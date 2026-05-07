@@ -1,40 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- ── 网络 ──────────────────────────────────────────────────── -->
+    <!-- ── 网络（GitHub API 请求） ────────────────────────────────── -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- ── 相机（拍照上传到 GitHub） ──────────────────────────────── -->
+    <!-- ── 相机（拍照上传到 GitHub，按需申请） ───────────────────── -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- ── 存储读权限 ─────────────────────────────────────────────
-         Android 13+（API 33）使用细粒度媒体权限
-         Android 6–12 使用通用读权限                               -->
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_IMAGES"
-        android:minSdkVersion="33" />
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_VIDEO"
-        android:minSdkVersion="33" />
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_AUDIO"
-        android:minSdkVersion="33" />
-    <uses-permission
-        android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-
-    <!-- ── 存储写权限（API 29 以上由 DownloadManager 自动处理） ────── -->
+    <!-- ── 写存储（仅 API 26–28 下载时需要，API 29+ 由 DownloadManager 自动处理） -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
-    <!-- ── 下载通知 ───────────────────────────────────────────────
-         允许 DownloadManager 后台下载时不弹通知（可选） -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!--
+      ❌ 不声明 READ_EXTERNAL_STORAGE / READ_MEDIA_IMAGES 等：
+         文件上传使用系统文件选择器（ACTION_GET_CONTENT），由 DocumentsUI 代理读取，
+         应用无需存储读权限；下载到 Downloads 目录 API 29+ 也无需存储权限。
+         精准最小权限，减少用户授权摩擦。
+    -->
 
-    <!-- ── 查询其他 App（打开下载文件 / 文件选择器） ───────────────── -->
+    <!-- ── 查询其他 App（文件选择器 / 打开下载文件） ─────────────── -->
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
@@ -42,9 +29,6 @@
         </intent>
         <intent>
             <action android:name="android.intent.action.GET_CONTENT" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.PICK" />
         </intent>
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
@@ -74,7 +58,7 @@
             </intent-filter>
         </activity>
 
-        <!-- ── FileProvider：为相机拍照 / 文件分享提供安全 URI ─────── -->
+        <!-- ── FileProvider：为相机拍照提供安全的 content:// URI ── -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

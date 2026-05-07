@@ -59,8 +59,14 @@ function formatBytes(bytes: number): string {
 
 /**
  * 通过 GitHub API 认证下载文件（适用于 archive_download_url / zipball / tarball）。
- * 直接用 <a href> 跳转时浏览器不会携带 Authorization header，导致 401 错误。
- * 此函数通过 fetch 携带 token，将响应转为 Blob 后触发本地下载。
+ *
+ * Android WebView 环境：
+ *   blob URL 在 `URL.revokeObjectURL` 后立即失效，DownloadManager 无法处理 blob 协议。
+ *   检测到 AndroidBridge 时直接将原始 URL + token 交给原生 DownloadManager，
+ *   跳过 fetch → blob → <a download> 整个流程，彻底避免 blob URL 问题。
+ *
+ * 浏览器环境：
+ *   保持原有 fetch → blob → <a download> 流程，不影响 Web 端功能。
  */
 async function downloadWithAuth(url: string, filename: string): Promise<void> {
   const token = getToken();
@@ -68,6 +74,16 @@ async function downloadWithAuth(url: string, filename: string): Promise<void> {
     toast.error('请先登录后再下载');
     return;
   }
+
+  // Android WebView 原生下载（绕过 blob URL 限制）
+  const bridge = (window as unknown as { AndroidBridge?: { downloadFile?: (u: string, f: string, t: string) => void } }).AndroidBridge;
+  if (bridge?.downloadFile) {
+    bridge.downloadFile(url, filename, token);
+    toast.success(`开始下载 ${filename}`);
+    return;
+  }
+
+  // 浏览器环境：fetch → blob → <a download>
   const toastId = toast.loading(`正在下载 ${filename}…`);
   try {
     const resp = await fetch(url, {

@@ -64,7 +64,31 @@ function objectsToCSV(data: Record<string, unknown>[]): string {
   return [header, ...rows].join('\n');
 }
 
+/**
+ * 触发文件下载。
+ *
+ * Android WebView 环境：
+ *   blob URL 无法被 DownloadManager 处理。
+ *   检测到 AndroidBridge 时将文本内容 Base64 编码后直接传给原生，
+ *   由原生写入设备「下载」文件夹，彻底绕过 blob URL。
+ *
+ * 浏览器环境：
+ *   保持原有 Blob → <a download> 流程。
+ */
 function downloadFile(content: string, filename: string, mime: string) {
+  // Android WebView 原生写文件（绕过 blob URL 限制）
+  const bridge = (window as unknown as { AndroidBridge?: { saveBlobData?: (f: string, m: string, b: string) => void } }).AndroidBridge;
+  if (bridge?.saveBlobData) {
+    try {
+      // 处理多字节字符（中文/Unicode）：先 encodeURIComponent，再 unescape，再 btoa
+      const base64 = btoa(unescape(encodeURIComponent(content)));
+      bridge.saveBlobData(filename, mime, base64);
+    } catch {
+      toast.error('导出失败，请稍后重试');
+    }
+    return;
+  }
+  // 浏览器环境：Blob → <a download>
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

@@ -31,6 +31,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -40,7 +41,24 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var splashOverlay: View
+    private lateinit var bottomNav: BottomNavigationView
     private var splashDismissed = false
+
+    // ── 底部导航：hash 路径 → 菜单项 ID 映射 ───────────────────────
+    /**
+     * HashRouter 路径前缀 → BottomNavigationView 菜单项 ID。
+     * 使用前缀匹配，确保仓库详情等子页面也能正确高亮「仓库」Tab。
+     * 顺序很重要：精确路径（"/"）必须排在最后，避免被子路径误命中。
+     */
+    private val navPathMap = linkedMapOf(
+        "/repos"         to R.id.nav_repos,
+        "/search"        to R.id.nav_search,
+        "/notifications" to R.id.nav_notifications,
+        "/settings"      to R.id.nav_settings,
+        "/"              to R.id.nav_home,
+    )
+    /** 当前激活的菜单项，避免重复导航 */
+    private var currentNavItemId: Int = R.id.nav_home
 
     // ── 文件上传 ────────────────────────────────────────────────────
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
@@ -225,18 +243,20 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         window.statusBarColor = Color.parseColor("#0d1117")
-        window.navigationBarColor = Color.parseColor("#0d1117")
+        window.navigationBarColor = Color.parseColor("#161b22")
 
         setContentView(R.layout.activity_main)
 
         webView = findViewById(R.id.webView)
         splashOverlay = findViewById(R.id.splashOverlay)
+        bottomNav = findViewById(R.id.bottomNav)
 
         registerDownloadReceiver()
         setupWebViewSettings()
         setupWebViewClient()
         setupWebChromeClient()
         setupDownloadListener()
+        setupBottomNav()
 
         webView.addJavascriptInterface(WebAppBridge(), "AndroidBridge")
 
@@ -307,6 +327,60 @@ class MainActivity : AppCompatActivity() {
                     !url.startsWith("https://") &&
                     !url.startsWith("http://")
             }
+
+            /**
+             * 每次页面导航完成后，从 URL fragment（HashRouter）中解析当前路径，
+             * 并同步更新底部导航栏的选中状态。
+             * 例如：file:///android_asset/index.html#/repos/owner/name → path = "/repos/..."
+             */
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                val hash = url?.substringAfter("#", "") ?: return
+                val path = if (hash.startsWith("/")) hash else "/$hash"
+                syncBottomNavSelection(path)
+            }
+        }
+    }
+
+    /**
+     * 根据当前路径前缀匹配导航菜单项，并更新 BottomNavigationView 选中状态。
+     * 采用静默更新方式（禁用监听器 → 修改选中项 → 恢复监听器），避免触发重复导航。
+     */
+    private fun syncBottomNavSelection(path: String) {
+        val targetId = navPathMap.entries.firstOrNull { (prefix, _) ->
+            if (prefix == "/") path == "/" else path.startsWith(prefix)
+        }?.value ?: R.id.nav_home
+
+        if (targetId == currentNavItemId) return
+        currentNavItemId = targetId
+
+        // 静默更新：临时移除监听器，防止 setSelectedItemId 触发重复路由跳转
+        bottomNav.setOnItemSelectedListener(null)
+        bottomNav.selectedItemId = targetId
+        setupBottomNavListener()
+    }
+
+    /**
+     * 初始化底部导航栏：绑定点击监听，通过 evaluateJavascript 修改 HashRouter location。
+     * 仅在目标 Tab 与当前页面不同时才执行导航，避免重刷当前页。
+     */
+    private fun setupBottomNav() {
+        bottomNav.selectedItemId = R.id.nav_home
+        setupBottomNavListener()
+    }
+
+    private fun setupBottomNavListener() {
+        bottomNav.setOnItemSelectedListener { item ->
+            val path = navPathMap.entries.firstOrNull { it.value == item.itemId }?.key ?: "/"
+            val targetId = item.itemId
+            if (targetId == currentNavItemId) return@setOnItemSelectedListener false
+
+            // 通过修改 location.hash 触发 HashRouter 路由跳转
+            val safeHash = path.replace("'", "\\'")
+            webView.evaluateJavascript(
+                "(function(){ window.location.hash = '$safeHash'; })()", null
+            )
+            true
         }
     }
 

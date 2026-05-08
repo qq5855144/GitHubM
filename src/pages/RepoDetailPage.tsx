@@ -305,19 +305,19 @@ export default function RepoDetailPage() {
       {/* 功能导航 —— 统一为一个网格 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Issues',     icon: AlertCircle,    count: repo.open_issues_count, path: 'issues' },
-          { label: 'Pull Requests', icon: GitPullRequest, count: null,              path: 'pulls' },
-          { label: '提交历史',   icon: Clock,           count: null,                 path: 'commits' },
-          { label: '分支管理',   icon: GitBranch,       count: null,                 path: 'branches' },
-          { label: '代码浏览',   icon: Code,            count: null,                 path: 'code' },
-          { label: '协作者',     icon: Users,           count: null,                 path: 'collaborators' },
-          { label: 'Actions',   icon: Play,             count: null,                 path: 'actions' },
-          { label: '上传文件',   icon: Upload,           count: null,                 path: 'upload' },
-          { label: '产物下载',   icon: Package,          count: null,                 path: 'artifacts' },
-          { label: 'Pages 部署', icon: Globe,            count: null,                 path: 'pages' },
-          { label: 'Projects',  icon: LayoutGrid,       count: null,                 path: 'projects' },
-          { label: 'Discussions', icon: MessageCircle,  count: null,                 path: 'discussions' },
-          { label: 'Wiki',      icon: BookOpen,         count: null,                 path: 'wiki' },
+          { label: 'Issues',       icon: AlertCircle,    count: repo.open_issues_count, path: 'issues' },
+          { label: 'Pull Requests',icon: GitPullRequest, count: null,                   path: 'pulls' },
+          { label: '代码浏览',     icon: Code,            count: null,                   path: 'code' },
+          { label: '产物下载',     icon: Package,         count: null,                   path: 'artifacts' },
+          { label: 'Pages 部署',   icon: Globe,           count: null,                   path: 'pages' },
+          { label: '提交历史',     icon: Clock,           count: null,                   path: 'commits' },
+          { label: '分支管理',     icon: GitBranch,       count: null,                   path: 'branches' },
+          { label: '协作者',       icon: Users,           count: null,                   path: 'collaborators' },
+          { label: 'Actions',      icon: Play,            count: null,                   path: 'actions' },
+          { label: '上传文件',     icon: Upload,          count: null,                   path: 'upload' },
+          { label: 'Projects',     icon: LayoutGrid,      count: null,                   path: 'projects' },
+          { label: 'Discussions',  icon: MessageCircle,   count: null,                   path: 'discussions' },
+          { label: 'Wiki',         icon: BookOpen,        count: null,                   path: 'wiki' },
         ].map((item) => {
           const Icon = item.icon;
           return (

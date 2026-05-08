@@ -98,6 +98,10 @@ function MobileBottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // APK 壳内由原生底部导航栏接管，隐藏 Web 端的重复导航条
+  const isInAndroidApp = typeof window !== 'undefined' && !!(window as unknown as { AndroidBridge?: unknown }).AndroidBridge;
+  if (isInAndroidApp) return null;
+
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-border
                     flex items-center h-16 safe-area-inset-bottom"
@@ -460,8 +464,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
-        {/* 页面内容 — 底部留出底部导航栏高度，避免内容被遮挡 */}
-        <main className="flex-1 overflow-x-hidden pb-16 lg:pb-0">
+        {/* 页面内容 — Web 端底部留出导航栏高度，APK 内由原生导航栏占位 */}
+        <main className={`flex-1 overflow-x-hidden ${typeof window !== 'undefined' && !!(window as unknown as { AndroidBridge?: unknown }).AndroidBridge ? '' : 'pb-16'} lg:pb-0`}>
           {children}
         </main>
       </div>

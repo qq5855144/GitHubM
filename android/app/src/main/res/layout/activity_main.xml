@@ -1,17 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  FrameLayout：WebView 与启动遮罩叠加。
-  splashOverlay 覆盖在 WebView 上方，颜色与 App 背景色一致（#0d1117），
-  等 React 首屏就绪后由 MainActivity 通过动画淡出，消除初始化闪烁。
+  LinearLayout（竖向）：
+    - WebView：填充剩余空间，显示 Web 应用内容
+    - BottomNavigationView：固定在底部，高度 56dp，映射核心导航功能
+  splashOverlay 叠加于整个布局顶层，启动时遮盖初始化闪烁。
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <WebView
-        android:id="@+id/webView"
+    <!-- 主体：WebView + 底部导航栏垂直排列 -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <WebView
+            android:id="@+id/webView"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- 底部原生导航栏 -->
+        <com.google.android.material.bottomnavigation.BottomNavigationView
+            android:id="@+id/bottomNav"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="@color/bottom_nav_background"
+            app:menu="@menu/bottom_nav_menu"
+            app:itemIconTint="@color/bottom_nav_colors"
+            app:itemTextColor="@color/bottom_nav_colors"
+            app:itemTextAppearanceActive="@style/BottomNavTextActive"
+            app:itemTextAppearanceInactive="@style/BottomNavTextInactive"
+            app:labelVisibilityMode="labeled"
+            app:elevation="8dp" />
+
+    </LinearLayout>
 
     <!-- 启动遮罩：与 App 深色背景同色，屏蔽 WebView 初始化白屏/闪烁 -->
     <View

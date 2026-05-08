@@ -140,9 +140,9 @@ function AssetItem({ asset }: { asset: GitHubReleaseAsset }) {
         </div>
       </div>
       <Button
-        variant="ghost"
+        variant="outline"
         size="sm"
-        className="h-8 text-xs text-muted-foreground border border-border hover:bg-secondary opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+        className="h-8 text-xs shrink-0"
         onClick={handleDownload}
         disabled={downloading}
       >
@@ -187,14 +187,14 @@ function ReleaseItem({
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <a href={release.html_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:text-accent hover:bg-accent/10 opacity-0 group-hover:opacity-100">
+            <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:text-accent hover:bg-accent/10">
               <ExternalLink className="w-3.5 h-3.5" />
             </Button>
           </a>
           <Button
             variant="ghost"
             size="icon"
-            className="w-7 h-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100"
+            className="w-7 h-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
             onClick={(e) => { e.stopPropagation(); onDelete(release.id); }}
             title="删除 Release"
           >
@@ -209,9 +209,9 @@ function ReleaseItem({
           <div className="flex gap-2 px-4 py-2.5 border-b border-border/50 flex-wrap">
             {release.zipball_url && (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary"
+                className="h-7 text-xs"
                 disabled={dlZip}
                 onClick={async () => {
                   setDlZip(true);
@@ -227,9 +227,9 @@ function ReleaseItem({
             )}
             {release.tarball_url && (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary"
+                className="h-7 text-xs"
                 disabled={dlTar}
                 onClick={async () => {
                   setDlTar(true);
@@ -262,9 +262,9 @@ function ArtifactDownloadButton({ art }: { art: GitHubArtifact }) {
   const [downloading, setDownloading] = useState(false);
   return (
     <Button
-      variant="ghost"
+      variant="outline"
       size="sm"
-      className="h-8 text-xs text-muted-foreground border border-border hover:bg-secondary"
+      className="h-8 text-xs"
       disabled={downloading}
       onClick={async () => {
         setDownloading(true);
@@ -473,7 +473,7 @@ export default function ArtifactsPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <div className="flex gap-1 shrink-0">
                       {!art.expired && (
                         <ArtifactDownloadButton art={art} />
                       )}

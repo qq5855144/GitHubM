@@ -49,7 +49,7 @@ export default function WikiPage() {
             <p className="text-sm text-muted-foreground text-pretty max-w-md mx-auto mb-6">
               GitHub Wiki 不允许在 iframe 中嵌入显示。请点击下方按钮前往 GitHub 网页端查看和编辑文档。
             </p>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col md:flex-row gap-3">
               <a href={wikiUrl} target="_blank" rel="noopener noreferrer">
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
                   <ExternalLink className="w-4 h-4 mr-2" />

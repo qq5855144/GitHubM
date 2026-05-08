@@ -137,6 +137,22 @@ export default function NotificationsPage() {
     }
   };
 
+  /** 通知类型→中文标签 */
+  const getTypeLabel = (type: string): string => {
+    const map: Record<string, string> = {
+      PullRequest: 'PR',
+      Issue: 'Issue',
+      CheckSuite: 'Actions',
+      Release: '版本发布',
+      Commit: '提交',
+      Discussion: '讨论',
+      RepositoryVulnerabilityAlert: '安全警报',
+      RepositoryAdvisory: '安全公告',
+      RepositoryDependabotAlertsThread: 'Dependabot',
+    };
+    return map[type] || type;
+  };
+
   const unreadCount = notifications.filter((n) => n.unread).length;
 
   return (
@@ -235,9 +251,9 @@ export default function NotificationsPage() {
                       <span className="text-xs text-muted-foreground">
                         {notification.repository.full_name}
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {notification.subject.type}
-                      </span>
+                      <Badge variant="outline" className="text-xs h-4 px-1 border-border text-muted-foreground">
+                        {getTypeLabel(notification.subject.type)}
+                      </Badge>
                       <span className="text-xs text-muted-foreground">
                         {formatRelativeTime(notification.updated_at)}
                       </span>

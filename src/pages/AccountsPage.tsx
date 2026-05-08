@@ -188,7 +188,7 @@ export default function AccountsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="border border-border text-muted-foreground hover:bg-secondary h-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="border border-border text-muted-foreground hover:bg-secondary h-8 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                       onClick={() => handleSwitch(acc)}
                       disabled={!!switching}
                     >

@@ -1063,10 +1063,10 @@ export async function getDiscussions(
   params: { per_page?: number; page?: number } = {}
 ): Promise<import('@/types/types').GitHubDiscussion[]> {
   const { per_page = 20, page = 1 } = params;
-  // REST API仅部分支持，通过仓库discussion category接口
+  // REST API 对 Discussions 支持有限，错误由调用方处理
   return request<import('@/types/types').GitHubDiscussion[]>(
     `/repos/${owner}/${repo}/discussions?per_page=${per_page}&page=${page}`
-  ).catch(() => [] as import('@/types/types').GitHubDiscussion[]);
+  );
 }
 
 // ===== gitignore 模板 =====

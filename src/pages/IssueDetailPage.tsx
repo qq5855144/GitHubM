@@ -77,6 +77,14 @@ export default function IssueDetailPage() {
     }
   };
 
+  // Ctrl/Cmd+Enter 快捷提交评论
+  const handleCommentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      if (!submitting && newComment.trim()) handleComment();
+    }
+  };
+
   const handleToggleState = async () => {
     if (!owner || !repo || !number || !issue) return;
     setToggling(true);
@@ -239,6 +247,7 @@ export default function IssueDetailPage() {
             <Textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
+              onKeyDown={handleCommentKeyDown}
               placeholder="撰写评论（支持 Markdown）..."
               className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm min-h-24"
               rows={4}
@@ -246,7 +255,7 @@ export default function IssueDetailPage() {
             <div className="flex justify-between items-center">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Edit2 className="w-3 h-3" />
-                支持 Markdown 格式
+                支持 Markdown · Ctrl+Enter 快速提交
               </span>
               <Button
                 className="bg-primary text-primary-foreground hover:bg-primary/90"

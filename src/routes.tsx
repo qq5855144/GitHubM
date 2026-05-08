@@ -27,6 +27,7 @@ import ExportPage from './pages/ExportPage';
 import UploadPage from './pages/UploadPage';
 import PagesDeployPage from './pages/PagesDeployPage';
 import ArtifactsPage from './pages/ArtifactsPage';
+import GraphQLPlaygroundPage from './pages/GraphQLPlaygroundPage';
 
 export interface RouteConfig {
   name: string;
@@ -72,4 +73,5 @@ export const routes: RouteConfig[] = [
   { name: 'Pages 部署', path: '/repos/:owner/:repo/pages', element: <PagesDeployPage /> },
   { name: '仓库产物', path: '/repos/:owner/:repo/artifacts', element: <ArtifactsPage /> },
   { name: '设置', path: '/settings', element: <SettingsPage /> },
+  { name: 'GraphQL Playground', path: '/graphql-playground', element: <GraphQLPlaygroundPage /> },
 ];

@@ -455,7 +455,7 @@ export interface GitHubGistDetail extends GitHubGist {
   }>;
 }
 
-// ===== GitHub Discussions =====
+// ===== GitHub Discussions (REST，有限支持) =====
 export interface GitHubDiscussion {
   id: number;
   node_id: string;
@@ -474,6 +474,135 @@ export interface GitHubDiscussion {
     is_answerable: boolean;
   };
   locked: boolean;
+}
+
+// ===== GraphQL Discussions（完整支持）=====
+export interface GQL_DiscussionAuthor {
+  login: string;
+  avatarUrl: string;
+}
+
+export interface GQL_DiscussionCategory {
+  id: string;
+  name: string;
+  emoji: string;
+  description?: string;
+  isAnswerable: boolean;
+}
+
+export interface GQL_DiscussionCommentReply {
+  id: string;
+  databaseId?: number;
+  body: string;
+  createdAt: string;
+  author: GQL_DiscussionAuthor | null;
+}
+
+export interface GQL_DiscussionComment {
+  id: string;
+  databaseId?: number;
+  body: string;
+  createdAt: string;
+  upvoteCount: number;
+  isAnswer: boolean;
+  author: GQL_DiscussionAuthor | null;
+  replies?: { nodes: GQL_DiscussionCommentReply[] };
+}
+
+export interface GQL_Discussion {
+  id: string;
+  databaseId?: number;
+  number: number;
+  title: string;
+  body?: string;
+  url: string;
+  createdAt: string;
+  updatedAt?: string;
+  locked: boolean;
+  isAnswered: boolean;
+  upvoteCount: number;
+  comments: { totalCount: number } | number;
+  author: GQL_DiscussionAuthor | null;
+  category: GQL_DiscussionCategory;
+  answerChosenAt?: string | null;
+  answerChosenBy?: GQL_DiscussionAuthor | null;
+}
+
+// ===== GraphQL 贡献热力图 =====
+export type ContributionLevel =
+  | 'NONE'
+  | 'FIRST_QUARTILE'
+  | 'SECOND_QUARTILE'
+  | 'THIRD_QUARTILE'
+  | 'FOURTH_QUARTILE';
+
+export interface ContributionDay {
+  date: string;
+  contributionCount: number;
+  contributionLevel: ContributionLevel;
+  weekday: number;
+}
+
+export interface ContributionWeek {
+  firstDay: string;
+  contributionDays: ContributionDay[];
+}
+
+export interface ContributionMonth {
+  name: string;
+  firstDay: string;
+  totalWeeks: number;
+}
+
+export interface ContributionCalendar {
+  totalContributions: number;
+  months: ContributionMonth[];
+  weeks: ContributionWeek[];
+}
+
+// ===== GraphQL Pinned 仓库 =====
+export interface GQL_PinnedRepo {
+  id: string;
+  databaseId?: number;
+  name: string;
+  nameWithOwner: string;
+  description: string | null;
+  url: string;
+  stargazerCount: number;
+  forkCount: number;
+  isPrivate: boolean;
+  primaryLanguage: { name: string; color: string } | null;
+}
+
+// ===== GraphQL PR Reviews =====
+export type GQL_ReviewState =
+  | 'APPROVED'
+  | 'CHANGES_REQUESTED'
+  | 'COMMENTED'
+  | 'DISMISSED'
+  | 'PENDING';
+
+export type GQL_ReviewDecision =
+  | 'APPROVED'
+  | 'CHANGES_REQUESTED'
+  | 'REVIEW_REQUIRED';
+
+export interface GQL_PRReview {
+  id: string;
+  databaseId?: number;
+  state: GQL_ReviewState;
+  body: string;
+  submittedAt: string;
+  author: { login: string; avatarUrl: string } | null;
+}
+
+// ===== GraphQL 仓库语言分布 =====
+export interface GQL_LanguageEdge {
+  size: number;
+  node: {
+    name: string;
+    color: string | null;
+  };
 }
 
 // ===== Multi-account =====

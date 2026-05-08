@@ -33,6 +33,7 @@ export default function PullsPage() {
   const [hasNextPage, setHasNextPage] = useState(false);
   const [page, setPage] = useState(1);
   const [stateFilter, setStateFilter] = useState<PrState>('open');
+  const [sortField, setSortField] = useState<'created' | 'updated' | 'popularity' | 'long-running'>('created');
 
   const loadPulls = useCallback(async (pageNum = 1, append = false) => {
     if (!owner || !repo) return;
@@ -40,6 +41,7 @@ export default function PullsPage() {
     try {
       const result = await getPullRequests(owner, repo, {
         state: stateFilter,
+        sort: sortField,
         per_page: 30,
         page: pageNum,
       });
@@ -56,7 +58,7 @@ export default function PullsPage() {
     } finally {
       setLoading(false);
     }
-  }, [owner, repo, stateFilter]);
+  }, [owner, repo, stateFilter, sortField]);
 
   useEffect(() => {
     loadPulls(1);
@@ -116,13 +118,15 @@ export default function PullsPage() {
           })}
         </div>
         <div className="ml-auto">
-          <Select defaultValue="created">
+          <Select value={sortField} onValueChange={(v) => setSortField(v as typeof sortField)}>
             <SelectTrigger className="bg-secondary border-border text-foreground w-28 h-9">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border">
               <SelectItem value="created" className="text-foreground">创建时间</SelectItem>
               <SelectItem value="updated" className="text-foreground">更新时间</SelectItem>
+              <SelectItem value="popularity" className="text-foreground">热度</SelectItem>
+              <SelectItem value="long-running" className="text-foreground">持续时间</SelectItem>
             </SelectContent>
           </Select>
         </div>

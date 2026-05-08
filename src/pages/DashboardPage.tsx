@@ -12,16 +12,183 @@ import {
   TrendingUp,
   Activity,
   ExternalLink,
+  Pin,
+  Lock,
+  Globe,
+  Flame,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserRepos, getUserEvents, formatRelativeTime, formatNumber, getLanguageColor } from '@/services/github';
-import type { GitHubRepo, GitHubEvent } from '@/types/types';
+import { gqlGetContributions, gqlGetPinnedRepos } from '@/services/github-graphql';
+import type { GitHubRepo, GitHubEvent, ContributionCalendar, GQL_PinnedRepo } from '@/types/types';
 import { toast } from 'sonner';
+
+// 贡献等级 → 样式映射
+function getContributionClass(level: string, count: number): string {
+  if (count === 0) return 'bg-secondary';
+  switch (level) {
+    case 'FIRST_QUARTILE': return 'bg-primary/25';
+    case 'SECOND_QUARTILE': return 'bg-primary/50';
+    case 'THIRD_QUARTILE': return 'bg-primary/75';
+    case 'FOURTH_QUARTILE': return 'bg-primary';
+    default: return 'bg-secondary';
+  }
+}
+
+/** 贡献热力图组件 */
+function ContributionHeatmap({
+  calendar,
+  loading,
+}: {
+  calendar: ContributionCalendar | null;
+  loading: boolean;
+}) {
+  const weekdayLabels = ['日', '', '二', '', '四', '', '六'];
+
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-4 w-32 bg-muted" />
+          <Skeleton className="h-4 w-20 bg-muted" />
+        </div>
+        <Skeleton className="h-28 w-full bg-muted rounded" />
+      </div>
+    );
+  }
+
+  if (!calendar) return null;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <span className="text-sm font-medium text-foreground flex items-center gap-2">
+          <Flame className="w-4 h-4 text-primary" />
+          贡献热力图
+        </span>
+        <Badge variant="outline" className="text-xs border-border text-muted-foreground">
+          今年共 <span className="text-foreground font-semibold mx-1">{calendar.totalContributions.toLocaleString()}</span> 次贡献
+        </Badge>
+      </div>
+
+      <TooltipProvider>
+        <div className="w-full min-w-0 overflow-x-auto">
+          <div className="inline-flex gap-1 min-w-max">
+            {/* 周几标签列 */}
+            <div className="flex flex-col gap-px pt-5">
+              {weekdayLabels.map((label, i) => (
+                <div key={i} className="h-3 flex items-center">
+                  <span className="text-[9px] text-muted-foreground w-3 leading-none">{label}</span>
+                </div>
+              ))}
+            </div>
+            {/* 周数据列 */}
+            {calendar.weeks.map((week, wi) => {
+              // 月份标签：仅在该周为某月第一周时显示
+              const firstDayDate = new Date(week.firstDay);
+              const showMonth = wi === 0 || firstDayDate.getDate() <= 7;
+              const monthName = showMonth
+                ? firstDayDate.toLocaleDateString('zh-CN', { month: 'short' })
+                : '';
+
+              return (
+                <div key={wi} className="flex flex-col gap-px">
+                  {/* 月份标签 */}
+                  <div className="h-4 flex items-end">
+                    {showMonth && (
+                      <span className="text-[9px] text-muted-foreground leading-none whitespace-nowrap">
+                        {monthName}
+                      </span>
+                    )}
+                  </div>
+                  {/* 7天方块 */}
+                  {Array.from({ length: 7 }).map((_, di) => {
+                    const day = week.contributionDays.find((d) => d.weekday === di);
+                    if (!day) return <div key={di} className="w-3 h-3 rounded-sm bg-transparent" />;
+                    return (
+                      <Tooltip key={di}>
+                        <TooltipTrigger asChild>
+                          <div
+                            className={`w-3 h-3 rounded-sm cursor-default transition-opacity hover:opacity-80 ${getContributionClass(day.contributionLevel, day.contributionCount)}`}
+                          />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="bg-popover border-border text-xs text-foreground">
+                          {day.date}：{day.contributionCount > 0 ? `${day.contributionCount} 次贡献` : '无贡献'}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </TooltipProvider>
+
+      {/* 图例 */}
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span>少</span>
+        {['bg-secondary', 'bg-primary/25', 'bg-primary/50', 'bg-primary/75', 'bg-primary'].map((cls, i) => (
+          <div key={i} className={`w-3 h-3 rounded-sm ${cls}`} />
+        ))}
+        <span>多</span>
+      </div>
+    </div>
+  );
+}
+
+/** Pinned 仓库卡片 */
+function PinnedRepoCard({ repo }: { repo: GQL_PinnedRepo }) {
+  const navigate = useNavigate();
+  const [owner, name] = repo.nameWithOwner.split('/');
+  return (
+    <button
+      type="button"
+      className="w-full text-left bg-secondary/30 border border-border rounded-lg p-3 hover:bg-secondary/60 transition-colors group"
+      onClick={() => navigate(`/repos/${repo.nameWithOwner}`)}
+    >
+      <div className="flex items-start justify-between gap-2 mb-1.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {repo.isPrivate
+            ? <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
+            : <Globe className="w-3 h-3 text-muted-foreground shrink-0" />}
+          <span className="text-sm font-semibold text-accent group-hover:underline truncate">{name}</span>
+        </div>
+        <span className="text-xs text-muted-foreground shrink-0">{owner}</span>
+      </div>
+      {repo.description && (
+        <p className="text-xs text-muted-foreground line-clamp-2 text-pretty mb-2">{repo.description}</p>
+      )}
+      <div className="flex items-center gap-3">
+        {repo.primaryLanguage && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: repo.primaryLanguage.color || '#8b949e' }}
+            />
+            {repo.primaryLanguage.name}
+          </span>
+        )}
+        {repo.stargazerCount > 0 && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Star className="w-3 h-3" />{formatNumber(repo.stargazerCount)}
+          </span>
+        )}
+        {repo.forkCount > 0 && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <GitFork className="w-3 h-3" />{formatNumber(repo.forkCount)}
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -29,6 +196,12 @@ export default function DashboardPage() {
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [events, setEvents] = useState<GitHubEvent[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // GraphQL 数据
+  const [calendar, setCalendar] = useState<ContributionCalendar | null>(null);
+  const [calendarLoading, setCalendarLoading] = useState(true);
+  const [pinnedRepos, setPinnedRepos] = useState<GQL_PinnedRepo[]>([]);
+  const [pinnedLoading, setPinnedLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
@@ -50,7 +223,35 @@ export default function DashboardPage() {
       }
     };
 
+    // GraphQL：贡献热力图
+    const loadCalendar = async () => {
+      setCalendarLoading(true);
+      try {
+        const cal = await gqlGetContributions(user.login);
+        setCalendar(cal);
+      } catch {
+        // 贡献图加载失败不影响其他功能
+      } finally {
+        setCalendarLoading(false);
+      }
+    };
+
+    // GraphQL：Pinned 仓库
+    const loadPinned = async () => {
+      setPinnedLoading(true);
+      try {
+        const pinned = await gqlGetPinnedRepos(user.login);
+        setPinnedRepos(pinned);
+      } catch {
+        // 静默失败
+      } finally {
+        setPinnedLoading(false);
+      }
+    };
+
     loadData();
+    loadCalendar();
+    loadPinned();
   }, [user]);
 
   const getEventDescription = (event: GitHubEvent): string => {
@@ -165,7 +366,7 @@ export default function DashboardPage() {
       </div>
 
       {/* 最近仓库 + 活动时间线 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* 最近仓库 */}
         <Card className="bg-card border-border h-full flex flex-col">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -249,7 +450,7 @@ export default function DashboardPage() {
               最近活动
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 p-0 overflow-y-auto" style={{ maxHeight: '400px' }}>
+          <CardContent className="flex-1 p-0 overflow-y-auto max-h-[400px]">
             {loading ? (
               <div className="px-4 pb-4 space-y-3">
                 {[1, 2, 3, 4, 5].map((i) => (
@@ -283,6 +484,43 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* GraphQL：贡献热力图 */}
+      {(calendarLoading || calendar) && (
+        <Card className="bg-card border-border">
+          <CardContent className="p-4 md:p-6">
+            <ContributionHeatmap calendar={calendar} loading={calendarLoading} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* GraphQL：Pinned 仓库 */}
+      {(pinnedLoading || pinnedRepos.length > 0) && (
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
+              <Pin className="w-4 h-4 text-primary" />
+              置顶仓库
+              <Badge variant="outline" className="text-xs border-border text-muted-foreground font-normal">GraphQL</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {pinnedLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-24 bg-muted rounded-lg" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {pinnedRepos.map((repo) => (
+                  <PinnedRepoCard key={repo.id} repo={repo} />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

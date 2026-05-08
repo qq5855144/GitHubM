@@ -16,13 +16,16 @@ import {
   Lock,
   ExternalLink,
   ChevronRight,
-  RefreshCw,
   Tag,
   Upload,
   Package,
   Trash2,
   Settings,
   Loader2,
+  Play,
+  MessageCircle,
+  BookOpen,
+  LayoutGrid,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -229,9 +232,9 @@ export default function RepoDetailPage() {
             仓库
           </button>
           <ChevronRight className="w-3 h-3" />
-          <span className="text-foreground">{repo.full_name}</span>
+          <span className="text-foreground truncate">{repo.full_name}</span>
         </div>
-        <div className="flex flex-wrap items-start gap-2 justify-between">
+        <div className="flex items-start gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-bold text-foreground text-balance">{repo.full_name}</h1>
@@ -246,22 +249,25 @@ export default function RepoDetailPage() {
               <p className="text-sm text-muted-foreground mt-1 text-pretty">{repo.description}</p>
             )}
           </div>
-          <a
-            href={repo.html_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0"
-          >
-            <Button variant="outline" size="sm" className="border-border hover:bg-secondary">
-              <ExternalLink className="w-3 h-3 mr-1.5" />
-              GitHub
+          {/* 管理操作：固定右侧，不参与换行 */}
+          <div className="flex items-center gap-1 shrink-0">
+            <a href={repo.html_url} target="_blank" rel="noopener noreferrer">
+              <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground hover:bg-secondary" title="在 GitHub 中查看">
+                <ExternalLink className="w-4 h-4" />
+              </Button>
+            </a>
+            <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground hover:bg-secondary" onClick={openEditDialog} title="仓库设置">
+              <Settings className="w-4 h-4" />
             </Button>
-          </a>
+            <Button variant="ghost" size="icon" className="w-8 h-8 text-destructive/70 hover:bg-destructive/10 hover:text-destructive" onClick={() => { setDeleteConfirmName(''); setDeleteDialogOpen(true); }} title="删除仓库">
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* 统计和操作 */}
-      <div className="flex flex-wrap items-center gap-3">
+      {/* 统计行 —— 仅 star/fork/eye/license，无换行风险 */}
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
           size="sm"
@@ -296,23 +302,22 @@ export default function RepoDetailPage() {
         )}
       </div>
 
-
-      {/* 仓库管理操作 */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <Button variant="ghost" size="sm" className="h-8 text-xs border border-border text-muted-foreground hover:bg-secondary" onClick={openEditDialog}>
-          <Settings className="w-3.5 h-3.5 mr-1.5" />仓库设置
-        </Button>
-        <Button variant="ghost" size="sm" className="h-8 text-xs border border-destructive/40 text-destructive hover:bg-destructive/10" onClick={() => { setDeleteConfirmName(''); setDeleteDialogOpen(true); }}>
-          <Trash2 className="w-3.5 h-3.5 mr-1.5" />删除仓库
-        </Button>
-      </div>
-      {/* 快速导航 */}
+      {/* 功能导航 —— 统一为一个网格 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Issues', icon: AlertCircle, count: repo.open_issues_count, path: `issues` },
-          { label: 'Pull Requests', icon: GitPullRequest, count: null, path: `pulls` },
-          { label: '提交历史', icon: Clock, count: null, path: `commits` },
-          { label: '分支管理', icon: GitBranch, count: null, path: `branches` },
+          { label: 'Issues',     icon: AlertCircle,    count: repo.open_issues_count, path: 'issues' },
+          { label: 'Pull Requests', icon: GitPullRequest, count: null,              path: 'pulls' },
+          { label: '提交历史',   icon: Clock,           count: null,                 path: 'commits' },
+          { label: '分支管理',   icon: GitBranch,       count: null,                 path: 'branches' },
+          { label: '代码浏览',   icon: Code,            count: null,                 path: 'code' },
+          { label: '协作者',     icon: Users,           count: null,                 path: 'collaborators' },
+          { label: 'Actions',   icon: Play,             count: null,                 path: 'actions' },
+          { label: '上传文件',   icon: Upload,           count: null,                 path: 'upload' },
+          { label: '产物下载',   icon: Package,          count: null,                 path: 'artifacts' },
+          { label: 'Pages 部署', icon: Globe,            count: null,                 path: 'pages' },
+          { label: 'Projects',  icon: LayoutGrid,       count: null,                 path: 'projects' },
+          { label: 'Discussions', icon: MessageCircle,  count: null,                 path: 'discussions' },
+          { label: 'Wiki',      icon: BookOpen,         count: null,                 path: 'wiki' },
         ].map((item) => {
           const Icon = item.icon;
           return (
@@ -323,43 +328,13 @@ export default function RepoDetailPage() {
               onClick={() => navigate(`/repos/${repo.full_name}/${item.path}`)}
             >
               <div className="flex items-center gap-2">
-                <Icon className="w-4 h-4 text-muted-foreground group-hover:text-accent transition-colors" />
-                <span className="text-sm text-foreground group-hover:text-accent transition-colors">{item.label}</span>
+                <Icon className="w-4 h-4 text-muted-foreground group-hover:text-accent transition-colors shrink-0" />
+                <span className="text-sm text-foreground group-hover:text-accent transition-colors truncate">{item.label}</span>
                 {item.count !== null && (
-                  <Badge variant="outline" className="ml-auto border-border text-muted-foreground text-xs">
+                  <Badge variant="outline" className="ml-auto border-border text-muted-foreground text-xs shrink-0">
                     {item.count}
                   </Badge>
                 )}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 更多导航 */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        {[
-          { label: '代码浏览', icon: Code, path: `code` },
-          { label: '协作者', icon: Users, path: `collaborators` },
-          { label: 'Actions', icon: GitBranch, path: `actions` },
-          { label: 'Projects', icon: Globe, path: `projects` },
-          { label: 'Discussions', icon: AlertCircle, path: `discussions` },
-          { label: 'Wiki', icon: ExternalLink, path: `wiki` },
-          { label: '上传文件', icon: Upload, path: `upload` },
-          { label: '产物下载', icon: Package, path: `artifacts` },
-          { label: 'Pages 部署', icon: Globe, path: `pages` },
-        ].map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.label}
-              type="button"
-              className="bg-card border border-border rounded-lg p-3 hover:bg-secondary/50 transition-colors text-left group"
-              onClick={() => navigate(`/repos/${repo.full_name}/${item.path}`)}
-            >
-              <div className="flex items-center gap-2">
-                <Icon className="w-4 h-4 text-muted-foreground group-hover:text-accent transition-colors" />
-                <span className="text-sm text-foreground group-hover:text-accent transition-colors">{item.label}</span>
               </div>
             </button>
           );

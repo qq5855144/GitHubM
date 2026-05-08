@@ -23,6 +23,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   User,
+  Braces,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -75,6 +76,7 @@ const navItems: NavItem[] = [
   { label: 'Packages', path: '/packages', icon: Package2 },
   { label: '账号管理', path: '/accounts', icon: Users },
   { label: '数据导出', path: '/export', icon: Download },
+  { label: 'GraphQL', path: '/graphql-playground', icon: Braces },
 ];
 
 const themeIcons: Record<ThemeMode, React.ComponentType<{ className?: string }>> = {
@@ -458,8 +460,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
-        {/* 页面内容 */}
-        <main className="flex-1 overflow-x-hidden">
+        {/* 页面内容 — 底部留出底部导航栏高度，避免内容被遮挡 */}
+        <main className="flex-1 overflow-x-hidden pb-16 lg:pb-0">
           {children}
         </main>
       </div>

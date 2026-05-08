@@ -16,6 +16,12 @@ import {
   Check,
   X,
   AlertCircle,
+  UserCheck,
+  CheckCircle2,
+  XCircle as XCircleIcon,
+  MessageCircle,
+  Clock,
+  Shield,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,10 +38,84 @@ import {
   updatePullRequest,
   formatRelativeTime,
 } from '@/services/github';
-import type { GitHubPullRequest, GitHubComment, GitHubFile } from '@/types/types';
+import { gqlGetPRReviews } from '@/services/github-graphql';
+import type {
+  GitHubPullRequest,
+  GitHubComment,
+  GitHubFile,
+  GQL_PRReview,
+  GQL_ReviewDecision,
+} from '@/types/types';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
+/** Review 状态图标与颜色 */
+function ReviewStateIcon({ state }: { state: GQL_PRReview['state'] }) {
+  switch (state) {
+    case 'APPROVED':
+      return <CheckCircle2 className="w-4 h-4 text-success" />;
+    case 'CHANGES_REQUESTED':
+      return <XCircleIcon className="w-4 h-4 text-destructive" />;
+    case 'COMMENTED':
+      return <MessageCircle className="w-4 h-4 text-muted-foreground" />;
+    case 'DISMISSED':
+      return <XCircleIcon className="w-4 h-4 text-muted-foreground" />;
+    default:
+      return <Clock className="w-4 h-4 text-muted-foreground" />;
+  }
+}
+
+/** Review 状态标签文字 */
+function reviewStateText(state: GQL_PRReview['state']): string {
+  switch (state) {
+    case 'APPROVED': return '已批准';
+    case 'CHANGES_REQUESTED': return '请求更改';
+    case 'COMMENTED': return '留下评论';
+    case 'DISMISSED': return '已忽略';
+    default: return '待审查';
+  }
+}
+
+/** Review Decision 横幅 */
+function ReviewDecisionBanner({ decision }: { decision: GQL_ReviewDecision | null }) {
+  if (!decision) return null;
+  if (decision === 'APPROVED') {
+    return (
+      <div className="flex items-center gap-2 bg-success/10 border border-success/30 rounded-lg px-4 py-2.5">
+        <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+        <span className="text-sm text-success font-medium">所有审查者已批准，可以合并</span>
+      </div>
+    );
+  }
+  if (decision === 'CHANGES_REQUESTED') {
+    return (
+      <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/30 rounded-lg px-4 py-2.5">
+        <XCircleIcon className="w-4 h-4 text-destructive shrink-0" />
+        <span className="text-sm text-destructive font-medium">有审查者请求更改，需要修复后才能合并</span>
+      </div>
+    );
+  }
+  if (decision === 'REVIEW_REQUIRED') {
+    return (
+      <div className="flex items-center gap-2 bg-warning/10 border border-warning/30 rounded-lg px-4 py-2.5">
+        <Shield className="w-4 h-4 text-warning shrink-0" />
+        <span className="text-sm text-warning font-medium">需要至少一个审查批准才能合并</span>
+      </div>
+    );
+  }
+  return null;
+}
 
 export default function PullDetailPage() {
   const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
@@ -48,7 +128,14 @@ export default function PullDetailPage() {
   const [newComment, setNewComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [mergeConfirmOpen, setMergeConfirmOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+
+  // GraphQL Reviews 数据
+  const [reviews, setReviews] = useState<GQL_PRReview[]>([]);
+  const [reviewDecision, setReviewDecision] = useState<GQL_ReviewDecision | null>(null);
+  const [requestedReviewers, setRequestedReviewers] = useState<Array<{ login: string; avatarUrl: string }>>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
 
   useEffect(() => {
     if (!owner || !repo || !number) return;
@@ -73,6 +160,22 @@ export default function PullDetailPage() {
     load();
   }, [owner, repo, number]);
 
+  // 独立加载 GraphQL Reviews 数据
+  useEffect(() => {
+    if (!owner || !repo || !number) return;
+    setReviewsLoading(true);
+    gqlGetPRReviews(owner, repo, Number(number))
+      .then(({ reviews: r, reviewDecision: rd, requestedReviewers: rr }) => {
+        setReviews(r);
+        setReviewDecision(rd);
+        setRequestedReviewers(rr);
+      })
+      .catch(() => {
+        // 静默失败，Reviews 面板不影响主功能
+      })
+      .finally(() => setReviewsLoading(false));
+  }, [owner, repo, number]);
+
   const handleComment = async () => {
     if (!owner || !repo || !number || !newComment.trim()) return;
     setSubmitting(true);
@@ -85,6 +188,14 @@ export default function PullDetailPage() {
       toast.error(err instanceof Error ? err.message : '发布失败');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Ctrl/Cmd+Enter 快捷提交评论
+  const handleCommentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      if (!submitting && newComment.trim()) handleComment();
     }
   };
 
@@ -192,6 +303,9 @@ export default function PullDetailPage() {
         </div>
       </div>
 
+      {/* GraphQL：Review Decision 横幅 */}
+      {!reviewsLoading && <ReviewDecisionBanner decision={reviewDecision} />}
+
       {/* 操作按钮 */}
       {pr.state === 'open' && (
         <div className="flex flex-wrap gap-3 bg-card border border-border rounded-lg p-4">
@@ -199,7 +313,7 @@ export default function PullDetailPage() {
             <>
               <Button
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={handleMerge}
+                onClick={() => setMergeConfirmOpen(true)}
                 disabled={merging}
               >
                 <GitMerge className="w-4 h-4 mr-2" />
@@ -238,6 +352,9 @@ export default function PullDetailPage() {
         <TabsList className="bg-secondary border border-border">
           <TabsTrigger value="description" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground">
             描述与评论
+          </TabsTrigger>
+          <TabsTrigger value="reviews" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground">
+            审查 {reviews.length > 0 ? `(${reviews.length})` : ''}
           </TabsTrigger>
           <TabsTrigger value="files" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground">
             文件变更 ({files.length})
@@ -290,11 +407,13 @@ export default function PullDetailPage() {
                 <Textarea
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
+                  onKeyDown={handleCommentKeyDown}
                   placeholder="撰写评论（支持 Markdown）..."
                   className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm min-h-24"
                   rows={4}
                 />
-                <div className="flex justify-end">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">Ctrl+Enter 快速提交</span>
                   <Button
                     className="bg-primary text-primary-foreground hover:bg-primary/90"
                     onClick={handleComment}
@@ -306,6 +425,88 @@ export default function PullDetailPage() {
                 </div>
               </div>
             </div>
+          )}
+        </TabsContent>
+
+        {/* GraphQL Reviews 标签页 */}
+        <TabsContent value="reviews" className="space-y-4">
+          {reviewsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-card border border-border rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="w-8 h-8 rounded-full bg-muted" />
+                    <Skeleton className="h-4 w-32 bg-muted" />
+                    <Skeleton className="h-5 w-16 bg-muted ml-auto" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              {/* 待审查的 Reviewers */}
+              {requestedReviewers.length > 0 && (
+                <div className="bg-card border border-border rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <UserCheck className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm font-medium text-foreground">待审查</span>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    {requestedReviewers.map((r) => (
+                      <div key={r.login} className="flex items-center gap-2 bg-secondary/50 rounded-lg px-3 py-2">
+                        <Avatar className="w-5 h-5">
+                          <AvatarImage src={r.avatarUrl} />
+                          <AvatarFallback className="text-[10px] bg-muted">{r.login[0]}</AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs text-foreground">{r.login}</span>
+                        <Clock className="w-3 h-3 text-muted-foreground" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Reviews 记录 */}
+              {reviews.length === 0 && requestedReviewers.length === 0 ? (
+                <div className="bg-card border border-border rounded-lg py-12 text-center">
+                  <UserCheck className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">该 PR 暂无 Code Review 记录</p>
+                </div>
+              ) : (
+                reviews.map((review) => (
+                  <div
+                    key={review.id}
+                    className={`bg-card border rounded-lg overflow-hidden ${
+                      review.state === 'APPROVED' ? 'border-success/40' :
+                      review.state === 'CHANGES_REQUESTED' ? 'border-destructive/40' :
+                      'border-border'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-secondary/30">
+                      <Avatar className="w-6 h-6">
+                        <AvatarImage src={review.author?.avatarUrl} />
+                        <AvatarFallback className="text-xs bg-muted">{review.author?.login?.[0] || '?'}</AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm font-medium text-foreground">{review.author?.login}</span>
+                      <span className="text-xs text-muted-foreground">{formatRelativeTime(review.submittedAt)}</span>
+                      <div className="ml-auto flex items-center gap-1.5">
+                        <ReviewStateIcon state={review.state} />
+                        <span className={`text-xs font-medium ${
+                          review.state === 'APPROVED' ? 'text-success' :
+                          review.state === 'CHANGES_REQUESTED' ? 'text-destructive' :
+                          'text-muted-foreground'
+                        }`}>{reviewStateText(review.state)}</span>
+                      </div>
+                    </div>
+                    {review.body && (
+                      <div className="p-4">
+                        <MarkdownRenderer content={review.body} />
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </>
           )}
         </TabsContent>
 
@@ -348,6 +549,36 @@ export default function PullDetailPage() {
           ))}
         </TabsContent>
       </Tabs>
+
+      {/* 合并 PR 二次确认 */}
+      <AlertDialog open={mergeConfirmOpen} onOpenChange={setMergeConfirmOpen}>
+        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground flex items-center gap-2">
+              <GitMerge className="w-4 h-4 text-primary" />
+              确认合并 Pull Request？
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground text-sm space-y-2">
+              <span>将把分支 </span>
+              <code className="font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded text-xs">{pr.head.ref}</code>
+              <span> 合并到 </span>
+              <code className="font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded text-xs">{pr.base.ref}</code>
+              <span>，合并后不可撤销。</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border hover:bg-secondary">取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => { setMergeConfirmOpen(false); handleMerge(); }}
+              disabled={merging}
+            >
+              <GitMerge className="w-4 h-4 mr-2" />
+              确认合并
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

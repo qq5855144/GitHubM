@@ -204,7 +204,7 @@ export default function IssuesPage() {
       )}
 
       {/* 筛选栏 */}
-      <div className="flex flex-col sm:flex-row gap-3 bg-card border border-border rounded-lg p-3">
+      <div className="flex flex-col md:flex-row gap-3 bg-card border border-border rounded-lg p-3">
         <div className="flex gap-2">
           <button
             type="button"

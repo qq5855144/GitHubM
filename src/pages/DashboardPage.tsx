@@ -294,7 +294,7 @@ export default function DashboardPage() {
       {/* 用户信息卡片 */}
       <div className="bg-card border border-border rounded-xl p-5">
         {/* 顶部：头像 + 核心信息 */}
-        <div className="flex items-start gap-4">
+        <div className="flex items-center gap-4">
           <Avatar className="w-16 h-16 shrink-0 ring-2 ring-border">
             <AvatarImage src={user.avatar_url} alt={user.login} />
             <AvatarFallback className="bg-secondary text-secondary-foreground text-xl font-bold">

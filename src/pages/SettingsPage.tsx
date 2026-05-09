@@ -294,7 +294,7 @@ export default function SettingsPage() {
           </div>
 
           {/* 头像 + 基本信息 */}
-          <div className="flex items-start gap-4">
+          <div className="flex items-center gap-4">
             <div className="relative shrink-0">
               <Avatar className="w-16 h-16 ring-2 ring-border">
                 <AvatarImage src={user.avatar_url} alt={user.login} />

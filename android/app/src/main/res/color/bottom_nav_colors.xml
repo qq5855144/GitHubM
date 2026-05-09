@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 底部导航栏图标与文字颜色选择器：选中/未选中状态 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:color="@color/bottom_nav_selected" />
+    <item android:color="@color/bottom_nav_unselected" />
+</selector>

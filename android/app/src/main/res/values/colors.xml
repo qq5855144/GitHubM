@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 启动图标背景：紫色（与 Web 端主题色一致） -->
+    <color name="ic_launcher_background">#7c3aed</color>
+
+    <!-- 底部导航栏颜色 -->
+    <color name="bottom_nav_background">#161b22</color>   <!-- 侧边栏背景色，与 Web sidebar 一致 -->
+    <color name="bottom_nav_selected">#7c3aed</color>     <!-- 选中色：主题紫色 primary -->
+    <color name="bottom_nav_unselected">#8b949e</color>   <!-- 未选中色：muted-foreground -->
+    <color name="bottom_nav_divider">#30363d</color>      <!-- 分割线：border 颜色 -->
+</resources>

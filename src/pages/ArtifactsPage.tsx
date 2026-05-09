@@ -58,26 +58,31 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * 通过 GitHub API 认证下载文件。
+ * 下载 GitHub 文件。
  *
- * Android WebView 环境：
- *   检测到 AndroidBridge 时直接将原始 URL + token 交给原生 DownloadManager，
- *   跳过 fetch → blob → <a download> 整个流程，彻底避免 blob URL 问题。
+ * Android WebView：
+ *   通过 AndroidBridge.downloadFile 交给原生 DownloadManager，携带 Token 认证，
+ *   支持私有仓库，同时绕过 blob URL 限制。
  *
  * 浏览器环境：
- *   Release Asset 必须使用 api.github.com 接口（/releases/assets/{id}）并附带
- *   Accept: application/octet-stream，而非直接请求 browser_download_url（github.com CDN
- *   不允许跨域携带 Authorization 头，会触发 CORS preflight 失败 → "Failed to fetch"）。
- *   zipball / tarball 本身已是 api.github.com URL，直接 fetch 即可。
+ *   直接用 window.open(browser_download_url) 进行浏览器原生导航下载。
+ *   ──────────────────────────────────────────────────────────────────
+ *   ❌ 为什么不用 fetch + Authorization？
+ *      api.github.com 的 Asset 下载接口会 302 重定向到 objects.githubusercontent.com。
+ *      CORS 规范规定：若请求携带凭证头（Authorization），而重定向目标以通配符
+ *      Access-Control-Allow-Origin: * 响应，浏览器会直接拦截 → "Failed to fetch"。
+ *      无论使用 browser_download_url 还是 api.github.com 接口 URL，均受此限制。
+ *   ✅ window.open 是浏览器原生导航，不走 CORS 检查，由浏览器自身处理跳转与下载。
+ *      公开仓库无需登录即可下载；私有仓库需在浏览器中登录 GitHub.com。
  */
-async function downloadWithAuth(url: string, filename: string, apiDownloadUrl?: string): Promise<void> {
+async function downloadWithAuth(url: string, filename: string): Promise<void> {
   const token = getToken();
   if (!token) {
     toast.error('请先登录后再下载');
     return;
   }
 
-  // Android WebView 原生下载（绕过 blob URL 限制，使用原始 CDN URL 即可）
+  // Android WebView 原生下载（携带 Token，支持私有仓库）
   const bridge = (window as unknown as { AndroidBridge?: { downloadFile?: (u: string, f: string, t: string) => void } }).AndroidBridge;
   if (bridge?.downloadFile) {
     bridge.downloadFile(url, filename, token);
@@ -85,46 +90,18 @@ async function downloadWithAuth(url: string, filename: string, apiDownloadUrl?: 
     return;
   }
 
-  // 浏览器环境：优先用 API 接口 URL（解决 browser_download_url CORS 问题）
-  const fetchUrl = apiDownloadUrl || url;
-  const toastId = toast.loading(`正在下载 ${filename}…`);
-  try {
-    const resp = await fetch(fetchUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/octet-stream',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    });
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => '');
-      throw new Error(`下载失败（${resp.status}）${errText ? '：' + errText : ''}`);
-    }
-    const blob = await resp.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
-    toast.success(`${filename} 下载完成`, { id: toastId });
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : '下载失败，请稍后重试', { id: toastId });
-    console.error('[downloadWithAuth]', err);
-  }
+  // 浏览器：原生导航下载，绕过 CORS 重定向限制
+  window.open(url, '_blank', 'noopener,noreferrer');
+  toast.success(`已在新标签页中打开 ${filename} 的下载链接`);
 }
 
-function AssetItem({ asset, owner, repo }: { asset: GitHubReleaseAsset; owner: string; repo: string }) {
+function AssetItem({ asset }: { asset: GitHubReleaseAsset }) {
   const [downloading, setDownloading] = useState(false);
 
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      // 浏览器 fetch 使用 API 接口 URL（CORS 友好），AndroidBridge 使用 browser_download_url 直链
-      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases/assets/${asset.id}`;
-      await downloadWithAuth(asset.browser_download_url, asset.name, apiUrl);
+      await downloadWithAuth(asset.browser_download_url, asset.name);
     } finally {
       setDownloading(false);
     }
@@ -161,13 +138,9 @@ function AssetItem({ asset, owner, repo }: { asset: GitHubReleaseAsset; owner: s
 
 function ReleaseItem({
   release,
-  owner,
-  repo,
   onDelete,
 }: {
   release: GitHubRelease;
-  owner: string;
-  repo: string;
   onDelete: (id: number) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -256,7 +229,7 @@ function ReleaseItem({
             <div className="py-6 text-center text-sm text-muted-foreground">此版本没有产物文件</div>
           ) : (
             <div className="divide-y divide-border/50">
-              {release.assets.map((asset) => <AssetItem key={asset.id} asset={asset} owner={owner} repo={repo} />)}
+              {release.assets.map((asset) => <AssetItem key={asset.id} asset={asset} />)}
             </div>
           )}
         </div>
@@ -420,7 +393,7 @@ export default function ArtifactsPage() {
             ) : (
               <div className="divide-y divide-border">
                 {releases.map((rel) => (
-                  <ReleaseItem key={rel.id} release={rel} owner={owner!} repo={repo!} onDelete={setDeleteRelTarget} />
+                  <ReleaseItem key={rel.id} release={rel} onDelete={setDeleteRelTarget} />
                 ))}
               </div>
             )}

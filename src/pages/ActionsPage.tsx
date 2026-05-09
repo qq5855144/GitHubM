@@ -14,10 +14,15 @@ import {
   Zap,
   ChevronDown,
   SkipForward,
+  GitBranch,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -25,6 +30,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import {
   Collapsible,
   CollapsibleContent,
@@ -37,6 +49,7 @@ import {
   cancelWorkflowRun,
   rerunWorkflowRun,
   getWorkflowRunJobs,
+  getBranches,
   formatRelativeTime,
 } from '@/services/github';
 import type { GitHubWorkflow, GitHubWorkflowRun, GitHubWorkflowJob } from '@/types/types';
@@ -210,6 +223,12 @@ export default function ActionsPage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [triggering, setTriggering] = useState<number | null>(null);
+  // 触发工作流 Dialog 状态
+  const [triggerDialog, setTriggerDialog] = useState<GitHubWorkflow | null>(null);
+  const [triggerRef, setTriggerRef] = useState('main');
+  const [branches, setBranches] = useState<string[]>([]);
+  const [loadingBranches, setLoadingBranches] = useState(false);
+  const [inputPairs, setInputPairs] = useState<{ key: string; value: string }[]>([]);
 
   useEffect(() => {
     if (!owner || !repo) return;
@@ -218,6 +237,42 @@ export default function ActionsPage() {
       .catch(console.error)
       .finally(() => setLoadingWf(false));
   }, [owner, repo]);
+
+  // 打开触发 Dialog 时加载分支列表
+  const openTriggerDialog = useCallback(async (wf: GitHubWorkflow) => {
+    setTriggerDialog(wf);
+    setInputPairs([]);
+    if (!owner || !repo) return;
+    setLoadingBranches(true);
+    try {
+      const result = await getBranches(owner, repo, 1);
+      const names = result.data.map((b) => b.name);
+      setBranches(names);
+      setTriggerRef(names[0] || 'main');
+    } catch {
+      setBranches([]);
+      setTriggerRef('main');
+    } finally {
+      setLoadingBranches(false);
+    }
+  }, [owner, repo]);
+
+  const handleTriggerConfirm = async () => {
+    if (!owner || !repo || !triggerDialog) return;
+    const inputs: Record<string, string> = {};
+    inputPairs.forEach(({ key, value }) => { if (key.trim()) inputs[key.trim()] = value; });
+    setTriggering(triggerDialog.id);
+    try {
+      await triggerWorkflow(owner, repo, triggerDialog.id, triggerRef, inputs);
+      toast.success(`工作流 "${triggerDialog.name}" 已在 ${triggerRef} 分支触发`);
+      setTriggerDialog(null);
+      setTimeout(() => loadRuns(1), 2000);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '触发失败，请确保工作流支持 workflow_dispatch');
+    } finally {
+      setTriggering(null);
+    }
+  };
 
   const loadRuns = useCallback(async (pg = 1, append = false) => {
     if (!owner || !repo) return;
@@ -240,21 +295,8 @@ export default function ActionsPage() {
 
   useEffect(() => { loadRuns(1); }, [loadRuns]);
 
-  const handleTrigger = async (wf: GitHubWorkflow) => {
-    if (!owner || !repo) return;
-    setTriggering(wf.id);
-    try {
-      await triggerWorkflow(owner, repo, wf.id, 'main');
-      toast.success(`工作流 "${wf.name}" 已触发`);
-      setTimeout(() => loadRuns(1), 2000);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : '触发失败，请确保工作流支持 workflow_dispatch');
-    } finally {
-      setTriggering(null);
-    }
-  };
-
   return (
+    <>
     <div className="p-4 md:p-6 space-y-4 max-w-5xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
@@ -297,7 +339,7 @@ export default function ActionsPage() {
                     variant="ghost"
                     size="icon"
                     className="w-7 h-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                    onClick={() => handleTrigger(wf)}
+                    onClick={() => openTriggerDialog(wf)}
                     disabled={triggering === wf.id}
                     title="触发工作流"
                   >
@@ -403,5 +445,117 @@ export default function ActionsPage() {
         </div>
       </div>
     </div>
+
+    {/* 触发工作流 Dialog */}
+    <Dialog open={!!triggerDialog} onOpenChange={(open) => { if (!open) setTriggerDialog(null); }}>
+      <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
+        <DialogHeader>
+          <DialogTitle className="text-foreground flex items-center gap-2 text-balance">
+            <Zap className="w-4 h-4 text-primary shrink-0" />
+            触发工作流：{triggerDialog?.name}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* 分支选择 */}
+          <div className="space-y-1.5">
+            <Label className="text-sm font-normal text-muted-foreground flex items-center gap-1.5">
+              <GitBranch className="w-3.5 h-3.5" />运行分支
+            </Label>
+            {loadingBranches ? (
+              <Skeleton className="h-9 bg-muted w-full" />
+            ) : branches.length > 0 ? (
+              <Select value={triggerRef} onValueChange={setTriggerRef}>
+                <SelectTrigger className="bg-secondary border-border text-foreground h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border max-h-52">
+                  {branches.map((b) => (
+                    <SelectItem key={b} value={b} className="text-foreground text-sm font-mono">{b}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                className="bg-secondary border-border text-foreground h-9 text-sm font-mono"
+                value={triggerRef}
+                onChange={(e) => setTriggerRef(e.target.value)}
+                placeholder="分支名称，例如 main"
+              />
+            )}
+          </div>
+
+          {/* 自定义 inputs */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-normal text-muted-foreground">
+                自定义 Inputs（可选）
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary gap-1"
+                onClick={() => setInputPairs((prev) => [...prev, { key: '', value: '' }])}
+              >
+                <Plus className="w-3 h-3" />添加
+              </Button>
+            </div>
+            {inputPairs.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-1">
+                无需 inputs 时留空，工作流将使用默认值运行
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {inputPairs.map((pair, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      className="bg-secondary border-border text-foreground h-8 text-xs font-mono flex-1"
+                      placeholder="key"
+                      value={pair.key}
+                      onChange={(e) => setInputPairs((prev) => prev.map((p, i) => i === idx ? { ...p, key: e.target.value } : p))}
+                    />
+                    <Input
+                      className="bg-secondary border-border text-foreground h-8 text-xs font-mono flex-1"
+                      placeholder="value"
+                      value={pair.value}
+                      onChange={(e) => setInputPairs((prev) => prev.map((p, i) => i === idx ? { ...p, value: e.target.value } : p))}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="w-8 h-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setInputPairs((prev) => prev.filter((_, i) => i !== idx))}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button
+            variant="ghost"
+            className="border border-border text-muted-foreground hover:bg-secondary"
+            onClick={() => setTriggerDialog(null)}
+          >
+            取消
+          </Button>
+          <Button
+            className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
+            onClick={handleTriggerConfirm}
+            disabled={!!triggering || !triggerRef.trim()}
+          >
+            {triggering ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+            {triggering ? '触发中…' : '触发运行'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

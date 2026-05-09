@@ -27,6 +27,7 @@ import {
   BookOpen,
   LayoutGrid,
   Network,
+  Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -367,7 +368,13 @@ export default function RepoDetailPage() {
             >
               <Star className={`w-3.5 h-3.5 mr-1.5 ${starred ? 'fill-warning' : ''}`} />
               {starred ? '已收藏' : '收藏'}
-              <span className="ml-1.5 text-xs text-muted-foreground">{formatNumber(repo.stargazers_count)}</span>
+              <button
+                type="button"
+                className="ml-1.5 text-xs text-muted-foreground hover:text-accent hover:underline"
+                onClick={(e) => { e.stopPropagation(); navigate(`/repos/${repo.full_name}/stargazers`); }}
+              >
+                {formatNumber(repo.stargazers_count)}
+              </button>
             </Button>
             <Button
               variant="outline"
@@ -387,10 +394,16 @@ export default function RepoDetailPage() {
         {/* 自己的仓库：Star/Fork 数只读展示 + 查看 Forks 按钮 */}
         {isOwner && (
           <>
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground border border-border rounded-md px-3 h-8">
-              <Star className="w-3.5 h-3.5" />
-              <span>{formatNumber(repo.stargazers_count)}</span>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-border hover:bg-secondary h-8"
+              onClick={() => navigate(`/repos/${repo.full_name}/stargazers`)}
+            >
+              <Star className="w-3.5 h-3.5 mr-1.5 text-warning" />
+              收藏者
+              <span className="ml-1.5 text-xs text-muted-foreground">{formatNumber(repo.stargazers_count)}</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -432,6 +445,7 @@ export default function RepoDetailPage() {
           { label: 'Actions',         icon: Play,           path: 'actions',       count: null,                   ownerOnly: false },
           // ── 管理功能（仅 owner）──
           { label: '协作者',          icon: Users,          path: 'collaborators', count: null,                   ownerOnly: true  },
+          { label: '触发工作流',      icon: Zap,            path: 'actions',       count: null,                   ownerOnly: true  },
           { label: '上传文件',        icon: Upload,         path: 'upload',        count: null,                   ownerOnly: true  },
           // ── 社区功能（所有人可见）──
           { label: 'Discussions',     icon: MessageCircle,  path: 'discussions',   count: null,                   ownerOnly: false },

@@ -49,10 +49,10 @@ function notifyAndroidTheme(isDark: boolean) {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
-    return saved || 'dark';
+    return saved || 'system';
   });
   const [resolvedTheme, setResolvedTheme] = useState<'dark' | 'light'>(() =>
-    applyTheme((localStorage.getItem(STORAGE_KEY) as ThemeMode | null) || 'dark')
+    applyTheme((localStorage.getItem(STORAGE_KEY) as ThemeMode | null) || 'system')
   );
 
   const setTheme = useCallback((t: ThemeMode) => {

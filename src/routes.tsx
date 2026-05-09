@@ -31,6 +31,7 @@ import GraphQLPlaygroundPage from './pages/GraphQLPlaygroundPage';
 import FollowListPage from './pages/FollowListPage';
 import StarredPage from './pages/StarredPage';
 import RepoForksPage from './pages/RepoForksPage';
+import StargazersPage from './pages/StargazersPage';
 
 export interface RouteConfig {
   name: string;
@@ -78,6 +79,7 @@ export const routes: RouteConfig[] = [
   { name: 'Pages 部署', path: '/repos/:owner/:repo/pages', element: <PagesDeployPage /> },
   { name: '仓库产物', path: '/repos/:owner/:repo/artifacts', element: <ArtifactsPage /> },
   { name: '仓库 Forks', path: '/repos/:owner/:repo/forks', element: <RepoForksPage /> },
+  { name: '仓库收藏者', path: '/repos/:owner/:repo/stargazers', element: <StargazersPage /> },
   { name: '设置', path: '/settings', element: <SettingsPage /> },
   { name: 'GraphQL Playground', path: '/graphql-playground', element: <GraphQLPlaygroundPage /> },
 ];

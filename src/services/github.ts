@@ -1539,3 +1539,15 @@ export async function getRepoWatchers(
     `/repos/${owner}/${repo}/subscribers?per_page=${per_page}&page=${page}`
   );
 }
+
+/** 获取仓库的 Stargazers（收藏者）列表 */
+export async function getRepoStargazers(
+  owner: string,
+  repo: string,
+  params: { per_page?: number; page?: number } = {}
+): Promise<GitHubUser[]> {
+  const { per_page = 30, page = 1 } = params;
+  return request<GitHubUser[]>(
+    `/repos/${owner}/${repo}/stargazers?per_page=${per_page}&page=${page}`
+  );
+}

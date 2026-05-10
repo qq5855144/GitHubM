@@ -312,29 +312,34 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * 启动画面打字动画：
-     * 将终端命令文字逐字符填入 splashTerminalText，总时长 2800ms（留 200ms 余量）。
-     * 同时启动光标闪烁效果。
+     * · 先停顿 300ms（光标独自闪烁，给 Logo/标题渲染留余量）
+     * · 随后逐字符顺序填入，每字符间隔 119ms，21 字符共 2499ms
+     * · 总时长约 2800ms，与 3s 最小展示窗口对齐，末字出现在 dismiss 之前
+     * 使用顺序回调（而非批量投递），保证每字符都在上一帧渲染后才调度下一字符。
      */
     private fun startSplashTypingAnimation() {
         val terminalTextView = splashOverlay.findViewById<TextView>(R.id.splashTerminalText)
             ?: return
         val cursorView = splashOverlay.findViewById<View>(R.id.splashCursor)
 
-        val fullText   = "git clone your_future"
-        val totalMs    = 2800L                            // 2.8s 内打完
-        val charDelayMs = totalMs / fullText.length       // 每字符间隔 ≈ 133ms
+        val fullText    = "git clone your_future"
+        val startDelayMs = 300L   // 入场停顿：Logo/标题渲染完后才开始打字
+        val charDelayMs  = 119L   // 每字符间隔（2499ms / 21 chars ≈ 119ms）
 
-        // 初始清空，避免 XML 残留内容
+        // 初始清空
         terminalTextView.text = ""
 
-        // 逐字符延时填入
-        fullText.forEachIndexed { index, _ ->
-            splashHandler.postDelayed({
-                terminalTextView.text = fullText.substring(0, index + 1)
-            }, index * charDelayMs)
+        // 顺序回调：typeChar(0) → typeChar(1) → … 每次只调度下一个字符
+        fun typeChar(index: Int) {
+            if (splashDismissed || index >= fullText.length) return
+            terminalTextView.text = fullText.substring(0, index + 1)
+            splashHandler.postDelayed({ typeChar(index + 1) }, charDelayMs)
         }
 
-        // 光标闪烁（每 480ms 切换一次可见性）
+        // 入场停顿后开始第一个字符
+        splashHandler.postDelayed({ typeChar(0) }, startDelayMs)
+
+        // 光标从一开始就闪烁（入场停顿期间也在跳动，增加生命感）
         if (cursorView != null) startCursorBlink(cursorView)
     }
 

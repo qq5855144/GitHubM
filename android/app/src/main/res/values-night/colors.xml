@@ -21,15 +21,4 @@
     <color name="splash_terminal">#484F58</color>
     <color name="splash_cursor">#7C4CF0</color>
     <color name="splash_accent">#8B4CF8</color>
-
-    <!-- 分隔装饰线 -->
-    <color name="splash_divider_edge">#0008080E</color>     <!-- 两端渐隐：透明 -->
-    <color name="splash_divider_center">#30363D</color>     <!-- 中间亮色：GitHub 深色边框 -->
-
-    <!-- Logo 圆形背景光晕 -->
-    <color name="splash_logo_outer_glow">#107C4CF0</color>  <!-- 最外层：极淡紫光晕 -->
-    <color name="splash_logo_mid_glow">#1E7C4CF0</color>    <!-- 中间：淡紫光晕 -->
-    <color name="splash_logo_grad_start">#1A0F2E</color>    <!-- 径向渐变起点：深紫 -->
-    <color name="splash_logo_grad_end">#0D0618</color>      <!-- 径向渐变终点：近黑 -->
-    <color name="splash_logo_stroke">#3B2E7C</color>        <!-- 描边：深紫灰 -->
 </resources>

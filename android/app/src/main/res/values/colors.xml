@@ -30,15 +30,4 @@
     <color name="splash_terminal">#8C959F</color>         <!-- 终端命令文字 -->
     <color name="splash_cursor">#7C3AED</color>           <!-- 光标块 -->
     <color name="splash_accent">#7C3AED</color>           <!-- 进度条 -->
-
-    <!-- 分隔装饰线 -->
-    <color name="splash_divider_edge">#00F6F8FA</color>     <!-- 两端渐隐：透明 -->
-    <color name="splash_divider_center">#D0D7DE</color>     <!-- 中间亮色：GitHub 浅边框 -->
-
-    <!-- Logo 圆形背景光晕 -->
-    <color name="splash_logo_outer_glow">#0D7C3AED</color>  <!-- 最外层：极淡紫光晕 -->
-    <color name="splash_logo_mid_glow">#187C3AED</color>    <!-- 中间：淡紫光晕 -->
-    <color name="splash_logo_grad_start">#F3F0FF</color>    <!-- 径向渐变起点：薰衣草白 -->
-    <color name="splash_logo_grad_end">#DDD6FE</color>      <!-- 径向渐变终点：淡紫 -->
-    <color name="splash_logo_stroke">#C4B5FD</color>        <!-- 描边：浅紫灰 -->
 </resources>

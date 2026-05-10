@@ -272,8 +272,14 @@ class MainActivity : AppCompatActivity() {
     private fun dismissSplash() {
         if (splashDismissed) return
         splashDismissed = true
-        splashOverlay.animate().alpha(0f).setDuration(250)
-            .withEndAction { splashOverlay.visibility = View.GONE }.start()
+        // 淡出 + 轻微缩小，营造优雅的启动画面消散效果
+        splashOverlay.animate()
+            .alpha(0f)
+            .scaleX(1.04f)
+            .scaleY(1.04f)
+            .setDuration(380)
+            .withEndAction { splashOverlay.visibility = View.GONE }
+            .start()
     }
 
     // ── 生命周期 ────────────────────────────────────────────────────

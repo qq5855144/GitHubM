@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  启动屏背景：渐变 + 中央径向光晕
+  深色：极深黑紫 + 紫色光晕
+  浅色：纯净白灰 + 淡紫光晕
+  颜色由 values/colors.xml 与 values-night/colors.xml 自动切换
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 底层：纯色背景 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/splash_bg_solid" />
+        </shape>
+    </item>
+
+    <!-- 中央径向光晕 -->
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:type="radial"
+                android:centerX="0.5"
+                android:centerY="0.42"
+                android:startColor="@color/splash_glow_center"
+                android:endColor="@color/splash_glow_edge"
+                android:gradientRadius="55%p" />
+        </shape>
+    </item>
+
+    <!-- 顶部轻晕叠加 -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:startColor="@color/splash_top_vignette"
+                android:endColor="@color/splash_glow_edge"
+                android:angle="270" />
+        </shape>
+    </item>
+
+</layer-list>
+

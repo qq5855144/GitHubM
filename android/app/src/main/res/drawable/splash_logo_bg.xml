@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Logo 圆形容器背景：双层圆 + 光晕
+  深色：紫色辉光环 + 深紫内圆
+  浅色：淡紫光晕环 + 薰衣草内圆
+  颜色由 values/colors.xml 与 values-night/colors.xml 自动切换
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 最外层：大光晕环 -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/splash_logo_outer_glow" />
+        </shape>
+    </item>
+
+    <!-- 中间：中等光晕 -->
+    <item
+        android:left="10dp"
+        android:top="10dp"
+        android:right="10dp"
+        android:bottom="10dp">
+        <shape android:shape="oval">
+            <solid android:color="@color/splash_logo_mid_glow" />
+        </shape>
+    </item>
+
+    <!-- 内圆：径向渐变 + 描边 -->
+    <item
+        android:left="20dp"
+        android:top="20dp"
+        android:right="20dp"
+        android:bottom="20dp">
+        <shape android:shape="oval">
+            <gradient
+                android:type="radial"
+                android:centerX="0.38"
+                android:centerY="0.32"
+                android:startColor="@color/splash_logo_grad_start"
+                android:endColor="@color/splash_logo_grad_end"
+                android:gradientRadius="55%p" />
+            <stroke
+                android:width="1.2dp"
+                android:color="@color/splash_logo_stroke" />
+        </shape>
+    </item>
+
+</layer-list>
+

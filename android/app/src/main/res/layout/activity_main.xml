@@ -38,12 +38,12 @@
 
     </LinearLayout>
 
-    <!-- 启动遮罩：与 App 深色背景同色，屏蔽 WebView 初始化白屏/闪烁 -->
-    <View
+    <!-- 启动遮罩：全屏启动画面，WebView 就绪后淡出 -->
+    <include
         android:id="@+id/splashOverlay"
+        layout="@layout/splash_screen"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#0d1117" />
+        android:layout_height="match_parent" />
 
 </FrameLayout>
 

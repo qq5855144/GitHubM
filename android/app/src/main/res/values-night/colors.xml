@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      ══ 启动画面 · 深色模式配色 ══
+      极客终端风格：深黑底 + 紫色辉光
+    -->
+    <!-- 背景层 -->
+    <color name="splash_bg_solid">#08080E</color>
+    <color name="splash_glow_center">#1A0A2E</color>      <!-- 深紫光晕中心 -->
+    <color name="splash_glow_edge">#0008080E</color>      <!-- 光晕边缘：近透明深黑 -->
+    <color name="splash_top_vignette">#28060610</color>   <!-- 顶部暗角 -->
+
+    <!-- Logo 圆形容器 -->
+    <color name="splash_logo_outer_glow">#158B4CF8</color>
+    <color name="splash_logo_mid_glow">#258B4CF8</color>
+    <color name="splash_logo_grad_start">#3D1A7A</color>
+    <color name="splash_logo_grad_end">#1A0840</color>
+    <color name="splash_logo_stroke">#7C4CF0</color>
+
+    <!-- 分隔线 -->
+    <color name="splash_divider_edge">#008B4CF8</color>
+    <color name="splash_divider_center">#558B4CF8</color>
+
+    <!-- 文字与装饰 -->
+    <color name="splash_corner_line">#407C4CF0</color>
+    <color name="splash_icon_tint">#FFFFFF</color>        <!-- Octocat：纯白，在深底上清晰 -->
+    <color name="splash_title">#F0F6FF</color>
+    <color name="splash_subtitle">#8B949E</color>
+    <color name="splash_prompt">#7C4CF0</color>
+    <color name="splash_terminal">#484F58</color>
+    <color name="splash_cursor">#7C4CF0</color>
+    <color name="splash_accent">#8B4CF8</color>
+    <color name="splash_loading_text">#484F58</color>
+</resources>

@@ -153,7 +153,7 @@
             android:layout_marginTop="20dp"
             style="?android:attr/progressBarStyleHorizontal"
             android:indeterminate="true"
-            android:indeterminateDuration="6000"
+            android:indeterminateDuration="12000"
             android:indeterminateTint="@color/splash_accent"
             android:progressTint="@color/splash_accent"
             android:indeterminateTintMode="src_in" />

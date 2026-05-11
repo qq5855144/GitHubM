@@ -4,9 +4,9 @@
       ══ 主界面颜色语义化 token（深色模式）══
       与 Web 端 index.css 深色 HSL 变量完全对应，确保冷启动零闪烁
     -->
-    <color name="main_bg">#111117</color>              <!-- WebView 背景，对应 --background dark -->
-    <color name="sidebar_bg">#0d0d11</color>           <!-- BottomNav 背景，对应 --sidebar-background dark -->
-    <color name="nav_unselected">#9292A8</color>       <!-- 底部导航未选中色，对应 --muted-foreground dark -->
+    <color name="main_bg">#111117</color>              <!-- WebView 背景，对应 CSS background dark -->
+    <color name="sidebar_bg">#0d0d11</color>           <!-- BottomNav 背景，对应 CSS sidebar-background dark -->
+    <color name="nav_unselected">#9292A8</color>       <!-- 底部导航未选中色，对应 CSS muted-foreground dark -->
 
     <!-- 底部导航栏颜色（深色模式覆盖） -->
     <color name="bottom_nav_background">@color/sidebar_bg</color>

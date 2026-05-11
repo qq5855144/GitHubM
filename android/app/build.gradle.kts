@@ -28,19 +28,27 @@ android {
     // ── 签名配置 ─────────────────────────────────────────────────────
     signingConfigs {
         create("release") {
-            // CI 提供 KEYSTORE_PATH 时使用 release 签名，否则使用 debug keystore
             if (ciKeystorePath.isNotEmpty()) {
+                // CI 环境：使用 workflow 传入的 keystore 路径
                 storeFile = file(ciKeystorePath)
                 storePassword = ciStorePass
                 keyAlias = ciKeyAlias
                 keyPassword = ciKeyPass
             } else {
-                // 本地开发：使用 Android 默认 debug.keystore，签名一致可覆盖安装
-                val debugKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
-                storeFile = debugKeystore
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
+                // 本地构建：优先使用仓库默认签名，否则回退到 debug keystore
+                val defaultKeystore = rootProject.file("release.keystore")
+                if (defaultKeystore.exists()) {
+                    storeFile = defaultKeystore
+                    storePassword = "GithubManager@CI"
+                    keyAlias = "github-manager"
+                    keyPassword = "GithubManager@CI"
+                } else {
+                    val debugKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
+                    storeFile = debugKeystore
+                    storePassword = "android"
+                    keyAlias = "androiddebugkey"
+                    keyPassword = "android"
+                }
             }
         }
     }

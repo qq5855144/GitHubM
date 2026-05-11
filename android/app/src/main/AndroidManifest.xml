@@ -43,15 +43,22 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.GitHubManager"
         android:hardwareAccelerated="true"
-        android:usesCleartextTraffic="false"
-        android:requestLegacyExternalStorage="true">
+        android:usesCleartextTraffic="false">
+        <!--
+          requestLegacyExternalStorage 在 API 30+ 无效，已移除。
+          下载文件使用 DownloadManager 写入 Downloads 目录，API 29+ 无需此标志。
+        -->
 
         <!-- ── 主 Activity ──────────────────────────────────────── -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|uiMode"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustPan">
+            <!--
+              adjustPan：Android 15 强制边到边后，adjustResize 不再可靠，
+              改用 adjustPan 保持键盘弹出时 WebView 平移而非重排布局。
+            -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

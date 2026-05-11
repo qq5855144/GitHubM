@@ -18,7 +18,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Base64
-import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
@@ -34,6 +33,11 @@ import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updatePadding
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import java.io.File
 import java.io.IOException
@@ -433,35 +437,37 @@ class MainActivity : AppCompatActivity() {
         // 同步 darkTheme 与系统/用户偏好的初始值，避免 setupWebViewSettings 使用错误颜色
         darkTheme = isInitialDark
 
-        // 立即应用与系统/偏好一致的初始颜色，避免深色闪烁
-        if (isInitialDark) {
-            window.statusBarColor     = Color.parseColor("#111117")
-            window.navigationBarColor = Color.parseColor("#0d0d11")
-        } else {
-            window.statusBarColor     = Color.parseColor("#f8f8fb")
-            window.navigationBarColor = Color.parseColor("#f6f4fa")
-            // 浅色模式：状态栏/导航栏图标设为深色
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                window.insetsController?.setSystemBarsAppearance(
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                window.decorView.systemUiVisibility =
-                    window.decorView.systemUiVisibility or
-                    View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
-                    View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-            }
-        }
+        // ── Android 15 边到边适配 ────────────────────────────────────
+        // API 35 强制边到边（edge-to-edge），窗口内容延伸至系统栏后方。
+        // 显式声明不由框架自动 fit，由我们手动通过 WindowInsets 处理 padding。
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // 系统栏颜色设为透明：边到边模式下内容填充整个窗口，
+        // 颜色外观由 WindowInsetsControllerCompat 控制（浅色/深色图标）
+        @Suppress("DEPRECATION")
+        window.statusBarColor     = Color.TRANSPARENT
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = Color.TRANSPARENT
+
+        // 用 WindowInsetsControllerCompat 统一处理系统栏图标颜色（替代已废弃的 systemUiVisibility）
+        val insetsController = WindowInsetsControllerCompat(window, window.decorView)
+        insetsController.isAppearanceLightStatusBars     = !isInitialDark
+        insetsController.isAppearanceLightNavigationBars = !isInitialDark
 
         setContentView(R.layout.activity_main)
 
         webView = findViewById(R.id.webView)
         splashOverlay = findViewById(R.id.splashOverlay)
         bottomNav = findViewById(R.id.bottomNav)
+
+        // ── 边到边 Insets 处理 ──────────────────────────────────────
+        // 将导航栏高度作为 bottomNav 的底部 padding，防止被系统手势条/按键条遮挡。
+        // WebView 不需要顶部 padding，Web 端使用 safe-area-inset-top 自行适配。
+        ViewCompat.setOnApplyWindowInsetsListener(bottomNav) { view, insets ->
+            val navBarInset = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            view.updatePadding(bottom = navBarInset.bottom)
+            insets
+        }
 
         // 读取上次持久化的主题色，并同步应用到启动画面各元素
         applySavedAccentToSplash()
@@ -722,71 +728,26 @@ class MainActivity : AppCompatActivity() {
         webView.setBackgroundColor(
             Color.parseColor(if (isDark) "#111117" else "#f8f8fb")
         )
-        if (isDark) {
-            // ── 深色模式 ──────────────────────────────────────────────
-            val bgColor      = Color.parseColor("#111117")  // --background dark
-            val navBgColor   = Color.parseColor("#0d0d11")  // --sidebar-background dark
-            val unselectedColor = Color.parseColor("#9292A8")  // --muted-foreground dark
 
-            window.statusBarColor     = bgColor
-            window.navigationBarColor = navBgColor
-            bottomNav.setBackgroundColor(navBgColor)
+        // ── 边到边模式下系统栏图标颜色 ────────────────────────────────
+        // API 35 强制边到边，statusBarColor/navigationBarColor 已废弃且无效。
+        // 使用 WindowInsetsControllerCompat 统一控制浅/深色图标外观。
+        val insetsController = WindowInsetsControllerCompat(window, window.decorView)
+        insetsController.isAppearanceLightStatusBars     = !isDark
+        insetsController.isAppearanceLightNavigationBars = !isDark
 
-            // 状态栏图标 → 浅色（白色）
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                window.insetsController?.setSystemBarsAppearance(
-                    0,
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                window.decorView.systemUiVisibility = window.decorView.systemUiVisibility and
-                    View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv() and
-                    View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR.inv()
-            }
+        // ── 底部导航栏背景色（跟随主题） ──────────────────────────────
+        val navBgColor = Color.parseColor(if (isDark) "#0d0d11" else "#f6f4fa")
+        bottomNav.setBackgroundColor(navBgColor)
 
-            // 底部导航栏图标与文字颜色（选中色跟随当前强调色方案）
-            val iconColors = android.content.res.ColorStateList(
-                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                intArrayOf(currentAccentColor, unselectedColor)
-            )
-            bottomNav.itemIconTintList = iconColors
-            bottomNav.itemTextColor   = iconColors
-
-        } else {
-            // ── 浅色模式 ──────────────────────────────────────────────
-            val bgColor      = Color.parseColor("#f8f8fb")  // --background light
-            val navBgColor   = Color.parseColor("#f6f4fa")  // --sidebar-background light
-            val unselectedColor = Color.parseColor("#64748b")  // 深灰，在浅色背景上可读
-
-            window.statusBarColor     = bgColor
-            window.navigationBarColor = navBgColor
-            bottomNav.setBackgroundColor(navBgColor)
-
-            // 状态栏图标 → 深色（黑色）
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                window.insetsController?.setSystemBarsAppearance(
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                window.decorView.systemUiVisibility = window.decorView.systemUiVisibility or
-                    View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
-                    View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-            }
-
-            // 底部导航栏图标与文字颜色（选中色跟随当前强调色方案）
-            val iconColors = android.content.res.ColorStateList(
-                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                intArrayOf(currentAccentColor, unselectedColor)
-            )
-            bottomNav.itemIconTintList = iconColors
-            bottomNav.itemTextColor   = iconColors
-        }
+        // ── 底部导航栏图标与文字颜色 ──────────────────────────────────
+        val unselectedColor = Color.parseColor(if (isDark) "#9292A8" else "#64748b")
+        val iconColors = android.content.res.ColorStateList(
+            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+            intArrayOf(currentAccentColor, unselectedColor)
+        )
+        bottomNav.itemIconTintList = iconColors
+        bottomNav.itemTextColor   = iconColors
     }
 
     private fun setupWebChromeClient() {

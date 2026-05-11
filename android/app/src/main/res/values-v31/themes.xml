@@ -1,20 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Android 12+（API 31）强制触发系统级启动画面（SplashScreen API）。
-  此文件覆盖主题中的窗口背景属性，为系统启动画面设置正确的背景色，
-  避免透明背景导致系统启动画面闪烁或崩溃。
-  深色/浅色由系统自动根据 UiMode 选择对应的 values-night-v31。
+  Android 12+（API 31）系统启动画面主题（浅色模式）。
+  API 35 强制边到边，移除 statusBarColor / navigationBarColor（已废弃）。
+  系统栏颜色外观由 WindowInsetsControllerCompat 在运行时控制。
 -->
 <resources>
     <style name="Theme.GitHubManager" parent="Theme.Material3.Light.NoActionBar">
-        <!-- 系统启动画面背景：浅色模式使用与 Web 端一致的背景色 -->
+        <!-- 系统启动画面背景色（浅色模式） -->
         <item name="android:windowSplashScreenBackground">@color/splash_bg_solid</item>
-        <!-- 启动画面图标：使用 Adaptive Icon -->
         <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
-        <!-- 主窗口背景：不再透明，防止 Android 12+ 透明背景引起的渲染异常 -->
         <item name="android:windowBackground">@color/splash_bg_solid</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="colorPrimary">#7c3aed</item>
         <item name="colorPrimaryVariant">#6d28d9</item>

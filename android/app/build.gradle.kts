@@ -15,12 +15,12 @@ val ciKeyPass      = System.getenv("KEY_PASSWORD")   ?: "android"
 
 android {
     namespace = "com.github.manager"
-    compileSdk = 34
+    compileSdk = 35   // Android 15
 
     defaultConfig {
         applicationId = "com.github.manager"
         minSdk = 26          // Android 8.0+，覆盖主流设备
-        targetSdk = 34
+        targetSdk = 35       // Android 15
         versionCode = ciVersionCode
         versionName = ciVersionName
     }
@@ -80,10 +80,11 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.13.1")
+    // core-ktx 1.15.0：WindowInsetsCompat API 35 完整支持
+    implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
-    // activity-ktx：registerForActivityResult / ActivityResultContracts
+    // activity-ktx：registerForActivityResult / OnBackPressedDispatcher / EdgeToEdge
     implementation("androidx.activity:activity-ktx:1.9.3")
-    // Material 组件：BottomNavigationView
+    // Material3 组件：BottomNavigationView（material 1.12.0 默认使用 Material3 属性体系）
     implementation("com.google.android.material:material:1.12.0")
 }

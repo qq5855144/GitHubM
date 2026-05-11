@@ -471,7 +471,7 @@ export default function AiAssistantPage() {
       )}
 
       {/* 消息列表 */}
-      <div ref={scrollAreaRef} className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col"><ScrollArea className="flex-1 min-h-0">
+      <div ref={scrollAreaRef} className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col"><ScrollArea className="flex-1 min-h-0 min-w-0">
         <div className="flex flex-col gap-4 p-4 pb-2">
           {messages.map((msg, idx) => {
             const isLastAi = idx === lastAiIdx;
@@ -485,22 +485,24 @@ export default function AiAssistantPage() {
                     ? <User className="w-3.5 h-3.5" />
                     : <Bot className="w-3.5 h-3.5 text-muted-foreground" />}
                 </div>
-                <div className="flex flex-col gap-1 max-w-[85%] min-w-0 overflow-hidden">
+                {/* overflow-x-hidden 只阻断横向溢出，不阻断纵向；气泡内 pre 的横向滚动条可正常工作 */}
+                <div className="flex flex-col gap-1 max-w-[85%] min-w-0 overflow-x-hidden">
                   {/* 消息气泡：内容超过阈值后启用独立滚动，避免整个列表被撑开 */}
+                  {/* 气泡：overflow-x-auto 让宽代码块可横向滚动而非截断；
+                       长内容流式结束后加 max-h+overflow-y-auto 防止无限撑高列表 */}
                   <div className={cn(
-                    'rounded-2xl px-4 py-3 text-sm min-w-0 max-w-full',
+                    'rounded-2xl px-4 py-3 text-sm min-w-0 max-w-full overflow-x-auto',
                     msg.role === 'user'
                       ? 'bg-primary text-primary-foreground rounded-tr-sm'
                       : 'bg-muted/60 border border-border text-foreground rounded-tl-sm',
-                    // 内容较长时（流式完成后）启用气泡内滚动
                     !msg.streaming && msg.content.length > 600
                       ? 'max-h-[60vh] overflow-y-auto'
-                      : 'overflow-hidden'
+                      : ''
                   )}>
                     {msg.role === 'user'
                       ? <p className="whitespace-pre-wrap break-words min-w-0 max-w-full">{msg.content}</p>
                       : (
-                        <div className="min-w-0 max-w-full overflow-hidden">
+                        <div className="min-w-0 max-w-full">
                           {msg.content ? renderMarkdown(msg.content) : (
                             msg.streaming
                               ? <span className="inline-block w-1.5 h-4 bg-primary animate-pulse rounded-sm align-middle" />

@@ -173,7 +173,7 @@ export function renderMarkdown(text: string): React.ReactNode {
               <span className="text-[10px] font-mono text-muted-foreground select-none">{lang}</span>
             </div>
           )}
-          <pre className="overflow-x-auto p-3 text-[11px] font-mono leading-relaxed">
+          <pre className="overflow-x-auto max-w-full p-3 text-[11px] font-mono leading-relaxed">
             <code className="break-normal whitespace-pre">{codeText}</code>
           </pre>
         </div>
@@ -256,5 +256,7 @@ export function renderMarkdown(text: string): React.ReactNode {
     );
     i++;
   }
-  return <div className="flex flex-col gap-0.5 min-w-0 max-w-full overflow-hidden">{result}</div>;
+  /* overflow-hidden 在此被移除：内层 pre 的 overflow-x-auto 需要能形成独立滚动上下文，
+     外部气泡已用 overflow-x-auto 兜底，根 div 只需约束宽度即可 */
+  return <div className="flex flex-col gap-0.5 min-w-0 max-w-full">{result}</div>;
 }

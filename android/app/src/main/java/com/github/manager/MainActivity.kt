@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import androidx.lifecycle.lifecycleScope
 import android.provider.MediaStore
 import android.util.Base64
 import android.view.View
@@ -877,7 +878,7 @@ class MainActivity : AppCompatActivity() {
 
         // lifecycleScope 绑定 Activity 生命周期，Activity 销毁时自动取消
         lifecycleScope.launch {
-            val (finalUrl, useToken) = withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 runCatching {
                     val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                         if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
@@ -907,13 +908,15 @@ class MainActivity : AppCompatActivity() {
                     }
                 }.getOrNull() // 网络异常时 getOrNull() 返回 null，走降级分支
             }
+            val finalUrl = result?.first
+            val useToken = result?.second ?: ""
 
             // 回到主线程更新 UI / 提交 DownloadManager（已在 lifecycleScope 的主线程上下文）
             if (finalUrl == null) {
                 // 非预期状态码：降级用原始 URL 直接提交，DownloadManager 自行处理
                 enqueueDownload(url, fileName, token)
             } else {
-                enqueueDownload(finalUrl, fileName, useToken ?: "")
+                enqueueDownload(finalUrl, fileName, useToken)
             }
         }
     }

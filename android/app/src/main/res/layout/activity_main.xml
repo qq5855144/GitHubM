@@ -35,16 +35,23 @@
             android:background="@color/bottom_nav_background"
             android:elevation="8dp">
 
+            <!--
+              Material 3 labeled BottomNavigationView 高度规范：
+                active indicator(32dp) + label(16dp) + 上下内边距(16dp) = 64dp 最小，官方推荐 80dp。
+              56dp 是 M2 icon-only 模式高度，在 labeled 模式下图标与文字必然重叠。
+              app:itemIconSize 从默认 24dp 缩为 20dp，让 indicator + label 在 80dp 内更舒适。
+            -->
             <com.google.android.material.bottomnavigation.BottomNavigationView
                 android:id="@+id/bottomNav"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
+                android:layout_height="80dp"
                 android:background="@android:color/transparent"
                 app:menu="@menu/bottom_nav_menu"
                 app:itemIconTint="@color/bottom_nav_colors"
                 app:itemTextColor="@color/bottom_nav_colors"
                 app:itemTextAppearanceActive="@style/BottomNavTextActive"
                 app:itemTextAppearanceInactive="@style/BottomNavTextInactive"
+                app:itemIconSize="20dp"
                 app:labelVisibilityMode="labeled"
                 app:elevation="0dp" />
 

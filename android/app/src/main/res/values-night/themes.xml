@@ -14,5 +14,8 @@
         <item name="colorPrimary">#8B4CF8</item>
         <item name="colorPrimaryVariant">#7C3AED</item>
         <item name="colorOnPrimary">#ffffff</item>
+        <!-- M3 Active Indicator 填充色（深色模式）：深紫 -->
+        <item name="colorSecondaryContainer">#3D2B6B</item>
+        <item name="colorOnSecondaryContainer">#D4BBFF</item>
     </style>
 </resources>

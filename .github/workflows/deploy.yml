@@ -45,6 +45,10 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+# 强制 Actions 使用 Node.js 24（2026-06 起官方默认，提前适配避免破坏性变更）
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # ─────────────────────────────────────────────────────────────────
 jobs:
 

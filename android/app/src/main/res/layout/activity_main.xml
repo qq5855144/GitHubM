@@ -78,7 +78,6 @@
                 app:itemTextAppearanceInactive="@style/BottomNavTextInactive"
                 app:itemIconSize="22dp"
                 app:itemActiveIndicatorStyle="@style/BottomNavActiveIndicator"
-                app:itemActiveIndicatorColor="@color/bottom_nav_indicator_colors"
                 app:labelVisibilityMode="labeled"
                 app:elevation="0dp" />
 

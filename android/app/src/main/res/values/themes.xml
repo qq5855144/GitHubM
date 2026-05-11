@@ -17,6 +17,9 @@
         <item name="colorPrimary">#7c3aed</item>
         <item name="colorPrimaryVariant">#6d28d9</item>
         <item name="colorOnPrimary">#ffffff</item>
+        <!-- M3 Active Indicator 填充色（BottomNav 选中指示器背景）：浅紫 -->
+        <item name="colorSecondaryContainer">#EDE9FE</item>
+        <item name="colorOnSecondaryContainer">#5B21B6</item>
     </style>
 
     <!--

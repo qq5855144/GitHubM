@@ -56,6 +56,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var splashOverlay: View
     private lateinit var bottomNav: BottomNavigationView
     private lateinit var navBarSpacer: View
+    private lateinit var statusBarSpacer: View
     private var splashDismissed = false
 
     // ── 启动画面双条件门禁 ──────────────────────────────────────────
@@ -196,6 +197,8 @@ class MainActivity : AppCompatActivity() {
                 bottomNav.itemIconTintList = iconColors
                 bottomNav.itemTextColor   = iconColors
                 currentAccentColor = color
+                // M3 Active Indicator 颜色同步
+                bottomNav.itemActiveIndicatorColor = ThemeUtils.indicatorColor(color, darkTheme)
             }
         }
 
@@ -476,12 +479,24 @@ class MainActivity : AppCompatActivity() {
         splashOverlay = findViewById(R.id.splashOverlay)
         bottomNav = findViewById(R.id.bottomNav)
         navBarSpacer = findViewById(R.id.navBarSpacer)
+        statusBarSpacer = findViewById(R.id.statusBarSpacer)
 
         // ── 边到边 Insets 处理 ──────────────────────────────────────
-        // 将系统导航条高度同步给 navBarSpacer，使底部容器自然撑开，
-        // BottomNavigationView 始终保持固定 56dp，图标与文字不会因 padding 压缩而重叠。
-        // Kotlin 2.0 K2 编译器对 Java SAM 推断更严格：
-        //   - 用 _ 丢弃未使用的 view 参数，避免与外层作用域命名歧义
+        // 【顶部】将系统状态栏高度同步给 statusBarSpacer，确保 WebView 内容
+        //   从状态栏下方开始，不与状态栏时钟/电量图标重叠。
+        //   启动画面期间状态栏被隐藏，insets.top = 0，spacer 高度 = 0 不占空间；
+        //   dismissSplash 恢复状态栏后 insets 重新派发，spacer 自动撑开正确高度。
+        ViewCompat.setOnApplyWindowInsetsListener(statusBarSpacer) { _, insets ->
+            val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            val lp = statusBarSpacer.layoutParams
+            lp.height = statusBarHeight
+            statusBarSpacer.layoutParams = lp
+            insets
+        }
+
+        // 【底部】将系统导航条高度同步给 navBarSpacer，使底部容器自然撑开，
+        //   BottomNavigationView 始终保持固定 80dp，图标与文字不会因 padding 压缩而重叠。
+        //   Kotlin 2.0 K2 编译器对 Java SAM 推断更严格：用 _ 丢弃未使用的 view 参数。
         ViewCompat.setOnApplyWindowInsetsListener(navBarSpacer) { _, insets ->
             val navBarHeight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val lp = navBarSpacer.layoutParams
@@ -715,6 +730,8 @@ class MainActivity : AppCompatActivity() {
                                 currentAccentColor = color
                                 bottomNav.itemIconTintList = iconColors
                                 bottomNav.itemTextColor   = iconColors
+                                // M3 Active Indicator 颜色同步
+                                bottomNav.itemActiveIndicatorColor = ThemeUtils.indicatorColor(color, darkTheme)
                             }
                         } catch (_: Exception) { /* 静默忽略 */ }
                     }
@@ -811,7 +828,9 @@ class MainActivity : AppCompatActivity() {
         )
         bottomNav.itemIconTintList = iconColors
         bottomNav.itemTextColor   = iconColors
-    }
+
+        // ── M3 Active Indicator 颜色（委托给 ThemeUtils.indicatorColor，保持逻辑单一来源）
+        bottomNav.itemActiveIndicatorColor = ThemeUtils.indicatorColor(currentAccentColor, isDark)
 
     private fun setupWebChromeClient() {
         webView.webChromeClient = object : WebChromeClient() {

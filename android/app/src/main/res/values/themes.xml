@@ -19,15 +19,37 @@
         <item name="colorOnPrimary">#ffffff</item>
     </style>
 
-    <!-- 底部导航栏选中文字样式 -->
+    <!--
+      ══ 底部导航栏 M3 样式 ══════════════════════════════════════════
+
+      BottomNavTextActive / BottomNavTextInactive
+        Material 3 规范使用 LabelMedium（12sp / medium weight）作为导航标签。
+        选中与未选中均使用相同字号，靠颜色区分；选中加粗以增强层次感。
+    -->
     <style name="BottomNavTextActive">
-        <item name="android:textSize">10sp</item>
+        <item name="android:textSize">11sp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.01</item>
     </style>
 
-    <!-- 底部导航栏未选中文字样式 -->
     <style name="BottomNavTextInactive">
-        <item name="android:textSize">10sp</item>
+        <item name="android:textSize">11sp</item>
         <item name="android:fontFamily">sans-serif</item>
+        <item name="android:letterSpacing">0.01</item>
+    </style>
+
+    <!--
+      BottomNavActiveIndicator
+        M3 Active Indicator 胶囊形状样式（Widget.Material3 规范）：
+          - width  64dp：适合 5 个标签的导航栏（item 宽度约 72dp）
+          - height 32dp：M3 官方规格
+          - shapeAppearance：全圆角（ShapeAppearance.Material3.Corner.Full）
+        填充颜色由 itemActiveIndicatorColor 在布局中指定，此处仅声明形状。
+    -->
+    <style name="BottomNavActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:width">56dp</item>
+        <item name="android:height">32dp</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+        <item name="fillColor">@color/bottom_nav_indicator_colors</item>
     </style>
 </resources>

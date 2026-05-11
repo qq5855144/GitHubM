@@ -1,5 +1,6 @@
 package com.github.manager
 
+import android.content.res.ColorStateList
 import android.graphics.Color
 import androidx.annotation.VisibleForTesting
 
@@ -42,4 +43,33 @@ object ThemeUtils {
      */
     @VisibleForTesting
     fun isValidHexColor(hex: String): Boolean = parseColorSafe(hex) != null
+
+    /**
+     * 生成 M3 BottomNavigationView Active Indicator 的 ColorStateList。
+     *
+     * Material 3 规范：
+     *   - 浅色模式：accent 色 + alpha 20%（primaryContainer 淡色调，不喧宾夺主）
+     *   - 深色模式：accent 色 × 55% 亮度（沉稳深紫，与深色 sidebar 形成可见对比）
+     *   - 未选中项：完全透明（不渲染 indicator）
+     *
+     * @param accentColor 当前强调色（ARGB Int）
+     * @param isDark      是否为深色模式
+     * @return 可直接赋给 bottomNav.itemActiveIndicatorColor 的 ColorStateList
+     */
+    fun indicatorColor(accentColor: Int, isDark: Boolean): ColorStateList {
+        val indicatorColor = if (isDark) {
+            // 深色：accent × 0.55 亮度，产生「primaryContainer dark」效果
+            val r = (Color.red(accentColor)   * 0.55f).toInt().coerceIn(0, 255)
+            val g = (Color.green(accentColor) * 0.55f).toInt().coerceIn(0, 255)
+            val b = (Color.blue(accentColor)  * 0.55f).toInt().coerceIn(0, 255)
+            Color.argb(255, r, g, b)
+        } else {
+            // 浅色：accent + 20% alpha（51/255）→ primaryContainer 淡化色
+            Color.argb(51, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
+        }
+        return ColorStateList(
+            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+            intArrayOf(indicatorColor, Color.TRANSPARENT)
+        )
+    }
 }

@@ -10,11 +10,23 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- 主体：WebView + 底部导航栏垂直排列 -->
+    <!-- 主体：状态栏占位 + WebView + 底部导航栏垂直排列 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
+
+        <!--
+          系统状态栏占位符：高度由 WindowInsets statusBars().top 动态设置。
+          确保 WebView 内容从状态栏下方开始，避免与状态栏图标重叠。
+          启动画面期间状态栏被隐藏，insets = 0，spacer 高度 = 0，不占空间。
+          dismissSplash 后状态栏恢复显示，insets 更新，spacer 自动撑开正确高度。
+        -->
+        <View
+            android:id="@+id/statusBarSpacer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:background="@color/main_bg" />
 
         <WebView
             android:id="@+id/webView"
@@ -23,9 +35,21 @@
             android:layout_weight="1" />
 
         <!--
-          底部导航容器：BottomNavigationView 固定 56dp，不接收系统导航条 inset，
-          避免 updatePadding(bottom) 压缩内部可用高度导致图标与文字重叠。
-          系统导航条（手势条/按键条）高度由 navBarSpacer 独立承接。
+          ══ M3 标准底部导航容器 ══════════════════════════════════════
+          结构：顶部分割线 + BottomNavigationView（固定 80dp，M3 规范）+ navBarSpacer
+
+          高度说明（M3 labeled 模式）：
+            active indicator 胶囊  : 32dp
+            标签文字（11sp）        : ~16dp
+            上下内边距              : ~16dp（合计 ~32dp）
+            总计                   : 80dp  ← M3 官方规格
+
+          Active Indicator：
+            圆角胶囊（cornerRadius = 999dp），颜色 = primaryContainer 淡紫，
+            由 itemActiveIndicatorStyle + itemActiveIndicatorColor 共同控制，
+            运行时通过 applyNativeTheme 动态更新以匹配用户选择的强调色。
+
+          不使用 updatePadding(bottom)：系统导航条高度由 navBarSpacer 独立承接。
         -->
         <LinearLayout
             android:id="@+id/bottomNavContainer"
@@ -35,14 +59,15 @@
             android:background="@color/bottom_nav_background"
             android:elevation="8dp">
 
-            <!--
-              Material 3 labeled BottomNavigationView 高度规范：
-                active indicator(32dp) + label(16dp) + 上下内边距(16dp) = 64dp 最小，官方推荐 80dp。
-              56dp 是 M2 icon-only 模式高度，在 labeled 模式下图标与文字必然重叠。
-              app:itemIconSize 从默认 24dp 缩为 20dp，让 indicator + label 在 80dp 内更舒适。
-            -->
+            <!-- 顶部分割线：1dp 高，与 Web 端 border token 对齐 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/bottom_nav_divider" />
+
             <com.google.android.material.bottomnavigation.BottomNavigationView
                 android:id="@+id/bottomNav"
+                style="@style/Widget.Material3.BottomNavigationView"
                 android:layout_width="match_parent"
                 android:layout_height="80dp"
                 android:background="@android:color/transparent"
@@ -51,7 +76,9 @@
                 app:itemTextColor="@color/bottom_nav_colors"
                 app:itemTextAppearanceActive="@style/BottomNavTextActive"
                 app:itemTextAppearanceInactive="@style/BottomNavTextInactive"
-                app:itemIconSize="20dp"
+                app:itemIconSize="22dp"
+                app:itemActiveIndicatorStyle="@style/BottomNavActiveIndicator"
+                app:itemActiveIndicatorColor="@color/bottom_nav_indicator_colors"
                 app:labelVisibilityMode="labeled"
                 app:elevation="0dp" />
 

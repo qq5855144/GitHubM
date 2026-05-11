@@ -44,3 +44,6 @@ android/**/*.class
 android/release.keystore
 android/*.keystore
 android/*.jks
+
+# 平台内部上下文文件（含敏感 token 记录，不纳入版本控制）
+historical_context.txt

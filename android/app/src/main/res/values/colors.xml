@@ -7,15 +7,17 @@
       ══ 主界面颜色语义化 token（浅色模式）══
       与 Web 端 index.css HSL 变量对应，确保 Native/WebView 背景一致无闪烁
     -->
-    <color name="main_bg">#f8f8fb</color>              <!-- WebView 背景，对应 CSS background -->
-    <color name="sidebar_bg">#f6f4fa</color>           <!-- BottomNav 背景，对应 CSS sidebar background -->
-    <color name="nav_unselected">#64748b</color>       <!-- 底部导航未选中色，对应 CSS muted foreground -->
+    <color name="main_bg">#f8f8fb</color>              <!-- WebView 背景色（对应 Web 端 background 变量） -->
+    <color name="sidebar_bg">#f6f4fa</color>           <!-- BottomNav 背景色（对应 Web 端 sidebar-background 变量） -->
+    <color name="nav_unselected">#64748b</color>       <!-- 底部导航未选中色（对应 Web 端 muted-foreground 变量） -->
 
     <!-- 底部导航栏颜色 -->
     <color name="bottom_nav_background">@color/sidebar_bg</color>
     <color name="bottom_nav_selected">#7c3aed</color>     <!-- 选中色：主题紫色 primary -->
     <color name="bottom_nav_unselected">@color/nav_unselected</color>
     <color name="bottom_nav_divider">#e2ddf5</color>      <!-- 分割线：浅紫灰 border -->
+    <!-- M3 Active Indicator 背景色：primaryContainer（浅色模式 = 淡紫） -->
+    <color name="bottom_nav_indicator_bg">#EDE9FE</color>
 
     <!--
       ══ 启动画面 · 浅色模式配色 ══

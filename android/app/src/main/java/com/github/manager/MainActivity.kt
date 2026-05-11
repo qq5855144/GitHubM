@@ -831,6 +831,7 @@ class MainActivity : AppCompatActivity() {
 
         // ── M3 Active Indicator 颜色（委托给 ThemeUtils.indicatorColor，保持逻辑单一来源）
         bottomNav.itemActiveIndicatorColor = ThemeUtils.indicatorColor(currentAccentColor, isDark)
+    }
 
     private fun setupWebChromeClient() {
         webView.webChromeClient = object : WebChromeClient() {

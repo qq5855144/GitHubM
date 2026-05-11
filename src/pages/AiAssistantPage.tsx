@@ -35,6 +35,7 @@ import {
   Star, Lock, Globe, ChevronRight, RefreshCw, Eye, EyeOff,
   RotateCw, CheckCircle2, XCircle, Copy, Check, ChevronDown,
   Plus, GitPullRequest, History, MessageSquare, ArrowLeft, Loader2,
+  FolderOpen, BookOpen, GitCommit, LayoutDashboard, Pencil, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -655,13 +656,13 @@ function RepoSelector({ onSelect }: { onSelect: (repo: GitHubRepo) => void }) {
 // ── 快捷指令 ──────────────────────────────────────────────────────────────────
 
 const QUICK_PROMPTS = [
-  { label: '📁 列出根目录', text: '请列出仓库根目录下的所有文件和文件夹' },
-  { label: '📖 查看 README', text: '请读取并展示 README.md 的内容' },
-  { label: '🌿 列出分支', text: '请列出该仓库所有的分支' },
-  { label: '📝 提交历史', text: '请展示仓库最近 10 条提交记录' },
-  { label: '🔍 搜索 TODO', text: '搜索仓库中所有包含 TODO 注释的代码位置' },
-  { label: '🏗️ 项目结构', text: '帮我分析一下这个仓库的整体项目结构和技术栈' },
-  { label: '✏️ 优化 README', text: '请读取 README.md，帮我优化内容并重新写入' },
+  { icon: FolderOpen,      label: '列出根目录', text: '请列出仓库根目录下的所有文件和文件夹' },
+  { icon: BookOpen,        label: '查看 README', text: '请读取并展示 README.md 的内容' },
+  { icon: GitBranch,       label: '列出分支', text: '请列出该仓库所有的分支' },
+  { icon: GitCommit,       label: '提交历史', text: '请展示仓库最近 10 条提交记录' },
+  { icon: Search,          label: '搜索 TODO', text: '搜索仓库中所有包含 TODO 注释的代码位置' },
+  { icon: LayoutDashboard, label: '项目结构', text: '帮我分析一下这个仓库的整体项目结构和技术栈' },
+  { icon: Pencil,          label: '优化 README', text: '请读取 README.md，帮我优化内容并重新写入' },
 ];
 
 // ── 复制按钮 ────────────────────────────────────────────────────────────────────
@@ -1281,27 +1282,14 @@ export default function AiAssistantPage() {
           </Button>
         </div>
 
-        {/* 右侧操作 */}
-        <div className="flex items-center gap-0.5 shrink-0">
+        {/* 右侧：流式状态 */}
+        <div className="flex items-center shrink-0">
           {isStreaming && (
-            <Badge variant="secondary" className="text-xs animate-pulse hidden md:flex mr-1">思考中…</Badge>
+            <Badge variant="secondary" className="text-xs animate-pulse">
+              <span className="hidden sm:inline">思考中</span>
+              <Loader2 className="w-3 h-3 animate-spin sm:hidden" />
+            </Badge>
           )}
-          <Button variant="ghost" size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={() => setShowHistory(true)} title="历史对话">
-            <History className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={() => setShowModelSettings(true)}
-            title={`当前模型：${currentModelDef.label}`}>
-            <Settings className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={handleClearChat} title="清空对话" disabled={isStreaming}>
-            <Trash2 className="w-4 h-4" />
-          </Button>
         </div>
       </div>
 
@@ -1389,57 +1377,122 @@ export default function AiAssistantPage() {
 
       {/* 快捷指令 */}
       {messages.length <= 1 && !isStreaming && (
-        <div className="px-4 pb-2 shrink-0">
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {QUICK_PROMPTS.map(q => (
-              <button
-                key={q.label}
-                onClick={() => handleSend(q.text)}
-                className="shrink-0 text-xs px-3 py-1.5 rounded-full border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
-              >
-                {q.label}
-              </button>
-            ))}
+        <div className="px-3 pb-2 shrink-0">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Zap className="w-3 h-3 text-primary/70" />
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">快捷指令</span>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+            {QUICK_PROMPTS.map(q => {
+              const Icon = q.icon;
+              return (
+                <button
+                  key={q.label}
+                  onClick={() => handleSend(q.text)}
+                  className="shrink-0 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-primary/5 hover:border-primary/30 hover:text-primary text-muted-foreground transition-all duration-150 whitespace-nowrap group"
+                >
+                  <Icon className="w-3 h-3 shrink-0 group-hover:text-primary" />
+                  <span>{q.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
-      <Separator />
-
       {/* 输入区 */}
-      <div className="px-4 py-3 shrink-0 bg-card">
-        <div className="flex gap-2 items-end">
-          <Textarea
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="输入消息… （Enter 发送，Shift+Enter 换行）"
-            className="flex-1 min-w-0 min-h-[44px] max-h-32 resize-none px-3 py-2.5 text-sm"
-            disabled={isStreaming}
-            rows={1}
-          />
-          {isStreaming ? (
-            <Button size="icon" variant="outline" onClick={handleStop}
-              className="h-10 w-10 shrink-0 border-destructive text-destructive hover:bg-destructive/10">
-              <Square className="w-4 h-4" />
-            </Button>
-          ) : (
-            <Button size="icon" onClick={() => handleSend()} disabled={!input.trim()} className="h-10 w-10 shrink-0">
-              <Send className="w-4 h-4" />
-            </Button>
-          )}
-        </div>
-        <div className="flex items-center justify-between mt-1.5">
-          <div className="flex items-center gap-1.5">
-            <GitBranch className="w-3 h-3 text-muted-foreground" />
-            <span className="text-[10px] text-muted-foreground font-mono">{selectedBranch}</span>
-            {sessionId && (
-              <span className="text-[10px] text-green-500 ml-1">● 已保存</span>
+      <div className="px-3 py-3 shrink-0 bg-card">
+        {/* 统一输入卡片 */}
+        <div className={cn(
+          'rounded-xl border bg-background transition-shadow duration-200',
+          isStreaming
+            ? 'border-primary/40 shadow-sm shadow-primary/10'
+            : 'border-border hover:border-border/80 focus-within:border-primary/50 focus-within:shadow-sm focus-within:shadow-primary/10'
+        )}>
+          {/* 工具栏 */}
+          <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
+            <div className="flex items-center gap-1">
+              {/* 模型标签 */}
+              <button
+                onClick={() => setShowModelSettings(true)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-primary/8 transition-colors group"
+                title="切换模型"
+              >
+                <Sparkles className="w-3 h-3 group-hover:text-primary shrink-0" />
+                <span className="font-medium">{currentModelDef.label}</span>
+                {modelConfig.model && (
+                  <span className="hidden sm:inline text-[10px] opacity-70">· {modelConfig.model}</span>
+                )}
+              </button>
+            </div>
+            <div className="flex items-center gap-0.5">
+              {/* 分支信息 */}
+              <button
+                onClick={() => setShowCreateBranch(true)}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors font-mono"
+                title="新建分支"
+              >
+                <GitBranch className="w-3 h-3 shrink-0" />
+                <span className="max-w-[80px] truncate">{selectedBranch}</span>
+              </button>
+              {sessionId && (
+                <span className="text-[10px] text-green-500 px-1" title="对话已保存">●</span>
+              )}
+              <div className="w-px h-3.5 bg-border mx-0.5" />
+              {/* 历史 */}
+              <button
+                onClick={() => setShowHistory(true)}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/8 transition-colors"
+                title="历史对话"
+              >
+                <History className="w-3.5 h-3.5" />
+              </button>
+              {/* 清空 */}
+              <button
+                onClick={handleClearChat}
+                disabled={isStreaming}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/8 transition-colors disabled:opacity-40"
+                title="清空对话"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* 分隔线 */}
+          <div className="mx-3 h-px bg-border/60" />
+
+          {/* 文本框 + 发送 */}
+          <div className="flex items-end gap-2 px-3 py-2">
+            <Textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="输入消息… （Enter 发送，Shift+Enter 换行）"
+              className="flex-1 min-w-0 min-h-[36px] max-h-28 resize-none border-0 shadow-none bg-transparent px-0 py-0.5 text-sm focus-visible:ring-0 placeholder:text-muted-foreground/60"
+              disabled={isStreaming}
+              rows={1}
+            />
+            {/* 发送 / 停止 按钮 */}
+            {isStreaming ? (
+              <button
+                onClick={handleStop}
+                className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-destructive/10 border border-destructive/30 text-destructive hover:bg-destructive/20 transition-colors"
+                title="停止生成"
+              >
+                <Square className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                onClick={() => handleSend()}
+                disabled={!input.trim()}
+                className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                title="发送（Enter）"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
             )}
           </div>
-          <p className="text-[10px] text-muted-foreground">
-            {currentModelDef.label}{modelConfig.model ? ` · ${modelConfig.model}` : ''}
-          </p>
         </div>
       </div>
 

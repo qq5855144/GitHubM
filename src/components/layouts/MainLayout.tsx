@@ -24,6 +24,7 @@ import {
   PanelLeftOpen,
   User,
   Braces,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -77,6 +78,7 @@ const navItems: NavItem[] = [
   { label: '账号管理', path: '/accounts', icon: Users },
   { label: '数据导出', path: '/export', icon: Download },
   { label: 'GraphQL', path: '/graphql-playground', icon: Braces },
+  { label: 'AI 助手', path: '/ai-assistant', icon: Sparkles },
 ];
 
 const themeIcons: Record<ThemeMode, React.ComponentType<{ className?: string }>> = {
@@ -87,11 +89,11 @@ const themeIcons: Record<ThemeMode, React.ComponentType<{ className?: string }>>
 
 // 移动端底部 Tab 导航（WebView APK 友好，5 个核心入口）
 const bottomTabs = [
-  { label: '首页', path: '/',             icon: Home },
-  { label: '仓库', path: '/repos',        icon: BookOpen },
-  { label: '搜索', path: '/search',       icon: Search },
-  { label: '通知', path: '/notifications', icon: Bell },
-  { label: '我的', path: '/settings',     icon: User },
+  { label: '首页',  path: '/',             icon: Home },
+  { label: '仓库',  path: '/repos',        icon: BookOpen },
+  { label: 'AI',   path: '/ai-assistant', icon: Sparkles },
+  { label: '通知',  path: '/notifications', icon: Bell },
+  { label: '我的',  path: '/settings',     icon: User },
 ];
 
 function MobileBottomNav() {

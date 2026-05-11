@@ -24,9 +24,8 @@
 #           勾选 repo 权限后生成，填入 GH_PAT Secret。
 #
 #   【零配置模式】
-#   以上 Secrets 均不填时，CI 使用仓库中的默认签名
-#   android/release.keystore，支持跨版本覆盖安装。
-#   若仓库中也无此文件（极少情况），CI 回退到生成临时证书。
+#   以上 Secrets 均不填时，CI 仍可正常构建，但每次生成不同临时证书，
+#   安装后无法被下一个构建版本覆盖安装。
 # ────────────────────────────────────────────────────────────────────
 name: Deploy & Build APK
 
@@ -146,10 +145,10 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
 
       # ── 签名配置 ──────────────────────────────────────────────────
-      # 三级优先级：
-      #   1. 仓库 Secret（RELEASE_KEYSTORE_BASE64）→ 自定义签名
-      #   2. 仓库默认签名（android/release.keystore）→ 零配置稳定签名
-      #   3. keytool 自动生成临时证书 → 兜底（每次构建签名不同）
+      # 优先使用仓库 Secret 中的稳定 Release Keystore（支持跨版本覆盖安装）；
+      # 未配置 Secret 时，用 keytool -genkeypair 自动生成临时 Keystore 并用于签名，
+      # 使 APK 始终以 Release 模式构建（而非 Debug），但该临时证书每次构建都会变化，
+      # 无法跨不同构建版本覆盖安装。如需稳定签名，请按注释说明配置 Secrets。
       - name: 配置 Release Keystore
         id: keystore
         env:
@@ -161,25 +160,20 @@ jobs:
           KEYSTORE_PATH="${GITHUB_WORKSPACE}/android/release.keystore"
 
           if [ -n "${RELEASE_KEYSTORE_BASE64}" ]; then
-            # ── 方案 1：使用仓库 Secret 中的自定义 Keystore ────────
-            echo "✅ 使用 Secret 中的 Release Keystore"
+            # ── 方案 A：使用仓库 Secret 中的稳定 Keystore ────────────
+            echo "✅ 使用 Secret 中的 Release Keystore（支持覆盖安装）"
             echo "${RELEASE_KEYSTORE_BASE64}" | base64 --decode > "${KEYSTORE_PATH}"
             STORE_PASS="${RELEASE_STORE_PASSWORD}"
             KEY_ALIAS_VAL="${RELEASE_KEY_ALIAS}"
             KEY_PASS="${RELEASE_KEY_PASSWORD}"
             echo "was_generated=false" >> "$GITHUB_OUTPUT"
-          elif [ -f "${KEYSTORE_PATH}" ]; then
-            # ── 方案 2：使用仓库中的默认签名 Keystore ──────────────
-            echo "✅ 使用仓库默认签名（android/release.keystore）"
-            echo "   零配置稳定签名，跨版本覆盖安装可用。"
-            STORE_PASS="GithubManager@CI"
-            KEY_ALIAS_VAL="github-manager"
-            KEY_PASS="GithubManager@CI"
-            echo "was_generated=false" >> "$GITHUB_OUTPUT"
           else
-            # ── 方案 3：兜底，keytool 自动生成临时 Keystore ──────
-            echo "⚠️  未找到任何签名配置，生成临时 Keystore..."
-            echo "   临时证书无法跨版本覆盖安装。"
+            # ── 方案 B：Secret 未配置，用 keytool 自动生成临时 Keystore ─
+            echo "⚠️  未检测到 RELEASE_KEYSTORE_BASE64 Secret"
+            echo "   正在使用 keytool -genkeypair 生成临时签名 Keystore..."
+            echo "   ℹ️  若配置了 GH_PAT Secret，本次生成的证书将自动写入仓库"
+            echo "      Secrets，后续构建将复用同一证书，支持覆盖安装。"
+            echo "   📋  未配置 GH_PAT 时，临时证书每次重新生成，无法跨版本覆盖安装。"
 
             STORE_PASS="GithubManager@CI"
             KEY_ALIAS_VAL="github-manager"
@@ -197,6 +191,8 @@ jobs:
               -noprompt
 
             echo "✅ 临时 Keystore 生成成功：${KEYSTORE_PATH}"
+
+            # 将 base64 写入临时文件，供后续写入 Secrets 步骤使用
             base64 -w 0 "${KEYSTORE_PATH}" > /tmp/keystore_b64.txt
             echo "was_generated=true"                 >> "$GITHUB_OUTPUT"
             echo "keystore_b64_file=/tmp/keystore_b64.txt" >> "$GITHUB_OUTPUT"
@@ -277,13 +273,11 @@ jobs:
           COMMIT_SHA="${{ github.sha }}"
           SHORT_SHA="${COMMIT_SHA:0:7}"
 
-          # 签名说明（默认签名 / 自定义签名 / 临时签名）
+          # 根据是否使用了稳定 Secret Keystore 生成不同的签名说明
           if [ -n "${RELEASE_KEYSTORE_BASE64}" ]; then
-            SIGN_NOTE="✅ **自定义 Release 签名**（Secret 配置，可跨版本覆盖安装）"
-          elif [ -f "android/release.keystore" ]; then
-            SIGN_NOTE="✅ **仓库默认 Release 签名**（零配置，可跨版本覆盖安装）"
+            SIGN_NOTE="✅ **稳定 Release 签名**（可跨版本覆盖安装，正式分发）"
           else
-            SIGN_NOTE="⚠️ **临时 Release 签名**（无法跨版本覆盖安装）"
+            SIGN_NOTE="⚠️ **临时 Release 签名**（keytool 自动生成，本次构建可安装，但无法覆盖安装其他构建版本；配置 RELEASE_KEYSTORE_BASE64 Secret 后升级为稳定签名）"
           fi
 
           NOTES="## GitHub Manager ${TAG}

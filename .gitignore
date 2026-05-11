@@ -40,7 +40,7 @@ android/app/build/
 # Kotlin/Java 编译缓存
 android/**/*.class
 
-# Android Release Keystore（默认签名已提交：android/release.keystore）
+# Android Release Keystore（切勿提交到 Git）
+android/release.keystore
 android/*.keystore
 android/*.jks
-!android/release.keystore

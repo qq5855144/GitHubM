@@ -33,6 +33,7 @@ import StarredPage from './pages/StarredPage';
 import RepoForksPage from './pages/RepoForksPage';
 import StargazersPage from './pages/StargazersPage';
 import PrDiffPage from './pages/PrDiffPage';
+import AiAssistantPage from './pages/AiAssistantPage';
 
 export interface RouteConfig {
   name: string;
@@ -84,4 +85,5 @@ export const routes: RouteConfig[] = [
   { name: '仓库收藏者', path: '/repos/:owner/:repo/stargazers', element: <StargazersPage /> },
   { name: '设置', path: '/settings', element: <SettingsPage /> },
   { name: 'GraphQL Playground', path: '/graphql-playground', element: <GraphQLPlaygroundPage /> },
+  { name: 'AI 助手', path: '/ai-assistant', element: <AiAssistantPage /> },
 ];

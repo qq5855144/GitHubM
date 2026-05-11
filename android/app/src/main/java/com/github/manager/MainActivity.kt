@@ -415,8 +415,41 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.statusBarColor = Color.parseColor("#0d1117")
-        window.navigationBarColor = Color.parseColor("#161b22")
+        // 冷启动时读取上次保存的主题，默认跟随系统（system 模式）
+        val savedTheme = getSharedPreferences("gm_prefs", MODE_PRIVATE)
+            .getString("theme_mode", "system") ?: "system"
+        val isInitialDark = when (savedTheme) {
+            "light" -> false
+            "dark"  -> true
+            else    -> { // system
+                val nightMode = resources.configuration.uiMode and
+                    android.content.res.Configuration.UI_MODE_NIGHT_MASK
+                nightMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
+            }
+        }
+        // 立即应用与系统/偏好一致的初始颜色，避免深色闪烁
+        if (isInitialDark) {
+            window.statusBarColor     = Color.parseColor("#111117")
+            window.navigationBarColor = Color.parseColor("#0d0d11")
+        } else {
+            window.statusBarColor     = Color.parseColor("#f8f8fb")
+            window.navigationBarColor = Color.parseColor("#f6f4fa")
+            // 浅色模式：状态栏/导航栏图标设为深色
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.insetsController?.setSystemBarsAppearance(
+                    android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                    android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                window.decorView.systemUiVisibility =
+                    window.decorView.systemUiVisibility or
+                    View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
+                    View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+            }
+        }
 
         setContentView(R.layout.activity_main)
 
@@ -514,7 +547,9 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebViewSettings() {
-        webView.setBackgroundColor(Color.parseColor("#0d1117"))
+        // WebView 背景跟随当前主题，避免深色/浅色主题下背景颜色不一致
+        val bgHex = if (darkTheme) "#111117" else "#f8f8fb"
+        webView.setBackgroundColor(Color.parseColor(bgHex))
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -577,7 +612,10 @@ class MainActivity : AppCompatActivity() {
                 view?.evaluateJavascript(
                     "(function(){ return localStorage.getItem('github_manager_theme') || 'dark'; })()"
                 ) { result ->
-                    val raw = result?.trim('"') ?: "dark"
+                    val raw = result?.trim('"') ?: "system"
+                    // 持久化最新主题设置，供下次冷启动恢复
+                    getSharedPreferences("gm_prefs", MODE_PRIVATE)
+                        .edit().putString("theme_mode", raw).apply()
                     val resolved = when (raw) {
                         "light" -> false
                         "dark"  -> true
@@ -677,6 +715,10 @@ class MainActivity : AppCompatActivity() {
      */
     private fun applyNativeTheme(isDark: Boolean) {
         darkTheme = isDark
+        // 同步 WebView 背景色，避免白/黑背景闪烁
+        webView.setBackgroundColor(
+            Color.parseColor(if (isDark) "#111117" else "#f8f8fb")
+        )
         if (isDark) {
             // ── 深色模式 ──────────────────────────────────────────────
             val bgColor      = Color.parseColor("#111117")  // --background dark

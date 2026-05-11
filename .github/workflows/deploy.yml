@@ -31,7 +31,7 @@ name: Deploy & Build APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]   # 同时监听 main 和 master 分支
   workflow_dispatch: # 支持手动触发
 
 # GITHUB_TOKEN 权限
@@ -70,14 +70,24 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 构建 Web 应用（注入版本号）
-        env:
-          # 版本号格式 1.0.<run_number>，与 APK versionName 保持一致
-          VITE_APP_VERSION: "1.0.${{ github.run_number }}"
-          # 注意：VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 不在此处注入。
-          # Vite 构建时会自动读取仓库中提交的 .env 文件。
-          # 若在此处设置（即使是空值），GitHub Actions 的 env 块会覆盖 .env 文件，
-          # 导致 Supabase URL 为空，所有 AI/Edge Function 调用失败。
-        run: pnpm exec vite build
+        run: |
+          # 注入版本号
+          export VITE_APP_VERSION="1.0.${{ github.run_number }}"
+          # 从已提交的 .env 文件中读取 Supabase 配置（如外部未通过 Secret 配置）
+          # 使用 export 而非 env 块，避免 GitHub Actions env 块的空值覆盖问题
+          if [ -f ".env" ]; then
+            while IFS= read -r line || [ -n "$line" ]; do
+              # 跳过空行和注释
+              [[ -z "$line" || "$line" == \#* ]] && continue
+              key="${line%%=*}"
+              val="${line#*=}"
+              # 若环境中该变量尚未设置（或为空），则从 .env 注入
+              if [ -z "${!key}" ]; then
+                export "$key=$val"
+              fi
+            done < .env
+          fi
+          pnpm exec vite build
 
       - name: 上传 Web 构建产物（供后续 Job 使用）
         uses: actions/upload-artifact@v4

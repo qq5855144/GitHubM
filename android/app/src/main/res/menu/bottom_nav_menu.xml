@@ -14,7 +14,7 @@
     <item
         android:id="@+id/nav_ai"
         android:icon="@drawable/ic_nav_ai"
-        android:title="AI" />
+        android:title="AI助手" />
 
     <item
         android:id="@+id/nav_search"

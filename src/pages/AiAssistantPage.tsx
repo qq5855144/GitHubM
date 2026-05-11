@@ -200,47 +200,137 @@ function saveModelConfig(cfg: ModelConfig) {
 
 // ── Markdown 渲染 ─────────────────────────────────────────────────────────────
 
+/**
+ * 渲染 Markdown 为 React 节点。
+ * 修复：
+ * - 代码块内容用 JSX 文本节点渲染，避免任何编码/转义导致的乱码
+ * - 所有文本强制 break-words + whitespace-pre-wrap，防止超出视口
+ * - 支持 # / ## / ### 标题、有序/无序列表、粗体、行内代码
+ */
 function renderMarkdown(text: string) {
+  if (!text) return null;
   const lines = text.split('\n');
   const result: React.ReactNode[] = [];
-  let i = 0, keyIdx = 0;
+  let i = 0, key = 0;
+
+  const renderInline = (raw: string, baseKey: number) => {
+    // 将行内 **bold** 和 `code` 解析为 span 数组
+    const segs = raw.split(/(`[^`]*`|\*\*[^*]+\*\*)/g);
+    return segs.map((seg, si) => {
+      if (seg.startsWith('**') && seg.endsWith('**') && seg.length > 4)
+        return <strong key={`${baseKey}-b${si}`} className="font-semibold">{seg.slice(2, -2)}</strong>;
+      if (seg.startsWith('`') && seg.endsWith('`') && seg.length > 2)
+        return <code key={`${baseKey}-c${si}`} className="bg-muted px-1 py-0.5 rounded text-[11px] font-mono break-all">{seg.slice(1, -1)}</code>;
+      return seg || null;
+    });
+  };
+
   while (i < lines.length) {
     const line = lines[i];
+
+    // ── 代码块 ──────────────────────────────────────────────────────
     if (line.startsWith('```')) {
       const lang = line.slice(3).trim();
       const codeLines: string[] = [];
       i++;
-      while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
+      while (i < lines.length && !lines[i].startsWith('```')) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      // 使用纯文本内容，避免任何 HTML 编码引发的乱码
+      const codeText = codeLines.join('\n');
       result.push(
-        <pre key={keyIdx++} className="bg-muted rounded-md p-3 my-2 overflow-x-auto text-xs font-mono border border-border">
-          {lang && <span className="text-muted-foreground text-[10px] block mb-1">{lang}</span>}
-          <code>{codeLines.join('\n')}</code>
-        </pre>
+        <div key={key++} className="my-2 rounded-lg border border-border bg-muted overflow-hidden">
+          {lang && (
+            <div className="flex items-center justify-between px-3 py-1 bg-muted border-b border-border">
+              <span className="text-[10px] font-mono text-muted-foreground select-none">{lang}</span>
+            </div>
+          )}
+          <pre className="overflow-x-auto p-3 text-[11px] font-mono leading-relaxed">
+            <code className="break-normal whitespace-pre">{codeText}</code>
+          </pre>
+        </div>
       );
       i++; continue;
     }
-    if (line.startsWith('### ')) {
-      result.push(<h3 key={keyIdx++} className="font-semibold text-sm mt-3 mb-1">{line.slice(4)}</h3>);
+
+    // ── 标题 ─────────────────────────────────────────────────────────
+    if (line.startsWith('# ')) {
+      result.push(<h1 key={key++} className="text-lg font-bold mt-4 mb-1.5 break-words text-balance">{line.slice(2)}</h1>);
       i++; continue;
     }
     if (line.startsWith('## ')) {
-      result.push(<h2 key={keyIdx++} className="font-semibold text-base mt-3 mb-1">{line.slice(3)}</h2>);
+      result.push(<h2 key={key++} className="text-base font-semibold mt-3 mb-1 break-words text-balance">{line.slice(3)}</h2>);
       i++; continue;
     }
-    const parts = line.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+    if (line.startsWith('### ')) {
+      result.push(<h3 key={key++} className="text-sm font-semibold mt-2.5 mb-1 break-words text-balance">{line.slice(4)}</h3>);
+      i++; continue;
+    }
+
+    // ── 无序列表 ─────────────────────────────────────────────────────
+    if (/^[-*+] /.test(line)) {
+      const listItems: string[] = [];
+      while (i < lines.length && /^[-*+] /.test(lines[i])) {
+        listItems.push(lines[i].slice(2));
+        i++;
+      }
+      result.push(
+        <ul key={key++} className="my-1.5 space-y-0.5 pl-4">
+          {listItems.map((item, li) => (
+            <li key={li} className="flex gap-1.5 text-sm break-words">
+              <span className="text-primary mt-[3px] shrink-0">•</span>
+              <span className="min-w-0 break-words">{renderInline(item, key * 100 + li)}</span>
+            </li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+
+    // ── 有序列表 ─────────────────────────────────────────────────────
+    if (/^\d+\. /.test(line)) {
+      const listItems: Array<{n: number; text: string}> = [];
+      while (i < lines.length && /^\d+\. /.test(lines[i])) {
+        const m = lines[i].match(/^(\d+)\. (.*)/);
+        if (m) listItems.push({ n: parseInt(m[1]), text: m[2] });
+        i++;
+      }
+      result.push(
+        <ol key={key++} className="my-1.5 space-y-0.5 pl-4">
+          {listItems.map((item, li) => (
+            <li key={li} className="flex gap-1.5 text-sm break-words">
+              <span className="text-primary shrink-0 font-mono text-xs mt-[3px]">{item.n}.</span>
+              <span className="min-w-0 break-words">{renderInline(item.text, key * 100 + li)}</span>
+            </li>
+          ))}
+        </ol>
+      );
+      continue;
+    }
+
+    // ── 分隔线 ───────────────────────────────────────────────────────
+    if (/^---+$/.test(line.trim())) {
+      result.push(<hr key={key++} className="my-2 border-border" />);
+      i++; continue;
+    }
+
+    // ── 空行 ─────────────────────────────────────────────────────────
+    if (line.trim() === '') {
+      // 连续空行只加一个间距
+      if (result.length > 0) result.push(<div key={key++} className="h-1" />);
+      i++; continue;
+    }
+
+    // ── 普通段落 ─────────────────────────────────────────────────────
     result.push(
-      <span key={keyIdx++} className="block">
-        {parts.map((p, pi) => {
-          if (p.startsWith('**') && p.endsWith('**')) return <strong key={pi} className="font-semibold">{p.slice(2, -2)}</strong>;
-          if (p.startsWith('`') && p.endsWith('`') && p.length > 2) return <code key={pi} className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{p.slice(1, -1)}</code>;
-          return p;
-        })}
-        {i < lines.length - 1 && <br />}
-      </span>
+      <p key={key++} className="text-sm leading-relaxed break-words min-w-0 text-pretty">
+        {renderInline(line, key)}
+      </p>
     );
     i++;
   }
-  return result;
+  return <div className="flex flex-col gap-0.5 min-w-0 max-w-full overflow-hidden">{result}</div>;
 }
 
 // ── 类型 ──────────────────────────────────────────────────────────────────────
@@ -920,9 +1010,29 @@ export default function AiAssistantPage() {
 
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Textarea 自动调整高度
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 112) + 'px'; // max-h-28 = 112px
+  }, [input]);
+
+  // 自动滚动到底部
+  // ScrollArea 的 viewport 是 [data-radix-scroll-area-viewport]，需要直接滚动它
+  useEffect(() => {
+    const viewport = scrollAreaRef.current?.querySelector(
+      '[data-radix-scroll-area-viewport]'
+    ) as HTMLElement | null;
+    if (viewport) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
+    } else {
+      // 降级：直接 scrollIntoView
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   // 加载分支列表
@@ -1088,7 +1198,13 @@ export default function AiAssistantPage() {
     const userText = (text ?? input).trim();
     if (!userText || isStreaming || !selectedRepo || !token) return;
 
-    if (!isRegen) setInput('');
+    if (!isRegen) {
+      setInput('');
+      // 同步重置 textarea 高度
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+    }
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: userText };
     const aiMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: '', streaming: true };
     setMessages(prev => isRegen ? [...prev, aiMsg] : [...prev, userMsg, aiMsg]);
@@ -1249,7 +1365,7 @@ export default function AiAssistantPage() {
   const lastAiIdx = [...messages].map((m, i) => m.role === 'assistant' ? i : -1).filter(i => i !== -1).pop() ?? -1;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] md:h-[calc(100vh-2rem)]">
+    <div className="flex flex-col h-[calc(100dvh-4rem)] md:h-[calc(100dvh-1rem)] overflow-hidden">
       {/* 顶部栏 */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-card shrink-0">
         {/* 返回按钮 */}
@@ -1307,7 +1423,7 @@ export default function AiAssistantPage() {
       )}
 
       {/* 消息列表 */}
-      <ScrollArea className="flex-1 min-w-0">
+      <div ref={scrollAreaRef} className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col"><ScrollArea className="flex-1 min-h-0">
         <div className="flex flex-col gap-4 p-4 pb-2">
           {messages.map((msg, idx) => {
             const isLastAi = idx === lastAiIdx;
@@ -1321,19 +1437,23 @@ export default function AiAssistantPage() {
                     ? <User className="w-3.5 h-3.5" />
                     : <Bot className="w-3.5 h-3.5 text-muted-foreground" />}
                 </div>
-                <div className="flex flex-col gap-1 max-w-[85%] min-w-0">
+                <div className="flex flex-col gap-1 max-w-[85%] min-w-0 overflow-hidden">
                   <div className={cn(
-                    'rounded-2xl px-4 py-3 text-sm',
+                    'rounded-2xl px-4 py-3 text-sm min-w-0 max-w-full overflow-hidden',
                     msg.role === 'user'
                       ? 'bg-primary text-primary-foreground rounded-tr-sm'
                       : 'bg-muted/60 border border-border text-foreground rounded-tl-sm'
                   )}>
                     {msg.role === 'user'
-                      ? <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                      ? <p className="whitespace-pre-wrap break-words min-w-0 max-w-full">{msg.content}</p>
                       : (
-                        <div>
-                          {msg.content ? renderMarkdown(msg.content) : <span className="text-muted-foreground">…</span>}
-                          {msg.streaming && (
+                        <div className="min-w-0 max-w-full overflow-hidden">
+                          {msg.content ? renderMarkdown(msg.content) : (
+                            msg.streaming
+                              ? <span className="inline-block w-1.5 h-4 bg-primary animate-pulse rounded-sm align-middle" />
+                              : <span className="text-muted-foreground text-sm">…</span>
+                          )}
+                          {msg.streaming && msg.content && (
                             <span className="inline-block w-1.5 h-4 bg-primary ml-0.5 animate-pulse rounded-sm align-middle" />
                           )}
                         </div>
@@ -1373,7 +1493,7 @@ export default function AiAssistantPage() {
           })}
           <div ref={bottomRef} />
         </div>
-      </ScrollArea>
+      </ScrollArea></div>
 
       {/* 快捷指令 */}
       {messages.length <= 1 && !isStreaming && (
@@ -1465,13 +1585,15 @@ export default function AiAssistantPage() {
           {/* 文本框 + 发送 */}
           <div className="flex items-end gap-2 px-3 py-2">
             <Textarea
+              ref={textareaRef}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="输入消息… （Enter 发送，Shift+Enter 换行）"
-              className="flex-1 min-w-0 min-h-[36px] max-h-28 resize-none border-0 shadow-none bg-transparent px-0 py-0.5 text-sm focus-visible:ring-0 placeholder:text-muted-foreground/60"
+              className="flex-1 min-w-0 min-h-[36px] max-h-28 resize-none border-0 shadow-none bg-transparent px-0 py-0.5 text-sm focus-visible:ring-0 placeholder:text-muted-foreground/60 overflow-y-auto"
               disabled={isStreaming}
               rows={1}
+              style={{ height: 'auto' }}
             />
             {/* 发送 / 停止 按钮 */}
             {isStreaming ? (

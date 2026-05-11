@@ -1,6 +1,6 @@
 {
   "name": "miaoda-react-admin",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "scripts": {
     "dev": "echo 'Do not use this command, only use lint to check'",

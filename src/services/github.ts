@@ -27,13 +27,57 @@ const BASE_URL = 'https://api.github.com';
 
 let authToken: string | null = null;
 
-// 为 GET 请求 URL 追加时间戳，破解 GitHub API CDN 60s 强制缓存
-function addCacheBuster(url: string): string {
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}_t=${Date.now()}`;
+// ── TTL 请求缓存层 ──────────────────────────────────────────────────
+// 替代原 addCacheBuster 时间戳反模式：
+//   - addCacheBuster 每次 GET 追加 _t=Date.now()，完全禁用 HTTP 缓存，
+//     导致相同接口被重复请求，加速 GitHub API Rate Limit（60次/小时 未认证，
+//     5000次/小时 已认证）耗尽。
+//   - 改为内存 TTL 缓存：GET 响应缓存 30s（用户列表/仓库详情等低频变化数据），
+//     同一 URL + token 组合在 TTL 内直接返回缓存，超时后重新请求。
+//   - 写操作（POST/PUT/PATCH/DELETE）始终跳过缓存，并自动失效相关前缀缓存。
+interface CacheEntry<T> {
+  data: T;
+  expireAt: number; // ms 时间戳
+}
+const apiCache = new Map<string, CacheEntry<unknown>>();
+const CACHE_TTL_MS = 30_000; // 30s
+
+/** 生成缓存 key（URL + 当前 token，token 变化后旧缓存自动失效） */
+export function buildCacheKey(url: string): string {
+  return `${authToken ?? ''}|${url}`;
+}
+
+/** 读取缓存，过期自动删除并返回 null */
+export function getCached<T>(key: string): T | null {
+  const entry = apiCache.get(key) as CacheEntry<T> | undefined;
+  if (!entry) return null;
+  if (Date.now() > entry.expireAt) {
+    apiCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+/** 写入缓存 */
+export function setCached<T>(key: string, data: T): void {
+  apiCache.set(key, { data, expireAt: Date.now() + CACHE_TTL_MS });
+}
+
+/** 主动失效包含指定前缀的所有缓存（写操作后调用） */
+export function invalidateCache(urlPrefix: string): void {
+  for (const key of apiCache.keys()) {
+    if (key.includes(urlPrefix)) apiCache.delete(key);
+  }
+}
+
+/** 清空全部缓存（退出登录时调用） */
+export function clearApiCache(): void {
+  apiCache.clear();
 }
 
 export function setToken(token: string | null) {
+  // token 变更（退出登录）时清空所有缓存，防止旧用户数据泄露
+  if (token !== authToken) clearApiCache();
   authToken = token;
 }
 
@@ -58,10 +102,16 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  let url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
-  // 仅对 GET 请求追加时间戳，防止 GitHub API 60s CDN 缓存
+  const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
   const method = (options.method ?? 'GET').toUpperCase();
-  if (method === 'GET') url = addCacheBuster(url);
+
+  // GET 请求：命中缓存直接返回，跳过网络请求
+  if (method === 'GET') {
+    const cacheKey = buildCacheKey(url);
+    const cached = getCached<T>(cacheKey);
+    if (cached !== null) return cached;
+  }
+
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -88,7 +138,16 @@ async function request<T>(
     return undefined as T;
   }
 
-  return response.json() as Promise<T>;
+  const data = await response.json() as T;
+
+  // GET 响应写入缓存；写操作自动失效相关前缀
+  if (method === 'GET') {
+    setCached(buildCacheKey(url), data);
+  } else {
+    invalidateCache(url.split('?')[0]);
+  }
+
+  return data;
 }
 
 // 从响应头获取分页链接
@@ -109,9 +168,16 @@ async function requestWithPagination<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<{ data: T[]; hasNextPage: boolean; totalCount?: number }> {
-  let url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
+  const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
   const method = (options.method ?? 'GET').toUpperCase();
-  if (method === 'GET') url = addCacheBuster(url);
+
+  // GET 分页请求同样命中缓存
+  if (method === 'GET') {
+    const cacheKey = buildCacheKey(url);
+    const cached = getCached<{ data: T[]; hasNextPage: boolean }>( cacheKey);
+    if (cached !== null) return cached;
+  }
+
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -137,10 +203,16 @@ async function requestWithPagination<T>(
   const linkHeader = response.headers.get('Link');
   const links = linkHeader ? parseLinkHeader(linkHeader) : {};
 
-  return {
+  const result = {
     data,
     hasNextPage: !!links.next,
   };
+
+  if (method === 'GET') {
+    setCached(buildCacheKey(url), result);
+  }
+
+  return result;
 }
 
 // ===== 用户 API =====
@@ -219,9 +291,14 @@ export async function unstarRepo(owner: string, repo: string): Promise<void> {
 
 export async function checkStarred(owner: string, repo: string): Promise<boolean> {
   try {
-    const url = addCacheBuster(`${BASE_URL}/user/starred/${owner}/${repo}`);
+    const url = `${BASE_URL}/user/starred/${owner}/${repo}`;
+    const cacheKey = buildCacheKey(url);
+    const cached = getCached<boolean>(cacheKey);
+    if (cached !== null) return cached;
     const response = await fetch(url, { headers: buildHeaders() });
-    return response.status === 204;
+    const result = response.status === 204;
+    setCached(cacheKey, result);
+    return result;
   } catch {
     return false;
   }
@@ -1491,7 +1568,7 @@ export async function getStarredCount(): Promise<number> {
   if (!result.hasNextPage) return result.data.length;
   // 从原始 headers 取 last page 编号（requestWithPagination 未暴露 links，改用 fetch 直接请求）
   const url = `${BASE_URL}/user/starred?per_page=1`;
-  const response = await fetch(addCacheBuster(url), { headers: buildHeaders() });
+  const response = await fetch(url, { headers: buildHeaders() });
   const linkHeader = response.headers.get('Link') || '';
   const match = linkHeader.match(/[?&]page=(\d+)>;\s*rel="last"/);
   return match ? parseInt(match[1], 10) : result.data.length;

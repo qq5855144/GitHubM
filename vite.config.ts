@@ -22,6 +22,18 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // ── Vitest 配置 ────────────────────────────────────────────────────
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/tests/setup.ts"],
+    include: ["src/tests/**/*.test.ts", "src/tests/**/*.test.tsx"],
+    coverage: {
+      provider: "v8",
+      include: ["src/services/**", "src/pages/**", "src/utils/**"],
+      reporter: ["text", "html"],
+    },
+  },
   build: {
     // 关闭 sourcemap，减小 APK 内嵌包体积
     sourcemap: false,

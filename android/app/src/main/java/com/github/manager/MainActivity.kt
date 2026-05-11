@@ -181,18 +181,15 @@ class MainActivity : AppCompatActivity() {
             getSharedPreferences("gm_prefs", MODE_PRIVATE)
                 .edit().putString("accent_hex", primaryHex).apply()
             runOnUiThread {
-                try {
-                    val color = Color.parseColor(primaryHex)
-                    // 仅更新选中色，未选中色保持不变（取自当前 itemTextColor/iconTintList）
-                    val unselected = if (darkTheme) 0xFF9292A8.toInt() else 0xFF64748B.toInt()
-                    val iconColors = android.content.res.ColorStateList(
-                        arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                        intArrayOf(color, unselected)
-                    )
-                    bottomNav.itemIconTintList = iconColors
-                    bottomNav.itemTextColor   = iconColors
-                    currentAccentColor = color
-                } catch (_: Exception) { /* 非法 hex，静默忽略 */ }
+                val color = ThemeUtils.parseColorSafe(primaryHex) ?: return@runOnUiThread
+                val unselected = ThemeUtils.unselectedNavColor(darkTheme)
+                val iconColors = android.content.res.ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(color, unselected)
+                )
+                bottomNav.itemIconTintList = iconColors
+                bottomNav.itemTextColor   = iconColors
+                currentAccentColor = color
             }
         }
 
@@ -262,7 +259,7 @@ class MainActivity : AppCompatActivity() {
     // ── MediaStore / Legacy 存储写入 ────────────────────────────────
 
     private fun saveToMediaStore(bytes: ByteArray, fileName: String, mimeType: String): String {
-        val effectiveMime = mimeType.ifBlank { "application/octet-stream" }.substringBefore(";")
+        val effectiveMime = FileUtils.normalizeMimeType(mimeType)
         val cv = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, fileName)
             put(MediaStore.Downloads.MIME_TYPE, effectiveMime)
@@ -281,16 +278,10 @@ class MainActivity : AppCompatActivity() {
     private fun saveToLegacyStorage(bytes: ByteArray, fileName: String): String {
         val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         dir.mkdirs()
-        var target = File(dir, fileName)
-        val base = fileName.substringBeforeLast(".")
-        val ext = fileName.substringAfterLast(".", "")
-        var n = 1
-        while (target.exists()) {
-            target = File(dir, if (ext.isNotEmpty()) "$base($n).$ext" else "$base($n)")
-            n++
-        }
-        target.writeBytes(bytes)
-        return target.name
+        val existingNames = dir.listFiles()?.map { it.name }?.toSet() ?: emptySet()
+        val safeName = FileUtils.resolveFileName(fileName, existingNames)
+        File(dir, safeName).writeBytes(bytes)
+        return safeName
     }
 
     /**
@@ -677,9 +668,7 @@ class MainActivity : AppCompatActivity() {
      * 采用静默更新方式（禁用监听器 → 修改选中项 → 恢复监听器），避免触发重复导航。
      */
     private fun syncBottomNavSelection(path: String) {
-        val targetId = navPathMap.entries.firstOrNull { (prefix, _) ->
-            if (prefix == "/") path == "/" else path.startsWith(prefix)
-        }?.value ?: R.id.nav_home
+        val targetId = NavUtils.resolveNavItemId(path)
 
         if (targetId == currentNavItemId) return
         currentNavItemId = targetId

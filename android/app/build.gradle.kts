@@ -71,6 +71,16 @@ android {
         jvmTarget = "17"
     }
 
+    // Robolectric 单元测试：使用 includeAndroidResources 允许测试读取 R 资源
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.jvmArgs("-Djunit.jupiter.extensions.autodetection.enabled=true")
+            }
+        }
+    }
+
     // assets 目录由 CI workflow 在构建前填充（dist/ 内容）
     sourceSets {
         getByName("main") {
@@ -87,4 +97,18 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
     // Material3 组件：BottomNavigationView（material 1.12.0 默认使用 Material3 属性体系）
     implementation("com.google.android.material:material:1.12.0")
+
+    // ── 单元测试依赖（仅参与 test 源集，不打包进 APK）──────────────
+    // JUnit 4：标准 Android 单元测试运行器
+    testImplementation("junit:junit:4.13.2")
+    // Kotlin Test：assertThat / assertEquals 等断言扩展
+    testImplementation("org.jetbrains.kotlin:kotlin-test:2.0.21")
+    // Kotlin Test JUnit4 集成
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.0.21")
+    // Robolectric：在 JVM 上模拟 Android 环境（android.graphics.Color 等）
+    testImplementation("org.robolectric:robolectric:4.12.2")
+    // AndroidX Test Core（ApplicationProvider / ActivityScenario）
+    testImplementation("androidx.test:core-ktx:1.6.1")
+    // MockK：Kotlin 原生 mock 框架
+    testImplementation("io.mockk:mockk:1.13.12")
 }

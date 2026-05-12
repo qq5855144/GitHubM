@@ -237,52 +237,143 @@ async function fileTree(ctx: GithubContext, path: string, maxDepth: number): Pro
  * 在文件中搜索文本（逐行 grep），返回匹配行的行号+内容。
  * 适用于 GitHub Search API 速率受限时的替代方案。
  */
-async function grepInFile(
-  ctx: GithubContext,
-  filePath: string,
-  pattern: string,
-  caseSensitive = false,
-): Promise<string> {
-  try {
-    const data = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/contents/${filePath}`);
-    if (data.encoding !== "base64") return `无法解码文件 "${filePath}"`;
-    const content = decodeBase64Utf8(data.content);
-    const lines = content.split("\n");
-    const regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), caseSensitive ? "g" : "gi");
-    const matches: string[] = [];
-    lines.forEach((line, i) => {
-      if (regex.test(line)) {
-        matches.push(`${String(i + 1).padStart(5, " ")} | ${line}`);
-      }
-      regex.lastIndex = 0;
-    });
-    if (!matches.length) return `"${filePath}" 中未找到匹配 "${pattern}" 的行`;
-    return `"${filePath}" 中匹配 "${pattern}" 的行（共 ${matches.length} 处）：\n\`\`\`\n${matches.slice(0, 50).join("\n")}\n\`\`\`` +
-      (matches.length > 50 ? `\n（仅显示前 50 条，共 ${matches.length} 条）` : "");
-  } catch (e) { return diagnose4xx(e, "grep_in_file"); }
-}
-
-/**
- * 批量读取多个文件（逗号分隔路径），一次工具调用读取多个文件，减少 round trip。
- * 每个文件自动分段返回前 100 行（防止超长）。
- */
-async function batchReadFiles(ctx: GithubContext, paths: string): Promise<string> {
-  const fileList = paths.split(",").map(p => p.trim()).filter(Boolean).slice(0, 5); // 最多5个
-  if (!fileList.length) return "请提供至少一个文件路径";
-  const results: string[] = [];
-  for (const fp of fileList) {
-    const content = await readFile(ctx, fp, 1, 100);
-    results.push(`\n=== ${fp} ===\n${content}`);
-  }
-  return results.join("\n");
-}
-
 /** base64 + UTF-8 解码（正确处理中文/日文/emoji 等多字节字符） */
 function decodeBase64Utf8(b64: string): string {
   const binaryStr = atob(b64.replace(/\n/g, ""));
   const bytes = new Uint8Array(binaryStr.length);
   for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
   return new TextDecoder("utf-8").decode(bytes);
+}
+
+/**
+ * 通用文件内容获取辅助函数。
+ * 自动处理大文件（>1MB）：先通过 Contents API 拿到 SHA，再走 Git Blobs API 取完整内容。
+ * 返回 { content, sha, size, totalLines } 或错误字符串。
+ */
+async function fetchFileContent(
+  ctx: GithubContext,
+  filePath: string,
+): Promise<{ content: string; sha: string; size: number; totalLines: number } | string> {
+  const data = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/contents/${filePath}`);
+  if (Array.isArray(data)) return `"${filePath}" 是目录，请用 file_tree 列出其内容。`;
+  if (!data.sha) return `无法读取文件 "${filePath}"：缺少 blob SHA。`;
+
+  let rawContent: string;
+  const isLarge = !data.content || data.content.trim() === "" || (data.size && data.size > 1_000_000);
+
+  if (isLarge) {
+    // 大文件：Git Blobs API
+    const blob = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/git/blobs/${data.sha}`);
+    if (!blob.content) {
+      const sizeLabel = data.size ? Math.round(data.size / 1024) + "KB" : "未知大小";
+      return `无法读取大文件 "${filePath}"（${sizeLabel}），GitHub API 返回空内容。`;
+    }
+    rawContent = decodeBase64Utf8(blob.content);
+  } else {
+    if (data.encoding !== "base64") return `无法解码文件 "${filePath}"（编码：${data.encoding}）`;
+    rawContent = decodeBase64Utf8(data.content);
+  }
+
+  return {
+    content: rawContent,
+    sha: data.sha as string,
+    size: (data.size as number) ?? 0,
+    totalLines: rawContent.split("\n").length,
+  };
+}
+
+/**
+ * 文件内搜索（grep）。
+ * 支持大文件（>1MB）自动切换 Blobs API；
+ * 每页最多返回 100 条匹配，超出时附带继续搜索的指引（offset 参数）。
+ * @param offset 跳过前 N 条匹配（用于翻页，默认 0）
+ */
+async function grepInFile(
+  ctx: GithubContext,
+  filePath: string,
+  pattern: string,
+  caseSensitive = false,
+  offset = 0,
+): Promise<string> {
+  try {
+    const result = await fetchFileContent(ctx, filePath);
+    if (typeof result === "string") return result;
+
+    const { content, totalLines } = result;
+    const lines = content.split("\n");
+
+    let regex: RegExp;
+    try {
+      regex = new RegExp(pattern, caseSensitive ? "g" : "gi");
+    } catch {
+      // 用户输入非法正则时退回字面量匹配
+      regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), caseSensitive ? "g" : "gi");
+    }
+
+    const allMatches: string[] = [];
+    lines.forEach((line, i) => {
+      if (regex.test(line)) {
+        allMatches.push(`${String(i + 1).padStart(6, " ")} | ${line}`);
+      }
+      regex.lastIndex = 0;
+    });
+
+    if (!allMatches.length) {
+      return `"${filePath}" 中未找到匹配 "${pattern}" 的行（共搜索 ${totalLines} 行）`;
+    }
+
+    const PAGE = 100;
+    const safeOffset = Math.max(0, Math.min(offset, allMatches.length - 1));
+    const page = allMatches.slice(safeOffset, safeOffset + PAGE);
+    const remaining = allMatches.length - safeOffset - page.length;
+
+    const header = `"${filePath}" 匹配 "${pattern}" 共 ${allMatches.length} 处` +
+      (safeOffset > 0 ? `，显示第 ${safeOffset + 1}–${safeOffset + page.length} 条` : `，显示第 1–${page.length} 条`) +
+      `（文件共 ${totalLines} 行）：`;
+
+    const truncHint = remaining > 0
+      ? `\n\n⚠️ 还有 ${remaining} 条未显示。继续查看请调用：` +
+        `{"tool":"grep_in_file","path":"${filePath}","pattern":"${pattern}","offset":"${safeOffset + PAGE}"}`
+      : "";
+
+    return `${header}\n\`\`\`\n${page.join("\n")}\n\`\`\`` + truncHint;
+  } catch (e) { return diagnose4xx(e, "grep_in_file"); }
+}
+
+/**
+ * 批量读取多个文件（逗号分隔路径），一次工具调用读取多个文件，减少 round trip。
+ * 每个文件最多返回前 300 行；自动支持大文件（>1MB）Blobs API 切换。
+ */
+async function batchReadFiles(ctx: GithubContext, paths: string): Promise<string> {
+  const fileList = paths.split(",").map(p => p.trim()).filter(Boolean).slice(0, 5);
+  if (!fileList.length) return "请提供至少一个文件路径";
+  const PREVIEW_LINES = 300;
+  const results: string[] = [];
+  for (const fp of fileList) {
+    try {
+      const fetched = await fetchFileContent(ctx, fp);
+      if (typeof fetched === "string") {
+        results.push(`\n=== ${fp} ===\n${fetched}`);
+        continue;
+      }
+      const { content, sha, size, totalLines } = fetched;
+      const lines = content.split("\n");
+      const preview = lines.slice(0, PREVIEW_LINES);
+      const sizeKB = Math.round(size / 1024);
+      const numbered = preview.map((l, i) => `${String(i + 1).padStart(6, " ")} | ${l}`).join("\n");
+      const truncHint = totalLines > PREVIEW_LINES
+        ? `\n⚠️ 文件共 ${totalLines} 行，仅展示前 ${PREVIEW_LINES} 行。` +
+          `完整读取请用：{"tool":"read_file","path":"${fp}","start_line":"1","end_line":"${PREVIEW_LINES}"}`
+        : "";
+      const sizeNote = sizeKB > 100 ? ` | ${sizeKB}KB` : "";
+      results.push(
+        `\n=== ${fp}（${totalLines} 行${sizeNote}）SHA: ${sha} ===\n\`\`\`\n${numbered}\n\`\`\`` + truncHint,
+      );
+    } catch (e) {
+      results.push(`\n=== ${fp} ===\n${diagnose4xx(e, "batch_read")}`);
+    }
+  }
+  return results.join("\n");
 }
 
 /**
@@ -403,6 +494,10 @@ async function getFileInfo(ctx: GithubContext, filePath: string): Promise<string
 }
 
 
+/**
+ * 局部修改文件（patch）：仅替换指定行范围，不覆盖整个文件。
+ * 自动支持大文件（>1MB）通过 Blobs API 读取。
+ * patch 成功后自动回显修改区域（±5行上下文），AI 可直接确认修改是否正确。
  * @param startLine 起始行号（1-based，包含）
  * @param endLine   结束行号（1-based，包含）
  * @param newContent 用于替换 [startLine, endLine] 范围的新内容（可多行）
@@ -419,13 +514,11 @@ async function patchFile(
   branch?: string,
 ): Promise<string> {
   try {
-    // 1. 先读取原文件，获取完整内容 + SHA
-    const data = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/contents/${filePath}`);
-    if (data.encoding !== "base64") return `无法解码文件 "${filePath}"`;
-
-    const fullContent = decodeBase64Utf8(data.content);
+    // 1. 读取原文件（自动处理大文件）
+    const fetched = await fetchFileContent(ctx, filePath);
+    if (typeof fetched === "string") return fetched;
+    const { content: fullContent, sha: fileSha, totalLines } = fetched;
     const allLines = fullContent.split("\n");
-    const totalLines = allLines.length;
 
     // 参数边界校验
     if (startLine < 1 || endLine < startLine || startLine > totalLines) {
@@ -434,20 +527,16 @@ async function patchFile(
     const safeEnd = Math.min(endLine, totalLines);
 
     // 2. 拼接新内容：前段 + 替换内容 + 后段
-    const before  = allLines.slice(0, startLine - 1);          // 0 ~ startLine-2
-    const after   = allLines.slice(safeEnd);                    // safeEnd ~ end
+    const before   = allLines.slice(0, startLine - 1);
+    const after    = allLines.slice(safeEnd);
     const newLines = newContent.split("\n");
-    const patched = [...before, ...newLines, ...after].join("\n");
+    const patched  = [...before, ...newLines, ...after].join("\n");
 
     // 3. base64 编码（兼容 UTF-8）
     const encoded = btoa(unescape(encodeURIComponent(patched)));
 
     // 4. 写回 GitHub
-    const body: Record<string, string> = {
-      message: commitMessage,
-      content: encoded,
-      sha: data.sha,
-    };
+    const body: Record<string, string> = { message: commitMessage, content: encoded, sha: fileSha };
     if (branch) body.branch = branch;
 
     const result = await githubRequest(
@@ -456,14 +545,31 @@ async function patchFile(
       { method: "PUT", body: JSON.stringify(body) },
     );
 
+    const commitSha = (result.commit?.sha as string)?.slice(0, 7) || "成功";
     const replacedCount = safeEnd - startLine + 1;
     const newCount = newLines.length;
+
+    // 5. 自动回显验证快照：修改区域 ±5 行上下文
+    const patchedLines = patched.split("\n");
+    const verifyFrom = Math.max(1, startLine - 5);
+    const verifyTo   = Math.min(patchedLines.length, startLine + newCount - 1 + 5);
+    const snapshot = patchedLines
+      .slice(verifyFrom - 1, verifyTo)
+      .map((l, i) => {
+        const lineNo = verifyFrom + i;
+        const isNew = lineNo >= startLine && lineNo < startLine + newCount;
+        return `${String(lineNo).padStart(6, " ")} ${isNew ? "▶" : " "} | ${l}`;
+      })
+      .join("\n");
+
     return (
-      `✅ 已 patch "${filePath}"：替换第 ${startLine}–${safeEnd} 行（${replacedCount} 行→${newCount} 行），` +
-      `提交：${result.commit?.sha?.slice(0, 7) || "成功"}，信息：${commitMessage}`
+      `✅ patch "${filePath}" 成功：第 ${startLine}–${safeEnd} 行（${replacedCount} 行→${newCount} 行），` +
+      `commit: ${commitSha}，信息：${commitMessage}\n\n` +
+      `📋 修改验证快照（第 ${verifyFrom}–${verifyTo} 行，▶ 为新增内容）：\n\`\`\`\n${snapshot}\n\`\`\``
     );
   } catch (e) { return diagnose4xx(e, "patch_file"); }
 }
+
 
 async function writeFile(
   ctx: GithubContext, filePath: string, content: string,
@@ -1169,8 +1275,9 @@ ${branchNote}
 4. 分段读取大文件（每次最多 500 行，返回中自动附带下一段调用示例）：
    {"tool":"read_file","path":"src/App.tsx","start_line":"1","end_line":"500"}
 4b. 读取前先查文件信息（获取总行数、大小，制定分段计划）：{"tool":"get_file_info","path":"src/App.tsx"}
-5. 文件内搜索（grep）：{"tool":"grep_in_file","path":"src/main.kt","pattern":"TODO","case_sensitive":"false"}
-6. 批量读取多个文件（逗号分隔，最多5个，每文件前100行）：{"tool":"batch_read","paths":"src/a.ts,src/b.ts,src/c.ts"}
+5. 文件内搜索（grep，支持大文件全文搜索）：{"tool":"grep_in_file","path":"src/main.kt","pattern":"TODO","case_sensitive":"false"}
+   搜索结果超 100 条时，返回中附带翻页调用示例，继续查看：{"tool":"grep_in_file","path":"src/main.kt","pattern":"TODO","offset":"100"}
+6. 批量读取多个文件（逗号分隔，最多5个，每文件前 300 行，自动支持大文件）：{"tool":"batch_read","paths":"src/a.ts,src/b.ts,src/c.ts"}
 7. 搜索代码（GitHub Search API）：{"tool":"search_code","query":"TODO"}
 8. 局部修改（推荐，仅替换指定行）：
    {"tool":"patch_file","path":"src/App.tsx","start_line":"10","end_line":"15","content":"新内容","message":"fix: 修复某处","branch":"${targetBranch || "main"}"}
@@ -1373,7 +1480,28 @@ ${branchNote}
 - 每段最多 500 行（系统自动限制，超出会截断并附提示）
 - **收到 ⚠️ 截断提示后，必须立即继续读取下一段，不得中断**
 - 若只需定位特定代码，优先用 grep_in_file 精确定位，避免读取无关内容
-- batch_read 适合同时了解多个小文件（如配置文件组合），每文件返回前 100 行
+- batch_read 适合同时了解多个小文件（如配置文件组合），每文件返回前 300 行，自动支持大文件
+
+==============================
+长内容输出与 patch 自动验证规则
+==============================
+
+**写入大内容时（代码超过 200 行）必须分批 patch，不得一次性 write_file**：
+1. 先用 get_file_info 确认目标文件总行数
+2. 将要写入的内容拆分为多段，每段不超过 200 行
+3. 按顺序逐段调用 patch_file，每段对应原文件的精确行范围
+4. 每次 patch_file 返回「修改验证快照」（▶ 标注新内容），**必须核查快照**：
+   - 内容正确 → 继续下一段 patch
+   - 发现错误 → 立即再次 patch_file 修正，不得跳过
+
+**patch_file 自动验证流程**（每次 patch 后系统自动回显，无需额外 read_file）：
+- 返回结果包含「📋 修改验证快照」，显示修改区域 ±5 行上下文
+- ▶ 标记的行是本次新写入的内容
+- AI 必须阅读快照确认无误，再继续后续操作
+
+**grep_in_file 搜索翻页**（搜索结果超 100 条时）：
+- 返回末尾会出现 ⚠️ 提示，附带 offset 翻页调用示例
+- 必须按提示继续翻页，直到收集到所有需要的匹配结果
 
 ==============================
 重要规则
@@ -1681,7 +1809,7 @@ function executeTool(
     case "search_code":  return searchCode(ctx, call.query);
     // ── 新工具 ───────────────────────────────────────────────────────────
     case "file_tree":    return fileTree(ctx, call.path || "", parseInt(call.depth || "3", 10));
-    case "grep_in_file": return grepInFile(ctx, call.path, call.pattern, call.case_sensitive === "true");
+    case "grep_in_file": return grepInFile(ctx, call.path, call.pattern, call.case_sensitive === "true", call.offset ? parseInt(call.offset, 10) : 0);
     case "batch_read":   return batchReadFiles(ctx, call.paths || "");
     // ── 分支 & PR ────────────────────────────────────────────────────────────
     case "list_branches":     return listBranches(ctx);

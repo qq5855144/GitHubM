@@ -967,7 +967,9 @@ async function getJobLogs(ctx: GithubContext, jobId: string): Promise<string> {
   } catch (e) { return diagnose4xx(e, "get_job_logs"); }
 }
 
-/** 手动触发工作流（workflow_dispatch 事件）；422 时自动添加触发器并重试 */
+/** 手动触发工作流（workflow_dispatch 事件）；422 时自动添加触发器并重试。
+ *  触发成功后会等待约 5s 再查最新 run_id，方便后续 check_run_status 直接使用。
+ */
 async function triggerWorkflow(
   ctx: GithubContext,
   workflowId: string,
@@ -981,9 +983,27 @@ async function triggerWorkflow(
       { method: "POST", body: JSON.stringify({ ref, inputs: inputs || {} }) },
     );
 
+  /** 触发后等待 GitHub 记录本次运行，返回新产生的 run_id（找不到则返回 null） */
+  const resolveNewRunId = async (): Promise<string | null> => {
+    await new Promise(r => setTimeout(r, 5000));
+    try {
+      const runs = await githubRequest(
+        ctx,
+        `/repos/${ctx.owner}/${ctx.repo}/actions/workflows/${workflowId}/runs?per_page=1&branch=${encodeURIComponent(ref)}`,
+      );
+      const latest = runs.workflow_runs?.[0];
+      if (latest?.id) return String(latest.id);
+    } catch { /* 忽略 */ }
+    return null;
+  };
+
   try {
     await doDispatch();
-    return `✅ 已触发工作流 \`${workflowId}\`，分支/标签：\`${ref}\`。稍后可用 get_workflow_runs 查看进度。`;
+    const runId = await resolveNewRunId();
+    const runHint = runId
+      ? `\n🆔 本次运行 ID：\`${runId}\`。请立即调用：{"tool":"check_run_status","run_id":"${runId}","workflow_type":"normal"}`
+      : `\n稍后可用 get_workflow_runs 查看进度。`;
+    return `✅ 已触发工作流 \`${workflowId}\`，分支：\`${ref}\`。${runHint}`;
   } catch (e) {
     const isDispatchMissing =
       e instanceof GithubApiError &&
@@ -1014,7 +1034,11 @@ async function triggerWorkflow(
     const original = decodeBase64Utf8(fileData.content);
     if (original.includes("workflow_dispatch")) {
       try { await doDispatch(); } catch (_) { /* ignore */ }
-      return `✅ 工作流已包含 workflow_dispatch，已重新触发 \`${workflowId}\`。`;
+      const runId2 = await resolveNewRunId();
+      const runHint2 = runId2
+        ? `\n🆔 本次运行 ID：\`${runId2}\`。请立即调用：{"tool":"check_run_status","run_id":"${runId2}","workflow_type":"normal"}`
+        : "";
+      return `✅ 工作流已包含 workflow_dispatch，已重新触发 \`${workflowId}\`。${runHint2}`;
     }
 
     // 在 `on:` 行之后插入 `  workflow_dispatch: {}`
@@ -1049,11 +1073,167 @@ async function triggerWorkflow(
     await new Promise(r => setTimeout(r, 2000));
     try {
       await doDispatch();
-      return `✅ 已自动为 \`${workflowId}\` 添加 \`workflow_dispatch\` 触发器并提交，随后触发成功（分支：\`${ref}\`）。\n稍后可用 get_workflow_runs 查看运行进度。`;
+      const runId3 = await resolveNewRunId();
+      const runHint3 = runId3
+        ? `\n🆔 本次运行 ID：\`${runId3}\`。请立即调用：{"tool":"check_run_status","run_id":"${runId3}","workflow_type":"normal"}`
+        : `\n稍后可用 get_workflow_runs 查看运行进度。`;
+      return `✅ 已自动为 \`${workflowId}\` 添加 \`workflow_dispatch\` 触发器并提交，随后触发成功（分支：\`${ref}\`）。${runHint3}`;
     } catch (retryErr) {
       return `⚠️ 已添加 workflow_dispatch 触发器并提交，但触发仍失败：${diagnose4xx(retryErr, "retry trigger")}`;
     }
   }
+}
+
+/**
+ * 智能等待工作流运行完成（轮询模式）。
+ * 根据 workflow_type 选择合适的等待策略，避免过早查询拿到空日志，
+ * 也避免对耗时较长的构建任务（如 Android APK）等待时间不足。
+ *
+ * 等待策略：
+ * - fast      : 初始等待 5s，每 10s 查一次，最多查 6 次（覆盖 ~65s）
+ * - normal    : 初始等待 15s，每 20s 查一次，最多查 5 次（覆盖 ~115s）
+ * - build_apk : 初始等待 60s，每 30s 查一次，最多查 3 次（覆盖 ~150s，约 2.5min）
+ *               构建 APP 通常约 3 分钟，若第一次返回仍在运行，AI 应再调一次此工具。
+ *
+ * 返回：
+ * - 已完成（success/failure/cancelled）→ 带结论和耗时；failure 自动附带 Jobs 失败摘要
+ * - 超时仍在运行 → 返回当前状态 + 已等待时长 + 继续调用建议
+ * - 运行无法启动（startup_failure）→ 立即返回错误，无需等待
+ *
+ * @param runId        运行 ID（由 trigger_workflow 返回，或 get_workflow_runs 获取）
+ * @param workflowType 工作流类型：fast | normal | build_apk（默认 normal）
+ */
+async function checkRunStatus(
+  ctx: GithubContext,
+  runId: string,
+  workflowType: "fast" | "normal" | "build_apk" = "normal",
+): Promise<string> {
+  type PollConfig = { initialWait: number; interval: number; maxPolls: number };
+  const CONFIGS: Record<string, PollConfig> = {
+    fast:      { initialWait: 5_000,  interval: 10_000, maxPolls: 6 },
+    normal:    { initialWait: 15_000, interval: 20_000, maxPolls: 5 },
+    build_apk: { initialWait: 60_000, interval: 30_000, maxPolls: 3 },
+  };
+  const cfg = CONFIGS[workflowType] ?? CONFIGS.normal;
+
+  const runUrl = `/repos/${ctx.owner}/${ctx.repo}/actions/runs/${runId}`;
+
+  // 首先快速检查一次，若已是 startup_failure 立即返回
+  try {
+    const snap = await githubRequest(ctx, runUrl);
+    if (snap.conclusion === "startup_failure") {
+      return (
+        `❌ 工作流运行 \`${runId}\` 启动失败（startup_failure）。\n` +
+        `这通常意味着工作流文件存在语法错误，或引用的 Action 版本不存在。\n` +
+        `请用 read_file 检查 .github/workflows/ 下的工作流文件。`
+      );
+    }
+    // 如果触发后立即已 completed（极少见但可能），直接返回
+    if (snap.status === "completed") {
+      return formatRunResult(snap, runId, 0);
+    }
+  } catch (e) {
+    return diagnose4xx(e, `check_run_status(${runId})`);
+  }
+
+  // 初始等待
+  await new Promise(r => setTimeout(r, cfg.initialWait));
+  let elapsedMs = cfg.initialWait;
+
+  for (let i = 0; i < cfg.maxPolls; i++) {
+    let run: Record<string, unknown>;
+    try {
+      run = await githubRequest(ctx, runUrl);
+    } catch (e) {
+      return diagnose4xx(e, `check_run_status poll(${runId})`);
+    }
+
+    if (run.status === "completed") {
+      return await formatRunResult(run, runId, elapsedMs, ctx);
+    }
+
+    // startup_failure 无论何时出现都立即返回
+    if (run.conclusion === "startup_failure") {
+      return (
+        `❌ 工作流运行 \`${runId}\` 启动失败（startup_failure）。\n` +
+        `工作流文件可能有语法错误，请用 read_file 检查 .github/workflows/ 目录。`
+      );
+    }
+
+    // 还在运行：如果不是最后一次轮询，继续等待
+    if (i < cfg.maxPolls - 1) {
+      await new Promise(r => setTimeout(r, cfg.interval));
+      elapsedMs += cfg.interval;
+    }
+  }
+
+  // 超出轮询次数，仍在运行
+  const elapsedSec = Math.round(elapsedMs / 1000);
+  const continueHint = workflowType === "build_apk"
+    ? `构建 APP 通常需要约 3 分钟，已等待 ${elapsedSec}s。请再次调用：\n{"tool":"check_run_status","run_id":"${runId}","workflow_type":"build_apk"}`
+    : `已等待 ${elapsedSec}s，工作流仍在运行。可稍后调用：\n{"tool":"check_run_status","run_id":"${runId}","workflow_type":"${workflowType}"}`;
+
+  return `⏳ 工作流 \`${runId}\` 仍在运行（已等待 ${elapsedSec}s）。\n${continueHint}`;
+}
+
+/** 格式化运行完成结果，failure 时自动附带 Jobs 失败摘要 */
+async function formatRunResult(
+  run: Record<string, unknown>,
+  runId: string,
+  elapsedMs: number,
+  ctx?: GithubContext,
+): Promise<string> {
+  const conclusion  = run.conclusion  as string ?? "unknown";
+  const startedAt   = run.run_started_at as string ?? "";
+  const updatedAt   = run.updated_at   as string ?? "";
+  const runNumber   = run.run_number   as number ?? 0;
+  const headBranch  = run.head_branch  as string ?? "";
+
+  // 实际耗时（从 GitHub 时间戳计算，比 elapsedMs 更准）
+  const durationSec = startedAt && updatedAt
+    ? Math.round((new Date(updatedAt).getTime() - new Date(startedAt).getTime()) / 1000)
+    : Math.round(elapsedMs / 1000);
+
+  const icon = conclusion === "success" ? "✅" : conclusion === "failure" ? "❌"
+    : conclusion === "cancelled" ? "⏹" : "⚠️";
+
+  let result =
+    `${icon} 工作流运行 **#${runNumber}**（ID: \`${runId}\`）已完成\n` +
+    `结论：\`${conclusion}\`  |  分支：\`${headBranch}\`  |  耗时：${durationSec}s`;
+
+  // failure / cancelled：自动查 Jobs 返回失败摘要，AI 不需要再单独调用 get_run_jobs
+  if ((conclusion === "failure" || conclusion === "cancelled") && ctx) {
+    try {
+      const jobsData = await githubRequest(
+        ctx,
+        `/repos/${ctx.owner}/${ctx.repo}/actions/runs/${runId}/jobs`,
+      );
+      const jobs = (jobsData.jobs ?? []) as Array<Record<string, unknown>>;
+      const failedJobs = jobs.filter(j => j.conclusion === "failure" || j.conclusion === "cancelled");
+
+      if (failedJobs.length) {
+        result += `\n\n**失败 Jobs**：`;
+        for (const job of failedJobs) {
+          result += `\n❌ \`${job.name}\` (Job ID: \`${job.id}\`)`;
+          const steps = (job.steps ?? []) as Array<Record<string, string>>;
+          const failedSteps = steps.filter(s => s.conclusion === "failure");
+          if (failedSteps.length) {
+            result += `\n   失败步骤：${failedSteps.map(s => `"${s.name}"`).join("、")}`;
+          }
+        }
+        const firstFailedJobId = failedJobs[0]?.id;
+        if (firstFailedJobId) {
+          result += `\n\n📋 获取详细日志：{"tool":"get_job_logs","job_id":"${firstFailedJobId}"}`;
+        }
+      }
+    } catch { /* 获取 Jobs 失败时忽略，不影响主结果 */ }
+  }
+
+  if (conclusion === "success") {
+    result += `\n\n🎉 运行成功！`;
+  }
+
+  return result;
 }
 
 /** 取消正在运行的工作流 */
@@ -1817,16 +1997,24 @@ ${branchNote}
 
 ⚙️ **工作流 & 部署**
 21. 列出所有工作流：{"tool":"list_workflows"}
-22. 查看工作流最近运行：{"tool":"get_workflow_runs","workflow_id":"deploy.yml","limit":"5"}
+22. 查看工作流最近运行（仅看历史，不等待）：{"tool":"get_workflow_runs","workflow_id":"deploy.yml","limit":"5"}
     （workflow_id 可以是文件名如 deploy.yml 或数字 ID；不填则查全部运行）
-23. 查看某次运行的 Jobs 及步骤：{"tool":"get_run_jobs","run_id":"12345678"}
-24. 下载 Job 日志（含报错详情）：{"tool":"get_job_logs","job_id":"87654321"}
-25. 手动触发工作流（⚠️ 若工作流缺少 workflow_dispatch 会自动添加并重试）：
-    {"tool":"trigger_workflow","workflow_id":"deploy.yml","ref":"main","inputs":{}}
-26. 取消运行中的工作流：{"tool":"cancel_workflow_run","run_id":"12345678"}
-27. 重新运行失败的工作流：{"tool":"rerun_workflow_run","run_id":"12345678","failed_jobs_only":"true"}
-28. 查看 Actions Secrets 名称：{"tool":"list_actions_secrets"}
-29. 向用户请求上传文件（缺少图片/图标/证书等资源时）：
+23. 触发工作流 → 自动等待完成（两步标准流程）：
+    步骤一 触发：{"tool":"trigger_workflow","workflow_id":"deploy.yml","ref":"main"}
+    步骤二 等待（trigger 返回的 run_id 直接填入，无需再查）：
+      普通部署   ：{"tool":"check_run_status","run_id":"<run_id>","workflow_type":"normal"}
+      构建 Android APK（约 3 分钟）：{"tool":"check_run_status","run_id":"<run_id>","workflow_type":"build_apk"}
+      快速脚本（<1 分钟）：{"tool":"check_run_status","run_id":"<run_id>","workflow_type":"fast"}
+    ⚠️ build_apk 若第一次返回"仍在运行"，**必须**再次调用 check_run_status（相同参数），不要改用 get_workflow_runs 轮询
+24. 等待已知 run_id（push 自动触发的运行）：
+    {"tool":"check_run_status","run_id":"12345678","workflow_type":"normal"}
+25. 查看某次运行的 Jobs 及步骤（check_run_status 失败时才需要）：{"tool":"get_run_jobs","run_id":"12345678"}
+26. 下载 Job 日志（含报错详情）：{"tool":"get_job_logs","job_id":"87654321"}
+    ⚡ check_run_status 失败时会自动附带 job_id，可直接用。
+27. 取消运行中的工作流：{"tool":"cancel_workflow_run","run_id":"12345678"}
+28. 重新运行失败的工作流：{"tool":"rerun_workflow_run","run_id":"12345678","failed_jobs_only":"true"}
+29. 查看 Actions Secrets 名称：{"tool":"list_actions_secrets"}
+30. 向用户请求上传文件（缺少图片/图标/证书等资源时）：
     {"tool":"request_file","filename":"app-icon.png","description":"需要 512×512 的应用图标 PNG 文件","mime_types":"image/png,image/jpeg"}
 
 🔀 **PR 高级操作**
@@ -1866,7 +2054,9 @@ ${branchNote}
   5. create_pr 提交 PR → merge_pull_request 合并
   6. **触发部署前必须检查**：read_file 读取 workflow 文件，确认 on: 块包含 \`workflow_dispatch:\`；
      若缺少，先用 patch_file 添加，提交后再执行 trigger_workflow
-  7. trigger_workflow 触发部署 → get_workflow_runs 轮询状态
+  7. trigger_workflow 触发部署 → **立即**用 check_run_status 等待结果（workflow_type 根据工作流选择）
+     - 普通部署：workflow_type="normal"（约 1 分钟）
+     - 构建 APK：workflow_type="build_apk"（约 3 分钟，第一次若超时需再调一次）
 
 🔍 **排查构建/部署失败（自动修复工作流）**：
   遇到用户提到"构建失败"、"部署报错"、"CI 挂了"等情况，**必须**按此流程自主完成全链路修复，无需询问用户：
@@ -1880,7 +2070,7 @@ ${branchNote}
      - 缺少 Secret → list_actions_secrets 检查，提示用户手动添加
      - 缺少资源文件（图片/图标等）→ 发出 request_file 工具调用
   5. patch_file / write_file 修复问题
-  6. rerun_workflow_run 重新触发，再次 get_workflow_runs 确认是否通过
+  6. rerun_workflow_run 重新触发 → **立即**调用 check_run_status 等待结果（不要轮询 get_workflow_runs）
   7. 如果依然失败，重复步骤 3-6 直到修复成功
   8. **所有自动修复尝试耗尽后仍失败时，必须输出如下格式的修复清单**，帮助用户手动处理：
 
@@ -2029,6 +2219,7 @@ ${branchNote}
 - **全仓库定位关键词用 grep_in_repo（返回行号）；跨文件批量替换用 search_and_replace（自动完成全流程）；只需文件路径列表用 search_code（更快但无行号）**
 - **对比两个分支/tag/commit 差异用 compare_commits（含 diff 片段）；查看单个 commit 详情用 get_commit_diff**
 - **代码审查用 auto_review；不要手动逐行分析变更文件，auto_review 会自动读取文件并输出结构化报告**
+- **触发工作流后必须用 check_run_status 等待结果，不要用 get_workflow_runs 手动轮询；build_apk 类型若超时需再调一次；startup_failure 说明工作流文件有语法问题，直接修复**
 - **trigger_workflow 已内置自动修复**：若缺少 workflow_dispatch，系统会自动添加并重试，无需手动干预
 - **Release 自动化**：收到发版/生成changelog指令时，必须按「Release 自动化工作流」五步完整执行，不得跳步或提前结束
 - commit message 使用中文，遵循 Conventional Commits（fix/feat/ci/chore/docs）
@@ -2360,6 +2551,10 @@ function executeTool(
     case "get_run_jobs":        return getRunJobs(ctx, call.run_id);
     case "get_job_logs":        return getJobLogs(ctx, call.job_id);
     case "trigger_workflow":    return triggerWorkflow(ctx, call.workflow_id, call.ref, undefined);
+    case "check_run_status":    return checkRunStatus(
+      ctx, call.run_id,
+      (call.workflow_type as "fast" | "normal" | "build_apk") || "normal",
+    );
     case "cancel_workflow_run": return cancelWorkflowRun(ctx, call.run_id);
     case "rerun_workflow_run":  return rerunWorkflowRun(ctx, call.run_id, call.failed_jobs_only === "true");
     case "list_actions_secrets": return listActionsSecrets(ctx);
@@ -2657,7 +2852,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       // Actions 工作流
       list_workflows: "列出工作流", get_workflow_runs: "查看运行记录",
       get_run_jobs: "查看 Jobs", get_job_logs: "下载日志",
-      trigger_workflow: "触发工作流", cancel_workflow_run: "取消运行",
+      trigger_workflow: "触发工作流", check_run_status: "等待运行完成",
+      cancel_workflow_run: "取消运行",
       rerun_workflow_run: "重新运行", list_actions_secrets: "查看 Secrets",
       // 资源请求
       request_file: "请求上传文件",

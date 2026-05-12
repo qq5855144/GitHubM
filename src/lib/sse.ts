@@ -76,7 +76,9 @@ export async function sendStreamRequest(options: StreamRequestOptions): Promise<
         'Content-Type': 'application/json',
       },
       signal,
-      timeout: 120000,
+      // 多步自主任务可能需要 5-10 分钟，设为 false 关闭超时限制；
+      // 用户可随时点"停止"按钮手动中断（AbortController signal）
+      timeout: false,
       hooks: { afterResponse: [sseHook] },
     });
   } catch (error) {

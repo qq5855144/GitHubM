@@ -779,10 +779,60 @@ async function callLLM(cfg: ModelConfig, platformKey: string, messages: Message[
   return full;
 }
 
+/**
+ * 从 LLM 输出中提取工具调用 JSON。
+ *
+ * 旧方案使用正则 /\{[^{}]*"tool"...\}/，当 content 字段包含代码花括号时会匹配失败，
+ * 导致多步任务在写文件后误判为"无工具调用"而提前终止。
+ *
+ * 新方案：遍历文本找到含 "tool" 的 JSON 对象起始 {，然后用括号栈找到对应的闭合 }，
+ * 支持任意嵌套深度的 JSON（如 content 字段中有 {}、[] 的代码）。
+ */
 function extractToolCall(text: string): Record<string, string> | null {
-  const match = text.match(/\{[^{}]*"tool"\s*:\s*"[^"]+[^{}]*\}/);
-  if (!match) return null;
-  try { return JSON.parse(match[0]); } catch { return null; }
+  // 在代码块内或普通文本中寻找含 "tool": 的 JSON 对象
+  const searchIn = text;
+  let searchPos = 0;
+
+  while (searchPos < searchIn.length) {
+    // 找下一个 "tool" 关键字
+    const toolIdx = searchIn.indexOf('"tool"', searchPos);
+    if (toolIdx === -1) break;
+
+    // 从 "tool" 往前找最近的 {
+    let start = toolIdx - 1;
+    while (start >= 0 && searchIn[start] !== '{') start--;
+    if (start < 0) { searchPos = toolIdx + 6; continue; }
+
+    // 用括号栈找对应的闭合 }，支持任意嵌套
+    let depth = 0;
+    let inStr = false;
+    let escape = false;
+    let end = -1;
+
+    for (let i = start; i < searchIn.length; i++) {
+      const ch = searchIn[i];
+      if (escape) { escape = false; continue; }
+      if (ch === '\\' && inStr) { escape = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) { end = i; break; }
+      }
+    }
+
+    if (end === -1) { searchPos = toolIdx + 6; continue; }
+
+    try {
+      const parsed = JSON.parse(searchIn.slice(start, end + 1));
+      if (parsed && typeof parsed.tool === 'string') return parsed;
+    } catch { /* 继续找下一个 */ }
+
+    searchPos = toolIdx + 6;
+  }
+
+  return null;
 }
 
 async function executeTool(
@@ -845,8 +895,10 @@ function createSSEStream() {
   const send = (data: string) => writer.write(encoder.encode(`data: ${data}\n\n`));
   const sendChunk = (content: string) =>
     send(JSON.stringify({ choices: [{ delta: { content }, finish_reason: null }] }));
+  // 心跳：发送空注释行，防止网关/负载均衡因无数据传输而断开 SSE 连接
+  const sendHeartbeat = () => writer.write(encoder.encode(": heartbeat\n\n"));
   const sendDone = async () => { await send("[DONE]"); await writer.close(); };
-  return { readable, sendChunk, sendDone };
+  return { readable, sendChunk, sendDone, sendHeartbeat };
 }
 
 // ── 主入口 ───────────────────────────────────────────────────────────────────
@@ -888,7 +940,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   const ctx: GithubContext = { token: githubToken, owner, repo };
-  const { readable, sendChunk, sendDone } = createSSEStream();
+  const { readable, sendChunk, sendDone, sendHeartbeat } = createSSEStream();
 
   (async () => {
     const fullMessages: Message[] = [{ role: "system", content: buildSystemPrompt(targetBranch) }, ...messages];
@@ -910,59 +962,87 @@ Deno.serve(async (req: Request): Promise<Response> => {
     };
     const MAX_ROUNDS = 15;
 
-    for (let round = 0; round < MAX_ROUNDS; round++) {
-      let assistantText = "";
-      try {
-        assistantText = await callLLM(modelConfig, platformKey, fullMessages);
-      } catch (e) {
-        await sendChunk(`\n❌ AI 调用失败：${(e as Error).message}`);
-        break;
+    // 每 20 秒发一次心跳，防止网关因空闲超时断开 SSE
+    const heartbeatTimer = setInterval(() => { sendHeartbeat().catch(() => {}); }, 20000);
+
+    try {
+      for (let round = 0; round < MAX_ROUNDS; round++) {
+        console.log(`[ai-assistant] round=${round} messages=${fullMessages.length}`);
+
+        let assistantText = "";
+        try {
+          assistantText = await callLLM(modelConfig, platformKey, fullMessages);
+        } catch (e) {
+          await sendChunk(`\n❌ AI 调用失败：${(e as Error).message}`);
+          break;
+        }
+
+        console.log(`[ai-assistant] round=${round} assistantText length=${assistantText.length} preview=${assistantText.slice(0, 120).replace(/\n/g, "\\n")}`);
+
+        const toolCall = extractToolCall(assistantText);
+
+        if (!toolCall) {
+          // 没有工具调用 → 最终回复，直接输出并结束
+          console.log(`[ai-assistant] round=${round} no toolCall → final answer`);
+          await sendChunk(assistantText);
+          break;
+        }
+
+        console.log(`[ai-assistant] round=${round} tool=${toolCall.tool} path=${toolCall.path || ""}`);
+
+        // 输出工具调用前的说明文字（如有）
+        // 用栈式解析找到工具 JSON 的起始位置，精确切割前文
+        const toolJsonStart = assistantText.indexOf(`"tool":"${toolCall.tool}"`);
+        let prefixEnd = toolJsonStart;
+        while (prefixEnd > 0 && assistantText[prefixEnd] !== '{') prefixEnd--;
+        const before = assistantText.slice(0, prefixEnd).trim();
+        if (before) await sendChunk(before + "\n\n");
+
+        const label = TOOL_LABELS[toolCall.tool] || toolCall.tool;
+        const hint = toolCall.tool === "read_file" && (toolCall.start_line || toolCall.end_line)
+          ? `${toolCall.path} 第${toolCall.start_line || "1"}–${toolCall.end_line || "末尾"}行`
+          : toolCall.tool === "patch_file"
+            ? `${toolCall.path} 第${toolCall.start_line}–${toolCall.end_line}行`
+            : toolCall.tool === "get_workflow_runs"
+              ? `workflow: ${toolCall.workflow_id || "全部"}`
+              : toolCall.tool === "get_run_jobs" || toolCall.tool === "cancel_workflow_run" || toolCall.tool === "rerun_workflow_run"
+                ? `run_id: ${toolCall.run_id}`
+                : toolCall.tool === "get_job_logs"
+                  ? `job_id: ${toolCall.job_id}`
+                  : toolCall.tool === "trigger_workflow"
+                    ? `${toolCall.workflow_id} @ ${toolCall.ref}`
+                    : toolCall.tool === "merge_pull_request"
+                      ? `PR #${toolCall.pull_number}`
+                      : toolCall.tool === "file_tree"
+                        ? `${toolCall.path || "/"} (深度${toolCall.depth || 3})`
+                        : toolCall.tool === "grep_in_file"
+                          ? `${toolCall.path} → "${toolCall.pattern}"`
+                          : toolCall.tool === "batch_read"
+                            ? toolCall.paths
+                            : toolCall.path || toolCall.query || toolCall.title || toolCall.branch || "";
+        await sendChunk(`🔧 **正在执行：${label}** \`${hint}\`\n\n`);
+
+        let toolResult = "";
+        try {
+          toolResult = await executeTool(ctx, toolCall, targetBranch);
+          console.log(`[ai-assistant] round=${round} toolResult length=${toolResult.length}`);
+        } catch (e) {
+          toolResult = `工具执行出错：${(e as Error).message}`;
+          console.error(`[ai-assistant] round=${round} tool error:`, (e as Error).message);
+        }
+
+        fullMessages.push({ role: "assistant", content: assistantText });
+        fullMessages.push({
+          role: "user",
+          content: `工具执行结果：\n${toolResult}\n\n请根据结果继续执行下一步。若还有未完成的步骤，继续调用工具；若全部步骤已完成，输出简洁的完成总结。`,
+        });
+
+        if (round === MAX_ROUNDS - 1) await sendChunk("\n\n⚠️ 已达到最大工具调用轮次（15 轮）。");
       }
-
-      const toolCall = extractToolCall(assistantText);
-      if (!toolCall) { await sendChunk(assistantText); break; }
-
-      const before = assistantText.split(/\{[^{}]*"tool"[^{}]*\}/)[0].trim();
-      if (before) await sendChunk(before + "\n\n");
-
-      const label = TOOL_LABELS[toolCall.tool] || toolCall.tool;
-      const hint = toolCall.tool === "read_file" && (toolCall.start_line || toolCall.end_line)
-        ? `${toolCall.path} 第${toolCall.start_line || "1"}–${toolCall.end_line || "末尾"}行`
-        : toolCall.tool === "patch_file"
-          ? `${toolCall.path} 第${toolCall.start_line}–${toolCall.end_line}行`
-          : toolCall.tool === "get_workflow_runs"
-            ? `workflow: ${toolCall.workflow_id || "全部"}`
-            : toolCall.tool === "get_run_jobs" || toolCall.tool === "cancel_workflow_run" || toolCall.tool === "rerun_workflow_run"
-              ? `run_id: ${toolCall.run_id}`
-              : toolCall.tool === "get_job_logs"
-                ? `job_id: ${toolCall.job_id}`
-                : toolCall.tool === "trigger_workflow"
-                  ? `${toolCall.workflow_id} @ ${toolCall.ref}`
-                  : toolCall.tool === "merge_pull_request"
-                    ? `PR #${toolCall.pull_number}`
-                    : toolCall.tool === "file_tree"
-                      ? `${toolCall.path || "/"} (深度${toolCall.depth || 3})`
-                      : toolCall.tool === "grep_in_file"
-                        ? `${toolCall.path} → "${toolCall.pattern}"`
-                        : toolCall.tool === "batch_read"
-                          ? toolCall.paths
-                          : toolCall.path || toolCall.query || toolCall.title || toolCall.branch || "";
-      await sendChunk(`🔧 **正在执行：${label}** \`${hint}\`\n\n`);
-
-      let toolResult = "";
-      try { toolResult = await executeTool(ctx, toolCall, targetBranch); }
-      catch (e) { toolResult = `工具执行出错：${(e as Error).message}`; }
-
-      fullMessages.push({ role: "assistant", content: assistantText });
-      fullMessages.push({
-        role: "user",
-        content: `工具执行结果：\n${toolResult}\n\n请根据结果继续执行下一步。若还有未完成的步骤，继续调用工具；若全部步骤已完成，输出简洁的完成总结。`,
-      });
-
-      if (round === MAX_ROUNDS - 1) await sendChunk("\n\n⚠️ 已达到最大工具调用轮次。");
+    } finally {
+      clearInterval(heartbeatTimer);
+      await sendDone();
     }
-
-    await sendDone();
   })();
 
   return new Response(readable, {

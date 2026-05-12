@@ -411,6 +411,10 @@ export default function AiAssistantPage() {
     let planStepsLocal: Array<{ id: string; title: string; desc: string }> = [];
     // 当前步骤 ID（闭包内，不走 setState 避免异步）
     let localCurrentStepId: string | null = null;
+    // 当前思考气泡 id
+    let thinkingBubbleId: string | null = null;
+    // toolCallId → 气泡 id 映射（tool_end 时用于定位并更新）
+    const toolBubbleMap = new Map<string, string>();
 
     await sendStreamRequest({
       functionUrl: `${SUPABASE_URL}/functions/v1/ai-assistant`,
@@ -443,21 +447,32 @@ export default function AiAssistantPage() {
             break;
           }
           case 'think_start': {
-            currentThinking = '';
-            // thinking 跟随当前 answer 气泡（answer 气泡未建时跟 init 气泡）
-            const tid = answerMsgId ?? initMsgId;
-            setMessages(prev => prev.map(m => m.id === tid ? { ...m, thinkingContent: '', thinkingDone: false } : m));
+            // 思考气泡：每次思考创建独立气泡
+            const tbId = `think-${Date.now()}`;
+            thinkingBubbleId = tbId;
+            const thinkMsg: Message = {
+              id: tbId, role: 'assistant', content: '',
+              streaming: true, bubbleType: 'thinking',
+              thinkingContent: '', thinkingDone: false,
+            };
+            setMessages(prev => [...prev, thinkMsg]);
             break;
           }
           case 'think_chunk': {
             currentThinking += chunk.content;
-            const tid = answerMsgId ?? initMsgId;
-            setMessages(prev => prev.map(m => m.id === tid ? { ...m, thinkingContent: currentThinking } : m));
+            if (thinkingBubbleId) {
+              const tid = thinkingBubbleId;
+              setMessages(prev => prev.map(m => m.id === tid ? { ...m, thinkingContent: currentThinking } : m));
+            }
             break;
           }
           case 'think_end': {
-            const tid = answerMsgId ?? initMsgId;
-            setMessages(prev => prev.map(m => m.id === tid ? { ...m, thinkingDone: true } : m));
+            if (thinkingBubbleId) {
+              const tid = thinkingBubbleId;
+              setMessages(prev => prev.map(m => m.id === tid ? { ...m, thinkingDone: true, streaming: false } : m));
+            }
+            thinkingBubbleId = null;
+            currentThinking = '';
             break;
           }
           case 'tool_start': {
@@ -467,13 +482,17 @@ export default function AiAssistantPage() {
               status: 'running', startedAt: Date.now(),
             }]);
             if (window.innerWidth >= 768) setShowToolHistory(true);
-            // 工具写入当前步骤气泡（若有），否则写入初始气泡
-            const tid = currentStepBubbleId ?? initMsgId;
-            setMessages(prev => prev.map(m => {
-              if (m.id !== tid) return m;
-              const newTool: InlineTool = { id: chunk.id, tool: chunk.tool, label: chunk.label, hint: chunk.hint, status: 'running' };
-              return { ...m, inlineTools: [...(m.inlineTools ?? []), newTool] };
-            }));
+            // 每个工具调用创建独立气泡
+            const toolMsgId = `tool-${chunk.id}-${Date.now()}`;
+            toolBubbleMap.set(chunk.id, toolMsgId);
+            const toolMsg: Message = {
+              id: toolMsgId, role: 'assistant', content: '',
+              streaming: true, bubbleType: 'tool',
+              toolCallId: chunk.id, toolName: chunk.tool,
+              toolLabel: chunk.label, toolHint: chunk.hint,
+              toolStatus: 'running',
+            };
+            setMessages(prev => [...prev, toolMsg]);
             break;
           }
           case 'tool_end': {
@@ -481,16 +500,15 @@ export default function AiAssistantPage() {
               ? { ...item, status: chunk.status, result: chunk.result, elapsedMs: chunk.elapsedMs }
               : item
             ));
-            const tid = currentStepBubbleId ?? initMsgId;
-            setMessages(prev => prev.map(m => {
-              if (m.id !== tid) return m;
-              return {
-                ...m,
-                inlineTools: (m.inlineTools ?? []).map(t =>
-                  t.id === chunk.id ? { ...t, status: chunk.status, result: chunk.result, elapsedMs: chunk.elapsedMs } : t
-                ),
-              };
-            }));
+            // 更新对应工具气泡
+            const toolMsgId = toolBubbleMap.get(chunk.id);
+            if (toolMsgId) {
+              setMessages(prev => prev.map(m =>
+                m.id === toolMsgId
+                  ? { ...m, streaming: false, toolStatus: chunk.status, toolElapsedMs: chunk.elapsedMs, toolResult: chunk.result }
+                  : m
+              ));
+            }
             break;
           }
           case 'plan': {
@@ -553,11 +571,6 @@ export default function AiAssistantPage() {
             setStepRetryCounts(prev => ({ ...prev, [chunk.stepId]: chunk.retryCount }));
             setCurrentStepId(chunk.stepId);
             localCurrentStepId = chunk.stepId;
-            // 在当前步骤气泡上更新重试徽章
-            const tid = currentStepBubbleId ?? initMsgId;
-            setMessages(prev => prev.map(m =>
-              m.id === tid ? { ...m, inlineTools: m.inlineTools } : m
-            ));
             break;
           }
           case 'step_end': {
@@ -1043,6 +1056,16 @@ export default function AiAssistantPage() {
                   );
                 }
 
+                // ── AI：思考气泡 ─────────────────────────────────────────────
+                if (msg.bubbleType === 'thinking') {
+                  return <ThinkingBubble key={msg.id} msg={msg} />;
+                }
+
+                // ── AI：工具调用气泡 ─────────────────────────────────────────
+                if (msg.bubbleType === 'tool') {
+                  return <ToolBubble key={msg.id} msg={msg} />;
+                }
+
                 // ── AI：answer 气泡 / 普通单气泡 ─────────────────────────────
                 return (
                   <div key={msg.id} className="flex gap-2.5 flex-row">
@@ -1055,10 +1078,6 @@ export default function AiAssistantPage() {
                         !msg.streaming && msg.content.length > 600 ? 'max-h-[60vh] overflow-y-auto' : ''
                       )}>
                         <div className="min-w-0">
-                          {/* 思考过程 */}
-                          {(msg.thinkingContent || (msg.streaming && !msg.thinkingDone)) && (
-                            <ThinkingBlock content={msg.thinkingContent || ''} done={msg.thinkingDone} />
-                          )}
                           {/* 正文内容 */}
                           {msg.content ? (
                             msg.content.includes('## 🔧 修复清单')
@@ -1683,26 +1702,8 @@ interface StepBubbleProps {
 }
 
 function StepBubble({ msg, onUploadFile }: StepBubbleProps) {
-  const hasTools = msg.inlineTools && msg.inlineTools.length > 0;
-  const toolsDone = msg.inlineTools?.every(t => t.status !== 'running') ?? true;
-  const hasError = msg.inlineTools?.some(t => t.status === 'fail') ?? false;
-  const stepDone = !msg.streaming && toolsDone;
-
-  // 完成时默认折叠，流式中默认展开
-  const [collapsed, setCollapsed] = useState(false);
-
-  // 步骤完成后自动折叠（延迟 600ms 让用户感知到完成状态）
-  useEffect(() => {
-    if (stepDone) {
-      const t = setTimeout(() => setCollapsed(true), 600);
-      return () => clearTimeout(t);
-    } else {
-      setCollapsed(false);
-    }
-  }, [stepDone]);
-
-  const successCount = msg.inlineTools?.filter(t => t.status === 'success').length ?? 0;
-  const totalCount = msg.inlineTools?.length ?? 0;
+  const hasError = false; // 错误由独立 tool 气泡展示
+  const stepDone = !msg.streaming;
 
   return (
     <div className="flex gap-2.5 flex-row">
@@ -1727,53 +1728,32 @@ function StepBubble({ msg, onUploadFile }: StepBubbleProps) {
       </div>
 
       <div className="flex flex-col gap-1 flex-1 min-w-0 pb-1">
-        {/* 标题行 —— 整行可点击折叠/展开（仅有工具时可折叠） */}
-        <button
-          onClick={() => hasTools && setCollapsed(v => !v)}
-          disabled={!hasTools || msg.streaming}
-          className={cn(
-            'flex items-center gap-2 rounded-xl px-3 py-2 border text-sm min-w-0 w-full text-left transition-colors',
-            msg.streaming
-              ? 'bg-primary/5 border-primary/20 cursor-default'
-              : hasError
-                ? 'bg-destructive/5 border-destructive/20 hover:bg-destructive/8 cursor-pointer'
-                : hasTools
-                  ? 'bg-muted/40 border-border/50 hover:bg-muted/70 cursor-pointer'
-                  : 'bg-muted/40 border-border/50 cursor-default'
-          )}
-        >
+        {/* 标题行 */}
+        <div className={cn(
+          'flex items-center gap-2 rounded-xl px-3 py-2 border text-sm min-w-0',
+          msg.streaming
+            ? 'bg-primary/5 border-primary/20'
+            : 'bg-muted/40 border-border/50'
+        )}>
           <span className={cn(
             'font-medium text-xs truncate flex-1',
-            msg.streaming ? 'text-primary' : hasError ? 'text-destructive' : 'text-foreground/70'
+            msg.streaming ? 'text-primary' : 'text-foreground/70'
           )}>
             {msg.stepTitle ?? '执行中'}
           </span>
-
-          {/* 右侧状态区 */}
           {msg.streaming && (
             <span className="text-[10px] text-primary/70 shrink-0 animate-pulse">进行中…</span>
           )}
-          {stepDone && !hasError && hasTools && (
-            <span className="text-[10px] text-green-600 dark:text-green-400 shrink-0 font-mono">
-              {successCount}/{totalCount}
-            </span>
+          {stepDone && !hasError && (
+            <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
           )}
-          {hasError && (
-            <span className="text-[10px] text-destructive shrink-0">失败</span>
-          )}
-          {/* 折叠箭头（完成后才显示） */}
-          {stepDone && hasTools && (
-            collapsed
-              ? <ChevronRight className="w-3 h-3 text-muted-foreground/60 shrink-0 ml-0.5" />
-              : <ChevronDown className="w-3 h-3 text-muted-foreground/60 shrink-0 ml-0.5" />
-          )}
-        </button>
+        </div>
 
-        {/* 工具调用列表（折叠时隐藏） */}
-        {hasTools && !collapsed && (
+        {/* 计划概览（首个步骤气泡展示任务列表） */}
+        {msg.inlinePlan && (
           <div className="pl-1">
             <InlineActivityPanel
-              inlineTools={msg.inlineTools}
+              inlinePlan={msg.inlinePlan}
               streaming={msg.streaming}
             />
           </div>
@@ -1789,6 +1769,143 @@ function StepBubble({ msg, onUploadFile }: StepBubbleProps) {
                 onUpload={(file) => onUploadFile(msg.id, freq.id, file)}
               />
             ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── ThinkingBubble：AI 思考过程独立气泡 ──────────────────────────────────────
+function ThinkingBubble({ msg }: { msg: Message }) {
+  const [expanded, setExpanded] = useState(true);
+  const content = msg.thinkingContent ?? '';
+  const done = msg.thinkingDone ?? false;
+
+  // 完成后自动折叠
+  useEffect(() => {
+    if (done) {
+      const t = setTimeout(() => setExpanded(false), 800);
+      return () => clearTimeout(t);
+    }
+  }, [done]);
+
+  return (
+    <div className="flex gap-2.5 flex-row pl-2">
+      {/* 左侧竖线装饰 */}
+      <div className="flex flex-col items-center shrink-0">
+        <div className="w-1 self-stretch rounded-full bg-border/40 mx-2.5" />
+      </div>
+
+      <div className="flex-1 min-w-0 max-w-[92%]">
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="flex items-center gap-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors py-1 w-full text-left"
+        >
+          {done
+            ? <CheckCircle2 className="w-3 h-3 text-primary/60 shrink-0" />
+            : <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />}
+          <span className="font-medium tracking-wide">
+            {done ? '已完成思考' : '正在思考…'}
+          </span>
+          {content && (
+            expanded
+              ? <ChevronDown className="w-3 h-3 ml-auto shrink-0" />
+              : <ChevronRight className="w-3 h-3 ml-auto shrink-0" />
+          )}
+        </button>
+
+        {expanded && content && (
+          <div className="mt-1 rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5 max-h-[180px] overflow-y-auto scrollbar-thin">
+            <p className="text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap italic break-words">
+              {content}
+              {!done && <span className="inline-block w-1 h-3 ml-1 bg-primary/50 animate-pulse align-middle" />}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── ToolBubble：单个工具调用独立气泡 ─────────────────────────────────────────
+function ToolBubble({ msg }: { msg: Message }) {
+  const [expanded, setExpanded] = useState(false);
+  const isRunning = msg.toolStatus === 'running';
+  const isFail = msg.toolStatus === 'fail';
+  const isSuccess = msg.toolStatus === 'success';
+  const result = msg.toolResult ?? '';
+  // 结果超过 80 字符时可展开
+  const canExpand = result.length > 80;
+
+  return (
+    <div className="flex gap-2.5 flex-row pl-2">
+      {/* 左侧竖线装饰 */}
+      <div className="flex flex-col items-center shrink-0">
+        <div className="w-1 self-stretch rounded-full bg-border/30 mx-2.5" />
+      </div>
+
+      <div className="flex-1 min-w-0 max-w-[92%]">
+        {/* 主行：工具名 + 状态 + 耗时 */}
+        <button
+          onClick={() => canExpand && setExpanded(v => !v)}
+          disabled={!canExpand}
+          className={cn(
+            'flex items-center gap-2 w-full text-left rounded-lg px-3 py-1.5 border text-xs transition-colors',
+            isRunning
+              ? 'bg-muted/30 border-border/40'
+              : isFail
+                ? 'bg-destructive/5 border-destructive/20'
+                : 'bg-muted/20 border-border/30 hover:bg-muted/40',
+            canExpand && !isRunning ? 'cursor-pointer' : 'cursor-default'
+          )}
+        >
+          {/* 状态图标 */}
+          {isRunning && <Loader2 className="w-3 h-3 text-primary animate-spin shrink-0" />}
+          {isSuccess && <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />}
+          {isFail && <XCircle className="w-3 h-3 text-destructive shrink-0" />}
+
+          {/* 工具标签 */}
+          <span className={cn(
+            'font-medium truncate flex-1',
+            isRunning ? 'text-foreground/80' : isFail ? 'text-destructive' : 'text-foreground/70'
+          )}>
+            {msg.toolLabel || msg.toolName || '工具调用'}
+          </span>
+
+          {/* 提示（hint） */}
+          {msg.toolHint && (
+            <span className="text-muted-foreground/60 truncate max-w-[120px] hidden sm:block">
+              {msg.toolHint}
+            </span>
+          )}
+
+          {/* 耗时 */}
+          {msg.toolElapsedMs != null && (
+            <span className={cn(
+              'font-mono shrink-0',
+              isFail ? 'text-destructive/70' : 'text-muted-foreground/50'
+            )}>
+              {msg.toolElapsedMs < 1000
+                ? `${msg.toolElapsedMs}ms`
+                : `${(msg.toolElapsedMs / 1000).toFixed(1)}s`}
+            </span>
+          )}
+
+          {/* 展开箭头 */}
+          {canExpand && !isRunning && (
+            expanded
+              ? <ChevronDown className="w-3 h-3 text-muted-foreground/50 shrink-0" />
+              : <ChevronRight className="w-3 h-3 text-muted-foreground/50 shrink-0" />
+          )}
+        </button>
+
+        {/* 展开的结果内容 */}
+        {expanded && result && (
+          <div className="mt-1 rounded-lg border border-border/40 bg-muted/10 px-3 py-2 max-h-[200px] overflow-y-auto scrollbar-thin">
+            <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words leading-relaxed font-mono">
+              {result}
+            </pre>
           </div>
         )}
       </div>

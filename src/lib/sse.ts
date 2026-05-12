@@ -33,6 +33,53 @@ function friendlyError(err: unknown): Error {
   return new Error(msg || '未知错误');
 }
 
+/**
+ * 解析 HTTP 错误响应体，返回友好的错误信息。
+ * 若响应体是 HTML（如 Cloudflare 拦截页、429 限流页），只提取关键文字；
+ * 若是 JSON，提取 error 字段。
+ */
+async function parseHttpError(response: Response): Promise<string> {
+  const status = response.status;
+  const statusText = response.statusText || '';
+
+  // 401/403 直接给出配置类提示，无需解析 body
+  if (status === 401) return `认证失败（401）：API Key 无效或已过期，请在模型设置中重新填写`;
+  if (status === 403) return `无权限（403）：API Key 无权访问此接口，请检查账号权限`;
+  if (status === 429) return `请求过于频繁（429）：触发限流，请稍后再试`;
+
+  let body = '';
+  try {
+    body = await response.text();
+  } catch {
+    return `请求失败（HTTP ${status} ${statusText}）`;
+  }
+
+  // 尝试 JSON 解析
+  try {
+    const parsed = JSON.parse(body);
+    const msg = parsed?.error?.message || parsed?.error || parsed?.message;
+    if (typeof msg === 'string' && msg.trim()) {
+      return `请求失败（${status}）：${msg.slice(0, 300)}`;
+    }
+  } catch { /* ignore */ }
+
+  // 是 HTML 页面：提取 <title> 或 <h1>，或截取纯文本
+  if (body.trim().startsWith('<') || body.includes('<!DOCTYPE') || body.includes('<html')) {
+    const titleMatch = body.match(/<title[^>]*>([^<]{1,120})<\/title>/i);
+    const h1Match = body.match(/<h1[^>]*>([^<]{1,120})<\/h1>/i);
+    const hint = titleMatch?.[1]?.trim() || h1Match?.[1]?.trim() || '';
+    return hint
+      ? `请求失败（${status}）：${hint}`
+      : `请求失败（HTTP ${status}）：服务端返回了 HTML 页面，可能是限流或防火墙拦截`;
+  }
+
+  // 纯文本，截断到 300 字符
+  const truncated = body.replace(/\s+/g, ' ').trim().slice(0, 300);
+  return truncated
+    ? `请求失败（${status}）：${truncated}`
+    : `请求失败（HTTP ${status} ${statusText}）`;
+}
+
 export async function sendStreamRequest(options: StreamRequestOptions): Promise<void> {
   const {
     functionUrl, requestBody, supabaseAnonKey,
@@ -40,6 +87,19 @@ export async function sendStreamRequest(options: StreamRequestOptions): Promise<
     signal: userSignal,
     timeoutMs = 300_000,
   } = options;
+
+  // ── 前置校验：确保 functionUrl 有效，防止 GitHub Pages 构建时 env 未注入 ────
+  if (!functionUrl || !functionUrl.startsWith('http')) {
+    onError(new Error(
+      `AI 服务地址未配置（functionUrl="${functionUrl}"）。` +
+      `请确认构建时 VITE_SUPABASE_URL 已正确注入，或联系管理员。`
+    ));
+    return;
+  }
+  if (!supabaseAnonKey) {
+    onError(new Error('AI 服务密钥未配置（VITE_SUPABASE_ANON_KEY 为空），请联系管理员。'));
+    return;
+  }
 
   // ── 超时控制：仅对"建立连接 + 收到首字节"阶段设超时 ─────────────────────────
   // SSE body 读取阶段使用独立 reader，不受此 controller 影响
@@ -91,14 +151,9 @@ export async function sendStreamRequest(options: StreamRequestOptions): Promise<
   // ── 连接建立后立即取消超时计时，SSE 读取阶段无时长限制 ──────────────────────
   cleanup();
 
-  // ── HTTP 错误：读取响应体获取实际错误信息 ───────────────────────────────────
+  // ── HTTP 错误：解析响应体，分类输出清晰错误 ─────────────────────────────────
   if (!response.ok) {
-    let msg = `请求失败（HTTP ${response.status}）`;
-    try {
-      const body = await response.text();
-      const parsed = JSON.parse(body);
-      if (parsed?.error) msg = parsed.error;
-    } catch { /* 保留默认 msg */ }
+    const msg = await parseHttpError(response);
     onError(new Error(msg));
     return;
   }

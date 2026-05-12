@@ -270,8 +270,8 @@ async function patchFile(
     const newLines = newContent.split("\n");
     const patched = [...before, ...newLines, ...after].join("\n");
 
-    // 3. base64 编码（兼容 UTF-8）
-    const encoded = btoa(unescape(encodeURIComponent(patched)));
+    // 3. base64 编码（TextEncoder，完整支持 UTF-8 多字节字符）
+    const encoded = encodeBase64Utf8(patched);
 
     // 4. 写回 GitHub
     const body: Record<string, string> = {
@@ -308,7 +308,7 @@ async function writeFile(
     } catch { /* 新文件 */ }
     const body: Record<string, string> = {
       message: commitMessage,
-      content: btoa(unescape(encodeURIComponent(content))),
+      content: encodeBase64Utf8(content),
     };
     if (sha) body.sha = sha;
     if (branch) body.branch = branch;
@@ -735,6 +735,23 @@ ${branchNote}
 - 对话语言：中文；操作完成后给出简洁总结
 
 ==============================
+🚨 工具调用格式（严格执行）
+==============================
+每次响应必须遵守以下规则，违反将导致系统故障：
+
+✅ 正确格式（只输出一个工具 JSON + 简短说明）：
+  正在读取项目结构。
+  {"tool":"file_tree","path":"","depth":"3"}
+
+❌ 严禁以下行为：
+  1. 在同一响应中出现多个 {"tool":...} JSON 对象
+  2. 用代码块（```）包裹工具 JSON
+  3. 列出"计划清单"：禁止把多个工具 JSON 写在一起展示
+  4. 用文字描述下一步要调用哪些工具，而不是直接执行
+
+口诀：每次只做一件事，等结果再做下一件。
+
+==============================
 自主任务执行规则（最重要）
 ==============================
 - 你拥有 15 次工具调用机会，必须充分利用，不得提前放弃
@@ -742,17 +759,35 @@ ${branchNote}
 - 任务未完成时，绝对禁止输出"任务完成"、"请问是否需要继续"等终止性语句
 - 只有当所有步骤都已完成、结果已验证，才输出最终总结
 - 遇到工具报错时，自行分析原因并尝试修正，而不是停下来询问用户
+- 内部思考（计划制定）保留在 <think> 标签内，不要把计划以 JSON 列表形式输出到正文
 - 面对复杂任务，按以下方式执行：
-  1. 先制定计划（内部思考，不输出给用户）
-  2. 逐步执行每个步骤
-  3. 每步完成后检查结果，决定下一步
+  1. 内心制定计划（仅思考，不输出 JSON 列表）
+  2. 直接执行第一步（输出一句说明 + 一个 JSON）
+  3. 收到结果后，立即执行第二步（同样格式）
   4. 全部完成后输出简洁的完成总结`;
 }
 
 interface Message { role: "user" | "assistant" | "system"; content: string; }
-interface ChatChunk { choices: Array<{ delta: { content?: string }; finish_reason: string | null }>; }
+interface ChatChunk { choices: Array<{ delta: { content?: string; reasoning_content?: string }; finish_reason: string | null }>; }
 
-async function callLLM(cfg: ModelConfig, platformKey: string, messages: Message[]): Promise<string> {
+/** UTF-8 安全的 base64 编码（btoa 不支持多字节字符，用 TextEncoder 替代） */
+function encodeBase64Utf8(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+/**
+ * 调用 LLM，返回 { content, thinking }。
+ * - content：正文（已去掉 <think>...</think> 标签及其内容）
+ * - thinking：模型内部思考过程（来自 <think> 标签或 reasoning_content 字段）
+ */
+async function callLLM(
+  cfg: ModelConfig,
+  platformKey: string,
+  messages: Message[],
+): Promise<{ content: string; thinking: string }> {
   const { url, headers, bodyExtra } = buildLLMRequest(cfg, platformKey);
   const res = await fetch(url, {
     method: "POST",
@@ -763,7 +798,7 @@ async function callLLM(cfg: ModelConfig, platformKey: string, messages: Message[
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let full = "", buf = "";
+  let full = "", reasoning = "", buf = "";
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -773,10 +808,55 @@ async function callLLM(cfg: ModelConfig, platformKey: string, messages: Message[
       if (!line.startsWith("data: ")) continue;
       const raw = line.slice(6).trim();
       if (raw === "[DONE]") continue;
-      try { full += (JSON.parse(raw) as ChatChunk).choices?.[0]?.delta?.content ?? ""; } catch { /* 跳过 */ }
+      try {
+        const chunk = JSON.parse(raw) as ChatChunk;
+        const delta = chunk.choices?.[0]?.delta;
+        if (!delta) continue;
+        // DeepSeek Reasoner 把思考内容放在 reasoning_content 字段
+        if (delta.reasoning_content) reasoning += delta.reasoning_content;
+        if (delta.content) full += delta.content;
+      } catch { /* 跳过 */ }
     }
   }
-  return full;
+
+  // 有些模型把思考放在 <think>...</think> 标签里（DeepSeek-R1 等）
+  // 将其提取出来，正文中删除这些标签
+  const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+  let thinkContent = reasoning; // 先用 reasoning_content
+  full = full.replace(thinkRegex, (_match, inner: string) => {
+    if (!thinkContent) thinkContent = inner.trim();
+    return ""; // 从正文中移除
+  }).trim();
+
+  return { content: full, thinking: thinkContent.trim() };
+}
+
+/**
+ * 从文本中移除所有看起来像工具调用的 JSON 对象（{"tool":...}），
+ * 用于清洗模型在"计划列表"里输出的多余 JSON，避免展示给用户。
+ */
+function stripToolJsonsFromText(text: string): string {
+  let result = text;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const toolIdx = result.indexOf('"tool"');
+    if (toolIdx === -1) break;
+    let start = toolIdx - 1;
+    while (start >= 0 && result[start] !== '{') start--;
+    if (start < 0) break;
+    let depth = 0, inStr = false, escape = false, end = -1;
+    for (let i = start; i < result.length; i++) {
+      const ch = result[i];
+      if (escape) { escape = false; continue; }
+      if (ch === '\\' && inStr) { escape = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; if (depth === 0) { end = i; break; } }
+    }
+    if (end === -1) break;
+    result = (result.slice(0, start).trimEnd() + "\n" + result.slice(end + 1).trimStart()).trim();
+  }
+  return result.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /**
@@ -970,14 +1050,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
         console.log(`[ai-assistant] round=${round} messages=${fullMessages.length}`);
 
         let assistantText = "";
+        let thinkingText = "";
         try {
-          assistantText = await callLLM(modelConfig, platformKey, fullMessages);
+          const result = await callLLM(modelConfig, platformKey, fullMessages);
+          assistantText = result.content;
+          thinkingText = result.thinking;
         } catch (e) {
           await sendChunk(`\n❌ AI 调用失败：${(e as Error).message}`);
           break;
         }
 
-        console.log(`[ai-assistant] round=${round} assistantText length=${assistantText.length} preview=${assistantText.slice(0, 120).replace(/\n/g, "\\n")}`);
+        console.log(`[ai-assistant] round=${round} contentLen=${assistantText.length} thinkingLen=${thinkingText.length} preview=${assistantText.slice(0, 120).replace(/\n/g, "\\n")}`);
+
+        // 如果模型有思考内容，先发给前端（用特殊标记，前端折叠显示）
+        if (thinkingText) {
+          await sendChunk(`[[THINKING]]${thinkingText}[[/THINKING]]\n\n`);
+        }
 
         const toolCall = extractToolCall(assistantText);
 
@@ -990,12 +1078,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
         console.log(`[ai-assistant] round=${round} tool=${toolCall.tool} path=${toolCall.path || ""}`);
 
-        // 输出工具调用前的说明文字（如有）
-        // 用栈式解析找到工具 JSON 的起始位置，精确切割前文
+        // 提取工具 JSON 之前的说明文字，并清洗掉其中所有裸 tool JSON（模型可能列出多个）
         const toolJsonStart = assistantText.indexOf(`"tool":"${toolCall.tool}"`);
         let prefixEnd = toolJsonStart;
         while (prefixEnd > 0 && assistantText[prefixEnd] !== '{') prefixEnd--;
-        const before = assistantText.slice(0, prefixEnd).trim();
+        const rawBefore = assistantText.slice(0, prefixEnd).trim();
+        // 去掉 before 中所有 {"tool":...} JSON 块，避免把"计划列表"展示给用户
+        const before = stripToolJsonsFromText(rawBefore);
         if (before) await sendChunk(before + "\n\n");
 
         const label = TOOL_LABELS[toolCall.tool] || toolCall.tool;

@@ -1,12 +1,12 @@
 // AI 助手共享工具函数 & 常量
-import React from 'react';
+import React, { useState } from 'react';
 import type { ModelConfig, ModelType } from './aiTypes';
 import {
   FolderOpen, BookOpen, Search, FileCode2, Pencil,
   GitBranch, GitCommit, GitMerge, CircleAlert,
   Play, ListChecks, BugPlay, LayoutDashboard,
   FolderSearch, ScanSearch, Files, GitPullRequest,
-  Cpu, Wrench,
+  Cpu, Wrench, ChevronDown, ChevronRight, BrainCircuit,
 } from 'lucide-react';
 
 // ── 模型类型（从 aiTypes 导入，在此仅重导出供外部使用）──────────────────────────────
@@ -147,6 +147,59 @@ export function parseChunk(data: string): string {
  * - 支持 # / ## / ### 标题、有序/无序列表、粗体、行内代码
  */
 export function renderMarkdown(text: string): React.ReactNode {
+  if (!text) return null;
+
+  // ── [[THINKING]]...[[/THINKING]] 思考块拆分处理 ───────────────────────────
+  // 把整段内容按思考块切分，分段渲染
+  const THINK_RE = /\[\[THINKING\]\]([\s\S]*?)\[\[\/THINKING\]\]/g;
+  if (THINK_RE.test(text)) {
+    THINK_RE.lastIndex = 0;
+    const nodes: React.ReactNode[] = [];
+    let last = 0, idx = 0;
+    let match: RegExpExecArray | null;
+    while ((match = THINK_RE.exec(text)) !== null) {
+      if (match.index > last) {
+        const before = text.slice(last, match.index).trim();
+        if (before) nodes.push(<div key={`seg-${idx++}`}>{renderMarkdownInner(before)}</div>);
+      }
+      nodes.push(<ThinkingBlock key={`think-${idx++}`} content={match[1].trim()} />);
+      last = match.index + match[0].length;
+    }
+    if (last < text.length) {
+      const after = text.slice(last).trim();
+      if (after) nodes.push(<div key={`seg-${idx++}`}>{renderMarkdownInner(after)}</div>);
+    }
+    return <div className="flex flex-col gap-1 min-w-0 w-full overflow-hidden">{nodes}</div>;
+  }
+
+  return renderMarkdownInner(text);
+}
+
+/** 可折叠的思考过程块 */
+function ThinkingBlock({ content }: { content: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="my-1 rounded-lg border border-border bg-muted/40 overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-1.5 px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted/60 transition-colors"
+      >
+        <BrainCircuit className="h-3.5 w-3.5 shrink-0 text-primary/60" />
+        <span className="flex-1 font-medium">思考过程</span>
+        {open
+          ? <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+          : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+      </button>
+      {open && (
+        <div className="px-3 pb-3 pt-1 border-t border-border text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">
+          {content}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function renderMarkdownInner(text: string): React.ReactNode {
   if (!text) return null;
   const lines = text.split('\n');
   const result: React.ReactNode[] = [];

@@ -75,6 +75,93 @@ export function clearApiCache(): void {
   apiCache.clear();
 }
 
+/**
+ * 写操作后的智能级联缓存失效。
+ * 除了失效操作 URL 本身，还按 URL 模式推导并失效所有相关列表/父目录缓存。
+ *
+ * 覆盖场景：
+ *   - 仓库 CRUD → 失效 /user/repos、/users/:owner/repos
+ *   - 文件写/删 → 失效 /repos/:owner/:repo/contents（所有层级）
+ *   - 分支创建/删除 → 失效 /repos/:owner/:repo/branches + /git/refs
+ *   - Issue 写操作 → 失效 /repos/:owner/:repo/issues 列表
+ *   - PR 写操作   → 失效 /repos/:owner/:repo/pulls + issues 列表
+ *   - 评论写操作  → 失效对应 issue/PR 的评论列表
+ *   - 协作者变更  → 失效 /repos/:owner/:repo/collaborators
+ *   - Gist 写操作 → 失效 /gists 列表
+ *   - Star/Unstar → 失效 /user/starred + checkStarred 缓存
+ */
+function invalidateCacheForMutation(url: string, method: string): void {
+  const path = url.startsWith(BASE_URL) ? url.slice(BASE_URL.length) : url;
+  const cleanPath = path.split('?')[0];
+
+  // 1. 始终失效操作 URL 本身
+  invalidateCache(cleanPath);
+
+  // 2. /repos/:owner/:repo/contents/* — 文件写/删
+  const contentsMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+\/contents)/);
+  if (contentsMatch) {
+    invalidateCache(contentsMatch[1]);           // 失效该 repo 所有 contents 缓存
+  }
+
+  // 3. /repos/:owner/:repo（仓库本身的 PATCH/DELETE）
+  const repoRootMatch = cleanPath.match(/^\/repos\/([^/]+)\/([^/]+)$/);
+  if (repoRootMatch && (method === 'DELETE' || method === 'PATCH')) {
+    const [, owner] = repoRootMatch;
+    invalidateCache('/user/repos');              // 当前用户仓库列表
+    invalidateCache(`/users/${owner}/repos`);   // 该用户公开仓库列表
+    invalidateCache(`/orgs/${owner}/repos`);    // 兼容 org 场景
+  }
+
+  // 4. /user/repos（创建新仓库）
+  if (cleanPath === '/user/repos' && method === 'POST') {
+    invalidateCache('/user/repos');
+  }
+
+  // 5. /repos/:owner/:repo/git/refs — 分支创建/删除
+  const refsMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+)\//);
+  if (cleanPath.includes('/git/refs') && refsMatch) {
+    invalidateCache(`${refsMatch[1]}/branches`);
+    invalidateCache(`${refsMatch[1]}/git/refs`);
+  }
+
+  // 6. /repos/:owner/:repo/issues（含 comments、labels）
+  const issueMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+)\/issues/);
+  if (issueMatch) {
+    invalidateCache(`${issueMatch[1]}/issues`);
+    invalidateCache(`${issueMatch[1]}/pulls`);  // PR 列表也要刷新（共享端点）
+  }
+
+  // 7. /repos/:owner/:repo/pulls/:number（含 merge、review、comments）
+  const prMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+)\/pulls/);
+  if (prMatch) {
+    invalidateCache(`${prMatch[1]}/pulls`);
+    invalidateCache(`${prMatch[1]}/issues`);
+  }
+
+  // 8. /repos/:owner/:repo/collaborators
+  const collabMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+\/collaborators)/);
+  if (collabMatch) {
+    invalidateCache(collabMatch[1]);
+  }
+
+  // 9. /gists — 创建/更新/删除 Gist
+  if (cleanPath.startsWith('/gists')) {
+    invalidateCache('/gists');
+  }
+
+  // 10. /user/starred — star/unstar 操作
+  if (cleanPath.startsWith('/user/starred')) {
+    invalidateCache('/user/starred');
+    invalidateCache(cleanPath);                 // checkStarred 精确 key
+  }
+
+  // 11. /repos/:owner/:repo/actions — 工作流触发/取消
+  const actionsMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+\/actions)/);
+  if (actionsMatch) {
+    invalidateCache(actionsMatch[1]);
+  }
+}
+
 // ── In-flight 请求合并层 ────────────────────────────────────────────
 // 当多个组件同时调用同一 GET 接口（如仓库列表同时被侧边栏和主页面请求）时，
 // 只有第一个请求会真正发出，后续相同 URL + token 的请求直接共享同一个 Promise。
@@ -168,9 +255,12 @@ async function request<T>(
     error.status = response.status;
     throw error;
   }
-  if (response.status === 204) return undefined as T;
+  if (response.status === 204) {
+    invalidateCacheForMutation(url, method);
+    return undefined as T;
+  }
   const data = await response.json() as T;
-  invalidateCache(url.split('?')[0]);
+  invalidateCacheForMutation(url, method);
   return data;
 }
 
@@ -245,6 +335,7 @@ async function requestWithPagination<T>(
   const data = await response.json() as T[];
   const linkHeader = response.headers.get('Link');
   const links = linkHeader ? parseLinkHeader(linkHeader) : {};
+  invalidateCacheForMutation(url, method);
   return { data, hasNextPage: !!links.next };
 }
 

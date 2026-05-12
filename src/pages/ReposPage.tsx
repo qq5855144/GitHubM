@@ -750,13 +750,13 @@ export default function ReposPage() {
                       </div>
                       {/* 右侧操作区：移动端三点菜单 + 桌面端右箭头 */}
                       <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
-                        <RepoCardDropdown repo={repo} onDeleteSuccess={() => loadRepos(1, false)} />
+                        <RepoCardDropdown repo={repo} onDeleteSuccess={() => { pageCache.invalidate('repos:'); loadRepos(1, false, true); }} />
                         <ChevronRight className="w-4 h-4 text-muted-foreground hidden md:block group-hover:text-foreground transition-colors" />
                       </div>
                     </div>
                   </div>
                 </ContextMenuTrigger>
-                <RepoContextMenu repo={repo} onDeleteSuccess={() => loadRepos(1, false)} />
+                <RepoContextMenu repo={repo} onDeleteSuccess={() => { pageCache.invalidate('repos:'); loadRepos(1, false, true); }} />
               </ContextMenu>
             ))}
           </div>

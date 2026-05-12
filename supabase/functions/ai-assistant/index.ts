@@ -82,8 +82,99 @@ async function githubRequest(ctx: GithubContext, apiPath: string, options: Reque
       ...((options.headers as Record<string, string>) || {}),
     },
   });
-  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new GithubApiError(res.status, body, apiPath);
+  }
+  // 204 No Content 时不解析 JSON
+  if (res.status === 204) return {};
   return res.json();
+}
+
+/** 结构化 GitHub API 错误，携带 HTTP 状态码和原始响应体 */
+class GithubApiError extends Error {
+  status: number;
+  body: string;
+  apiPath: string;
+  constructor(status: number, body: string, apiPath: string) {
+    super(`GitHub API ${status}: ${body}`);
+    this.status = status;
+    this.body = body;
+    this.apiPath = apiPath;
+  }
+}
+
+/**
+ * 通用 4xx 错误诊断：根据状态码 + 响应体返回中文诊断建议。
+ * 供所有工具函数 catch 块调用，提升 AI 的自愈能力。
+ */
+function diagnose4xx(err: unknown, context?: string): string {
+  if (!(err instanceof GithubApiError)) {
+    return `操作失败：${(err as Error).message}`;
+  }
+  const { status, body, apiPath } = err;
+  let bodyMsg = body;
+  try { bodyMsg = JSON.parse(body)?.message ?? body; } catch (_) { /* keep raw */ }
+
+  const ctx2 = context ? `【${context}】` : "";
+
+  switch (status) {
+    case 401:
+      return `${ctx2} ❌ 401 认证失败：Token 已过期或无效。\n建议：请在设置页重新填写有效的 GitHub Personal Access Token（PAT）。`;
+    case 403:
+      if (bodyMsg.includes("workflow")) {
+        return `${ctx2} ❌ 403 权限不足：Token 缺少 \`workflow\` 权限，无法操作 Actions 工作流。\n建议：在 GitHub → Settings → Tokens 中为该 PAT 勾选 \`workflow\` scope 后重试。`;
+      }
+      if (bodyMsg.includes("push") || bodyMsg.includes("branch")) {
+        return `${ctx2} ❌ 403 分支受保护：目标分支已启用分支保护规则，禁止直接推送。\n建议：create_branch 创建新分支 → 在新分支上修改 → create_pr 发起 PR → 由有权限的人 merge_pull_request。`;
+      }
+      if (bodyMsg.includes("rate limit") || bodyMsg.includes("secondary rate")) {
+        return `${ctx2} ❌ 403 触发速率限制：API 请求过于频繁。\n建议：等待 1-2 分钟后重试；或检查 Token 权限，确保用正确 Token 而非未授权访问。`;
+      }
+      return `${ctx2} ❌ 403 操作被拒绝：${bodyMsg}\n建议：检查 Token 的 scope 是否包含对应权限（repo、workflow、admin:org 等）。`;
+    case 404:
+      if (apiPath.includes("/contents/")) {
+        const filePath = apiPath.split("/contents/")[1]?.split("?")[0] ?? "目标文件";
+        return `${ctx2} ❌ 404 文件不存在：\`${filePath}\` 在仓库中未找到。\n建议：用 file_tree 或 list_files 确认正确路径后重试；若要新建，改用 write_file。`;
+      }
+      if (apiPath.includes("/branches/")) {
+        return `${ctx2} ❌ 404 分支不存在：请用 list_branches 确认分支名称拼写，或先用 create_branch 创建该分支。`;
+      }
+      if (apiPath.includes("/pulls/") || apiPath.includes("/issues/")) {
+        const num = apiPath.match(/\/(pulls|issues)\/(\d+)/)?.[2];
+        return `${ctx2} ❌ 404 PR/Issue #${num ?? "?"} 不存在：请用 list_pull_requests 或 list_issues 确认编号后重试。`;
+      }
+      if (apiPath.includes("/actions/workflows/")) {
+        const wf = apiPath.match(/\/workflows\/([^/]+)\//)?.[1];
+        return `${ctx2} ❌ 404 工作流 \`${wf ?? "?"}\` 不存在：请用 list_workflows 获取正确的 workflow_id 后重试。`;
+      }
+      return `${ctx2} ❌ 404 资源不存在：\`${apiPath}\`\n建议：确认仓库名、路径、编号是否正确，必要时先 list_* 查询。`;
+    case 409:
+      if (bodyMsg.includes("merge conflict") || bodyMsg.includes("conflict")) {
+        return `${ctx2} ❌ 409 合并冲突：PR 存在合并冲突，无法自动 merge。\n建议：在本地或通过 patch_file 手动解决冲突后重新提交，再尝试合并。`;
+      }
+      if (bodyMsg.includes("already exists")) {
+        return `${ctx2} ❌ 409 已存在：目标资源（分支/文件/标签）已存在，无法重复创建。\n建议：用 list_branches 或 list_files 确认，若确实需要覆盖，先删除再创建。`;
+      }
+      return `${ctx2} ❌ 409 冲突：${bodyMsg}\n建议：检查资源状态，解决冲突后重试。`;
+    case 422:
+      if (bodyMsg.includes("workflow_dispatch")) {
+        return `${ctx2} ❌ 422 工作流缺少 workflow_dispatch 触发器（将自动修复）。`;
+      }
+      if (bodyMsg.includes("protected branch")) {
+        return `${ctx2} ❌ 422 分支保护规则阻止操作：目标分支设有保护规则（需要 PR review / status check 通过）。\n建议：走 create_pr → merge_pull_request 流程，确保 CI 通过并获得 review 后再合并。`;
+      }
+      if (bodyMsg.includes("Validation Failed")) {
+        return `${ctx2} ❌ 422 参数校验失败：${bodyMsg}\n建议：检查工具调用的参数格式（如 pull_number 必须为字符串数字、标题不能为空等）。`;
+      }
+      return `${ctx2} ❌ 422 无法处理的请求：${bodyMsg}\n建议：检查参数是否符合 GitHub API 要求，或先查询资源状态再重试。`;
+    case 410:
+      return `${ctx2} ❌ 410 资源已被删除：该 Issue/PR/分支已永久删除，无法再操作。`;
+    case 451:
+      return `${ctx2} ❌ 451 访问受限（法律原因）：该仓库或内容在当前地区受到访问限制。`;
+    default:
+      return `${ctx2} ❌ GitHub API ${status} 错误：${bodyMsg}\n原始路径：\`${apiPath}\``;
+  }
 }
 
 async function listFiles(ctx: GithubContext, path: string): Promise<string> {
@@ -96,7 +187,7 @@ async function listFiles(ctx: GithubContext, path: string): Promise<string> {
       return `目录 "${path || "/"}" 内容：\n${items.join("\n")}`;
     }
     return JSON.stringify(data);
-  } catch (e) { return `列出目录失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "list_files"); }
 }
 
 /**
@@ -139,7 +230,7 @@ async function fileTree(ctx: GithubContext, path: string, maxDepth: number): Pro
     const depth = Math.min(maxDepth || 3, 5); // 最大深度不超过 5，防止超时
     const tree = await getFileTree(ctx, path || "", depth);
     return `仓库文件树（${path || "/"}, 深度${depth}）：\n${tree || "（空目录）"}`;
-  } catch (e) { return `获取文件树失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "file_tree"); }
 }
 
 /**
@@ -168,7 +259,7 @@ async function grepInFile(
     if (!matches.length) return `"${filePath}" 中未找到匹配 "${pattern}" 的行`;
     return `"${filePath}" 中匹配 "${pattern}" 的行（共 ${matches.length} 处）：\n\`\`\`\n${matches.slice(0, 50).join("\n")}\n\`\`\`` +
       (matches.length > 50 ? `\n（仅显示前 50 条，共 ${matches.length} 条）` : "");
-  } catch (e) { return `grep 搜索失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "grep_in_file"); }
 }
 
 /**
@@ -232,7 +323,7 @@ async function readFile(
       `文件 "${filePath}"${lineHeader}：\n\`\`\`\n${numberedContent}\n\`\`\`` +
       `\n_SHA: ${data.sha} | 总行数: ${totalLines}_`
     );
-  } catch (e) { return `读取文件失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "read_file"); }
 }
 
 /**
@@ -296,7 +387,7 @@ async function patchFile(
       `✅ 已 patch "${filePath}"：替换第 ${startLine}–${safeEnd} 行（${replacedCount} 行→${newCount} 行），` +
       `提交：${result.commit?.sha?.slice(0, 7) || "成功"}，信息：${commitMessage}`
     );
-  } catch (e) { return `patch 文件失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "patch_file"); }
 }
 
 async function writeFile(
@@ -319,7 +410,7 @@ async function writeFile(
       method: "PUT", body: JSON.stringify(body),
     });
     return `✅ 文件 "${filePath}" 已${sha ? "更新" : "创建"}，提交：${result.commit?.sha?.slice(0, 7) || "成功"}，信息：${commitMessage}`;
-  } catch (e) { return `写入文件失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "write_file"); }
 }
 
 async function searchCode(ctx: GithubContext, query: string): Promise<string> {
@@ -331,7 +422,7 @@ async function searchCode(ctx: GithubContext, query: string): Promise<string> {
     return `搜索 "${query}" 找到 ${data.total_count} 个结果（前10）：\n${
       data.items.map((item: { path: string }) => `• ${item.path}`).join("\n")
     }`;
-  } catch (e) { return `搜索代码失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "search_code"); }
 }
 
 async function listBranches(ctx: GithubContext): Promise<string> {
@@ -342,7 +433,7 @@ async function listBranches(ctx: GithubContext): Promise<string> {
       `• ${b.name}${b.protected ? " 🔒（受保护）" : ""}`
     );
     return `仓库分支列表（共 ${data.length} 个）：\n${names.join("\n")}`;
-  } catch (e) { return `获取分支列表失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "list_branches"); }
 }
 
 async function listCommits(ctx: GithubContext, path?: string, branch?: string): Promise<string> {
@@ -356,7 +447,7 @@ async function listCommits(ctx: GithubContext, path?: string, branch?: string): 
       `• \`${c.sha.slice(0, 7)}\` ${c.commit.message.split("\n")[0]} — ${c.commit.author.name} (${c.commit.author.date.slice(0, 10)})`
     );
     return `最近 ${data.length} 条提交${path ? `（文件 ${path}）` : ""}：\n${items.join("\n")}`;
-  } catch (e) { return `获取提交历史失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "list_commits"); }
 }
 
 async function createBranch(
@@ -383,7 +474,7 @@ async function createBranch(
       body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: baseSha }),
     });
     return `✅ 分支 \`${branchName}\` 已从 \`${fromBranch || "默认分支"}\` 创建成功`;
-  } catch (e) { return `创建分支失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "create_branch"); }
 }
 
 async function createPullRequest(
@@ -399,7 +490,7 @@ async function createPullRequest(
       body: JSON.stringify({ title, head, base, body: body || "", draft: false }),
     });
     return `✅ PR 已创建：[#${pr.number} ${pr.title}](${pr.html_url})\n- 从 \`${head}\` → \`${base}\`\n- 状态：${pr.state}`;
-  } catch (e) { return `创建 PR 失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "create_pr"); }
 }
 
 // ── GitHub Actions 工作流工具 ─────────────────────────────────────────────────
@@ -413,7 +504,7 @@ async function listWorkflows(ctx: GithubContext): Promise<string> {
       `- **${w.name}**（\`${w.path}\`）ID: \`${w.id}\`  状态: ${w.state}`
     );
     return `共 ${data.total_count} 个工作流：\n${rows.join("\n")}`;
-  } catch (e) { return `列出工作流失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "list_workflows"); }
 }
 
 /** 获取工作流最近的运行记录 */
@@ -438,7 +529,7 @@ async function getWorkflowRuns(
       return `${statusIcon} Run #${r.run_number}  结论: ${r.conclusion || r.status}  分支: \`${r.head_branch}\`  耗时: ${duration}  ID: \`${r.id}\`  触发: ${r.event}`;
     });
     return `最近 ${data.workflow_runs.length} 次运行：\n${rows.join("\n")}`;
-  } catch (e) { return `获取运行记录失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "get_workflow_runs"); }
 }
 
 /** 获取某次运行的 Jobs 及步骤状态 */
@@ -461,7 +552,7 @@ async function getRunJobs(ctx: GithubContext, runId: string): Promise<string> {
       }
     }
     return lines.join("\n");
-  } catch (e) { return `获取 Jobs 失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "get_run_jobs"); }
 }
 
 /** 下载并返回某个 Job 的日志（纯文本，截取最后 12000 字符） */
@@ -495,65 +586,95 @@ async function getJobLogs(ctx: GithubContext, jobId: string): Promise<string> {
       ? `...[前 ${logText.length - 12000} 字符已省略]\n\n${logText.slice(-12000)}`
       : logText;
     return `Job \`${jobId}\` 日志（共 ${logText.length} 字符）：\n\`\`\`\n${truncated}\n\`\`\``;
-  } catch (e) { return `下载日志失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "get_job_logs"); }
 }
 
-/** 手动触发工作流（workflow_dispatch 事件） */
+/** 手动触发工作流（workflow_dispatch 事件）；422 时自动添加触发器并重试 */
 async function triggerWorkflow(
   ctx: GithubContext,
   workflowId: string,
   ref: string,
   inputs?: Record<string, string>,
 ): Promise<string> {
-  try {
-    await githubRequest(
+  const doDispatch = async () =>
+    githubRequest(
       ctx,
       `/repos/${ctx.owner}/${ctx.repo}/actions/workflows/${workflowId}/dispatches`,
       { method: "POST", body: JSON.stringify({ ref, inputs: inputs || {} }) },
     );
+
+  try {
+    await doDispatch();
     return `✅ 已触发工作流 \`${workflowId}\`，分支/标签：\`${ref}\`。稍后可用 get_workflow_runs 查看进度。`;
   } catch (e) {
-    const msg = (e as Error).message;
-    // 422: 工作流没有 workflow_dispatch 触发器 —— 自动诊断并给出修复方案
-    if (msg.includes("422") && msg.includes("workflow_dispatch")) {
-      // 尝试推断工作流文件路径
-      const workflowPath = workflowId.includes("/")
-        ? workflowId
-        : `.github/workflows/${workflowId}`;
-      let currentTriggers = "（无法读取工作流文件）";
-      try {
-        const data = await githubRequest(
-          ctx,
-          `/repos/${ctx.owner}/${ctx.repo}/contents/${workflowPath}`,
-        );
-        if (data.encoding === "base64") {
-          const content = decodeBase64Utf8(data.content);
-          // 提取 on: 块的前 20 行，帮助 AI 了解现有触发器
-          const onSection = content
-            .split("\n")
-            .slice(0, 30)
-            .filter((l: string) => /^\s*(on:|push:|pull_request:|schedule:|workflow_call:)/.test(l))
-            .join("\n");
-          currentTriggers = onSection || "（on: 块未找到，请用 read_file 读取完整文件）";
-        }
-      } catch (_) { /* 读取失败不影响主错误提示 */ }
-      return [
-        `❌ trigger_workflow 失败：工作流 \`${workflowId}\` 没有 \`workflow_dispatch\` 触发器。`,
-        ``,
-        `**当前触发器（检测到）：**`,
-        `\`\`\`yaml`,
-        currentTriggers,
-        `\`\`\``,
-        ``,
-        `**必须先修复工作流文件**，在 \`on:\` 块中添加 \`workflow_dispatch:\`，然后再重试触发：`,
-        ``,
-        `修复步骤：`,
-        `1. read_file 读取 \`${workflowPath}\` 确认完整 on: 块`,
-        `2. patch_file 在 on: 块中追加 \`workflow_dispatch: {}\` 或带 inputs 的完整定义`,
-        `3. 提交修改后再次调用 trigger_workflow`,
-      ].join("\n");
+    const isDispatchMissing =
+      e instanceof GithubApiError &&
+      e.status === 422 &&
+      e.body.includes("workflow_dispatch");
+
+    if (!isDispatchMissing) return diagnose4xx(e, `trigger_workflow(${workflowId})`);
+
+    // ── 自动修复：在工作流文件中注入 workflow_dispatch 触发器 ─────────────
+    const workflowPath = workflowId.includes("/")
+      ? workflowId
+      : `.github/workflows/${workflowId}`;
+
+    let fileData: Record<string, string>;
+    try {
+      fileData = await githubRequest(
+        ctx,
+        `/repos/${ctx.owner}/${ctx.repo}/contents/${workflowPath}`,
+      );
+    } catch (readErr) {
+      return `❌ 工作流缺少 workflow_dispatch，且无法读取文件自动修复：${diagnose4xx(readErr, "read workflow file")}`;
     }
-    return `触发工作流失败：${msg}`;
+
+    if (fileData.encoding !== "base64") {
+      return `❌ 工作流 \`${workflowId}\` 缺少 workflow_dispatch，文件编码非 base64，无法自动修复。`;
+    }
+
+    const original = decodeBase64Utf8(fileData.content);
+    if (original.includes("workflow_dispatch")) {
+      try { await doDispatch(); } catch (_) { /* ignore */ }
+      return `✅ 工作流已包含 workflow_dispatch，已重新触发 \`${workflowId}\`。`;
+    }
+
+    // 在 `on:` 行之后插入 `  workflow_dispatch: {}`
+    const lines = original.split("\n");
+    const onIdx = lines.findIndex(l => /^on\s*:/.test(l.trim()));
+    if (onIdx === -1) {
+      return `❌ 未在工作流文件中找到 \`on:\` 块，无法自动注入 workflow_dispatch。请 read_file 检查后手动 patch_file 修复。`;
+    }
+    lines.splice(onIdx + 1, 0, "  workflow_dispatch: {}");
+    const patched = lines.join("\n");
+    const encoded = btoa(unescape(encodeURIComponent(patched)));
+
+    try {
+      await githubRequest(
+        ctx,
+        `/repos/${ctx.owner}/${ctx.repo}/contents/${workflowPath}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            message: "ci: 自动添加 workflow_dispatch 触发器",
+            content: encoded,
+            sha: fileData.sha,
+            branch: ref,
+          }),
+        },
+      );
+    } catch (writeErr) {
+      return `❌ 自动注入 workflow_dispatch 失败（写入时报错）：${diagnose4xx(writeErr, "auto-patch workflow_dispatch")}`;
+    }
+
+    // 等待 GitHub 索引生效后重试
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      await doDispatch();
+      return `✅ 已自动为 \`${workflowId}\` 添加 \`workflow_dispatch\` 触发器并提交，随后触发成功（分支：\`${ref}\`）。\n稍后可用 get_workflow_runs 查看运行进度。`;
+    } catch (retryErr) {
+      return `⚠️ 已添加 workflow_dispatch 触发器并提交，但触发仍失败：${diagnose4xx(retryErr, "retry trigger")}`;
+    }
   }
 }
 
@@ -566,7 +687,7 @@ async function cancelWorkflowRun(ctx: GithubContext, runId: string): Promise<str
       { method: "POST" },
     );
     return `✅ 已发送取消请求，Run ID: \`${runId}\`。`;
-  } catch (e) { return `取消运行失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "cancel_workflow_run"); }
 }
 
 /** 重新运行失败的工作流 */
@@ -577,7 +698,7 @@ async function rerunWorkflowRun(ctx: GithubContext, runId: string, failedJobsOnl
       : `/repos/${ctx.owner}/${ctx.repo}/actions/runs/${runId}/rerun`;
     await githubRequest(ctx, path, { method: "POST" });
     return `✅ 已重新触发 Run \`${runId}\`（${failedJobsOnly ? "仅失败 Jobs" : "全部 Jobs"}），稍后可查看新运行。`;
-  } catch (e) { return `重新运行失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "rerun_workflow_run"); }
 }
 
 // ── 文件完善操作 ─────────────────────────────────────────────────────────────
@@ -597,7 +718,7 @@ async function deleteFile(
       method: "DELETE", body: JSON.stringify(body),
     });
     return `✅ 已删除文件 "${filePath}"，提交信息：${commitMessage}`;
-  } catch (e) { return `删除文件失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "delete_file"); }
 }
 
 // ── PR / Issue 管理 ──────────────────────────────────────────────────────────
@@ -613,7 +734,7 @@ async function listPullRequests(ctx: GithubContext, state = "open"): Promise<str
       `#${pr.number} **${pr.title}**  \`${(pr.head as Record<string,string>).ref}\` → \`${(pr.base as Record<string,string>).ref}\`  作者: ${(pr.user as Record<string,string>).login}  [查看](${pr.html_url})`
     );
     return `${state} 状态 PR（共 ${rows.length} 个）：\n${rows.join("\n")}`;
-  } catch (e) { return `列出 PR 失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "list_pull_requests"); }
 }
 
 /** 合并 Pull Request */
@@ -631,7 +752,7 @@ async function mergePullRequest(
       { method: "PUT", body: JSON.stringify(body) },
     );
     return `✅ PR #${pullNumber} 已合并：${result.message}  SHA: ${result.sha?.slice(0, 7)}`;
-  } catch (e) { return `合并 PR 失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "merge_pull_request"); }
 }
 
 /** 列出 Issues */
@@ -647,7 +768,7 @@ async function listIssues(ctx: GithubContext, state = "open"): Promise<string> {
       `#${i.number} **${i.title}**  作者: ${(i.user as Record<string,string>).login}  标签: ${((i.labels as Array<Record<string,string>>) || []).map(l => l.name).join(", ") || "无"}  [查看](${i.html_url})`
     );
     return `${state} Issues（共 ${rows.length} 个）：\n${rows.join("\n")}`;
-  } catch (e) { return `列出 Issue 失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "list_issues"); }
 }
 
 /** 创建 Issue */
@@ -665,7 +786,7 @@ async function createIssue(
       { method: "POST", body: JSON.stringify(payload) },
     );
     return `✅ Issue 已创建：[#${issue.number} ${issue.title}](${issue.html_url})`;
-  } catch (e) { return `创建 Issue 失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "create_issue"); }
 }
 
 /** 列出 Actions Secrets 名称（值不可读取） */
@@ -677,7 +798,196 @@ async function listActionsSecrets(ctx: GithubContext): Promise<string> {
       `- \`${s.name}\`  更新时间: ${s.updated_at?.slice(0, 10) || "-"}`
     );
     return `共 ${data.total_count} 个 Secrets（仅显示名称，值不可读取）：\n${names.join("\n")}`;
-  } catch (e) { return `列出 Secrets 失败：${(e as Error).message}`; }
+  } catch (e) { return diagnose4xx(e, "list_actions_secrets"); }
+}
+
+// ── 新增实用工具 ──────────────────────────────────────────────────────────────
+
+/** 获取仓库基础信息（描述、语言、star、fork、默认分支、topics 等） */
+async function getRepoInfo(ctx: GithubContext): Promise<string> {
+  try {
+    const d = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}`);
+    const lines = [
+      `📦 **${d.full_name}**`,
+      d.description ? `> ${d.description}` : "",
+      ``,
+      `- 主语言：${d.language || "未知"}`,
+      `- ⭐ Stars：${d.stargazers_count}  🍴 Forks：${d.forks_count}  👁 Watchers：${d.subscribers_count}`,
+      `- 默认分支：\`${d.default_branch}\``,
+      `- 可见性：${d.private ? "私有" : "公开"}`,
+      `- 许可证：${d.license?.spdx_id || "无"}`,
+      d.topics?.length ? `- Topics：${(d.topics as string[]).join(", ")}` : "",
+      `- 创建时间：${d.created_at?.slice(0, 10)}  最后推送：${d.pushed_at?.slice(0, 10)}`,
+      `- 仓库链接：${d.html_url}`,
+    ].filter(Boolean);
+    return lines.join("\n");
+  } catch (e) { return diagnose4xx(e, "get_repo_info"); }
+}
+
+/** 添加 Issue 或 PR 评论 */
+async function addComment(
+  ctx: GithubContext,
+  issueNumber: string,
+  body: string,
+): Promise<string> {
+  try {
+    const data = await githubRequest(
+      ctx,
+      `/repos/${ctx.owner}/${ctx.repo}/issues/${issueNumber}/comments`,
+      { method: "POST", body: JSON.stringify({ body }) },
+    );
+    return `✅ 已在 #${issueNumber} 添加评论（ID: ${data.id}）：\n> ${body.slice(0, 80)}${body.length > 80 ? "…" : ""}`;
+  } catch (e) { return diagnose4xx(e, `add_comment(#${issueNumber})`); }
+}
+
+/** 关闭 Issue（可选附带评论） */
+async function closeIssue(
+  ctx: GithubContext,
+  issueNumber: string,
+  comment?: string,
+): Promise<string> {
+  try {
+    if (comment) {
+      await githubRequest(
+        ctx,
+        `/repos/${ctx.owner}/${ctx.repo}/issues/${issueNumber}/comments`,
+        { method: "POST", body: JSON.stringify({ body: comment }) },
+      );
+    }
+    await githubRequest(
+      ctx,
+      `/repos/${ctx.owner}/${ctx.repo}/issues/${issueNumber}`,
+      { method: "PATCH", body: JSON.stringify({ state: "closed" }) },
+    );
+    return `✅ Issue #${issueNumber} 已关闭${comment ? "（已附带评论）" : ""}。`;
+  } catch (e) { return diagnose4xx(e, `close_issue(#${issueNumber})`); }
+}
+
+/** 关闭 PR */
+async function closePR(
+  ctx: GithubContext,
+  pullNumber: string,
+  comment?: string,
+): Promise<string> {
+  try {
+    if (comment) {
+      await githubRequest(
+        ctx,
+        `/repos/${ctx.owner}/${ctx.repo}/issues/${pullNumber}/comments`,
+        { method: "POST", body: JSON.stringify({ body: comment }) },
+      );
+    }
+    await githubRequest(
+      ctx,
+      `/repos/${ctx.owner}/${ctx.repo}/pulls/${pullNumber}`,
+      { method: "PATCH", body: JSON.stringify({ state: "closed" }) },
+    );
+    return `✅ PR #${pullNumber} 已关闭${comment ? "（已附带评论）" : ""}。`;
+  } catch (e) { return diagnose4xx(e, `close_pr(#${pullNumber})`); }
+}
+
+/** 查看某次提交的 diff（文件列表 + 统计） */
+async function getCommitDiff(ctx: GithubContext, sha: string): Promise<string> {
+  try {
+    const data = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/commits/${sha}`);
+    const commit = data.commit;
+    const files = (data.files as Array<Record<string, string | number>>) || [];
+    const header = [
+      `**提交 \`${sha.slice(0, 7)}\`**`,
+      `作者：${commit?.author?.name} <${commit?.author?.email}>`,
+      `时间：${commit?.author?.date?.slice(0, 19).replace("T", " ")}`,
+      `信息：${commit?.message?.split("\n")[0]}`,
+      `变更：+${data.stats?.additions} -${data.stats?.deletions}，共 ${files.length} 个文件`,
+      ``,
+    ].join("\n");
+    const fileLines = files.slice(0, 20).map((f: Record<string, string | number>) =>
+      `- ${f.status === "added" ? "➕" : f.status === "removed" ? "➖" : "✏️"} \`${f.filename}\`  +${f.additions} -${f.deletions}`
+    );
+    if (files.length > 20) fileLines.push(`…（共 ${files.length} 个文件，仅展示前 20 个）`);
+    return header + fileLines.join("\n");
+  } catch (e) { return diagnose4xx(e, `get_commit_diff(${sha})`); }
+}
+
+/** 查看 PR 的文件变更列表 */
+async function getPRFiles(ctx: GithubContext, pullNumber: string): Promise<string> {
+  try {
+    const files = await githubRequest(
+      ctx,
+      `/repos/${ctx.owner}/${ctx.repo}/pulls/${pullNumber}/files?per_page=50`,
+    ) as Array<Record<string, string | number>>;
+    if (!files?.length) return `PR #${pullNumber} 没有文件变更。`;
+    const lines = files.map(f =>
+      `- ${f.status === "added" ? "➕" : f.status === "removed" ? "➖" : "✏️"} \`${f.filename}\`  +${f.additions} -${f.deletions}`
+    );
+    const total = files.reduce((s, f) => s + (Number(f.additions) + Number(f.deletions)), 0);
+    return `PR #${pullNumber} 共变更 ${files.length} 个文件，${total} 行：\n${lines.join("\n")}`;
+  } catch (e) { return diagnose4xx(e, `get_pr_files(#${pullNumber})`); }
+}
+
+/** 创建 Release（tag + 标题 + 正文） */
+async function createRelease(
+  ctx: GithubContext,
+  tagName: string,
+  name: string,
+  body: string,
+  draft = false,
+  prerelease = false,
+  targetBranch?: string,
+): Promise<string> {
+  try {
+    const payload: Record<string, string | boolean> = {
+      tag_name: tagName,
+      name: name || tagName,
+      body: body || "",
+      draft,
+      prerelease,
+    };
+    if (targetBranch) payload.target_commitish = targetBranch;
+    const data = await githubRequest(
+      ctx,
+      `/repos/${ctx.owner}/${ctx.repo}/releases`,
+      { method: "POST", body: JSON.stringify(payload) },
+    );
+    return `✅ 已创建 Release \`${data.tag_name}\`（${draft ? "草稿" : prerelease ? "预发布" : "正式发布"}）\n链接：${data.html_url}`;
+  } catch (e) { return diagnose4xx(e, `create_release(${tagName})`); }
+}
+
+/** 列出最近的 Releases */
+async function listReleases(ctx: GithubContext, limit = 10): Promise<string> {
+  try {
+    const data = await githubRequest(
+      ctx,
+      `/repos/${ctx.owner}/${ctx.repo}/releases?per_page=${limit}`,
+    ) as Array<Record<string, string | boolean>>;
+    if (!data?.length) return "该仓库还没有 Release。";
+    const lines = data.map(r =>
+      `- **${r.tag_name}** ${r.prerelease ? "（预发布）" : r.draft ? "（草稿）" : ""}  ${String(r.published_at || "").slice(0, 10) || "-"}\n  ${r.name || r.tag_name}`
+    );
+    return `共 ${data.length} 个 Release（最新 ${limit} 个）：\n${lines.join("\n")}`;
+  } catch (e) { return diagnose4xx(e, "list_releases"); }
+}
+
+/** 为 PR 提交代码审查（APPROVE / REQUEST_CHANGES / COMMENT） */
+async function submitPRReview(
+  ctx: GithubContext,
+  pullNumber: string,
+  event: string,
+  body: string,
+): Promise<string> {
+  const allowed = ["APPROVE", "REQUEST_CHANGES", "COMMENT"];
+  const ev = event.toUpperCase();
+  if (!allowed.includes(ev)) {
+    return `❌ 无效的 review 类型 "${event}"，必须是 APPROVE / REQUEST_CHANGES / COMMENT 之一。`;
+  }
+  try {
+    const data = await githubRequest(
+      ctx,
+      `/repos/${ctx.owner}/${ctx.repo}/pulls/${pullNumber}/reviews`,
+      { method: "POST", body: JSON.stringify({ event: ev, body: body || "" }) },
+    );
+    const label = ev === "APPROVE" ? "✅ 已批准" : ev === "REQUEST_CHANGES" ? "🔄 已请求修改" : "💬 已评论";
+    return `${label} PR #${pullNumber}（Review ID: ${data.id}）${body ? `\n> ${body.slice(0, 100)}` : ""}`;
+  } catch (e) { return diagnose4xx(e, `submit_pr_review(#${pullNumber})`); }
 }
 
 // ── Agent 核心 ───────────────────────────────────────────────────────────────
@@ -739,19 +1049,37 @@ ${branchNote}
 🐛 **Issue 管理**
 17. 列出 Issues：{"tool":"list_issues","state":"open"}
 18. 创建 Issue：{"tool":"create_issue","title":"构建失败","body":"描述","labels":"bug,ci"}
+19. 关闭 Issue（可附带结论评论）：{"tool":"close_issue","issue_number":"12","comment":"已在 PR #33 修复，关闭此 Issue"}
+20. 在 Issue 或 PR 下添加评论：{"tool":"add_comment","issue_number":"12","body":"评论内容"}
 
 ⚙️ **工作流 & 部署**
-19. 列出所有工作流：{"tool":"list_workflows"}
-20. 查看工作流最近运行：{"tool":"get_workflow_runs","workflow_id":"deploy.yml","limit":"5"}
+21. 列出所有工作流：{"tool":"list_workflows"}
+22. 查看工作流最近运行：{"tool":"get_workflow_runs","workflow_id":"deploy.yml","limit":"5"}
     （workflow_id 可以是文件名如 deploy.yml 或数字 ID；不填则查全部运行）
-21. 查看某次运行的 Jobs 及步骤：{"tool":"get_run_jobs","run_id":"12345678"}
-22. 下载 Job 日志（含报错详情）：{"tool":"get_job_logs","job_id":"87654321"}
-23. 手动触发工作流：{"tool":"trigger_workflow","workflow_id":"deploy.yml","ref":"main","inputs":{}}
-24. 取消运行中的工作流：{"tool":"cancel_workflow_run","run_id":"12345678"}
-25. 重新运行失败的工作流：{"tool":"rerun_workflow_run","run_id":"12345678","failed_jobs_only":"true"}
-26. 查看 Actions Secrets 名称：{"tool":"list_actions_secrets"}
-27. 向用户请求上传文件（缺少图片/图标/证书等资源时）：
+23. 查看某次运行的 Jobs 及步骤：{"tool":"get_run_jobs","run_id":"12345678"}
+24. 下载 Job 日志（含报错详情）：{"tool":"get_job_logs","job_id":"87654321"}
+25. 手动触发工作流（⚠️ 若工作流缺少 workflow_dispatch 会自动添加并重试）：
+    {"tool":"trigger_workflow","workflow_id":"deploy.yml","ref":"main","inputs":{}}
+26. 取消运行中的工作流：{"tool":"cancel_workflow_run","run_id":"12345678"}
+27. 重新运行失败的工作流：{"tool":"rerun_workflow_run","run_id":"12345678","failed_jobs_only":"true"}
+28. 查看 Actions Secrets 名称：{"tool":"list_actions_secrets"}
+29. 向用户请求上传文件（缺少图片/图标/证书等资源时）：
     {"tool":"request_file","filename":"app-icon.png","description":"需要 512×512 的应用图标 PNG 文件","mime_types":"image/png,image/jpeg"}
+
+🔀 **PR 高级操作**
+30. 关闭 PR（可附带评论）：{"tool":"close_pr","pull_number":"42","comment":"改用 PR #45，关闭此 PR"}
+31. 查看 PR 的文件变更列表：{"tool":"get_pr_files","pull_number":"42"}
+32. 提交 PR 代码审查（APPROVE/REQUEST_CHANGES/COMMENT）：
+    {"tool":"submit_pr_review","pull_number":"42","event":"APPROVE","body":"LGTM，代码清晰"}
+
+📊 **仓库分析**
+33. 查看仓库基本信息（语言/Stars/默认分支/Topics 等）：{"tool":"get_repo_info"}
+34. 查看某次提交的 diff（文件变更统计）：{"tool":"get_commit_diff","sha":"abc1234"}
+
+🏷️ **Release 管理**
+35. 列出最近 Releases：{"tool":"list_releases","limit":"10"}
+36. 创建新 Release（tag + 标题 + 发布说明）：
+    {"tool":"create_release","tag_name":"v1.2.0","name":"v1.2.0 - 新增 XX 功能","body":"## 更新内容\n- 修复 xxx\n- 新增 yyy","draft":"false","prerelease":"false","branch":"main"}
 
 ==============================
 全流程开发标准工作流
@@ -838,10 +1166,27 @@ ${branchNote}
 - 查看日志时先用 get_run_jobs 找到失败 Job ID，再用 get_job_logs 获取日志
 - patch_file 比 write_file 更安全，修改工作流文件时优先使用 patch
 - 修改前必须先用 grep_in_file 或 read_file 确认精确的行号
-- **调用 trigger_workflow 前，必须先确认工作流文件的 on: 块含有 `workflow_dispatch:`**
-  若缺少，先 patch_file 添加再触发；否则会 422 报错
+- **trigger_workflow 已内置自动修复**：若缺少 workflow_dispatch，系统会自动添加并重试，无需手动干预
 - commit message 使用中文，遵循 Conventional Commits（fix/feat/ci/chore/docs）
 - 对话语言：中文；操作完成后给出简洁总结
+
+==============================
+GitHub API 4xx 错误自愈规则
+==============================
+工具返回的错误消息已包含具体诊断和建议，遇到 4xx 时**立即按诊断建议自动修复，不要询问用户**：
+
+- **401 认证失败**：无法自动修复，告知用户更新 PAT，终止当前任务
+- **403 workflow 权限不足**：无法自动修复，告知用户为 Token 勾选 workflow scope
+- **403 分支保护**：自动切换为"create_branch → patch_file → create_pr → merge_pull_request"流程
+- **403 速率限制**：等待后重试（已在消息中说明），本次任务暂停并告知用户
+- **404 文件不存在**：自动用 file_tree 重新定位正确路径后重试；若确认不存在则改用 write_file 新建
+- **404 分支不存在**：自动用 list_branches 查询正确名称或先 create_branch 创建
+- **404 工作流不存在**：自动用 list_workflows 确认正确 workflow_id 后重试
+- **404 PR/Issue 不存在**：自动用 list_pull_requests / list_issues 重新获取正确编号
+- **409 合并冲突**：自动读取冲突文件，用 patch_file 解决冲突后重新尝试合并
+- **409 资源已存在**：检查是否可复用现有资源，或先删除再创建
+- **422 分支保护规则**：自动走 PR 流程替代直接 push
+- **410 资源已删除**：告知用户，建议重新创建或确认正确 ID
 
 ==============================
 自主任务执行规则（最重要）
@@ -1140,6 +1485,15 @@ function executeTool(
     case "cancel_workflow_run": return cancelWorkflowRun(ctx, call.run_id);
     case "rerun_workflow_run":  return rerunWorkflowRun(ctx, call.run_id, call.failed_jobs_only === "true");
     case "list_actions_secrets": return listActionsSecrets(ctx);
+    case "get_repo_info":        return getRepoInfo(ctx);
+    case "add_comment":          return addComment(ctx, call.issue_number || call.pull_number, call.body);
+    case "close_issue":          return closeIssue(ctx, call.issue_number, call.comment);
+    case "close_pr":             return closePR(ctx, call.pull_number, call.comment);
+    case "get_commit_diff":      return getCommitDiff(ctx, call.sha);
+    case "get_pr_files":         return getPRFiles(ctx, call.pull_number);
+    case "create_release":       return createRelease(ctx, call.tag_name, call.name, call.body, call.draft === "true", call.prerelease === "true", call.branch || targetBranch);
+    case "list_releases":        return listReleases(ctx, parseInt(call.limit || "10", 10));
+    case "submit_pr_review":     return submitPRReview(ctx, call.pull_number, call.event, call.body);
     default: return `未知工具: ${call.tool}`;
   }
 }
@@ -1415,6 +1769,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       rerun_workflow_run: "重新运行", list_actions_secrets: "查看 Secrets",
       // 资源请求
       request_file: "请求上传文件",
+      // 新增工具
+      get_repo_info: "仓库信息",
+      add_comment: "添加评论", close_issue: "关闭 Issue", close_pr: "关闭 PR",
+      get_commit_diff: "查看提交变更", get_pr_files: "PR 文件变更",
+      create_release: "创建 Release", list_releases: "列出 Release",
+      submit_pr_review: "PR 代码审查",
     };
     // 每批最多 20 轮工具调用；最多自动续跑 3 批，总上限 60 轮
     const MAX_ROUNDS_PER_BATCH = 20;

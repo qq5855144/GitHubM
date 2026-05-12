@@ -708,6 +708,8 @@ ${branchNote}
 24. 取消运行中的工作流：{"tool":"cancel_workflow_run","run_id":"12345678"}
 25. 重新运行失败的工作流：{"tool":"rerun_workflow_run","run_id":"12345678","failed_jobs_only":"true"}
 26. 查看 Actions Secrets 名称：{"tool":"list_actions_secrets"}
+27. 向用户请求上传文件（缺少图片/图标/证书等资源时）：
+    {"tool":"request_file","filename":"app-icon.png","description":"需要 512×512 的应用图标 PNG 文件","mime_types":"image/png,image/jpeg"}
 
 ==============================
 全流程开发标准工作流
@@ -726,18 +728,32 @@ ${branchNote}
   5. create_pr 提交 PR → merge_pull_request 合并
   6. trigger_workflow 触发部署 → get_workflow_runs 轮询状态
 
-🔍 **排查构建/部署失败**：
-  1. get_workflow_runs 找到最新失败的运行 ID
-  2. get_run_jobs 查看哪个 Job/步骤失败
-  3. get_job_logs 下载该 Job 的完整日志，定位具体报错
-  4. grep_in_file / search_code 找到问题源码
-  5. patch_file 修复代码 → rerun_workflow_run 重新触发
+🔍 **排查构建/部署失败（自动修复工作流）**：
+  遇到用户提到"构建失败"、"部署报错"、"CI 挂了"等情况，**必须**按此流程自主完成全链路修复，无需询问用户：
+  1. get_workflow_runs 找到最新失败的运行 ID（状态为 failure/cancelled）
+  2. get_run_jobs 查看哪个 Job/步骤失败，获取 job_id
+  3. get_job_logs 下载该 Job 的完整日志，仔细阅读报错信息
+  4. 根据日志内容定位问题根源：
+     - 依赖问题 → 检查 package.json / pom.xml / go.mod 等
+     - 代码错误 → grep_in_file / search_code 定位具体行
+     - 配置错误 → read_file 读取 workflow 文件或配置文件
+     - 缺少 Secret → list_actions_secrets 检查，提示用户手动添加
+     - 缺少资源文件（图片/图标等）→ 发出 request_file 工具调用
+  5. patch_file / write_file 修复问题
+  6. rerun_workflow_run 重新触发，再次 get_workflow_runs 确认是否通过
+  7. 如果依然失败，重复步骤 3-6 直到修复成功
 
 🔧 **修改工作流文件**：
   1. list_workflows 找到 workflow_id 及路径
   2. read_file 读取 .github/workflows/xxx.yml
   3. patch_file 精确修改触发条件/环境变量/步骤
   4. trigger_workflow 验证新工作流
+
+📦 **缺失资源文件处理**：
+  当项目中缺少图片、图标、证书等二进制资源时：
+  1. 通过 file_tree / grep_in_file 确认资源路径及名称
+  2. 调用 request_file 工具，说明需要的文件名和用途
+  3. 等待用户在聊天框上传后，用 write_file 写入到正确路径
 
 ==============================
 超长文件处理策略
@@ -1169,13 +1185,15 @@ function createSSEStream() {
 
 /**
  * 逐词流式推送最终回答，模拟打字机效果。
- * 将文本按"词+空白"分组，每 ~20ms 推送一组，
+ * 将文本按"词+空白"分组，每 ~10ms 推送一组，
  * 代码块（```...```）整体一次性推送避免渲染撕裂。
+ * isAborted：可选回调，返回 true 时提前终止输出。
  */
 async function streamAnswer(
   text: string,
   sendChunk: (s: string) => Promise<void>,
-  delayMs = 20,
+  delayMs = 10,
+  isAborted?: () => boolean,
 ) {
   if (!text) return;
 
@@ -1191,12 +1209,12 @@ async function streamAnswer(
   let codeBuffer = "";
 
   for (let li = 0; li < lines.length; li++) {
+    if (isAborted?.()) return; // 用户中断，提前退出
     const line = lines[li];
     const suffix = li < lines.length - 1 ? "\n" : "";
 
     if (line.startsWith("```")) {
       if (!inCodeBlock) {
-        // 进入代码块
         inCodeBlock = true;
         codeBuffer = line + "\n";
       } else {
@@ -1214,8 +1232,7 @@ async function streamAnswer(
       continue;
     }
 
-    // 普通行：按空格 + 中文字符粒度切分（中文无空格，逐字推送）
-    // 策略：英文按词（连续非空白），中文每 2~4 字为一组
+    // 普通行：英文按词，中文每 3 字为一组
     const segments: string[] = [];
     let buf = "";
     for (let i = 0; i < line.length; i++) {
@@ -1224,7 +1241,6 @@ async function streamAnswer(
       if (isCJK) {
         if (buf) { segments.push(buf); buf = ""; }
         buf += ch;
-        // 每 3 个中文字符为一组
         if (buf.length >= 3) { segments.push(buf); buf = ""; }
       } else if (ch === " " || ch === "\t") {
         buf += ch;
@@ -1236,15 +1252,13 @@ async function streamAnswer(
     }
     if (buf) segments.push(buf);
 
-    // 逐段推送，每段间隔 delayMs
     for (let si = 0; si < segments.length; si++) {
-      const isLast = li === lines.length - 1 && si === segments.length - 1;
-      await sendChunk(segments[si] + (isLast && suffix === "" ? "" : ""));
+      if (isAborted?.()) return;
+      await sendChunk(segments[si]);
       if (si < segments.length - 1 || suffix) {
         await new Promise(r => setTimeout(r, delayMs));
       }
     }
-    // 行末换行符
     if (suffix) await sendChunk(suffix);
   }
 
@@ -1295,6 +1309,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const ctx: GithubContext = { token: githubToken, owner, repo };
   const { readable, sendTyped, sendChunk, sendDone } = createSSEStream();
 
+  // 客户端中断信号：用户点"停止"时 req.signal 触发 abort
+  const abortSig = req.signal;
+
   (async () => {
     try {
     const fullMessages: Message[] = [{ role: "system", content: buildSystemPrompt(targetBranch) }, ...messages];
@@ -1325,6 +1342,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       get_run_jobs: "查看 Jobs", get_job_logs: "下载日志",
       trigger_workflow: "触发工作流", cancel_workflow_run: "取消运行",
       rerun_workflow_run: "重新运行", list_actions_secrets: "查看 Secrets",
+      // 资源请求
+      request_file: "请求上传文件",
     };
     // 每批最多 20 轮工具调用；最多自动续跑 3 批，总上限 60 轮
     const MAX_ROUNDS_PER_BATCH = 20;
@@ -1340,6 +1359,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     for (let batch = 0; batch < MAX_BATCHES; batch++) {
     let batchDone = false; // 本批是否已完成（break 出内层循环）
     for (let round = 0; round < MAX_ROUNDS_PER_BATCH; round++, totalRound++) {
+      // ── 用户主动中断：立即退出循环 ────────────────────────────────────────
+      if (abortSig.aborted) { batchDone = true; break; }
+
       let assistantText = "";
       let thinkingStarted = false;
 
@@ -1469,7 +1491,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         // 持久化工作流完成
         if (sb && workflowDbId) await dbFinishWorkflow(sb, workflowDbId);
         // 逐词流式输出最终回答，模拟打字机效果
-        await streamAnswer(assistantText, sendChunk);
+        await streamAnswer(assistantText, sendChunk, 10, () => abortSig.aborted);
         batchDone = true; // 任务已完成，退出外层批次循环
         break;
       }
@@ -1511,6 +1533,31 @@ Deno.serve(async (req: Request): Promise<Response> => {
                           : toolCall.path || toolCall.query || toolCall.title || toolCall.branch || "";
       
       const toolCallId = `tool-${Date.now()}-${totalRound}`;
+
+      // ── 用户中断：工具执行前最后一次检查 ────────────────────────────────
+      if (abortSig.aborted) { batchDone = true; break; }
+
+      // ── request_file：虚拟工具，向前端发出文件上传请求事件 ────────────────
+      if (toolCall.tool === "request_file") {
+        const fileReqId = `freq-${Date.now()}`;
+        await sendTyped({
+          type: "file_request",
+          id: fileReqId,
+          filename: toolCall.filename || "file",
+          description: toolCall.description || "请上传所需文件",
+          mime_types: toolCall.mime_types || "",
+        });
+        // 向上下文追加：AI 已发出请求，等待用户回复
+        fullMessages.push({ role: "assistant", content: rawText });
+        fullMessages.push({
+          role: "user",
+          content: `已向用户请求上传文件"${toolCall.filename || 'file'}"，请继续等待用户上传。上传完成后系统会将文件内容附加到对话中。`,
+        });
+        // 结束本次流式（前端收到 file_request 后会引导用户上传，并开启新一轮对话）
+        batchDone = true;
+        break;
+      }
+
       await sendTyped({ 
         type: "tool_start", 
         id: toolCallId, 
@@ -1618,7 +1665,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     } // end inner for
 
-    if (batchDone) break; // 内层正常完成（final answer / fatal error），退出外层
+    if (batchDone || abortSig.aborted) break; // 内层正常完成 / 用户中断，退出外层
     } // end outer for (batch)
 
     if (sb && workflowDbId) await dbFinishWorkflow(sb, workflowDbId);

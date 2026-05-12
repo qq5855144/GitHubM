@@ -259,20 +259,45 @@ export function renderMarkdown(text: string): React.ReactNode {
       i++; continue;
     }
 
-    // ── 无序列表 ─────────────────────────────────────────────────────
+    // ── 无序列表（含 GFM checkbox） ────────────────────────────────────
     if (/^[-*+] /.test(line)) {
-      const listItems: string[] = [];
-      while (i < lines.length && /^[-*+] /.test(lines[i])) {
-        listItems.push(lines[i].slice(2));
+      // 连续收集同级列表项（保留缩进行作为子内容）
+      const listItems: Array<{ text: string; checked: boolean | null; indent: string }> = [];
+      while (i < lines.length && (/^[-*+] /.test(lines[i]) || /^ {2,}/.test(lines[i]))) {
+        const l = lines[i];
+        if (/^[-*+] /.test(l)) {
+          const body = l.slice(2);
+          if (/^\[[ xX]\] /.test(body)) {
+            listItems.push({ text: body.slice(4), checked: body[1] !== ' ', indent: '' });
+          } else {
+            listItems.push({ text: body, checked: null, indent: '' });
+          }
+        } else {
+          // 缩进子行：追加到上一项
+          if (listItems.length > 0) {
+            listItems[listItems.length - 1].text += '\n' + l.trimStart();
+          }
+        }
         i++;
       }
       result.push(
-        <ul key={key++} className="my-1.5 space-y-0.5 pl-4">
+        <ul key={key++} className="my-1.5 space-y-0.5 pl-2">
           {listItems.map((item, li) => (
-            <li key={li} className="flex gap-1.5 text-sm break-words">
-              <span className="text-primary mt-[3px] shrink-0">•</span>
-              <span className="min-w-0 break-words">{renderInline(item, key * 100 + li)}</span>
-            </li>
+            item.checked !== null ? (
+              <li key={li} className="flex items-start gap-2 text-sm break-words">
+                <span className={`mt-[3px] shrink-0 w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] ${item.checked ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/50'}`}>
+                  {item.checked && '✓'}
+                </span>
+                <span className={`min-w-0 break-words ${item.checked ? 'line-through text-muted-foreground' : ''}`}>
+                  {renderInline(item.text, key * 100 + li)}
+                </span>
+              </li>
+            ) : (
+              <li key={li} className="flex gap-1.5 text-sm break-words">
+                <span className="text-primary mt-[3px] shrink-0">•</span>
+                <span className="min-w-0 break-words">{renderInline(item.text, key * 100 + li)}</span>
+              </li>
+            )
           ))}
         </ul>
       );

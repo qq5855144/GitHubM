@@ -5,9 +5,9 @@
 -->
 <resources>
     <style name="Theme.GitHubManager" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- 系统启动画面背景色（深色模式） -->
+        <!-- 系统启动画面背景色（深色模式）：与自定义启动页背景色完全一致，无缝衔接 -->
+        <!-- 不设置 windowSplashScreenAnimatedIcon，避免在自定义启动页前出现额外的系统图标层 -->
         <item name="android:windowSplashScreenBackground">@color/splash_bg_solid</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="android:windowBackground">@color/splash_bg_solid</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="colorPrimary">#8B4CF8</item>

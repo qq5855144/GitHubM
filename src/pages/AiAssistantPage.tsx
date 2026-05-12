@@ -1,4 +1,4 @@
-// AI 助手页面 v6 - 任务工作流面板 + 自主执行引擎
+// AI 助手页面 v7 - 超时可配置 + 后台断连自动重连 + 原生 fetch SSE
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getRepoBranches } from '@/services/github';
@@ -10,7 +10,7 @@ import {
   Bot, User, Send, Square, Trash2, Settings,
   Sparkles, AlertCircle,
   RefreshCw, Plus, GitPullRequest, History, ArrowLeft, Loader2,
-  Zap, FolderSearch, PanelRight, Wrench, ListChecks, Clock,
+  Zap, FolderSearch, PanelRight, Wrench, ListChecks, Clock, WifiOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -35,8 +35,8 @@ import {
 import { upsertSession, insertMessages } from '@/components/ai/aiSupabase';
 import type { Message, ModelConfig, ChatSession, ChatSessionMessage, ToolHistoryItem, TaskPlanStep, InlineStep, InlineTool } from '@/components/ai/aiTypes';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://backend.appmiaoda.com/projects/supabase311500128454225920';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoyMDkzNjk0NjE4LCJpc3MiOiJzdXBhYmFzZSIsInJvbGUiOiJhbm9uIiwic3ViIjoiYW5vbiJ9.TCCMRRmNXi3Cp9ebFdfQbK9__bSDa9czf5hIvRaMYGE';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 // ── 主组件 ────────────────────────────────────────────────────────────────────
 
 export default function AiAssistantPage() {
@@ -77,6 +77,18 @@ export default function AiAssistantPage() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // ── 断连重连：记录最后一次请求参数，供后台切回时恢复 ─────────────────────────
+  /** 上次发送的请求 body（不含 signal），网络中断时用于重连 */
+  const lastRequestBodyRef = useRef<Record<string, unknown> | null>(null);
+  /** 上次对话的用户原文（重连时注入到重连消息） */
+  const lastUserTextRef = useRef<string>('');
+  /** 当前是否处于网络中断（非用户主动 Stop）状态 */
+  const networkInterruptedRef = useRef(false);
+  /** 驱动 UI 显示重连提示条 */
+  const [isNetworkInterrupted, setIsNetworkInterrupted] = useState(false);
+  /** 当前流式对应的 AI 消息 id，重连时用于定位消息 */
+  const streamingAiMsgIdRef = useRef<string | null>(null);
+
   // Textarea 自动调整高度
   useEffect(() => {
     const el = textareaRef.current;
@@ -95,6 +107,27 @@ export default function AiAssistantPage() {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
+
+  // ── 后台恢复检测：页面从后台切回时，若任务被网络中断则提示重连 ─────────────────
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) return;
+      if (!networkInterruptedRef.current) return;
+      networkInterruptedRef.current = false;
+      setIsNetworkInterrupted(true); // 让 UI 重连条保持可见
+      toast.warning('网络连接已断开，AI 任务被中断', {
+        duration: 0,
+        id: 'reconnect-toast',
+        action: {
+          label: '重新连接',
+          onClick: () => { toast.dismiss('reconnect-toast'); handleReconnect(); },
+        },
+      });
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 加载分支列表
   const loadBranches = useCallback(async (repo: GitHubRepo) => {
@@ -291,18 +324,26 @@ export default function AiAssistantPage() {
       setCurrentStepId(null);
     }
 
+    // ── 记录请求参数，供断连后重连使用 ─────────────────────────────────────────
+    const reqBody = {
+      messages: history,
+      github_token: token,
+      owner: selectedRepo.owner.login,
+      repo: selectedRepo.name,
+      target_branch: selectedBranch,
+      model_config: modelConfig,
+      user_id: user?.login || 'anonymous',
+    };
+    lastRequestBodyRef.current = reqBody;
+    lastUserTextRef.current = userText;
+    streamingAiMsgIdRef.current = aiMsg.id;
+    networkInterruptedRef.current = false;
+
     await sendStreamRequest({
       functionUrl: `${SUPABASE_URL}/functions/v1/ai-assistant`,
-      requestBody: {
-        messages: history,
-        github_token: token,
-        owner: selectedRepo.owner.login,
-        repo: selectedRepo.name,
-        target_branch: selectedBranch,
-        model_config: modelConfig,
-        user_id: user?.login || 'anonymous',
-      },
+      requestBody: reqBody,
       supabaseAnonKey: SUPABASE_ANON_KEY,
+      timeoutMs: modelConfig.timeoutMs ?? 300_000,
       onData: (data) => {
         const chunk = parseTypedChunk(data);
         if (!chunk) return;
@@ -430,6 +471,9 @@ export default function AiAssistantPage() {
         }
       },
       onComplete: async () => {
+        networkInterruptedRef.current = false;
+        setIsNetworkInterrupted(false);
+        streamingAiMsgIdRef.current = null;
         setMessages(prev => prev.map(m => m.id === aiMsg.id ? { ...m, streaming: false } : m));
         setIsStreaming(false);
         // 持久化本轮新消息
@@ -440,19 +484,115 @@ export default function AiAssistantPage() {
         pendingMsgsRef.current = [];
       },
       onError: (err) => {
-        setMessages(prev => prev.map(m =>
-          m.id === aiMsg.id ? { ...m, content: `❌ 请求失败：${err.message}`, streaming: false } : m
-        ));
-        setIsStreaming(false);
-        toast.error('AI 响应失败');
+        const isUserAbort = abortRef.current?.signal.aborted;
+        // 判断是否为网络/超时导致的中断（非用户主动 Stop）
+        const isNetworkDrop = !isUserAbort && (
+          err.message.includes('网络') ||
+          err.message.includes('Failed to fetch') ||
+          err.message.includes('NetworkError') ||
+          err.message.includes('超时') ||
+          err.message.includes('timeout') ||
+          err.message.includes('中断')
+        );
+        if (isNetworkDrop) {
+          // 标记为网络中断，页面切回前台时提示重连
+          networkInterruptedRef.current = true;
+          setIsNetworkInterrupted(true);
+          setMessages(prev => prev.map(m =>
+            m.id === aiMsg.id
+              ? { ...m, content: accumulated + (accumulated ? '\n\n' : '') + `⚠️ 连接中断：${err.message}`, streaming: false }
+              : m
+          ));
+          setIsStreaming(false);
+          // 若当前页面仍在前台，立即提示
+          if (!document.hidden) {
+            networkInterruptedRef.current = false;
+            toast.warning(`连接中断：${err.message}`, {
+              duration: 0,
+              id: 'reconnect-toast',
+              action: {
+                label: '重新连接',
+                onClick: () => { toast.dismiss('reconnect-toast'); handleReconnect(); },
+              },
+            });
+          }
+        } else {
+          setMessages(prev => prev.map(m =>
+            m.id === aiMsg.id ? { ...m, content: `❌ ${err.message}`, streaming: false } : m
+          ));
+          setIsStreaming(false);
+          if (!isUserAbort) toast.error(err.message, { duration: 5000 });
+        }
       },
       signal: abortRef.current.signal,
     });
   }, [input, isStreaming, messages, selectedRepo, token, modelConfig, selectedBranch, persistMessages]);
 
+  // ── 重连：用上次请求的 history + 一条"请继续"提示，重新发起流式请求 ────────────
+  const handleReconnect = useCallback(() => {
+    if (isStreaming || !lastRequestBodyRef.current || !selectedRepo || !token) return;
+    const prevBody = lastRequestBodyRef.current;
+    const userText = lastUserTextRef.current;
+    // 在 history 末尾追加一条重连提示，让 AI 从中断处继续
+    const reconnectHistory = [
+      ...((prevBody.messages as Array<{ role: string; content: string }>) ?? []),
+      {
+        role: 'user',
+        content: '⚠️ 系统提示：上一次连接因网络中断，请从中断处继续完成任务，如果有任务计划，继续执行剩余未完成的步骤。',
+      },
+    ];
+
+    const aiMsg: Message = { id: Date.now().toString(), role: 'assistant', content: '', streaming: true };
+    setMessages(prev => [...prev, aiMsg]);
+    setIsStreaming(true);
+    abortRef.current = new AbortController();
+    streamingAiMsgIdRef.current = aiMsg.id;
+    networkInterruptedRef.current = false;
+
+    let accumulated = '';
+    const newReqBody = { ...prevBody, messages: reconnectHistory };
+    lastRequestBodyRef.current = newReqBody as Record<string, unknown>;
+
+    sendStreamRequest({
+      functionUrl: `${SUPABASE_URL}/functions/v1/ai-assistant`,
+      requestBody: newReqBody,
+      supabaseAnonKey: SUPABASE_ANON_KEY,
+      timeoutMs: modelConfig.timeoutMs ?? 300_000,
+      signal: abortRef.current.signal,
+      onData: (data) => {
+        const chunk = parseTypedChunk(data);
+        if (!chunk) return;
+        if (chunk.type === 'content') {
+          accumulated += chunk.content;
+          setMessages(prev => prev.map(m => m.id === aiMsg.id ? { ...m, content: accumulated } : m));
+        }
+      },
+      onComplete: async () => {
+        networkInterruptedRef.current = false;
+        setIsNetworkInterrupted(false);
+        streamingAiMsgIdRef.current = null;
+        setMessages(prev => prev.map(m => m.id === aiMsg.id ? { ...m, streaming: false } : m));
+        setIsStreaming(false);
+        await persistMessages(
+          [{ role: 'user', content: userText + ' [重连续跑]' }, { role: 'assistant', content: accumulated }],
+          selectedRepo, selectedBranch,
+        );
+      },
+      onError: (err) => {
+        setMessages(prev => prev.map(m =>
+          m.id === aiMsg.id ? { ...m, content: `❌ 重连失败：${err.message}`, streaming: false } : m
+        ));
+        setIsStreaming(false);
+        toast.error(`重连失败：${err.message}`);
+      },
+    });
+  }, [isStreaming, selectedRepo, token, modelConfig, selectedBranch, persistMessages]);
+
   const handleStop = () => {
     abortRef.current?.abort();
     setIsStreaming(false);
+    setIsNetworkInterrupted(false);
+    networkInterruptedRef.current = false;
     setMessages(prev => prev.map(m => m.streaming ? { ...m, streaming: false } : m));
   };
 
@@ -846,6 +986,30 @@ export default function AiAssistantPage() {
               </div>
 
               <div className="mx-3 h-px bg-border/60" />
+
+              {/* 断连重连提示条 */}
+              {isNetworkInterrupted && !isStreaming && (
+                <div className="mx-3 mt-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                  <WifiOff className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="flex-1 min-w-0 text-xs text-amber-700 dark:text-amber-300 truncate">
+                    连接已中断，任务未完成
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2.5 text-xs shrink-0 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
+                    onClick={() => { setIsNetworkInterrupted(false); handleReconnect(); }}
+                  >
+                    <RefreshCw className="w-3 h-3 mr-1" />
+                    重新连接
+                  </Button>
+                  <button
+                    className="text-amber-500/60 hover:text-amber-600 dark:hover:text-amber-400 text-xs shrink-0"
+                    onClick={() => setIsNetworkInterrupted(false)}
+                    title="忽略"
+                  >✕</button>
+                </div>
+              )}
 
               <div className="flex items-end gap-2 px-3 py-2">
                 <Textarea

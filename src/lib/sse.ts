@@ -63,12 +63,11 @@ export async function sendStreamRequest(options: StreamRequestOptions): Promise<
 
   const sseHook = createSSEHook({
     onData,
-    onCompleted: (error?: Error) => { if (error) { console.error('[DEBUG] SSE Hook Error:', error); onError(error); } else onComplete(); },
+    onCompleted: (error?: Error) => { if (error) onError(error); else onComplete(); },
     onAborted: () => { /* 已中断，静默处理 */ },
   });
 
   try {
-    console.log('[DEBUG] ky.post starting to:', functionUrl);
     await ky.post(functionUrl, {
       json: requestBody,
       headers: {
@@ -80,9 +79,7 @@ export async function sendStreamRequest(options: StreamRequestOptions): Promise<
       timeout: 120000,
       hooks: { afterResponse: [sseHook] },
     });
-    console.log('[DEBUG] ky.post finished successfully');
   } catch (error) {
-    console.error('[DEBUG] ky.post catched error:', error);
     if (!signal?.aborted) onError(error as Error);
   }
 }

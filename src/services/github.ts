@@ -42,6 +42,12 @@ interface CacheEntry<T> {
 const apiCache = new Map<string, CacheEntry<unknown>>();
 const CACHE_TTL_MS = 30_000; // 30s
 
+/**
+ * 需要打时间戳绕过 GitHub CDN 强制缓存（60s）的 URL 前缀集合。
+ * 写操作后由 invalidateCacheForMutation 填充，下次对应 GET 发出时消费并附加 _t=Date.now()。
+ */
+const cdnBustPrefixes = new Set<string>();
+
 /** 生成缓存 key（URL + 当前 token，token 变化后旧缓存自动失效） */
 export function buildCacheKey(url: string): string {
   return `${authToken ?? ''}|${url}`;
@@ -70,14 +76,41 @@ export function invalidateCache(urlPrefix: string): void {
   }
 }
 
+/**
+ * 失效内存缓存并同时标记该前缀需要 CDN 绕过。
+ * 下次对该前缀的 GET 请求会自动附加时间戳参数，迫使 GitHub CDN 返回最新数据。
+ */
+function invalidateAndBust(urlPrefix: string): void {
+  invalidateCache(urlPrefix);
+  cdnBustPrefixes.add(urlPrefix);
+}
+
+/**
+ * 检查并消费 CDN 绕过标记：若 url 命中任意已标记前缀，
+ * 返回附加了 _t=Date.now() 的新 URL，并移除该前缀标记；否则返回原 URL。
+ */
+function consumeCacheBust(url: string): string {
+  for (const prefix of cdnBustPrefixes) {
+    if (url.includes(prefix)) {
+      cdnBustPrefixes.delete(prefix);
+      const sep = url.includes('?') ? '&' : '?';
+      return `${url}${sep}_t=${Date.now()}`;
+    }
+  }
+  return url;
+}
+
 /** 清空全部缓存（退出登录时调用） */
 export function clearApiCache(): void {
   apiCache.clear();
+  cdnBustPrefixes.clear();
 }
 
 /**
  * 写操作后的智能级联缓存失效。
  * 除了失效操作 URL 本身，还按 URL 模式推导并失效所有相关列表/父目录缓存。
+ * 对于需要绕过 GitHub CDN 强制缓存（60s）的关键场景，同时调用 invalidateAndBust
+ * 在下次 GET 时附加时间戳参数，确保拿到最新数据。
  *
  * 覆盖场景：
  *   - 仓库 CRUD → 失效 /user/repos、/users/:owner/repos
@@ -95,70 +128,70 @@ function invalidateCacheForMutation(url: string, method: string): void {
   const cleanPath = path.split('?')[0];
 
   // 1. 始终失效操作 URL 本身
-  invalidateCache(cleanPath);
+  invalidateAndBust(cleanPath);
 
   // 2. /repos/:owner/:repo/contents/* — 文件写/删
   const contentsMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+\/contents)/);
   if (contentsMatch) {
-    invalidateCache(contentsMatch[1]);           // 失效该 repo 所有 contents 缓存
+    invalidateAndBust(contentsMatch[1]);         // 失效该 repo 所有 contents 缓存
   }
 
   // 3. /repos/:owner/:repo（仓库本身的 PATCH/DELETE）
   const repoRootMatch = cleanPath.match(/^\/repos\/([^/]+)\/([^/]+)$/);
   if (repoRootMatch && (method === 'DELETE' || method === 'PATCH')) {
     const [, owner] = repoRootMatch;
-    invalidateCache('/user/repos');              // 当前用户仓库列表
-    invalidateCache(`/users/${owner}/repos`);   // 该用户公开仓库列表
-    invalidateCache(`/orgs/${owner}/repos`);    // 兼容 org 场景
+    invalidateAndBust('/user/repos');            // 当前用户仓库列表
+    invalidateAndBust(`/users/${owner}/repos`); // 该用户公开仓库列表
+    invalidateAndBust(`/orgs/${owner}/repos`);  // 兼容 org 场景
   }
 
   // 4. /user/repos（创建新仓库）
   if (cleanPath === '/user/repos' && method === 'POST') {
-    invalidateCache('/user/repos');
+    invalidateAndBust('/user/repos');
   }
 
   // 5. /repos/:owner/:repo/git/refs — 分支创建/删除
   const refsMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+)\//);
   if (cleanPath.includes('/git/refs') && refsMatch) {
-    invalidateCache(`${refsMatch[1]}/branches`);
-    invalidateCache(`${refsMatch[1]}/git/refs`);
+    invalidateAndBust(`${refsMatch[1]}/branches`);
+    invalidateAndBust(`${refsMatch[1]}/git/refs`);
   }
 
   // 6. /repos/:owner/:repo/issues（含 comments、labels）
   const issueMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+)\/issues/);
   if (issueMatch) {
-    invalidateCache(`${issueMatch[1]}/issues`);
-    invalidateCache(`${issueMatch[1]}/pulls`);  // PR 列表也要刷新（共享端点）
+    invalidateAndBust(`${issueMatch[1]}/issues`);
+    invalidateAndBust(`${issueMatch[1]}/pulls`);  // PR 列表也要刷新（共享端点）
   }
 
   // 7. /repos/:owner/:repo/pulls/:number（含 merge、review、comments）
   const prMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+)\/pulls/);
   if (prMatch) {
-    invalidateCache(`${prMatch[1]}/pulls`);
-    invalidateCache(`${prMatch[1]}/issues`);
+    invalidateAndBust(`${prMatch[1]}/pulls`);
+    invalidateAndBust(`${prMatch[1]}/issues`);
   }
 
   // 8. /repos/:owner/:repo/collaborators
   const collabMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+\/collaborators)/);
   if (collabMatch) {
-    invalidateCache(collabMatch[1]);
+    invalidateAndBust(collabMatch[1]);
   }
 
   // 9. /gists — 创建/更新/删除 Gist
   if (cleanPath.startsWith('/gists')) {
-    invalidateCache('/gists');
+    invalidateAndBust('/gists');
   }
 
   // 10. /user/starred — star/unstar 操作
   if (cleanPath.startsWith('/user/starred')) {
-    invalidateCache('/user/starred');
-    invalidateCache(cleanPath);                 // checkStarred 精确 key
+    invalidateAndBust('/user/starred');
+    invalidateAndBust(cleanPath);               // checkStarred 精确 key
   }
 
   // 11. /repos/:owner/:repo/actions — 工作流触发/取消
   const actionsMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+\/actions)/);
   if (actionsMatch) {
-    invalidateCache(actionsMatch[1]);
+    invalidateAndBust(actionsMatch[1]);
   }
 }
 
@@ -218,8 +251,11 @@ async function request<T>(
     if (cached !== null) return cached;
 
     // 2. In-flight 合并：若相同请求正在进行中，共享同一 Promise
+    //    fetchUrl 可能附加 _t 时间戳以绕过 GitHub CDN 强制缓存（60s），
+    //    但 cacheKey 始终用干净 URL，确保时间戳不污染内存缓存键。
+    const fetchUrl = consumeCacheBust(url);
     return getOrCreateInFlight<T>(cacheKey, async () => {
-      const response = await fetch(url, {
+      const response = await fetch(fetchUrl, {
         ...options,
         headers: { ...buildHeaders(), ...options.headers },
       });
@@ -292,9 +328,10 @@ async function requestWithPagination<T>(
     const cached = getCached<{ data: T[]; hasNextPage: boolean }>(cacheKey);
     if (cached !== null) return cached;
 
-    // 2. In-flight 合并
+    // 2. In-flight 合并（fetchUrl 可能附加 _t 绕过 GitHub CDN 强制缓存）
+    const fetchUrl = consumeCacheBust(url);
     return getOrCreateInFlight<{ data: T[]; hasNextPage: boolean }>(cacheKey, async () => {
-      const response = await fetch(url, {
+      const response = await fetch(fetchUrl, {
         ...options,
         headers: { ...buildHeaders(), ...options.headers },
       });

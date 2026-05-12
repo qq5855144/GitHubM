@@ -11,6 +11,7 @@ import {
   Sparkles, AlertCircle,
   RefreshCw, Plus, GitPullRequest, History, ArrowLeft, Loader2,
   Zap, FolderSearch, PanelRight, Wrench, ListChecks, Clock, WifiOff,
+  Paperclip, X, ImageIcon, FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -33,7 +34,7 @@ import {
   parseChunk, parseTypedChunk, renderMarkdown, ThinkingBlock, QUICK_PROMPTS,
 } from '@/components/ai/aiUtils';
 import { upsertSession, insertMessages } from '@/components/ai/aiSupabase';
-import type { Message, ModelConfig, ChatSession, ChatSessionMessage, ToolHistoryItem, TaskPlanStep, InlineStep, InlineTool } from '@/components/ai/aiTypes';
+import type { Message, ModelConfig, ChatSession, ChatSessionMessage, ToolHistoryItem, TaskPlanStep, InlineStep, InlineTool, Attachment, FileRequest } from '@/components/ai/aiTypes';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -76,6 +77,9 @@ export default function AiAssistantPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // 附件上传相关
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
 
   // ── 断连重连：记录最后一次请求参数，供后台切回时恢复 ─────────────────────────
   /** 上次发送的请求 body（不含 signal），网络中断时用于重连 */
@@ -288,24 +292,79 @@ export default function AiAssistantPage() {
   }, [isStreaming, messages]);
 
   // 发送消息
+  // ── 附件工具函数（必须在 handleSend 之前声明）─────────────────────────────
+
+  // 附件文件选择处理
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    files.forEach(file => {
+      const isImage = file.type.startsWith('image/');
+      const maxSize = isImage ? 5 * 1024 * 1024 : 500 * 1024;
+      if (file.size > maxSize) {
+        toast.warning(`文件 ${file.name} 超过大小限制（${isImage ? '5MB' : '500KB'}）`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const result = ev.target?.result as string;
+        const attachment: Attachment = {
+          id: `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          name: file.name,
+          type: isImage ? 'image' : (file.type.startsWith('text/') || /\.(ts|tsx|js|jsx|json|yaml|yml|md|py|go|kt|swift|sh|env|xml|html|css)$/.test(file.name)) ? 'text' : 'binary',
+          mimeType: file.type,
+          content: result,
+          size: file.size,
+        };
+        setAttachments(prev => [...prev, attachment]);
+      };
+      if (isImage) reader.readAsDataURL(file);
+      else reader.readAsText(file);
+    });
+    e.target.value = '';
+  }, []);
+
+  // 将附件内容格式化为注入到消息的文本
+  const formatAttachmentsForMessage = useCallback((atts: Attachment[]): string => {
+    if (!atts.length) return '';
+    return atts.map(att => {
+      if (att.type === 'image') return `\n\n[图片附件: ${att.name}]\n${att.content}`;
+      if (att.type === 'text') return `\n\n[文件附件: ${att.name}]\n\`\`\`\n${att.content}\n\`\`\``;
+      return `\n\n[二进制附件: ${att.name}（base64）]\n${att.content}`;
+    }).join('');
+  }, []);
+
   const handleSend = useCallback(async (text?: string, isRegen = false) => {
     const userText = (text ?? input).trim();
     if (!userText || isStreaming || !selectedRepo || !token) return;
 
+    // 附件内容注入到消息文本
+    const pendingAttachments = isRegen ? [] : [...attachments];
+    const attachmentText = formatAttachmentsForMessage(pendingAttachments);
+    const fullUserText = userText + attachmentText;
+
     if (!isRegen) {
       setInput('');
+      setAttachments([]);
       // 同步重置 textarea 高度
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
     }
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: userText };
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: userText, // 气泡显示原始文字，不含 base64
+      attachments: pendingAttachments.length ? pendingAttachments : undefined,
+    };
     const aiMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: '', streaming: true };
     setMessages(prev => isRegen ? [...prev, aiMsg] : [...prev, userMsg, aiMsg]);
     setIsStreaming(true);
 
     const baseHistory = messages.filter(m => m.id !== 'welcome');
-    const history = [...(isRegen ? baseHistory : [...baseHistory, userMsg])].map(m => ({
+    // history 用 fullUserText（含附件内容）替换最后一条用户消息，确保 AI 看到完整内容
+    const historyUserMsg = { role: 'user' as const, content: fullUserText };
+    const history = [...(isRegen ? baseHistory : [...baseHistory, historyUserMsg])].map(m => ({
       role: m.role, content: m.content,
     }));
 
@@ -459,6 +518,14 @@ export default function AiAssistantPage() {
           case 'status_warning':
             toast.warning(chunk.message, { duration: 5000 });
             break;
+          case 'file_request':
+            // AI 请求用户上传文件：将请求追加到当前 AI 消息的 fileRequests 列表
+            setMessages(prev => prev.map(m => {
+              if (m.id !== aiMsg.id) return m;
+              const req = { id: chunk.id, filename: chunk.filename, description: chunk.description, mime_types: chunk.mime_types, fulfilled: false };
+              return { ...m, fileRequests: [...(m.fileRequests ?? []), req] };
+            }));
+            break;
           case 'step_end':
             setStepStatuses(prev => ({ ...prev, [chunk.stepId]: chunk.status === 'error' ? 'error' : 'done' }));
             if (chunk.status !== 'error') setCurrentStepId(null);
@@ -533,7 +600,7 @@ export default function AiAssistantPage() {
       },
       signal: abortRef.current.signal,
     });
-  }, [input, isStreaming, messages, selectedRepo, token, modelConfig, selectedBranch, persistMessages]);
+  }, [input, attachments, formatAttachmentsForMessage, isStreaming, messages, selectedRepo, token, modelConfig, selectedBranch, persistMessages]);
 
   // ── 重连：用上次请求的 history + 一条"请继续"提示，重新发起流式请求 ────────────
   const handleReconnect = useCallback(() => {
@@ -845,7 +912,25 @@ export default function AiAssistantPage() {
                           : ''
                       )}>
                         {msg.role === 'user'
-                          ? <p className="whitespace-pre-wrap break-words break-all">{msg.content}</p>
+                          ? (
+                            <div className="min-w-0">
+                              <p className="whitespace-pre-wrap break-words break-all">{msg.content}</p>
+                              {/* 附件预览 */}
+                              {msg.attachments && msg.attachments.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                  {msg.attachments.map(att => (
+                                    <div key={att.id} className="flex items-center gap-1 rounded-md border border-primary-foreground/30 bg-primary-foreground/10 px-2 py-1 text-xs text-primary-foreground/90">
+                                      {att.type === 'image'
+                                        ? <img src={att.content} alt={att.name} className="w-5 h-5 rounded object-cover shrink-0" />
+                                        : <FileText className="w-3.5 h-3.5 shrink-0" />
+                                      }
+                                      <span className="truncate max-w-[120px]">{att.name}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
                           : (
                             <div className="min-w-0">
                               {/* 思考过程显示 */}
@@ -867,6 +952,45 @@ export default function AiAssistantPage() {
                                   inlineTools={msg.inlineTools}
                                   streaming={msg.streaming}
                                 />
+                              )}
+                              {/* 文件上传请求卡片（AI 调用 request_file 工具时显示） */}
+                              {msg.fileRequests && msg.fileRequests.length > 0 && (
+                                <div className="mt-3 flex flex-col gap-2">
+                                  {msg.fileRequests.map(freq => (
+                                    <FileRequestCard
+                                      key={freq.id}
+                                      request={freq}
+                                      onUpload={(file) => {
+                                        // 标记为已处理
+                                        setMessages(prev => prev.map(m =>
+                                          m.id === msg.id
+                                            ? { ...m, fileRequests: m.fileRequests?.map(r => r.id === freq.id ? { ...r, fulfilled: true } : r) }
+                                            : m
+                                        ));
+                                        // 读取文件内容后作为新用户消息发送
+                                        const reader = new FileReader();
+                                        const isImage = file.type.startsWith('image/');
+                                        reader.onload = (ev) => {
+                                          const content = ev.target?.result as string;
+                                          const att: Attachment = {
+                                            id: `att-${Date.now()}`,
+                                            name: file.name,
+                                            type: isImage ? 'image' : 'text',
+                                            mimeType: file.type,
+                                            content,
+                                            size: file.size,
+                                          };
+                                          const attText = isImage
+                                            ? `\n\n[图片附件: ${file.name}]\n${content}`
+                                            : `\n\n[文件附件: ${file.name}]\n\`\`\`\n${content}\n\`\`\``;
+                                          handleSend(`已上传文件 ${file.name}，请继续执行任务。${attText}`, false);
+                                        };
+                                        if (isImage) reader.readAsDataURL(file);
+                                        else reader.readAsText(file);
+                                      }}
+                                    />
+                                  ))}
+                                </div>
                               )}
                             </div>
                           )}
@@ -1018,7 +1142,48 @@ export default function AiAssistantPage() {
                 </div>
               )}
 
+              {/* 附件预览条（有附件时显示在输入框上方） */}
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 px-3 pt-2">
+                  {attachments.map(att => (
+                    <div key={att.id} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-2 py-1 text-xs text-foreground max-w-[180px]">
+                      {att.type === 'image'
+                        ? <img src={att.content} alt={att.name} className="w-5 h-5 rounded object-cover shrink-0" />
+                        : <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
+                      }
+                      <span className="flex-1 min-w-0 truncate">{att.name}</span>
+                      <button
+                        onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
+                        className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                        title="移除附件"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 隐藏 file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,text/*,.ts,.tsx,.js,.jsx,.json,.yaml,.yml,.md,.py,.go,.kt,.swift,.sh,.env,.xml,.html,.css,.txt"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+
               <div className="flex items-end gap-2 px-3 py-2">
+                {/* 附件上传按钮 */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isStreaming}
+                  className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/8 transition-colors disabled:opacity-40"
+                  title="上传文件或图片"
+                >
+                  <Paperclip className="w-3.5 h-3.5" />
+                </button>
                 <Textarea
                   ref={textareaRef}
                   value={input}
@@ -1192,6 +1357,60 @@ export default function AiAssistantPage() {
         login={user?.login || ''}
         onLoad={handleLoadHistory}
       />
+    </div>
+  );
+}
+
+// ── FileRequestCard：AI 请求用户上传文件时显示的内联卡片 ──────────────────────
+interface FileRequestCardProps {
+  request: FileRequest;
+  onUpload: (file: File) => void;
+}
+
+function FileRequestCard({ request, onUpload }: FileRequestCardProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) onUpload(file);
+    e.target.value = '';
+  };
+
+  if (request.fulfilled) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/8 px-3 py-2 text-xs text-green-700 dark:text-green-400">
+        <ImageIcon className="w-3.5 h-3.5 shrink-0" />
+        <span>文件已上传：{request.filename}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2.5">
+      <div className="flex items-start gap-2 mb-2">
+        <Paperclip className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-foreground">需要上传文件</p>
+          <p className="text-xs text-muted-foreground mt-0.5 break-words">{request.description}</p>
+          {request.filename && (
+            <p className="text-[10px] text-primary/70 mt-0.5">文件名：{request.filename}</p>
+          )}
+        </div>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={request.mime_types || '*/*'}
+        className="hidden"
+        onChange={handleChange}
+      />
+      <button
+        onClick={() => inputRef.current?.click()}
+        className="w-full flex items-center justify-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium py-1.5 transition-colors"
+      >
+        <Paperclip className="w-3 h-3" />
+        选择文件上传
+      </button>
     </div>
   );
 }

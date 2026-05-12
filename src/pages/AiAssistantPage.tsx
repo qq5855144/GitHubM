@@ -937,7 +937,11 @@ export default function AiAssistantPage() {
                               {(msg.thinkingContent || (msg.streaming && !msg.thinkingDone)) && (
                                 <ThinkingBlock content={msg.thinkingContent || ''} done={msg.thinkingDone} />
                               )}
-                              {msg.content ? renderMarkdown(msg.content) : (
+                              {msg.content ? (
+                                msg.content.includes('## 🔧 修复清单')
+                                  ? <RepairChecklist content={msg.content} />
+                                  : renderMarkdown(msg.content)
+                              ) : (
                                 msg.streaming
                                   ? <span className="inline-block w-1.5 h-4 bg-primary animate-pulse rounded-sm align-middle" />
                                   : <span className="text-muted-foreground text-sm">…</span>
@@ -1411,6 +1415,153 @@ function FileRequestCard({ request, onUpload }: FileRequestCardProps) {
         <Paperclip className="w-3 h-3" />
         选择文件上传
       </button>
+    </div>
+  );
+}
+
+// ── RepairChecklist：修复清单特殊渲染卡片 ─────────────────────────────────────
+interface CheckItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+interface RepairSection {
+  title: string;
+  items: CheckItem[];
+  isNote?: boolean;
+}
+
+function parseRepairSections(content: string): RepairSection[] {
+  const sections: RepairSection[] = [];
+  // 按 ### 分割
+  const parts = content.split(/^### /m).filter(Boolean);
+  for (const part of parts) {
+    const lines = part.split('\n');
+    const title = lines[0].trim();
+    const isNote = title.startsWith('⚠️');
+    const items: CheckItem[] = [];
+    for (const line of lines.slice(1)) {
+      const m = line.match(/^- \[([ xX])\] (.+)/);
+      if (m) {
+        items.push({ id: crypto.randomUUID(), text: m[2].trim(), done: m[1] !== ' ' });
+      } else if (line.match(/^- \*\*/) || (isNote && line.match(/^- /))) {
+        // 注意事项条目（非 checkbox）
+        items.push({ id: crypto.randomUUID(), text: line.replace(/^- /, '').trim(), done: false });
+      }
+    }
+    if (items.length > 0) sections.push({ title, items, isNote });
+  }
+  return sections;
+}
+
+function RepairChecklist({ content }: { content: string }) {
+  // 提取清单部分（从 ## 🔧 修复清单 到下一个 ## 或文末）
+  const checklistMatch = content.match(/## 🔧 修复清单[\s\S]+/);
+  const rest = content.replace(/## 🔧 修复清单[\s\S]+/, '').trim();
+  if (!checklistMatch) return <>{renderMarkdown(content)}</>;
+
+  const checklistRaw = checklistMatch[0];
+  const sections = parseRepairSections(checklistRaw);
+
+  // 每个 section 的 items 用 state 管理勾选
+  const [checked, setChecked] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    sections.forEach(s => s.items.forEach(it => { init[it.id] = it.done; }));
+    return init;
+  });
+
+  const toggle = (id: string) => setChecked(prev => ({ ...prev, [id]: !prev[id] }));
+
+  const totalItems = sections.filter(s => !s.isNote).reduce((acc, s) => acc + s.items.length, 0);
+  const doneItems = sections.filter(s => !s.isNote).reduce((acc, s) => acc + s.items.filter(it => checked[it.id]).length, 0);
+  const allDone = totalItems > 0 && doneItems === totalItems;
+
+  // 提取引导语（### 之前的文字）
+  const introMatch = checklistRaw.match(/## 🔧 修复清单\n+(> [^\n]+\n+)?/);
+  const intro = introMatch ? introMatch[0].replace(/## 🔧 修复清单\n+/, '').replace(/^> /, '').trim() : '';
+
+  return (
+    <div className="flex flex-col gap-2 min-w-0 w-full">
+      {/* 清单前的普通内容 */}
+      {rest && renderMarkdown(rest)}
+
+      {/* 修复清单卡片 */}
+      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/8 overflow-hidden">
+        {/* 卡片头部 */}
+        <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-amber-500/10 border-b border-amber-500/20">
+          <div className="flex items-center gap-2 min-w-0">
+            <Wrench className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="text-sm font-semibold text-amber-800 dark:text-amber-300 truncate">修复清单</span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {allDone
+              ? <span className="text-[11px] text-green-600 dark:text-green-400 font-medium">全部完成 ✓</span>
+              : <span className="text-[11px] text-amber-600 dark:text-amber-400">{doneItems}/{totalItems} 已完成</span>
+            }
+            {/* 进度条 */}
+            <div className="w-16 h-1.5 rounded-full bg-amber-200/60 dark:bg-amber-900/40 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-amber-500 dark:bg-amber-400 transition-all duration-300"
+                style={{ width: totalItems ? `${(doneItems / totalItems) * 100}%` : '0%' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 引导语 */}
+        {intro && (
+          <p className="px-3.5 pt-2.5 pb-0 text-xs text-amber-700 dark:text-amber-400/80 break-words text-pretty">{intro}</p>
+        )}
+
+        {/* 各 Section */}
+        <div className="px-3.5 py-2.5 flex flex-col gap-3">
+          {sections.map((section, si) => (
+            <div key={si} className="flex flex-col gap-1.5">
+              {/* section 标题 */}
+              <p className={`text-xs font-semibold break-words text-balance ${section.isNote ? 'text-muted-foreground' : 'text-foreground'}`}>
+                {section.title}
+              </p>
+              {/* items */}
+              <div className="flex flex-col gap-1">
+                {section.items.map(item => (
+                  <label
+                    key={item.id}
+                    className={`flex items-start gap-2.5 min-h-[2rem] cursor-pointer group ${section.isNote ? 'cursor-default' : ''}`}
+                    onClick={section.isNote ? undefined : () => toggle(item.id)}
+                  >
+                    {!section.isNote && (
+                      <span className={`mt-[2px] shrink-0 w-4 h-4 rounded border-[1.5px] flex items-center justify-center transition-colors
+                        ${checked[item.id]
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'border-amber-400/60 group-hover:border-amber-500'
+                        }`}>
+                        {checked[item.id] && <span className="text-[9px] font-bold leading-none">✓</span>}
+                      </span>
+                    )}
+                    {section.isNote && (
+                      <span className="mt-[3px] shrink-0 text-amber-500/60">•</span>
+                    )}
+                    <span className={`text-xs leading-relaxed break-words min-w-0 flex-1
+                      ${!section.isNote && checked[item.id] ? 'line-through text-muted-foreground/60' : 'text-foreground/90'}
+                      ${section.isNote ? 'text-muted-foreground' : ''}
+                    `}>
+                      {item.text}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* 底部提示 */}
+        <div className="px-3.5 pb-2.5">
+          <p className="text-[11px] text-amber-600/70 dark:text-amber-400/60 text-pretty">
+            修复完成后，回复「重新构建」即可自动触发 CI 验证。
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

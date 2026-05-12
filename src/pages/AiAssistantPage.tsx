@@ -373,7 +373,8 @@ export default function AiAssistantPage() {
               status: 'running',
               startedAt: Date.now()
             }]);
-            setShowToolHistory(true); // 自动展开工具面板
+            // 自动展开侧边面板：仅桌面端（md+），手机端不自动弹出以免遮挡对话区
+            if (window.innerWidth >= 768) setShowToolHistory(true);
             // ── 同步写入气泡内联 ──
             setMessages(prev => prev.map(m => {
               if (m.id !== aiMsg.id) return m;
@@ -412,7 +413,8 @@ export default function AiAssistantPage() {
             setStepRetryCounts({});
             setCurrentStepId(null);
             setSidePanelTab('plan');
-            setShowToolHistory(true); // 展开侧边面板
+            // 自动展开侧边面板：仅桌面端（md+），手机端不自动弹出以免遮挡对话区
+            if (window.innerWidth >= 768) setShowToolHistory(true);
             // ── 同步写入气泡内联 ──
             setMessages(prev => prev.map(m => {
               if (m.id !== aiMsg.id) return m;

@@ -339,6 +339,13 @@ export default function AiAssistantPage() {
     }]);
   };
 
+  // 文件浏览器插入文本（追加到输入框末尾）
+  // ⚠️ 必须在所有条件 return 之前声明，否则违反 React Hooks 规则（error #310）
+  const handleFileBrowserInsert = useCallback((text: string) => {
+    setInput(prev => prev ? `${prev}\n${text}` : text);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }, []);
+
   // ── 仓库选择步骤 ─────────────────────────────────────────────────────────
 
   if (step === 'repo') {
@@ -415,13 +422,6 @@ export default function AiAssistantPage() {
   // ── 对话步骤 ─────────────────────────────────────────────────────────────
 
   const lastAiIdx = [...messages].map((m, i) => m.role === 'assistant' ? i : -1).filter(i => i !== -1).pop() ?? -1;
-
-  // 文件浏览器插入文本（追加到输入框末尾）
-  const handleFileBrowserInsert = useCallback((text: string) => {
-    setInput(prev => prev ? `${prev}\n${text}` : text);
-    // 插入后聚焦输入框
-    setTimeout(() => textareaRef.current?.focus(), 50);
-  }, []);
 
   return (
     <div className="flex flex-col h-[calc(100dvh-4rem)] md:h-[calc(100dvh-1rem)] overflow-hidden">

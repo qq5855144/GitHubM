@@ -18,8 +18,6 @@ import {
   Loader2,
   User,
   Palette,
-  Mail,
-  MessageCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -598,43 +596,22 @@ export default function SettingsPage() {
       {/* 作者 */}
       <div className="bg-card border border-border rounded-xl p-5">
         <h2 className="text-sm font-semibold text-foreground mb-4">作者</h2>
-        <div className="flex items-start gap-4">
-          {/* 头像区域 */}
-          <div className="relative shrink-0">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 border-2 border-primary/20 flex items-center justify-center">
-              <span className="text-lg select-none">🦖</span>
-            </div>
-            {/* 在线小圆点 */}
-            <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-2 border-card" />
+        <div className="flex items-center gap-3">
+          {/* 头像（预留 SVG 内联位置） */}
+          <div className="w-10 h-10 rounded-full bg-muted border border-border flex items-center justify-center shrink-0 overflow-hidden">
+            <span className="text-lg select-none">🦖</span>
           </div>
-
-          {/* 信息区 */}
-          <div className="flex-1 min-w-0 space-y-2">
-            <div>
-              <p className="text-sm font-semibold text-foreground leading-tight text-balance">水怪</p>
-              <p className="text-xs text-muted-foreground mt-0.5 text-pretty">MT 论坛练习时长两年半的水怪</p>
-            </div>
-
-            {/* 标签 */}
-            <div className="flex flex-wrap gap-1.5">
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary bg-primary/10 border border-primary/20 rounded-full px-2.5 py-0.5">
-                <MessageCircle className="w-3 h-3 shrink-0" />MT 论坛
-              </span>
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground bg-muted border border-border rounded-full px-2.5 py-0.5">
-                练习时长两年半
-              </span>
-            </div>
-
-            {/* 邮箱 */}
-            <div className="flex items-center gap-2 pt-0.5">
-              <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <div className="flex-1 min-w-0 space-y-0.5">
+            <p className="text-sm text-foreground truncate">作者：MT 论坛练习时长两年半的水怪</p>
+            <p className="text-xs text-muted-foreground">
+              反馈邮箱：
               <a
                 href="mailto:3214931827@qq.com"
-                className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2 decoration-border hover:decoration-primary truncate"
+                className="hover:text-primary transition-colors underline underline-offset-2 decoration-border hover:decoration-primary"
               >
                 3214931827@qq.com
               </a>
-            </div>
+            </p>
           </div>
         </div>
       </div>

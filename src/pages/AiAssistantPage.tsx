@@ -510,6 +510,7 @@ export default function AiAssistantPage() {
                     return null; // 工具调用 hint 已内嵌在 AI 回复流中，不单独渲染
                   }
                   return (
+                    /* 消息行：flex 行方向，头像 shrink-0，内容 flex-1 min-w-0 */
                     <div key={msg.id} className={cn('flex gap-2.5 w-full min-w-0', msg.role === 'user' ? 'flex-row-reverse' : 'flex-row')}>
                       <div className={cn(
                         'w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5',
@@ -519,14 +520,18 @@ export default function AiAssistantPage() {
                           ? <User className="w-3.5 h-3.5" />
                           : <Bot className="w-3.5 h-3.5 text-muted-foreground" />}
                       </div>
-                      {/* min-w-0 是关键：flex 子项默认 min-width:auto 会撑爆父容器 */}
-                      <div className="flex flex-col gap-1 min-w-0 overflow-hidden" style={{ maxWidth: 'calc(100% - 2.5rem)' }}>
-                        {/* 气泡 */}
+                      {/*
+                        关键：flex-1 + min-w-0 让此列收缩到剩余空间内，
+                        overflow-hidden 阻止任何子元素（代码块等）撑出父容器宽度。
+                        Android WebView 对 style={{ maxWidth }} 支持较差，改用纯 Tailwind。
+                      */}
+                      <div className="flex flex-col gap-1 flex-1 min-w-0 overflow-hidden">
+                        {/* 气泡：overflow-hidden 阻止内部代码块撑出气泡边界 */}
                         <div className={cn(
-                          'rounded-2xl px-4 py-3 text-sm min-w-0 w-full',
+                          'rounded-2xl px-4 py-3 text-sm w-full min-w-0 overflow-hidden',
                           msg.role === 'user'
-                            ? 'bg-primary text-primary-foreground rounded-tr-sm overflow-hidden'
-                            : 'bg-muted/60 border border-border text-foreground rounded-tl-sm overflow-x-auto',
+                            ? 'bg-primary text-primary-foreground rounded-tr-sm'
+                            : 'bg-muted/60 border border-border text-foreground rounded-tl-sm',
                           !msg.streaming && msg.content.length > 600
                             ? 'max-h-[60vh] overflow-y-auto'
                             : ''
@@ -534,7 +539,7 @@ export default function AiAssistantPage() {
                           {msg.role === 'user'
                             ? <p className="whitespace-pre-wrap break-words break-all min-w-0 w-full">{msg.content}</p>
                             : (
-                              <div className="min-w-0 w-full">
+                              <div className="min-w-0 w-full overflow-hidden">
                                 {msg.content ? renderMarkdown(msg.content) : (
                                   msg.streaming
                                     ? <span className="inline-block w-1.5 h-4 bg-primary animate-pulse rounded-sm align-middle" />

@@ -184,10 +184,10 @@ export function renderMarkdown(text: string): React.ReactNode {
               <span className="text-[10px] font-mono text-muted-foreground select-none">{lang}</span>
             </div>
           )}
-          {/* 代码块：overflow-x-auto 横向滚动，pre 不换行保留格式，外层约束最大宽度 */}
-          <div className="overflow-x-auto max-w-full">
-            <pre className="p-3 text-[11px] font-mono leading-relaxed min-w-0" style={{ width: 'max-content', minWidth: '100%' }}>
-              <code className="whitespace-pre">{codeText}</code>
+          {/* 代码块：overflow-x-auto 约束在气泡宽度内横向滚动，避免 Android WebView 撑爆父容器 */}
+          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <pre className="p-3 text-[11px] font-mono leading-relaxed whitespace-pre" style={{ display: 'inline-block', minWidth: '100%' }}>
+              <code>{codeText}</code>
             </pre>
           </div>
         </div>
@@ -270,7 +270,6 @@ export function renderMarkdown(text: string): React.ReactNode {
     );
     i++;
   }
-  /* overflow-hidden 在此被移除：内层 pre 的 overflow-x-auto 需要能形成独立滚动上下文，
-     外部气泡已用 overflow-x-auto 兜底，根 div 只需约束宽度即可 */
-  return <div className="flex flex-col gap-0.5 min-w-0 max-w-full overflow-hidden">{result}</div>;
+  /* overflow-hidden 约束整个 markdown 区域宽度，让内层代码块的 overflow-x-auto 在气泡边界内滚动 */
+  return <div className="flex flex-col gap-0.5 min-w-0 w-full overflow-hidden">{result}</div>;
 }

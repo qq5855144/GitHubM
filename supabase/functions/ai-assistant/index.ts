@@ -31,25 +31,31 @@ function buildLLMRequest(cfg: ModelConfig, platformKey: string): {
       return {
         url: "https://api.deepseek.com/v1/chat/completions",
         headers: { Authorization: `Bearer ${cfg.api_key}` },
-        bodyExtra: { model: cfg.model || "deepseek-chat", stream: true },
+        // max_tokens: 8192 防止 DeepSeek 在任务中途截断输出
+        bodyExtra: { model: cfg.model || "deepseek-chat", stream: true, max_tokens: 8192 },
       };
     case "openai":
       return {
         url: "https://api.openai.com/v1/chat/completions",
         headers: { Authorization: `Bearer ${cfg.api_key}` },
-        bodyExtra: { model: cfg.model || "gpt-4o-mini", stream: true },
+        // max_tokens: 16384 给 GPT 系列充足输出空间
+        bodyExtra: { model: cfg.model || "gpt-4o-mini", stream: true, max_tokens: 16384 },
       };
     case "custom":
       return {
         url: cfg.endpoint!,
         headers: cfg.api_key ? { Authorization: `Bearer ${cfg.api_key}` } : {},
-        bodyExtra: cfg.model ? { model: cfg.model, stream: true } : { stream: true },
+        // 自定义接口同样设大 max_tokens，避免中途截断
+        bodyExtra: cfg.model
+          ? { model: cfg.model, stream: true, max_tokens: 8192 }
+          : { stream: true, max_tokens: 8192 },
       };
     default: // wenxin（platform managed）
       return {
         url: "https://app-bgc5z86utjwh-api-zYkZz8qovQ1L-gateway.appmiaoda.com/v2/chat/completions",
         headers: { "X-Gateway-Authorization": `Bearer ${platformKey}` },
-        bodyExtra: { enable_thinking: false },
+        // 文心：enable_thinking=false + 不限制输出长度
+        bodyExtra: { enable_thinking: false, max_tokens: 8192 },
       };
   }
 }
@@ -726,7 +732,21 @@ ${branchNote}
 - patch_file 比 write_file 更安全，修改工作流文件时优先使用 patch
 - 修改前必须先用 grep_in_file 或 read_file 确认精确的行号
 - commit message 使用中文，遵循 Conventional Commits（fix/feat/ci/chore/docs）
-- 对话语言：中文；操作完成后给出简洁总结`;
+- 对话语言：中文；操作完成后给出简洁总结
+
+==============================
+自主任务执行规则（最重要）
+==============================
+- 你拥有 15 次工具调用机会，必须充分利用，不得提前放弃
+- 每次调用完工具后，立即分析结果，继续执行下一步，不要询问用户是否继续
+- 任务未完成时，绝对禁止输出"任务完成"、"请问是否需要继续"等终止性语句
+- 只有当所有步骤都已完成、结果已验证，才输出最终总结
+- 遇到工具报错时，自行分析原因并尝试修正，而不是停下来询问用户
+- 面对复杂任务，按以下方式执行：
+  1. 先制定计划（内部思考，不输出给用户）
+  2. 逐步执行每个步骤
+  3. 每步完成后检查结果，决定下一步
+  4. 全部完成后输出简洁的完成总结`;
 }
 
 interface Message { role: "user" | "assistant" | "system"; content: string; }
@@ -936,7 +956,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       fullMessages.push({ role: "assistant", content: assistantText });
       fullMessages.push({
         role: "user",
-        content: `工具执行结果：\n${toolResult}\n\n请根据结果继续回复用户，任务完成请直接总结。`,
+        content: `工具执行结果：\n${toolResult}\n\n请根据结果继续执行下一步。若还有未完成的步骤，继续调用工具；若全部步骤已完成，输出简洁的完成总结。`,
       });
 
       if (round === MAX_ROUNDS - 1) await sendChunk("\n\n⚠️ 已达到最大工具调用轮次。");

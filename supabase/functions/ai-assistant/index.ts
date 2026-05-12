@@ -1,6 +1,9 @@
-// AI 助手 Edge Function v2
+// AI 助手 Edge Function v3
 // 支持多模型：文心 ERNIE / DeepSeek / OpenAI / 自定义兼容接口
 // ReAct Agent：AI 通过工具链读取/写入 GitHub 仓库文件
+// 新增：任务计划持久化到 Supabase + 步骤失败自动重试
+
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -642,9 +645,25 @@ function buildSystemPrompt(targetBranch?: string): string {
     ? `**当前目标分支：\`${targetBranch}\`**（所有写入操作默认提交到此分支，除非用户明确指定其他分支）`
     : "（未指定分支，写入时使用仓库默认分支）";
 
-  return `你是 GitHub 仓库全流程开发助手，能够帮助用户完成从编码、提交、PR、部署到监控日志、修复的完整 DevOps 工作流。
-
+  return `你是 GitHub 仓库全流程开发助手。
 ${branchNote}
+
+==============================
+⚠️ 核心规则（严格遵守）
+==============================
+1. **任务规划（首轮必须）**：收到用户任务后，第一件事是在回复开头输出一行任务计划，然后立即执行第一步。
+   格式（必须是合法 JSON，不加 markdown 代码块）：
+   PLAN:{"steps":[{"id":"1","title":"步骤名（≤8字）","desc":"一句话说明"},{"id":"2","title":"...","desc":"..."}]}
+
+2. **步骤标记**：在开始一个新步骤时，在工具调用 JSON 前一行输出 STEP:步骤ID（仅在切换步骤时输出，不是每次工具调用都要输出）。
+   示例：
+   PLAN:{"steps":[{"id":"1","title":"探索结构","desc":"获取项目文件树"},{"id":"2","title":"修复代码","desc":"定位并修改问题"}]}
+   STEP:1
+   {"tool":"file_tree","path":"","depth":"3"}
+
+3. **ReAct 模式**：每轮只调用一个工具，工具 JSON 单独成行，无 markdown 包裹。
+4. **禁止伪造**：不要用文字模仿工具执行过程，只输出 JSON。
+5. **自主执行**：禁止询问用户是否继续，禁止提前结束，工具报错时自行修正后继续。
 
 ==============================
 工具清单（每次只调用一个，JSON 单独成行）
@@ -743,23 +762,34 @@ ${branchNote}
 - 只有当所有步骤都已完成、结果已验证，才输出最终总结
 - 遇到工具报错时，自行分析原因并尝试修正，而不是停下来询问用户
 - 面对复杂任务，按以下方式执行：
-  1. 先制定计划（内部思考，不输出给用户）
-  2. 逐步执行每个步骤
+  1. 先输出 PLAN（首轮）
+  2. 逐步执行每个步骤，切换步骤时输出 STEP:id
   3. 每步完成后检查结果，决定下一步
   4. 全部完成后输出简洁的完成总结`;
 }
 
 interface Message { role: "user" | "assistant" | "system"; content: string; }
-interface ChatChunk { choices: Array<{ delta: { content?: string }; finish_reason: string | null }>; }
+interface ChatChunk { choices: Array<{ delta: { content?: string; reasoning_content?: string }; finish_reason: string | null }>; }
 
-async function callLLM(cfg: ModelConfig, platformKey: string, messages: Message[]): Promise<string> {
+async function callLLM(
+  cfg: ModelConfig,
+  platformKey: string,
+  messages: Message[],
+  onThinkingChunk?: (chunk: string) => Promise<void>,
+  onHeartbeat?: () => Promise<void>,
+): Promise<string> {
   const { url, headers, bodyExtra } = buildLLMRequest(cfg, platformKey);
+  console.log(`[callLLM] type=${cfg.type} model=${cfg.model || "default"} url=${url}`);
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify({ messages, ...bodyExtra }),
   });
-  if (!res.ok || !res.body) throw new Error(`LLM 调用失败: ${res.status} ${await res.text()}`);
+  if (!res.ok || !res.body) {
+    const errText = await res.text();
+    console.error(`[callLLM] 失败 status=${res.status} body=${errText.slice(0, 300)}`);
+    throw new Error(`LLM 调用失败: ${res.status} ${errText}`);
+  }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -773,9 +803,25 @@ async function callLLM(cfg: ModelConfig, platformKey: string, messages: Message[
       if (!line.startsWith("data: ")) continue;
       const raw = line.slice(6).trim();
       if (raw === "[DONE]") continue;
-      try { full += (JSON.parse(raw) as ChatChunk).choices?.[0]?.delta?.content ?? ""; } catch { /* 跳过 */ }
+      try {
+        const chunk = JSON.parse(raw) as ChatChunk;
+        const delta = chunk.choices?.[0]?.delta;
+        if (!delta) continue;
+
+        // ── 思考过程 (DeepSeek Reasoner) ──
+        if (delta.reasoning_content && onThinkingChunk) {
+          await onThinkingChunk(delta.reasoning_content);
+        } else if (onHeartbeat) {
+          // 非思考内容时，每次收到 chunk 就发心跳，防止 SSE 连接超时
+          await onHeartbeat();
+        }
+
+        // ── 正式内容 ──
+        full += delta.content ?? "";
+      } catch { /* 跳过非 JSON 行 */ }
     }
   }
+  console.log(`[callLLM] 完成 full.length=${full.length}`);
   return full;
 }
 
@@ -785,7 +831,28 @@ function extractToolCall(text: string): Record<string, string> | null {
   try { return JSON.parse(match[0]); } catch { return null; }
 }
 
-async function executeTool(
+/** 从文本中提取任务计划（首轮 PLAN:{...} 行） */
+interface PlanStep { id: string; title: string; desc: string; }
+function extractPlan(text: string): PlanStep[] | null {
+  const m = text.match(/PLAN:(\{[^}]*"steps"[^}]*\}|\{.*?\})/s);
+  if (!m) return null;
+  try {
+    // 提取 PLAN: 后面的完整 JSON（可能跨行，用贪婪匹配 steps 数组）
+    const jsonMatch = text.match(/PLAN:(\{"steps"\s*:\s*\[.*?\]\s*\})/s);
+    if (!jsonMatch) return null;
+    const parsed = JSON.parse(jsonMatch[1]);
+    if (Array.isArray(parsed.steps)) return parsed.steps as PlanStep[];
+  } catch { /* ignore */ }
+  return null;
+}
+
+/** 从文本中提取步骤标记 STEP:id */
+function extractStepMarker(text: string): string | null {
+  const m = text.match(/\bSTEP\s*:\s*([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+function executeTool(
   ctx: GithubContext,
   call: Record<string, string>,
   targetBranch?: string,
@@ -836,17 +903,114 @@ async function executeTool(
   }
 }
 
+// ── Supabase 持久化辅助 ───────────────────────────────────────────────────────
+
+function makeSupabase() {
+  const url = Deno.env.get("SUPABASE_URL") ?? "";
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
+
+/** 创建工作流记录，返回 workflow id */
+async function dbCreateWorkflow(
+  sb: ReturnType<typeof createClient>,
+  userId: string,
+  repo: string,
+  taskSummary: string,
+  steps: PlanStep[],
+): Promise<string | null> {
+  try {
+    const { data, error } = await sb
+      .from("task_workflows")
+      .insert({
+        user_id: userId,
+        repo,
+        task_summary: taskSummary.slice(0, 200),
+        status: "running",
+        total_steps: steps.length,
+        done_steps: 0,
+        fail_steps: 0,
+      })
+      .select("id")
+      .maybeSingle();
+    if (error || !data) { console.error("[db] createWorkflow error", error?.message); return null; }
+
+    // 批量插入步骤
+    const stepRows = steps.map((s, i) => ({
+      workflow_id: data.id,
+      step_id: s.id,
+      seq: i,
+      title: s.title,
+      description: s.desc,
+      status: "pending",
+    }));
+    const { error: sErr } = await sb.from("task_workflow_steps").insert(stepRows);
+    if (sErr) console.error("[db] insertSteps error", sErr.message);
+
+    return data.id as string;
+  } catch (e) { console.error("[db] createWorkflow exception", (e as Error).message); return null; }
+}
+
+/** 更新步骤状态 */
+async function dbUpdateStep(
+  sb: ReturnType<typeof createClient>,
+  workflowId: string,
+  stepId: string,
+  patch: { status?: string; retry_count?: number; started_at?: string; finished_at?: string },
+) {
+  try {
+    await sb
+      .from("task_workflow_steps")
+      .update(patch)
+      .eq("workflow_id", workflowId)
+      .eq("step_id", stepId);
+  } catch (e) { console.error("[db] updateStep exception", (e as Error).message); }
+}
+
+/** 完成工作流（统计成功/失败步骤数） */
+async function dbFinishWorkflow(
+  sb: ReturnType<typeof createClient>,
+  workflowId: string,
+) {
+  try {
+    const { data: steps } = await sb
+      .from("task_workflow_steps")
+      .select("status")
+      .eq("workflow_id", workflowId);
+    if (!steps) return;
+    const done = steps.filter(s => s.status === "done").length;
+    const fail = steps.filter(s => s.status === "error").length;
+    const status = fail > 0 ? "partial_fail" : "done";
+    await sb
+      .from("task_workflows")
+      .update({ status, done_steps: done, fail_steps: fail, finished_at: new Date().toISOString() })
+      .eq("id", workflowId);
+  } catch (e) { console.error("[db] finishWorkflow exception", (e as Error).message); }
+}
+
 // ── SSE 流输出 ───────────────────────────────────────────────────────────────
 
 function createSSEStream() {
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
-  const send = (data: string) => writer.write(encoder.encode(`data: ${data}\n\n`));
-  const sendChunk = (content: string) =>
-    send(JSON.stringify({ choices: [{ delta: { content }, finish_reason: null }] }));
-  const sendDone = async () => { await send("[DONE]"); await writer.close(); };
-  return { readable, sendChunk, sendDone };
+  
+  const sendRaw = (data: string) => writer.write(encoder.encode(`data: ${data}\n\n`));
+  
+  /** 发送结构化事件（新版） */
+  const sendTyped = (payload: unknown) => sendRaw(JSON.stringify(payload));
+
+  /** 发送纯内容 Chunk（兼容旧版前端） */
+  const sendChunk = (content: string) => 
+    sendTyped({ type: "content", content });
+
+  const sendDone = async () => { 
+    await sendRaw("[DONE]"); 
+    await writer.close(); 
+  };
+
+  return { readable, sendTyped, sendChunk, sendDone };
 }
 
 // ── 主入口 ───────────────────────────────────────────────────────────────────
@@ -858,6 +1022,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   let messages: Message[], githubToken: string, owner: string, repo: string;
   let modelConfig: ModelConfig = { type: "wenxin" };
   let targetBranch: string | undefined;
+  let userId = "anonymous";
 
   try {
     const body = await req.json();
@@ -867,6 +1032,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     repo = body.repo;
     targetBranch = body.target_branch || undefined;
     if (body.model_config) modelConfig = body.model_config;
+    if (body.user_id) userId = body.user_id;
     if (!messages?.length || !githubToken || !owner || !repo) {
       throw new Error("缺少必要参数：messages, github_token, owner, repo");
     }
@@ -888,10 +1054,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   const ctx: GithubContext = { token: githubToken, owner, repo };
-  const { readable, sendChunk, sendDone } = createSSEStream();
+  const { readable, sendTyped, sendChunk, sendDone } = createSSEStream();
 
   (async () => {
+    try {
     const fullMessages: Message[] = [{ role: "system", content: buildSystemPrompt(targetBranch) }, ...messages];
+    console.log(`[main] model=${modelConfig.type} hasApiKey=${!!modelConfig.api_key} owner=${owner} repo=${repo}`);
+    
+    // 心跳辅助函数：每次调用都向 SSE 写入一条 heartbeat，保持连接活跃
+    const heartbeat = () => sendTyped({ type: "heartbeat" });
+
+    // Supabase 客户端（可能为 null，持久化失败不影响主流程）
+    const sb = makeSupabase();
+    // 工作流 DB id（首轮收到 plan 后写入）
+    let workflowDbId: string | null = null;
+
     const TOOL_LABELS: Record<string, string> = {
       // 文件操作
       list_files: "列出目录", read_file: "读取文件", patch_file: "局部修改文件",
@@ -909,19 +1086,87 @@ Deno.serve(async (req: Request): Promise<Response> => {
       rerun_workflow_run: "重新运行", list_actions_secrets: "查看 Secrets",
     };
     const MAX_ROUNDS = 15;
+    // 当前正在执行的计划步骤 ID
+    let currentStepId: string | null = null;
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
       let assistantText = "";
+      let thinkingStarted = false;
+
+      // 定义思考过程回调；普通内容 chunk 触发心跳
+      const onThinkingChunk = async (chunk: string) => {
+        if (!thinkingStarted) {
+          await sendTyped({ type: "think_start" });
+          thinkingStarted = true;
+        }
+        await sendTyped({ type: "think_chunk", content: chunk });
+      };
+
       try {
-        assistantText = await callLLM(modelConfig, platformKey, fullMessages);
+        assistantText = await callLLM(modelConfig, platformKey, fullMessages, onThinkingChunk, heartbeat);
+        if (thinkingStarted) await sendTyped({ type: "think_end" });
       } catch (e) {
         await sendChunk(`\n❌ AI 调用失败：${(e as Error).message}`);
         break;
       }
 
-      const toolCall = extractToolCall(assistantText);
-      if (!toolCall) { await sendChunk(assistantText); break; }
+      // ── 首轮提取任务计划 ─────────────────────────────────────────────────────
+      if (round === 0) {
+        const plan = extractPlan(assistantText);
+        if (plan && plan.length > 0) {
+          await sendTyped({ type: "plan", steps: plan });
+          // 持久化：创建工作流 + 步骤
+          if (sb) {
+            const firstMsg = messages[messages.length - 1]?.content ?? "";
+            workflowDbId = await dbCreateWorkflow(sb, userId, `${owner}/${repo}`, firstMsg, plan);
+          }
+          // 从显示文本中移除 PLAN:{...} 行
+          assistantText = assistantText.replace(/PLAN\s*:\s*\{"steps"\s*:\s*\[.*?\]\s*\}\n?/s, "").trim();
+        }
+      }
 
+      // ── 每轮提取步骤标记 ─────────────────────────────────────────────────────
+      const stepMarker = extractStepMarker(assistantText);
+      if (stepMarker && stepMarker !== currentStepId) {
+        // 结束上一个步骤
+        if (currentStepId) {
+          await sendTyped({ type: "step_end", stepId: currentStepId, status: "done" });
+          if (sb && workflowDbId) {
+            await dbUpdateStep(sb, workflowDbId, currentStepId, {
+              status: "done", finished_at: new Date().toISOString(),
+            });
+          }
+        }
+        currentStepId = stepMarker;
+        await sendTyped({ type: "step_start", stepId: currentStepId });
+        if (sb && workflowDbId) {
+          await dbUpdateStep(sb, workflowDbId, currentStepId, {
+            status: "running", started_at: new Date().toISOString(),
+          });
+        }
+        // 移除 STEP:N 标记行
+        assistantText = assistantText.replace(/STEP\s*:\s*\S+[ \t]*\n?/, "").trim();
+      }
+
+      const toolCall = extractToolCall(assistantText);
+      if (!toolCall) {
+        // 最终回答 → 结束当前步骤（如有）
+        if (currentStepId) {
+          await sendTyped({ type: "step_end", stepId: currentStepId, status: "done" });
+          if (sb && workflowDbId) {
+            await dbUpdateStep(sb, workflowDbId, currentStepId, {
+              status: "done", finished_at: new Date().toISOString(),
+            });
+          }
+          currentStepId = null;
+        }
+        // 持久化工作流完成
+        if (sb && workflowDbId) await dbFinishWorkflow(sb, workflowDbId);
+        await sendChunk(assistantText);
+        break;
+      }
+
+      // 工具调用前的前置文本（去除 PLAN/STEP 标记后的剩余内容）
       const before = assistantText.split(/\{[^{}]*"tool"[^{}]*\}/)[0].trim();
       if (before) await sendChunk(before + "\n\n");
 
@@ -947,11 +1192,77 @@ Deno.serve(async (req: Request): Promise<Response> => {
                         : toolCall.tool === "batch_read"
                           ? toolCall.paths
                           : toolCall.path || toolCall.query || toolCall.title || toolCall.branch || "";
-      await sendChunk(`🔧 **正在执行：${label}** \`${hint}\`\n\n`);
+      
+      const toolCallId = `tool-${Date.now()}-${round}`;
+      await sendTyped({ 
+        type: "tool_start", 
+        id: toolCallId, 
+        tool: toolCall.tool, 
+        label, 
+        hint 
+      });
 
+      const startTime = Date.now();
       let toolResult = "";
-      try { toolResult = await executeTool(ctx, toolCall, targetBranch); }
+      try { 
+        // 工具执行前先发一次心跳，执行过程中 GitHub API 也可能耗时数秒
+        await heartbeat();
+        toolResult = await executeTool(ctx, toolCall, targetBranch);
+      }
       catch (e) { toolResult = `工具执行出错：${(e as Error).message}`; }
+      
+      const elapsedMs = Date.now() - startTime;
+      const toolFailed = toolResult.includes("出错") || toolResult.includes("失败");
+      const toolStatus = toolFailed ? "fail" : "success";
+      
+      await sendTyped({ 
+        type: "tool_end", 
+        id: toolCallId, 
+        status: toolStatus, 
+        result: toolResult.slice(0, 1000),
+        elapsedMs 
+      });
+
+      // ── 步骤失败自动重试（最多 2 次，间隔递增） ─────────────────────────────
+      // 重试仅针对整体步骤（step_end error 场景），工具级失败由 AI 下轮自行处理。
+      // 此处：若工具执行失败且当前步骤有标记，向前端发送 step_retry 事件
+      if (toolFailed && currentStepId) {
+        const MAX_RETRIES = 2;
+        let retryCount = 0;
+        let retriedResult = toolResult;
+        while (retryCount < MAX_RETRIES && (retriedResult.includes("出错") || retriedResult.includes("失败"))) {
+          retryCount++;
+          const delay = retryCount * 1000; // 1s, 2s
+          await new Promise(res => setTimeout(res, delay));
+          await sendTyped({ type: "step_retry", stepId: currentStepId, retryCount });
+          // 持久化重试次数
+          if (sb && workflowDbId) {
+            await dbUpdateStep(sb, workflowDbId, currentStepId, { retry_count: retryCount });
+          }
+          try {
+            await heartbeat();
+            retriedResult = await executeTool(ctx, toolCall, targetBranch);
+          } catch (e) { retriedResult = `工具执行出错：${(e as Error).message}`; }
+        }
+        if (retriedResult !== toolResult) {
+          // 重试成功：用新结果替换
+          toolResult = retriedResult;
+          const retryFailed = toolResult.includes("出错") || toolResult.includes("失败");
+          // 若重试后仍失败，标记当前步骤为最终失败
+          if (retryFailed && currentStepId) {
+            await sendTyped({ type: "step_end", stepId: currentStepId, status: "error" });
+            if (sb && workflowDbId) {
+              await dbUpdateStep(sb, workflowDbId, currentStepId, {
+                status: "error", finished_at: new Date().toISOString(),
+              });
+              await dbFinishWorkflow(sb, workflowDbId);
+            }
+            currentStepId = null;
+            await sendChunk("\n\n⚠️ 步骤执行失败（已重试 2 次），终止任务。");
+            break;
+          }
+        }
+      }
 
       fullMessages.push({ role: "assistant", content: assistantText });
       fullMessages.push({
@@ -959,10 +1270,28 @@ Deno.serve(async (req: Request): Promise<Response> => {
         content: `工具执行结果：\n${toolResult}\n\n请根据结果继续执行下一步。若还有未完成的步骤，继续调用工具；若全部步骤已完成，输出简洁的完成总结。`,
       });
 
-      if (round === MAX_ROUNDS - 1) await sendChunk("\n\n⚠️ 已达到最大工具调用轮次。");
+      if (round === MAX_ROUNDS - 1) {
+        if (currentStepId) {
+          await sendTyped({ type: "step_end", stepId: currentStepId, status: "done" });
+          if (sb && workflowDbId) {
+            await dbUpdateStep(sb, workflowDbId, currentStepId, {
+              status: "done", finished_at: new Date().toISOString(),
+            });
+          }
+        }
+        if (sb && workflowDbId) await dbFinishWorkflow(sb, workflowDbId);
+        await sendChunk("\n\n⚠️ 已达到最大工具调用轮次。");
+      }
     }
 
+    if (sb && workflowDbId) await dbFinishWorkflow(sb, workflowDbId);
     await sendDone();
+    } catch (fatalErr) {
+      // 顶层兜底：未预期的异常，写入流后关闭，防止代理层因未处理的 rejection 返回 500
+      console.error("[IIFE fatal]", (fatalErr as Error).message);
+      try { await sendChunk(`\n\n❌ 内部错误：${(fatalErr as Error).message}`); } catch { /* ignore */ }
+      try { await sendDone(); } catch { /* ignore */ }
+    }
   })();
 
   return new Response(readable, {

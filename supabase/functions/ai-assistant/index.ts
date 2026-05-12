@@ -1302,6 +1302,313 @@ async function getPRFiles(ctx: GithubContext, pullNumber: string): Promise<strin
   } catch (e) { return diagnose4xx(e, `get_pr_files(#${pullNumber})`); }
 }
 
+/**
+ * 对比两个 commit / 分支 / tag 之间的所有文件变更（类似 git diff base...head）。
+ * 调用 GitHub Compare API，返回：变更统计摘要 + 每个文件的 +/- 行数 + patch 片段（超长截断）。
+ *
+ * @param base  基准（commit SHA、分支名、tag 名），例如 "main" 或 "v1.0.0"
+ * @param head  目标（commit SHA、分支名、tag 名），例如 "feat/new-feature" 或 "abc1234"
+ */
+async function compareCommits(ctx: GithubContext, base: string, head: string): Promise<string> {
+  try {
+    const data = await githubRequest(
+      ctx,
+      `/repos/${ctx.owner}/${ctx.repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+    );
+
+    const status      = data.status as string;           // "ahead" | "behind" | "diverged" | "identical"
+    const aheadBy     = data.ahead_by  as number ?? 0;
+    const behindBy    = data.behind_by as number ?? 0;
+    const totalCommits= data.total_commits as number ?? 0;
+    const files       = (data.files as Array<Record<string, string | number | undefined>>) ?? [];
+    const commits     = (data.commits as Array<Record<string, Record<string, string>>>) ?? [];
+
+    if (status === "identical") {
+      return `\`${base}\` 与 \`${head}\` 完全相同，没有任何差异。`;
+    }
+
+    // 摘要
+    const summary = [
+      `📊 **对比结果：\`${base}\` ↔ \`${head}\`**`,
+      `状态：${status}  |  head 超前 ${aheadBy} 提交，落后 ${behindBy} 提交`,
+      `提交数：${totalCommits}  |  变更文件：${files.length} 个  |  +${data.stats?.additions ?? "?"} -${data.stats?.deletions ?? "?"}`,
+      "",
+    ].join("\n");
+
+    // 最近几条提交
+    const commitLines = commits.slice(0, 10).map(c =>
+      `  \`${c.sha?.slice(0, 7)}\` ${c.commit?.message?.split("\n")[0]}  — ${c.commit?.author?.name ?? ""}`,
+    );
+    const commitSection = totalCommits > 0
+      ? `**提交列表**（共 ${totalCommits} 条，展示前 ${commitLines.length} 条）：\n${commitLines.join("\n")}\n\n`
+      : "";
+
+    // 文件变更详情（每个文件展示 patch，超 40 行截断）
+    const MAX_PATCH_LINES = 40;
+    const fileDetails = files.slice(0, 30).map(f => {
+      const icon = f.status === "added" ? "➕" : f.status === "removed" ? "➖" : f.status === "renamed" ? "🔄" : "✏️";
+      const header = `${icon} \`${f.filename}\`  +${f.additions ?? 0} -${f.deletions ?? 0}  [${f.status}]`;
+      if (!f.patch) return header;
+      const patchLines = String(f.patch).split("\n");
+      const truncated = patchLines.length > MAX_PATCH_LINES;
+      const display = patchLines.slice(0, MAX_PATCH_LINES).join("\n");
+      return `${header}\n\`\`\`diff\n${display}${truncated ? `\n…（patch 共 ${patchLines.length} 行，仅展示前 ${MAX_PATCH_LINES} 行）` : ""}\n\`\`\``;
+    });
+    if (files.length > 30) fileDetails.push(`…（共 ${files.length} 个文件，仅展示前 30 个）`);
+
+    return summary + commitSection + `**文件变更详情**：\n\n` + fileDetails.join("\n\n");
+  } catch (e) { return diagnose4xx(e, `compare_commits(${base}...${head})`); }
+}
+
+/**
+ * 全仓库关键词一键替换（搜索 + 批量修改自动化）。
+ * 流程：grep_in_repo 找到所有匹配位置 → 按文件分组 → 逐文件调用 batchPatch 应用替换。
+ * 所有修改合并为每个文件一个 commit，返回完整替换报告。
+ *
+ * @param searchPattern  搜索的关键词（支持正则）
+ * @param replacement    替换为的新文本（纯字符串，逐行替换匹配部分）
+ * @param filePattern    可选，限制替换的文件路径（如 "src/" 或 ".ts"）
+ * @param commitMessage  commit 信息
+ * @param branch         目标分支
+ */
+async function searchAndReplace(
+  ctx: GithubContext,
+  searchPattern: string,
+  replacement: string,
+  filePattern: string | undefined,
+  commitMessage: string,
+  branch?: string,
+): Promise<string> {
+  try {
+    // Step 1: 全仓库搜索（最多 5 个文件，避免超时）
+    let searchQ = `${encodeURIComponent(searchPattern)}+repo:${ctx.owner}/${ctx.repo}`;
+    if (filePattern) searchQ += `+path:${encodeURIComponent(filePattern)}`;
+    const searchData = await githubRequest(ctx, `/search/code?q=${searchQ}&per_page=5`);
+
+    if (!searchData.items?.length) {
+      return `全仓库搜索 "${searchPattern}" 未找到匹配文件${filePattern ? `（路径过滤：${filePattern}）` : ""}，无需替换。`;
+    }
+
+    const items = searchData.items as Array<{ path: string }>;
+    const totalFound = searchData.total_count as number;
+
+    let regex: RegExp;
+    try {
+      regex = new RegExp(searchPattern, "g");
+    } catch {
+      regex = new RegExp(searchPattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
+    }
+
+    const report: string[] = [
+      `🔄 **全仓库替换：\`${searchPattern}\` → \`${replacement}\`**`,
+      `找到约 ${totalFound} 个匹配文件，本次处理前 ${items.length} 个${filePattern ? `（路径过滤：${filePattern}）` : ""}`,
+      "",
+    ];
+
+    let totalReplacements = 0;
+
+    for (const item of items) {
+      const fetched = await fetchFileContent(ctx, item.path);
+      if (typeof fetched === "string") {
+        report.push(`❌ \`${item.path}\`：读取失败 — ${fetched}`);
+        continue;
+      }
+
+      const lines = fetched.content.split("\n");
+
+      // 找出所有匹配行并构建 patches
+      const patches: Array<{ start_line: number; end_line: number; content: string }> = [];
+      lines.forEach((line, i) => {
+        regex.lastIndex = 0;
+        if (regex.test(line)) {
+          regex.lastIndex = 0;
+          const newLine = line.replace(regex, replacement);
+          patches.push({ start_line: i + 1, end_line: i + 1, content: newLine });
+        }
+        regex.lastIndex = 0;
+      });
+
+      if (!patches.length) {
+        report.push(`⏭️ \`${item.path}\`：Search API 匹配但逐行 grep 未命中，跳过`);
+        continue;
+      }
+
+      totalReplacements += patches.length;
+      const patchResult = await batchPatch(ctx, item.path, patches, commitMessage, branch);
+      const success = patchResult.startsWith("✅");
+      report.push(
+        `${success ? "✅" : "❌"} \`${item.path}\`：${patches.length} 处替换${success ? "成功" : "失败"}`,
+        ...(success ? [] : [`  错误：${patchResult.slice(0, 200)}`]),
+      );
+    }
+
+    const moreHint = totalFound > items.length
+      ? `\n⚠️ 仓库中还有约 ${totalFound - items.length} 个文件未处理，请再次调用 search_and_replace 继续（可配合 file_pattern 缩小范围）。`
+      : "";
+
+    report.push("", `共替换 ${totalReplacements} 处，涉及 ${items.length} 个文件。` + moreHint);
+    return report.join("\n");
+  } catch (e) { return diagnose4xx(e, "search_and_replace"); }
+}
+
+/**
+ * 自动代码审查：获取最近 N 次 commit 的变更文件，对每个文件进行质量检查，
+ * 返回结构化审查报告（问题类型 + 具体位置 + 改进建议）。
+ *
+ * 审查维度：
+ * - 硬编码的密钥/Token/密码
+ * - 遗留的 TODO/FIXME/HACK 注释
+ * - 过长函数（超过 80 行）
+ * - 重复的魔法数字
+ * - 缺少错误处理的 await 调用
+ * - console.log 遗留调试输出
+ * - 超长行（>120 字符）
+ *
+ * @param commitCount  检查最近几次 commit 的变更（默认 1）
+ * @param sha          可选，指定某个具体 commit SHA（不传则用最新 commit）
+ */
+async function autoReview(
+  ctx: GithubContext,
+  commitCount = 1,
+  sha?: string,
+): Promise<string> {
+  try {
+    // 1. 获取目标 commit 列表
+    const commitsUrl = `/repos/${ctx.owner}/${ctx.repo}/commits?per_page=${Math.min(commitCount, 5)}`;
+    const commits = await githubRequest(ctx, sha ? `/repos/${ctx.owner}/${ctx.repo}/commits/${sha}` : commitsUrl);
+    const targetCommits = sha
+      ? [commits]
+      : (Array.isArray(commits) ? commits : [commits]);
+
+    // 2. 收集所有变更文件（去重）
+    const fileSet = new Map<string, string>(); // path → patch
+    for (const c of targetCommits) {
+      const detail = c.files
+        ? c
+        : await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/commits/${c.sha}`);
+      for (const f of (detail.files ?? []) as Array<Record<string, string>>) {
+        if (f.status !== "removed" && f.filename) {
+          fileSet.set(f.filename, f.patch ?? "");
+        }
+      }
+    }
+
+    if (!fileSet.size) return "未找到变更文件，无法进行代码审查。";
+
+    const report: string[] = [
+      `🔍 **自动代码审查报告**`,
+      `审查范围：最近 ${targetCommits.length} 次 commit，共 ${fileSet.size} 个变更文件`,
+      `时间：${new Date().toISOString().slice(0, 19).replace("T", " ")} UTC`,
+      "",
+    ];
+
+    let totalIssues = 0;
+
+    // 3. 对每个文件进行静态规则审查
+    for (const [filePath, _patch] of fileSet) {
+      // 只审查代码文件（跳过图片、lock 文件等）
+      const skipExtensions = [".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".lock", ".sum", ".min.js", ".min.css"];
+      if (skipExtensions.some(ext => filePath.endsWith(ext))) continue;
+
+      const fetched = await fetchFileContent(ctx, filePath);
+      if (typeof fetched === "string") {
+        report.push(`📄 \`${filePath}\`\n  ⚠️ 无法读取：${fetched}\n`);
+        continue;
+      }
+
+      const lines = fetched.content.split("\n");
+      const issues: string[] = [];
+
+      // 规则 1：硬编码密钥/Token（高优先级）
+      const secretPatterns = [
+        /(?:api_key|apikey|secret|password|passwd|token|auth|credential)\s*[:=]\s*["']([^"']{8,})/i,
+        /(?:ghp_|sk-|AKIA)[A-Za-z0-9]{10,}/,
+        /-----BEGIN (RSA|EC|OPENSSH) PRIVATE KEY-----/,
+      ];
+      lines.forEach((line, i) => {
+        if (secretPatterns.some(r => r.test(line)) && !line.trim().startsWith("//") && !line.trim().startsWith("#")) {
+          issues.push(`  🔴 第 ${i+1} 行 **[高危]** 疑似硬编码密钥/Token：\`${line.trim().slice(0, 80)}\``);
+        }
+      });
+
+      // 规则 2：遗留 TODO/FIXME/HACK/XXX
+      lines.forEach((line, i) => {
+        if (/\b(TODO|FIXME|HACK|XXX)\b/i.test(line)) {
+          issues.push(`  🟡 第 ${i+1} 行 **[待处理]** 遗留注释：\`${line.trim().slice(0, 80)}\``);
+        }
+      });
+
+      // 规则 3：遗留 console.log/print 调试输出（非测试文件）
+      if (!/test|spec|__tests__/.test(filePath)) {
+        lines.forEach((line, i) => {
+          if (/console\.(log|debug|warn|error)\s*\(/.test(line) && !line.trim().startsWith("//")) {
+            issues.push(`  🟡 第 ${i+1} 行 **[调试残留]** console 输出：\`${line.trim().slice(0, 80)}\``);
+          }
+        });
+      }
+
+      // 规则 4：超长行（>120 字符，排除数据行）
+      lines.forEach((line, i) => {
+        if (line.length > 120 && !/^\s*(\/\/|#|"|')/.test(line) && !/https?:\/\//.test(line)) {
+          issues.push(`  🟠 第 ${i+1} 行 **[可读性]** 行长度 ${line.length} 字符（建议 ≤120）`);
+        }
+      });
+
+      // 规则 5：await 缺少 try-catch（简单启发式）
+      lines.forEach((line, i) => {
+        if (/^\s*(const|let|var)\s+\w+\s*=\s*await\s+/.test(line)) {
+          // 检查前后 5 行内是否有 try {
+          const context = lines.slice(Math.max(0, i - 5), i + 1).join("\n");
+          if (!/try\s*\{/.test(context)) {
+            issues.push(`  🟡 第 ${i+1} 行 **[错误处理]** await 调用疑似缺少 try-catch：\`${line.trim().slice(0, 80)}\``);
+          }
+        }
+      });
+
+      // 规则 6：过长函数（连续超 80 行的函数体）
+      let funcStart = -1;
+      let braceDepth = 0;
+      lines.forEach((line, i) => {
+        if (/^(async\s+)?function\s+\w+|=>\s*\{$|^\s*(async\s+)?\(/.test(line) && /\{/.test(line)) {
+          if (braceDepth === 0) funcStart = i;
+        }
+        braceDepth += (line.match(/\{/g) ?? []).length;
+        braceDepth -= (line.match(/\}/g) ?? []).length;
+        if (braceDepth <= 0 && funcStart >= 0) {
+          const funcLen = i - funcStart + 1;
+          if (funcLen > 80) {
+            issues.push(`  🟠 第 ${funcStart+1}–${i+1} 行 **[复杂度]** 函数体 ${funcLen} 行（建议拆分至 ≤80 行）`);
+          }
+          funcStart = -1;
+          braceDepth = 0;
+        }
+      });
+
+      totalIssues += issues.length;
+
+      if (issues.length) {
+        report.push(`📄 \`${filePath}\`（${fetched.totalLines} 行，发现 ${issues.length} 个问题）：`);
+        report.push(...issues.slice(0, 15));
+        if (issues.length > 15) report.push(`  …还有 ${issues.length - 15} 个问题`);
+        report.push("");
+      } else {
+        report.push(`📄 \`${filePath}\`（${fetched.totalLines} 行）：✅ 未发现常见问题`);
+      }
+    }
+
+    report.push(
+      "",
+      `---`,
+      `**审查完成**：共检查 ${fileSet.size} 个文件，发现 ${totalIssues} 个潜在问题。`,
+      totalIssues > 0
+        ? `建议优先处理 🔴 高危问题，再处理 🟡 待处理和 🟠 可读性问题。`
+        : `代码质量良好，未发现常见问题。`,
+    );
+
+    return report.join("\n");
+  } catch (e) { return diagnose4xx(e, "auto_review"); }
+}
+
 /** 创建 Release（tag + 标题 + 正文） */
 async function createRelease(
   ctx: GithubContext,
@@ -1477,10 +1784,18 @@ ${branchNote}
 6. 批量读取多个文件（逗号分隔，最多5个，每文件前 300 行，自动支持大文件）：{"tool":"batch_read","paths":"src/a.ts,src/b.ts,src/c.ts"}
 7. 全仓库搜索关键词（返回文件路径+精确行号）：{"tool":"grep_in_repo","query":"TODO","file_pattern":"src/"}
    搜索结果超 8 个文件时附带翻页示例，继续查看：{"tool":"grep_in_repo","query":"TODO","offset":"8"}
-8. 搜索代码（GitHub Search API，仅返回文件路径，无行号）：{"tool":"search_code","query":"TODO"}
-9. 批量局部修改（同一文件多处非连续行，合并为单个 commit）：
+8. 全仓库一键搜索替换（自动找到所有匹配行，按文件 batch_patch 修改，合并 commit）：
+   {"tool":"search_and_replace","pattern":"oldApiUrl","replacement":"newApiUrl","file_pattern":"src/","message":"refactor: 替换 API 地址","branch":"main"}
+9. 对比两个 commit / 分支 / tag 的所有文件变更（含 diff patch 片段）：
+   {"tool":"compare_commits","base":"main","head":"feat/new-feature"}
+   {"tool":"compare_commits","base":"v1.0.0","head":"v1.1.0"}
+10. 自动代码审查（检查最近 N 次 commit 变更文件的质量问题）：
+    {"tool":"auto_review","commit_count":"1"}
+    {"tool":"auto_review","sha":"abc1234","commit_count":"3"}
+11. 搜索代码（GitHub Search API，仅返回文件路径，无行号）：{"tool":"search_code","query":"TODO"}
+12. 批量局部修改（同一文件多处非连续行，合并为单个 commit）：
    {"tool":"batch_patch","path":"src/App.tsx","patches":"[{\"start_line\":10,\"end_line\":12,\"content\":\"新内容A\"},{\"start_line\":50,\"end_line\":55,\"content\":\"新内容B\"}]","message":"fix: 同时修复两处问题","branch":"main"}
-10. 局部修改（推荐，仅替换指定行）：
+13. 局部修改（推荐，仅替换指定行）：
    {"tool":"patch_file","path":"src/App.tsx","start_line":"10","end_line":"15","content":"新内容","message":"fix: 修复某处","branch":"${targetBranch || "main"}"}
 9. 全量写入（新建文件或大幅重写时用）：
    {"tool":"write_file","path":".github/workflows/deploy.yml","content":"...","message":"ci: 更新部署工作流","branch":"${targetBranch || "main"}"}
@@ -1711,7 +2026,9 @@ ${branchNote}
 - patch_file 比 write_file 更安全，修改工作流文件时优先使用 patch
 - **同一文件多处修改时，优先使用 batch_patch，合并为单个 commit，避免多次 patch 产生冗余提交**
 - 修改前必须先用 grep_in_file 或 read_file 确认精确的行号
-- **全仓库定位关键词用 grep_in_repo（返回行号）；只需文件路径列表用 search_code（更快但无行号）**
+- **全仓库定位关键词用 grep_in_repo（返回行号）；跨文件批量替换用 search_and_replace（自动完成全流程）；只需文件路径列表用 search_code（更快但无行号）**
+- **对比两个分支/tag/commit 差异用 compare_commits（含 diff 片段）；查看单个 commit 详情用 get_commit_diff**
+- **代码审查用 auto_review；不要手动逐行分析变更文件，auto_review 会自动读取文件并输出结构化报告**
 - **trigger_workflow 已内置自动修复**：若缺少 workflow_dispatch，系统会自动添加并重试，无需手动干预
 - **Release 自动化**：收到发版/生成changelog指令时，必须按「Release 自动化工作流」五步完整执行，不得跳步或提前结束
 - commit message 使用中文，遵循 Conventional Commits（fix/feat/ci/chore/docs）
@@ -2052,6 +2369,16 @@ function executeTool(
     case "close_pr":             return closePR(ctx, call.pull_number, call.comment);
     case "get_commit_diff":      return getCommitDiff(ctx, call.sha);
     case "get_pr_files":         return getPRFiles(ctx, call.pull_number);
+    case "compare_commits":      return compareCommits(ctx, call.base, call.head);
+    case "search_and_replace":   return searchAndReplace(
+      ctx, call.pattern, call.replacement, call.file_pattern,
+      call.message, call.branch || targetBranch,
+    );
+    case "auto_review":          return autoReview(
+      ctx,
+      call.commit_count ? parseInt(call.commit_count, 10) : 1,
+      call.sha || undefined,
+    );
     case "create_release":       return createRelease(ctx, call.tag_name, call.name, call.body, call.draft === "true", call.prerelease === "true", call.branch || targetBranch);
     case "list_releases":        return listReleases(ctx, parseInt(call.limit || "10", 10));
     case "submit_pr_review":     return submitPRReview(ctx, call.pull_number, call.event, call.body);
@@ -2338,6 +2665,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       get_repo_info: "仓库信息",
       add_comment: "添加评论", close_issue: "关闭 Issue", close_pr: "关闭 PR",
       get_commit_diff: "查看提交变更", get_pr_files: "PR 文件变更",
+      compare_commits: "对比 commit/分支", search_and_replace: "全仓库搜索替换", auto_review: "自动代码审查",
       create_release: "创建 Release", list_releases: "列出 Release",
       submit_pr_review: "PR 代码审查",
       get_latest_release: "获取最新 Release", get_merged_prs_since: "获取已合并 PR",

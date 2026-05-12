@@ -460,34 +460,7 @@ export default function AiAssistantPage() {
           }
           case 'think_chunk': {
             currentThinking += chunk.content;
-            // 检测段落断点（\n\n）：将断点前内容收尾到当前气泡，断点后内容放入新气泡
-            const breakIdx = currentThinking.indexOf('\n\n');
-            if (breakIdx !== -1 && thinkingBubbleId) {
-              const before = currentThinking.slice(0, breakIdx).trim();
-              const after = currentThinking.slice(breakIdx + 2).trimStart();
-              // 收尾当前气泡
-              const oldTid = thinkingBubbleId;
-              if (before) {
-                setMessages(prev => prev.map(m => m.id === oldTid
-                  ? { ...m, thinkingContent: before, thinkingDone: true, streaming: false }
-                  : m
-                ));
-              } else {
-                // 段落为空时直接移除占位气泡
-                setMessages(prev => prev.filter(m => m.id !== oldTid));
-              }
-              // 新建下一段落气泡
-              const newTbId = `think-${Date.now()}`;
-              thinkingBubbleId = newTbId;
-              const newThinkMsg: Message = {
-                id: newTbId, role: 'assistant', content: '',
-                streaming: true, bubbleType: 'thinking',
-                thinkingContent: after, thinkingDone: false,
-              };
-              setMessages(prev => [...prev, newThinkMsg]);
-              currentThinking = after;
-            } else if (thinkingBubbleId) {
-              // 无断点，正常追加
+            if (thinkingBubbleId) {
               const tid = thinkingBubbleId;
               setMessages(prev => prev.map(m => m.id === tid ? { ...m, thinkingContent: currentThinking } : m));
             }

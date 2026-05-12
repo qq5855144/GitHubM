@@ -2,7 +2,7 @@
 import { memo, useState, useEffect } from 'react';
 import {
   Eye, EyeOff, RefreshCw, RotateCw,
-  CheckCircle2, XCircle, Sparkles,
+  CheckCircle2, XCircle, Sparkles, Timer,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -285,6 +285,29 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
               </p>
             </div>
           )}
+
+          {/* 超时时间设置 */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <Timer className="w-3.5 h-3.5 text-muted-foreground" />
+              <Label className="text-sm font-normal">请求超时时间</Label>
+            </div>
+            <Select
+              value={String(draft.timeoutMs ?? 300000)}
+              onValueChange={v => setDraft(prev => ({ ...prev, timeoutMs: Number(v) }))}
+            >
+              <SelectTrigger className="px-3"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="60000">1 分钟（简单对话）</SelectItem>
+                <SelectItem value="180000">3 分钟（普通任务）</SelectItem>
+                <SelectItem value="300000">5 分钟（推荐，复杂任务）</SelectItem>
+                <SelectItem value="600000">10 分钟（超长任务）</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              AI 在此时间内未响应则报超时。复杂多步任务建议选 5~10 分钟。
+            </p>
+          </div>
 
           <div className="flex gap-2 justify-end pt-1">
             <Button variant="outline" onClick={onClose}>取消</Button>

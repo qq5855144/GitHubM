@@ -35,12 +35,13 @@ import {
 import { upsertSession, insertMessages } from '@/components/ai/aiSupabase';
 import type { Message, ModelConfig, ChatSession, ChatSessionMessage, ToolHistoryItem, TaskPlanStep, InlineStep, InlineTool } from '@/components/ai/aiTypes';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 if (typeof window !== 'undefined') {
   (window as any)._SUPABASE_URL = SUPABASE_URL;
   (window as any)._SUPABASE_ANON_KEY = !!SUPABASE_ANON_KEY;
+  (window as any)._ENV_CHECK = JSON.stringify(import.meta.env);
 }
 
 console.log('[DEBUG] SUPABASE_URL:', SUPABASE_URL);

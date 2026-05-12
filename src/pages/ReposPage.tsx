@@ -90,7 +90,7 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { pageCache } from '@/lib/page-cache';
 
 // 仓库右键上下文菜单
-function RepoContextMenu({ repo, onDeleteSuccess }: { repo: GitHubRepo; onDeleteSuccess: () => void }) {
+function RepoContextMenu({ repo, onDeleteSuccess }: { repo: GitHubRepo; onDeleteSuccess: (name: string) => void }) {
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [confirmName, setConfirmName] = useState('');
@@ -134,7 +134,7 @@ function RepoContextMenu({ repo, onDeleteSuccess }: { repo: GitHubRepo; onDelete
       toast.success(`已删除仓库 ${repo.name}`);
       setDeleteDialogOpen(false);
       // 通知父组件刷新列表，避免 window.location.reload() 导致 GitHub Pages 空白页
-      onDeleteSuccess();
+      onDeleteSuccess(repo.name);
     } catch {
       toast.error('删除失败，请确认你有足够权限');
     } finally {
@@ -231,7 +231,7 @@ function RepoContextMenu({ repo, onDeleteSuccess }: { repo: GitHubRepo; onDelete
 }
 
 // 移动端仓库卡片下拉菜单（补全移动端的右键菜单功能）
-function RepoCardDropdown({ repo, onDeleteSuccess }: { repo: GitHubRepo; onDeleteSuccess: () => void }) {
+function RepoCardDropdown({ repo, onDeleteSuccess }: { repo: GitHubRepo; onDeleteSuccess: (name: string) => void }) {
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [confirmName, setConfirmName] = useState('');
@@ -270,7 +270,7 @@ function RepoCardDropdown({ repo, onDeleteSuccess }: { repo: GitHubRepo; onDelet
       await deleteRepo(repo.owner.login, repo.name);
       toast.success(`已删除仓库 ${repo.name}`);
       setDeleteDialogOpen(false);
-      onDeleteSuccess();
+      onDeleteSuccess(repo.name);
     } catch { toast.error('删除失败，请确认你有足够权限'); } finally { setDeleting(false); }
   };
 
@@ -750,13 +750,25 @@ export default function ReposPage() {
                       </div>
                       {/* 右侧操作区：移动端三点菜单 + 桌面端右箭头 */}
                       <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
-                        <RepoCardDropdown repo={repo} onDeleteSuccess={() => { pageCache.invalidate('repos:'); loadRepos(1, false, true); }} />
+                        <RepoCardDropdown repo={repo} onDeleteSuccess={(name) => {
+                          // 立即从列表中移除（乐观更新），无需等待 API 响应
+                          setRepos(prev => prev.filter(r => r.name !== name));
+                          pageCache.invalidate('repos:');
+                          // 异步静默刷新，同步最终数据（时间戳绕过 GitHub CDN 60s 缓存）
+                          loadRepos(1, false, true);
+                        }} />
                         <ChevronRight className="w-4 h-4 text-muted-foreground hidden md:block group-hover:text-foreground transition-colors" />
                       </div>
                     </div>
                   </div>
                 </ContextMenuTrigger>
-                <RepoContextMenu repo={repo} onDeleteSuccess={() => { pageCache.invalidate('repos:'); loadRepos(1, false, true); }} />
+                <RepoContextMenu repo={repo} onDeleteSuccess={(name) => {
+                  // 立即从列表中移除（乐观更新），无需等待 API 响应
+                  setRepos(prev => prev.filter(r => r.name !== name));
+                  pageCache.invalidate('repos:');
+                  // 异步静默刷新，同步最终数据（时间戳绕过 GitHub CDN 60s 缓存）
+                  loadRepos(1, false, true);
+                }} />
               </ContextMenu>
             ))}
           </div>

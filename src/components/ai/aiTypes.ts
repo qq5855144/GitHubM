@@ -93,7 +93,9 @@ export type SSEChunk =
   | { type: 'step_start'; stepId: string }
   | { type: 'step_end'; stepId: string; status: 'done' | 'error' }
   | { type: 'step_retry'; stepId: string; retryCount: number }
-  | { type: 'heartbeat' };
+  | { type: 'heartbeat' }
+  | { type: 'status_info'; message: string }
+  | { type: 'status_warning'; message: string };
 
 // ── 模型配置 ────────────────────────────────────────────────────────────────────
 

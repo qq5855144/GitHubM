@@ -87,6 +87,17 @@ export interface Message {
   attachments?: Attachment[];
   /** AI 发出的文件上传请求列表 */
   fileRequests?: FileRequest[];
+  /**
+   * 气泡类型：
+   *  - 'step'   = 每个任务步骤执行气泡（含工具调用列表）
+   *  - 'answer' = 最终回答气泡（含 Markdown 正文）
+   *  - undefined = 普通消息（无 plan 时保持单气泡行为）
+   */
+  bubbleType?: 'step' | 'answer';
+  /** 步骤标题，bubbleType==='step' 时展示 */
+  stepTitle?: string;
+  /** 关联的步骤 ID */
+  stepId?: string;
 }// ── 工具调用记录类型 ────────────────────────────────────────────────────────────
 
 export interface ToolHistoryItem {

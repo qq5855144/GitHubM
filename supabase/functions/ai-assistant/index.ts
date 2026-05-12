@@ -780,7 +780,6 @@ async function callLLM(
   messages: Message[],
   onThinkingChunk?: (chunk: string) => Promise<void>,
   onHeartbeat?: () => Promise<void>,
-  onContentChunk?: (chunk: string) => Promise<void>, // 实时流式内容回调
 ): Promise<string> {
   const { url, headers, bodyExtra } = buildLLMRequest(cfg, platformKey);
   console.log(`[callLLM] type=${cfg.type} model=${cfg.model || "default"} url=${url}`);
@@ -798,12 +797,6 @@ async function callLLM(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let full = "", buf = "";
-
-  // 智能流式缓冲：先缓冲 300 字符，判断是否为工具调用/PLAN，再决定是否实时推流
-  let streamBuf = "";
-  let streamDecided = false; // 是否已决定推流策略
-  let streamBlocked = false; // 是否为工具调用/PLAN（不推流）
-
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -821,70 +814,18 @@ async function callLLM(
         // ── 思考过程 (DeepSeek Reasoner) ──
         if (delta.reasoning_content && onThinkingChunk) {
           await onThinkingChunk(delta.reasoning_content);
+        } else if (onHeartbeat) {
+          // 非思考内容时，每次收到 chunk 就发心跳，防止 SSE 连接超时
+          await onHeartbeat();
         }
 
         // ── 正式内容 ──
-        const content = delta.content ?? "";
-        if (content) {
-          full += content;
-
-          // 实时流式推送（仅在有回调且未被屏蔽时）
-          if (onContentChunk && !streamBlocked) {
-            if (!streamDecided) {
-              // 缓冲阶段：累积直到 300 字符后判断
-              streamBuf += content;
-              if (streamBuf.length >= 300) {
-                streamDecided = true;
-                const stripped = streamBuf.replace(/^```[\w]*\n?/, "").trimStart();
-                // 判断是否是工具调用或 PLAN（不应推流给用户）
-                streamBlocked = stripped.startsWith("{") || stripped.includes('"tool"') || /^\s*PLAN\s*:/i.test(stripped);
-                if (!streamBlocked) {
-                  // 非工具调用 → 刷新缓冲并开始推流
-                  await onContentChunk(streamBuf);
-                  streamBuf = "";
-                }
-                // 如果 streamBlocked，丢弃 streamBuf（full 里仍有完整内容）
-              }
-            } else {
-              // 已决定推流策略 → 直接推送每个 token
-              await onContentChunk(content);
-            }
-          } else if (onHeartbeat && !content) {
-            // 非内容 chunk 时发心跳（兼容旧逻辑）
-            await onHeartbeat();
-          }
-        } else if (onHeartbeat) {
-          // 无内容时发心跳，保持连接
-          await onHeartbeat();
-        }
+        full += delta.content ?? "";
       } catch { /* 跳过非 JSON 行 */ }
     }
   }
-
-  // 流结束后，如果缓冲阶段未结束（响应 < 300 字符），判断并刷新
-  if (onContentChunk && !streamDecided && !streamBlocked && streamBuf) {
-    const stripped = streamBuf.replace(/^```[\w]*\n?/, "").trimStart();
-    const isToolLike = stripped.startsWith("{") || stripped.includes('"tool"') || /^\s*PLAN\s*:/i.test(stripped);
-    if (!isToolLike) {
-      await onContentChunk(streamBuf);
-    }
-  }
-
   console.log(`[callLLM] 完成 full.length=${full.length}`);
   return full;
-}
-
-/**
- * 裁剪消息历史，防止超长上下文导致 LLM 超时或 API 报错。
- * 保留：系统消息 + 前 4 条用户消息 + 最近 40 条消息。
- */
-function trimMessages(messages: Message[], maxKeep = 50): Message[] {
-  if (messages.length <= maxKeep) return messages;
-  const system = messages[0]; // 系统提示永远保留
-  // 保留最近的消息，确保上下文连贯
-  const recent = messages.slice(-(maxKeep - 1));
-  console.log(`[trimMessages] 裁剪消息 ${messages.length} → ${1 + recent.length}`);
-  return [system, ...recent];
 }
 
 // ── 解析辅助工具 ──────────────────────────────────────────────────────────────
@@ -1236,20 +1177,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const MAX_NUDGE = 2;
     // 总轮次计数（跨批次）
     let totalRound = 0;
-    // 本次请求是否收到过 PLAN（用于 nudge 判断，避免纯文字回答被误判为"需要工具"）
-    let planEverFound = false;
-    // 实时流式内容已发送的字符数（用于防止 final sendChunk 重复发送）
-    let streamedContentLen = 0;
 
     for (let batch = 0; batch < MAX_BATCHES; batch++) {
     let batchDone = false; // 本批是否已完成（break 出内层循环）
     for (let round = 0; round < MAX_ROUNDS_PER_BATCH; round++, totalRound++) {
       let assistantText = "";
       let thinkingStarted = false;
-      // 本轮实时流式内容缓冲（用于在 callLLM 完成后判断是否需要补发）
-      let roundStreamedLen = 0;
 
-      // 定义思考过程回调
+      // 定义思考过程回调；普通内容 chunk 触发心跳
       const onThinkingChunk = async (chunk: string) => {
         if (!thinkingStarted) {
           await sendTyped({ type: "think_start" });
@@ -1258,16 +1193,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         await sendTyped({ type: "think_chunk", content: chunk });
       };
 
-      // 实时内容推流回调：将 LLM 生成的 token 直接推送给客户端
-      const onContentChunk = async (chunk: string) => {
-        roundStreamedLen += chunk.length;
-        await sendChunk(chunk);
-      };
-
       try {
-        // 裁剪消息历史，避免超长上下文导致 LLM 超时
-        const trimmedMessages = trimMessages(fullMessages, 50);
-        assistantText = await callLLM(modelConfig, platformKey, trimmedMessages, onThinkingChunk, heartbeat, onContentChunk);
+        assistantText = await callLLM(modelConfig, platformKey, fullMessages, onThinkingChunk, heartbeat);
         if (thinkingStarted) await sendTyped({ type: "think_end" });
       } catch (e) {
         await sendChunk(`\n❌ AI 调用失败：${(e as Error).message}`);
@@ -1284,7 +1211,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
       if (totalRound === 0) {
         const plan = extractPlan(rawText); // 使用原始文本（stripCodeFences 在内部处理）
         if (plan && plan.length > 0) {
-          planEverFound = true;
           await sendTyped({ type: "plan", steps: plan });
           // 持久化：创建工作流 + 步骤
           if (sb) {
@@ -1322,15 +1248,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const toolCall = extractToolCall(assistantText);
       if (!toolCall) {
         // ── Nudge 机制：任务进行中但 LLM 忘记输出工具 JSON ─────────────────────
-        // 仅在以下情况触发：(1) 有步骤在执行，或 (2) 本次请求收到过 PLAN（说明 AI 明确规划了步骤）
-        // 不在 totalRound===0 时无条件触发，避免"继续任务"等纯文字指令被误判
-        const taskOngoing = currentStepId !== null || (totalRound === 0 && planEverFound);
+        // 判断条件：有步骤在执行（或 totalRound=0 时刚给了 PLAN），且 nudge 未超限
+        const taskOngoing = currentStepId !== null || totalRound === 0;
         if (taskOngoing && nudgeCount < MAX_NUDGE) {
           nudgeCount++;
-          console.log(`[nudge ${nudgeCount}] totalRound=${totalRound} planFound=${planEverFound} 无工具调用，注入纠正提示`);
-          // 若本轮没有通过实时流推送内容，则手动发送已有文字（避免界面空白）
+          console.log(`[nudge ${nudgeCount}] totalRound=${totalRound} 无工具调用，注入纠正提示`);
+          // 保留 LLM 已输出的文字内容，再追加纠正指令
           const displayText = assistantText.replace(/\bPLAN\s*:\s*\{[\s\S]*?\}/i, "").trim();
-          if (displayText && roundStreamedLen === 0) await sendChunk(displayText + "\n");
+          if (displayText) await sendChunk(displayText + "\n");
           fullMessages.push({ role: "assistant", content: rawText });
           fullMessages.push({
             role: "user",
@@ -1351,16 +1276,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         }
         // 持久化工作流完成
         if (sb && workflowDbId) await dbFinishWorkflow(sb, workflowDbId);
-        // 若实时流已经推送了全部内容，无需再次 sendChunk（避免重复）
-        if (roundStreamedLen < assistantText.length) {
-          // 只补发未推流的部分（或全部，如果流式被阻断）
-          const alreadySent = roundStreamedLen > 0;
-          if (!alreadySent) {
-            await sendChunk(assistantText);
-          }
-          // 如果部分已推流（roundStreamedLen > 0），内容已在客户端，无需补发
-        }
-        streamedContentLen += roundStreamedLen;
+        await sendChunk(assistantText);
         batchDone = true; // 任务已完成，退出外层批次循环
         break;
       }
@@ -1376,8 +1292,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       // 向前找最近的 `{`
       const braceIdx = toolKeyIdx !== -1 ? assistantText.lastIndexOf("{", toolKeyIdx) : -1;
       const beforeText = braceIdx > 0 ? assistantText.slice(0, braceIdx).trim() : "";
-      // 只在未通过实时流推送过内容时才发送前置文本（避免重复）
-      if (beforeText && roundStreamedLen === 0) await sendChunk(beforeText + "\n\n");
+      if (beforeText) await sendChunk(beforeText + "\n\n");
 
       const label = TOOL_LABELS[toolCall.tool] || toolCall.tool;
       const hint = toolCall.tool === "read_file" && (toolCall.start_line || toolCall.end_line)

@@ -102,4 +102,9 @@ export interface ModelConfig {
   api_key?: string;
   endpoint?: string;
   model?: string;
+  /**
+   * 请求超时毫秒数（默认 300000 = 5 分钟）
+   * 用户可在模型设置中调整，复杂任务建议设 5~10 分钟
+   */
+  timeoutMs?: number;
 }

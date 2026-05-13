@@ -6,10 +6,10 @@
 |------|-----|
 | Plugin ID | `ea9ecacf-f5ab-4c56-9ed7-2fadaf6e62cc` |
 | API ID | `api-wYqgz8WoB0A9` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-wYqgz8WoB0A9-gateway.appmiaoda.com/stock/hs/overview` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-wYqgz8WoB0A9-gateway.appmiaoda.com/stock/hs/overview` |
 | Auth | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | 无（本接口无需请求体，不需要设置 Content-Type 请求头） |
-| Third-party domain | `app-bgc5z86utjwh-api-wYqgz8WoB0A9-gateway.appmiaoda.com` |
+| Third-party domain | `app-bm0s7wqmrksh-api-wYqgz8WoB0A9-gateway.appmiaoda.com` |
 | 计费 | 启用，折扣价 ¥0.13/次，原价 ¥0.20/次 |
 
 ---
@@ -75,7 +75,7 @@ interface OverviewData {
  */
 async function fetchOverview(): Promise<OverviewData> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-wYqgz8WoB0A9-gateway.appmiaoda.com/stock/hs/overview",
+    "https://app-bm0s7wqmrksh-api-wYqgz8WoB0A9-gateway.appmiaoda.com/stock/hs/overview",
     {
       method: "POST",
       headers: {
@@ -123,7 +123,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-wYqgz8WoB0A9-gateway.appmiaoda.com/stock/hs/overview",
+    "https://app-bm0s7wqmrksh-api-wYqgz8WoB0A9-gateway.appmiaoda.com/stock/hs/overview",
     {
       method: "POST",
       headers: {

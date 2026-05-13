@@ -6,12 +6,12 @@
 |------|----|
 | Plugin ID | `0d5623f2-4b41-4d17-885d-e41178515b29` |
 | API ID | `api-ELbWz8Omem6Y` |
-| Endpoint | `https://app-bgc5z86utjwh-api-ELbWz8Omem6Y-gateway.appmiaoda.com/rest/2.0/ocr/v1/taxi_receipt` |
+| Endpoint | `https://app-bm0s7wqmrksh-api-ELbWz8Omem6Y-gateway.appmiaoda.com/rest/2.0/ocr/v1/taxi_receipt` |
 | Method | `POST` |
 | Content-Type | `application/x-www-form-urlencoded` |
 | Auth 模式 | `platform_managed`（密钥由平台注入） |
 | Auth Header | `X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>` |
-| Third-party Domain | `app-bgc5z86utjwh-api-ELbWz8Omem6Y-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-ELbWz8Omem6Y-gateway.appmiaoda.com` |
 
 ---
 
@@ -138,7 +138,7 @@ async function recognizeTaxiReceipt(params: TaxiReceiptParams): Promise<TaxiRece
   }
 
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-ELbWz8Omem6Y-gateway.appmiaoda.com/rest/2.0/ocr/v1/taxi_receipt",
+    "https://app-bm0s7wqmrksh-api-ELbWz8Omem6Y-gateway.appmiaoda.com/rest/2.0/ocr/v1/taxi_receipt",
     {
       method: "POST",
       headers: {
@@ -225,7 +225,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-ELbWz8Omem6Y-gateway.appmiaoda.com/rest/2.0/ocr/v1/taxi_receipt",
+    "https://app-bm0s7wqmrksh-api-ELbWz8Omem6Y-gateway.appmiaoda.com/rest/2.0/ocr/v1/taxi_receipt",
     {
       method: "POST",
       headers: {

@@ -10,7 +10,7 @@ license: MIT
 
 | 属性 | 值 |
 |------|-----|
-| Endpoint | `POST https://app-bgc5z86utjwh-api-o9wN0AExZQ8a-gateway.appmiaoda.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-o9wN0AExZQ8a-gateway.appmiaoda.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent` |
 | Content-Type | `application/json` |
 | 认证模式 | `platform_managed`（密钥由平台注入，读取 `INTEGRATIONS_API_KEY`） |
 | 响应格式 | JSON，图片以 Base64 编码内嵌于 `candidates[].content.parts[].inlineData.data` |

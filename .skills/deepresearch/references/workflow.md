@@ -38,7 +38,7 @@ import json
 import requests
 import time
 
-BASE_URL = "https://app-bgc5z86utjwh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2"
+BASE_URL = "https://app-bm0s7wqmrksh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2"
 API_KEY = "your-api-key"
 AGENT_ID = "your-agent-id"
 

@@ -6,8 +6,8 @@
 |------|----|
 | Plugin ID | `e5ac922c-fb39-4131-a4c3-bdc4121db2be` |
 | API ID | `api-Aa2PqMJnJGwL` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-Aa2PqMJnJGwL-gateway.appmiaoda.com/v1/text/chatcompletion_v2` |
-| Third-party Domain | `app-bgc5z86utjwh-api-Aa2PqMJnJGwL-gateway.appmiaoda.com` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-Aa2PqMJnJGwL-gateway.appmiaoda.com/v1/text/chatcompletion_v2` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-Aa2PqMJnJGwL-gateway.appmiaoda.com` |
 | Auth 模式 | `platform_managed`（`traefik: true`） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
@@ -174,7 +174,7 @@ interface ChatCompletionResponse {
  */
 async function callMiniMaxChat(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-Aa2PqMJnJGwL-gateway.appmiaoda.com/v1/text/chatcompletion_v2",
+    "https://app-bm0s7wqmrksh-api-Aa2PqMJnJGwL-gateway.appmiaoda.com/v1/text/chatcompletion_v2",
     {
       method: "POST",
       headers: {
@@ -274,7 +274,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-Aa2PqMJnJGwL-gateway.appmiaoda.com/v1/text/chatcompletion_v2",
+    "https://app-bm0s7wqmrksh-api-Aa2PqMJnJGwL-gateway.appmiaoda.com/v1/text/chatcompletion_v2",
     {
       method: "POST",
       headers: {
@@ -354,7 +354,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游（流式）---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-Aa2PqMJnJGwL-gateway.appmiaoda.com/v1/text/chatcompletion_v2",
+    "https://app-bm0s7wqmrksh-api-Aa2PqMJnJGwL-gateway.appmiaoda.com/v1/text/chatcompletion_v2",
     {
       method: "POST",
       headers: {

@@ -6,12 +6,12 @@
 |------|----|
 | Plugin ID | `822bc679-0277-46ac-b8aa-b91f49a3605b` |
 | API ID | `api-k93RZBjPykEa` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-k93RZBjPykEa-gateway.appmiaoda.com/v2/chat/completions` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-k93RZBjPykEa-gateway.appmiaoda.com/v2/chat/completions` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
 | 响应类型 | SSE 流式（`text/event-stream`） |
-| third_part_domain | `app-bgc5z86utjwh-api-k93RZBjPykEa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-k93RZBjPykEa-gateway.appmiaoda.com` |
 
 ---
 
@@ -107,7 +107,7 @@ async function callMultimodalChat(
   enableThinking = false
 ): Promise<string> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-k93RZBjPykEa-gateway.appmiaoda.com/v2/chat/completions",
+    "https://app-bm0s7wqmrksh-api-k93RZBjPykEa-gateway.appmiaoda.com/v2/chat/completions",
     {
       method: "POST",
       headers: {
@@ -214,7 +214,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   // 3. 调用上游 SSE 接口
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-k93RZBjPykEa-gateway.appmiaoda.com/v2/chat/completions",
+    "https://app-bm0s7wqmrksh-api-k93RZBjPykEa-gateway.appmiaoda.com/v2/chat/completions",
     {
       method: "POST",
       headers: {
@@ -301,7 +301,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-k93RZBjPykEa-gateway.appmiaoda.com/v2/chat/completions",
+    "https://app-bm0s7wqmrksh-api-k93RZBjPykEa-gateway.appmiaoda.com/v2/chat/completions",
     {
       method: "POST",
       headers: {
@@ -944,7 +944,7 @@ export function MultimodalChatApp() {
 ### 密钥安全
 
 - `INTEGRATIONS_API_KEY` 由平台注入 Deno 环境变量，**严禁暴露到前端**
-- 前端只与 Supabase Edge Function 通信，不直接访问 `app-bgc5z86utjwh-api-k93RZBjPykEa-gateway.appmiaoda.com`
+- 前端只与 Supabase Edge Function 通信，不直接访问 `app-bm0s7wqmrksh-api-k93RZBjPykEa-gateway.appmiaoda.com`
 
 ### 计费
 

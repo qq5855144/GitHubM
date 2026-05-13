@@ -57,7 +57,7 @@ async function createVideo(
   form.append("seconds", String(seconds));
 
   const res = await fetch(
-    "https://app-bgc5z86utjwh-api-Xa6Jew6JjAqa-gateway.appmiaoda.com/openai/v1/videos",
+    "https://app-bm0s7wqmrksh-api-Xa6Jew6JjAqa-gateway.appmiaoda.com/openai/v1/videos",
     {
       method: "POST",
       headers: { "X-Gateway-Authorization": `Bearer ${apiKey}` },
@@ -76,7 +76,7 @@ async function queryVideoStatus(videoId: string): Promise<{
   video_url?: string;
 }> {
   const res = await fetch(
-    "https://app-bgc5z86utjwh-api-M9v0w87KjxoY-gateway.appmiaoda.com/query",
+    "https://app-bm0s7wqmrksh-api-M9v0w87KjxoY-gateway.appmiaoda.com/query",
     {
       method: "POST",
       headers: {

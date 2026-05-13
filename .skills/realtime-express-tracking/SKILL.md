@@ -6,7 +6,7 @@ license: MIT
 
 ## 能力概述
 
-本 skill 封装了两个快递相关接口，通过百度云 API 网关（`app-bgc5z86utjwh-api-V9gDz8wo0V5L-gateway.appmiaoda.com`）提供服务：
+本 skill 封装了两个快递相关接口，通过百度云 API 网关（`app-bm0s7wqmrksh-api-V9gDz8wo0V5L-gateway.appmiaoda.com`）提供服务：
 
 | 接口 | Endpoint | 方法 | 说明 |
 |------|----------|------|------|

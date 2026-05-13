@@ -8,7 +8,7 @@
 | 认证方式 | `platform_managed`（`INTEGRATIONS_API_KEY`） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${apiKey}` |
 | Content-Type | `application/x-www-form-urlencoded` |
-| Third-part Domain | `app-bgc5z86utjwh-api-ra5Err8G2Rla-gateway.appmiaoda.com` |
+| Third-part Domain | `app-bm0s7wqmrksh-api-ra5Err8G2Rla-gateway.appmiaoda.com` |
 | 计费单价 | 折扣价 ¥0.06 / 次（原价 ¥0.10 / 次） |
 
 ---
@@ -18,7 +18,7 @@
 | 字段 | 值 |
 |------|----|
 | API ID | `api-ra5Err8G2Rla` |
-| 端点 | `POST https://app-bgc5z86utjwh-api-ra5Err8G2Rla-gateway.appmiaoda.com/precious-metal/domestic/price` |
+| 端点 | `POST https://app-bm0s7wqmrksh-api-ra5Err8G2Rla-gateway.appmiaoda.com/precious-metal/domestic/price` |
 
 ### 请求参数
 
@@ -89,7 +89,7 @@ interface DomesticPriceData {
 
 async function getDomesticPrice(symbol: string): Promise<DomesticPriceData> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-ra5Err8G2Rla-gateway.appmiaoda.com/precious-metal/domestic/price",
+    "https://app-bm0s7wqmrksh-api-ra5Err8G2Rla-gateway.appmiaoda.com/precious-metal/domestic/price",
     {
       method: "POST",
       headers: {
@@ -145,7 +145,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-ra5Err8G2Rla-gateway.appmiaoda.com/precious-metal/domestic/price",
+    "https://app-bm0s7wqmrksh-api-ra5Err8G2Rla-gateway.appmiaoda.com/precious-metal/domestic/price",
     {
       method: "POST",
       headers: {
@@ -203,7 +203,7 @@ console.log(`黄金T+D: ${price.price} 元/克，涨跌幅: ${price.changeRate}%
 | 字段 | 值 |
 |------|----|
 | API ID | `api-rLobRR63mpd9` |
-| 端点 | `POST https://app-bgc5z86utjwh-api-rLobRR63mpd9-gateway.appmiaoda.com/precious-metal/domestic/kline` |
+| 端点 | `POST https://app-bm0s7wqmrksh-api-rLobRR63mpd9-gateway.appmiaoda.com/precious-metal/domestic/kline` |
 
 ### 请求参数
 
@@ -262,7 +262,7 @@ async function getDomesticKline(
   if (limit) params.limit = limit;
 
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-rLobRR63mpd9-gateway.appmiaoda.com/precious-metal/domestic/kline",
+    "https://app-bm0s7wqmrksh-api-rLobRR63mpd9-gateway.appmiaoda.com/precious-metal/domestic/kline",
     {
       method: "POST",
       headers: {
@@ -334,7 +334,7 @@ serve(async (req: Request): Promise<Response> => {
   if (limit) params.limit = limit;
 
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-rLobRR63mpd9-gateway.appmiaoda.com/precious-metal/domestic/kline",
+    "https://app-bm0s7wqmrksh-api-rLobRR63mpd9-gateway.appmiaoda.com/precious-metal/domestic/kline",
     {
       method: "POST",
       headers: {
@@ -391,7 +391,7 @@ const klineData = await getDomesticKline("AUTD", "0", "5");
 | 字段 | 值 |
 |------|----|
 | API ID | `api-DY8Mnnl0GGAa` |
-| 端点 | `POST https://app-bgc5z86utjwh-api-DY8Mnnl0GGAa-gateway.appmiaoda.com/precious-metal/domestic/contract` |
+| 端点 | `POST https://app-bm0s7wqmrksh-api-DY8Mnnl0GGAa-gateway.appmiaoda.com/precious-metal/domestic/contract` |
 
 ### 请求参数
 
@@ -424,7 +424,7 @@ const apiKey = process.env["INTEGRATIONS_API_KEY"]!;
 
 async function getDomesticContract(symbol: string): Promise<unknown> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-DY8Mnnl0GGAa-gateway.appmiaoda.com/precious-metal/domestic/contract",
+    "https://app-bm0s7wqmrksh-api-DY8Mnnl0GGAa-gateway.appmiaoda.com/precious-metal/domestic/contract",
     {
       method: "POST",
       headers: {
@@ -480,7 +480,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-DY8Mnnl0GGAa-gateway.appmiaoda.com/precious-metal/domestic/contract",
+    "https://app-bm0s7wqmrksh-api-DY8Mnnl0GGAa-gateway.appmiaoda.com/precious-metal/domestic/contract",
     {
       method: "POST",
       headers: {

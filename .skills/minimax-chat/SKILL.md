@@ -10,7 +10,7 @@ license: MIT
 
 | 属性 | 值 |
 |------|----|
-| Endpoint | `POST https://app-bgc5z86utjwh-api-Aa2PqMJnJGwL-gateway.appmiaoda.com/v1/text/chatcompletion_v2` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-Aa2PqMJnJGwL-gateway.appmiaoda.com/v1/text/chatcompletion_v2` |
 | 认证方式 | Platform Managed（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | `application/json` |
 | 支持平台 | Web、MiniProgram |

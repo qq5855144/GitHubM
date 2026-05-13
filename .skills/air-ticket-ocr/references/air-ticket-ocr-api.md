@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `ab465fee-da53-4566-8b2b-4f1fb033b83a` |
 | API ID | `api-DLEO7Vjd8Qea` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-DLEO7Vjd8Qea-gateway.appmiaoda.com/rest/2.0/ocr/v1/air_ticket` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-DLEO7Vjd8Qea-gateway.appmiaoda.com/rest/2.0/ocr/v1/air_ticket` |
 | Auth 模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/x-www-form-urlencoded` |
-| Third-party Domain | `app-bgc5z86utjwh-api-DLEO7Vjd8Qea-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-DLEO7Vjd8Qea-gateway.appmiaoda.com` |
 | 计费 | 启用；原价 ¥7.20 / 5次，折扣价 ¥5.00 / 5次（即 ¥1.00/次） |
 
 ---
@@ -119,7 +119,7 @@ async function recognizeAirTicket(options: {
   }
 
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-DLEO7Vjd8Qea-gateway.appmiaoda.com/rest/2.0/ocr/v1/air_ticket",
+    "https://app-bm0s7wqmrksh-api-DLEO7Vjd8Qea-gateway.appmiaoda.com/rest/2.0/ocr/v1/air_ticket",
     {
       method: "POST",
       headers: {
@@ -220,7 +220,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-DLEO7Vjd8Qea-gateway.appmiaoda.com/rest/2.0/ocr/v1/air_ticket",
+    "https://app-bm0s7wqmrksh-api-DLEO7Vjd8Qea-gateway.appmiaoda.com/rest/2.0/ocr/v1/air_ticket",
     {
       method: "POST",
       headers: {

@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `1479a6f5-d50c-40be-9caf-db2c63179a4e` |
 | API ID | `api-ra5EZDjVyjVa` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-ra5EZDjVyjVa-gateway.appmiaoda.com/v2/tools/trending_lists/vertical` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-ra5EZDjVyjVa-gateway.appmiaoda.com/v2/tools/trending_lists/vertical` |
 | Auth 模式 | `platform_managed`（traefik: true） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| Third-party Domain | `app-bgc5z86utjwh-api-ra5EZDjVyjVa-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-ra5EZDjVyjVa-gateway.appmiaoda.com` |
 | 计费 | 启用，原价 ¥60.00/千次，折扣价 ¥45.00/千次 |
 
 ---
@@ -110,7 +110,7 @@ async function queryVerticalTrendingList(
   timeRange: TimeRange
 ): Promise<TrendingItem[]> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-ra5EZDjVyjVa-gateway.appmiaoda.com/v2/tools/trending_lists/vertical",
+    "https://app-bm0s7wqmrksh-api-ra5EZDjVyjVa-gateway.appmiaoda.com/v2/tools/trending_lists/vertical",
     {
       method: "POST",
       headers: {
@@ -179,7 +179,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-ra5EZDjVyjVa-gateway.appmiaoda.com/v2/tools/trending_lists/vertical",
+    "https://app-bm0s7wqmrksh-api-ra5EZDjVyjVa-gateway.appmiaoda.com/v2/tools/trending_lists/vertical",
     {
       method: "POST",
       headers: {

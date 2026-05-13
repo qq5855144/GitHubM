@@ -8,7 +8,7 @@
 | 认证模式 | `platform_managed` |
 | 密钥来源 | `Deno.env.get("INTEGRATIONS_API_KEY")!` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${apiKey}` |
-| 第三方域名 | `app-bgc5z86utjwh-api-V9gDzg15D7BL-gateway.appmiaoda.com` |
+| 第三方域名 | `app-bm0s7wqmrksh-api-V9gDzg15D7BL-gateway.appmiaoda.com` |
 
 ---
 
@@ -18,7 +18,7 @@
 |------|----|
 | API ID | `api-V9gDzg15D7BL` |
 | 方法 | POST |
-| Endpoint | `https://app-bgc5z86utjwh-api-V9gDzg15D7BL-gateway.appmiaoda.com/v1/video_generation` |
+| Endpoint | `https://app-bm0s7wqmrksh-api-V9gDzg15D7BL-gateway.appmiaoda.com/v1/video_generation` |
 | Content-Type | `application/json` |
 
 ### 请求参数
@@ -96,7 +96,7 @@ async function submitTextToVideo(
   promptOptimizer: boolean = true
 ): Promise<string> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-V9gDzg15D7BL-gateway.appmiaoda.com/v1/video_generation",
+    "https://app-bm0s7wqmrksh-api-V9gDzg15D7BL-gateway.appmiaoda.com/v1/video_generation",
     {
       method: "POST",
       headers: {
@@ -163,7 +163,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   // --- Call upstream ---
-  const upstream = await fetch("https://app-bgc5z86utjwh-api-V9gDzg15D7BL-gateway.appmiaoda.com/v1/video_generation", {
+  const upstream = await fetch("https://app-bm0s7wqmrksh-api-V9gDzg15D7BL-gateway.appmiaoda.com/v1/video_generation", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -247,7 +247,7 @@ async function submitMinimaxVideo(
 |------|----|
 | API ID | `api-zYkZz2eDWvPL` |
 | 方法 | GET |
-| Endpoint | `https://app-bgc5z86utjwh-api-zYkZz2eDWvPL-gateway.appmiaoda.com/v1/query/video_generation` |
+| Endpoint | `https://app-bm0s7wqmrksh-api-zYkZz2eDWvPL-gateway.appmiaoda.com/v1/query/video_generation` |
 | 计费 | 不计费 |
 
 ### 请求参数
@@ -298,7 +298,7 @@ async function queryTextToVideo(taskId: string): Promise<{
   video_height?: number;
   base_resp: { status_code: number; status_msg: string };
 }> {
-  const url = new URL("https://app-bgc5z86utjwh-api-zYkZz2eDWvPL-gateway.appmiaoda.com/v1/query/video_generation");
+  const url = new URL("https://app-bm0s7wqmrksh-api-zYkZz2eDWvPL-gateway.appmiaoda.com/v1/query/video_generation");
   url.searchParams.set("task_id", taskId);
   const response = await fetch(url.toString(), {
     method: "GET",
@@ -349,7 +349,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   // --- Call upstream ---
-  const url = new URL("https://app-bgc5z86utjwh-api-zYkZz2eDWvPL-gateway.appmiaoda.com/v1/query/video_generation");
+  const url = new URL("https://app-bm0s7wqmrksh-api-zYkZz2eDWvPL-gateway.appmiaoda.com/v1/query/video_generation");
   url.searchParams.set("task_id", taskId);
   const upstream = await fetch(url.toString(), {
     method: "GET",
@@ -417,7 +417,7 @@ async function queryMinimaxVideo(taskId: string): Promise<{
 |------|----|
 | API ID | `api-GYX1ld3ExkQa` |
 | 方法 | GET |
-| Endpoint | `https://app-bgc5z86utjwh-api-GYX1ld3ExkQa-gateway.appmiaoda.com/v1/files/retrieve` |
+| Endpoint | `https://app-bm0s7wqmrksh-api-GYX1ld3ExkQa-gateway.appmiaoda.com/v1/files/retrieve` |
 | 计费 | 不计费 |
 
 ### 请求参数
@@ -475,7 +475,7 @@ async function retrieveVideoFile(fileId: string): Promise<{
   purpose: string;
   download_url: string;
 }> {
-  const url = new URL("https://app-bgc5z86utjwh-api-GYX1ld3ExkQa-gateway.appmiaoda.com/v1/files/retrieve");
+  const url = new URL("https://app-bm0s7wqmrksh-api-GYX1ld3ExkQa-gateway.appmiaoda.com/v1/files/retrieve");
   url.searchParams.set("file_id", fileId);
   const response = await fetch(url.toString(), {
     method: "GET",
@@ -567,7 +567,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   // --- Call upstream to get download URL ---
-  const url = new URL("https://app-bgc5z86utjwh-api-GYX1ld3ExkQa-gateway.appmiaoda.com/v1/files/retrieve");
+  const url = new URL("https://app-bm0s7wqmrksh-api-GYX1ld3ExkQa-gateway.appmiaoda.com/v1/files/retrieve");
   url.searchParams.set("file_id", fileId);
   const upstream = await fetch(url.toString(), {
     method: "GET",

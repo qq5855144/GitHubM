@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `126915de-23d7-454c-accf-b88797feb9e5` |
 | API ID | `api-2Y00V8pRRoxY` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-2Y00V8pRRoxY-gateway.appmiaoda.com/caipiao/winning` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-2Y00V8pRRoxY-gateway.appmiaoda.com/caipiao/winning` |
 | Auth | `platform_managed`，`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| Third-party Domain | `app-bgc5z86utjwh-api-2Y00V8pRRoxY-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-2Y00V8pRRoxY-gateway.appmiaoda.com` |
 
 ## 请求参数
 
@@ -108,7 +108,7 @@ async function queryCaipiaoWinning(
   if (type) params.set("type", type);
 
   const url =
-    `https://app-bgc5z86utjwh-api-2Y00V8pRRoxY-gateway.appmiaoda.com/caipiao/winning?${params.toString()}`;
+    `https://app-bm0s7wqmrksh-api-2Y00V8pRRoxY-gateway.appmiaoda.com/caipiao/winning?${params.toString()}`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -183,7 +183,7 @@ serve(async (req: Request): Promise<Response> => {
   if (type) params.set("type", type);
 
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-2Y00V8pRRoxY-gateway.appmiaoda.com/caipiao/winning?${params.toString()}`,
+    `https://app-bm0s7wqmrksh-api-2Y00V8pRRoxY-gateway.appmiaoda.com/caipiao/winning?${params.toString()}`,
     {
       method: "POST",
       headers: {

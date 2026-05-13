@@ -12,8 +12,8 @@ license: MIT
 
 | 接口 | Method | Endpoint |
 |------|--------|----------|
-| 创建图生视频任务 | POST | `https://app-bgc5z86utjwh-api-m9xKX785MdZa-gateway.appmiaoda.com/beta/video/generations/kling/image2video` |
-| 查询图生视频生成任务状态 | GET | `https://app-bgc5z86utjwh-api-ra5EZDjVv8Xa-gateway.appmiaoda.com/beta/video/generations/kling/image2video?task_id={task_id}` |
+| 创建图生视频任务 | POST | `https://app-bm0s7wqmrksh-api-m9xKX785MdZa-gateway.appmiaoda.com/beta/video/generations/kling/image2video` |
+| 查询图生视频生成任务状态 | GET | `https://app-bm0s7wqmrksh-api-ra5EZDjVv8Xa-gateway.appmiaoda.com/beta/video/generations/kling/image2video?task_id={task_id}` |
 
 **工作流（异步轮询）：**
 
@@ -57,7 +57,7 @@ async function generateImageToVideo(
 ): Promise<{ taskId: string; videoUrl: string }> {
   // Step 1: 提交任务
   const submitRes = await fetch(
-    "https://app-bgc5z86utjwh-api-m9xKX785MdZa-gateway.appmiaoda.com/beta/video/generations/kling/image2video",
+    "https://app-bm0s7wqmrksh-api-m9xKX785MdZa-gateway.appmiaoda.com/beta/video/generations/kling/image2video",
     {
       method: "POST",
       headers: {
@@ -80,7 +80,7 @@ async function generateImageToVideo(
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
 
     const queryRes = await fetch(
-      `https://app-bgc5z86utjwh-api-ra5EZDjVv8Xa-gateway.appmiaoda.com/beta/video/generations/kling/image2video?task_id=${taskId}`,
+      `https://app-bm0s7wqmrksh-api-ra5EZDjVv8Xa-gateway.appmiaoda.com/beta/video/generations/kling/image2video?task_id=${taskId}`,
       {
         method: "GET",
         headers: {

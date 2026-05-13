@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `17196c7a-fca2-41ec-85f3-1e303e1a3ee1` |
 | API ID | `api-oLpZbv47qvea` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-oLpZbv47qvea-gateway.appmiaoda.com/v1/video_generation` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-oLpZbv47qvea-gateway.appmiaoda.com/v1/video_generation` |
 | Auth | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bgc5z86utjwh-api-oLpZbv47qvea-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-oLpZbv47qvea-gateway.appmiaoda.com` |
 | 计费 | 是（`need_count_calls: true`，具体价格以平台实际配置为准）|
 
 ---
@@ -125,7 +125,7 @@ async function submitVideoGeneration(
   if (options?.aigcWatermark !== undefined) requestBody.aigc_watermark = options.aigcWatermark;
 
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-oLpZbv47qvea-gateway.appmiaoda.com/v1/video_generation",
+    "https://app-bm0s7wqmrksh-api-oLpZbv47qvea-gateway.appmiaoda.com/v1/video_generation",
     {
       method: "POST",
       headers: {
@@ -209,7 +209,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-oLpZbv47qvea-gateway.appmiaoda.com/v1/video_generation",
+    "https://app-bm0s7wqmrksh-api-oLpZbv47qvea-gateway.appmiaoda.com/v1/video_generation",
     {
       method: "POST",
       headers: {

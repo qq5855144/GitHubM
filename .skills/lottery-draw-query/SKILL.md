@@ -11,10 +11,10 @@ license: MIT
 
 | 接口 | 方法 | Endpoint |
 |------|------|----------|
-| 彩票开奖 | POST | `https://app-bgc5z86utjwh-api-baBw2m51JXz9-gateway.appmiaoda.com/caipiao/query` |
-| 历史开奖信息 | POST | `https://app-bgc5z86utjwh-api-qYGW2z745vzY-gateway.appmiaoda.com/caipiao/history` |
-| 查询是否中奖 | POST | `https://app-bgc5z86utjwh-api-2Y00V8pRRoxY-gateway.appmiaoda.com/caipiao/winning` |
-| 彩票分类 | POST | `https://app-bgc5z86utjwh-api-BYdwQyx58E6L-gateway.appmiaoda.com/caipiao/class` |
+| 彩票开奖 | POST | `https://app-bm0s7wqmrksh-api-baBw2m51JXz9-gateway.appmiaoda.com/caipiao/query` |
+| 历史开奖信息 | POST | `https://app-bm0s7wqmrksh-api-qYGW2z745vzY-gateway.appmiaoda.com/caipiao/history` |
+| 查询是否中奖 | POST | `https://app-bm0s7wqmrksh-api-2Y00V8pRRoxY-gateway.appmiaoda.com/caipiao/winning` |
+| 彩票分类 | POST | `https://app-bm0s7wqmrksh-api-BYdwQyx58E6L-gateway.appmiaoda.com/caipiao/class` |
 
 **认证模式：** `platform_managed`（`traefik: true`），密钥由平台注入，读取自 `INTEGRATIONS_API_KEY` 环境变量。
 - Auth Header 为 `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`（注意不是标准的 `Authorization`）。

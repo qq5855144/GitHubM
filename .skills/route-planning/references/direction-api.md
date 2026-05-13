@@ -10,14 +10,14 @@
 | 密钥来源 | `Deno.env.get("INTEGRATIONS_API_KEY")!` |
 | HTTP 方法 | GET |
 | Content-Type | — (GET 请求，无请求体) |
-| third_part_domain | `app-bgc5z86utjwh-api-GaDwZKpJxXOY-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-GaDwZKpJxXOY-gateway.appmiaoda.com` |
 
 | 接口 | API ID | Endpoint |
 |------|--------|---------|
-| 驾车路线规划 | `api-GaDwZKpJxXOY` | `GET https://app-bgc5z86utjwh-api-GaDwZKpJxXOY-gateway.appmiaoda.com/direction/v2/driving` |
-| 骑行路线规划 | `api-W9z3MpAdKeNL` | `GET https://app-bgc5z86utjwh-api-W9z3MpAdKeNL-gateway.appmiaoda.com/direction/v2/riding` |
-| 步行路线规划 | `api-wLNdomNRn42a` | `GET https://app-bgc5z86utjwh-api-wLNdomNRn42a-gateway.appmiaoda.com/direction/v2/walking` |
-| 公交路线规划 | `api-m9xKXQkOKZXa` | `GET https://app-bgc5z86utjwh-api-m9xKXQkOKZXa-gateway.appmiaoda.com/direction/v2/transit` |
+| 驾车路线规划 | `api-GaDwZKpJxXOY` | `GET https://app-bm0s7wqmrksh-api-GaDwZKpJxXOY-gateway.appmiaoda.com/direction/v2/driving` |
+| 骑行路线规划 | `api-W9z3MpAdKeNL` | `GET https://app-bm0s7wqmrksh-api-W9z3MpAdKeNL-gateway.appmiaoda.com/direction/v2/riding` |
+| 步行路线规划 | `api-wLNdomNRn42a` | `GET https://app-bm0s7wqmrksh-api-wLNdomNRn42a-gateway.appmiaoda.com/direction/v2/walking` |
+| 公交路线规划 | `api-m9xKXQkOKZXa` | `GET https://app-bm0s7wqmrksh-api-m9xKXQkOKZXa-gateway.appmiaoda.com/direction/v2/transit` |
 
 ---
 
@@ -133,7 +133,7 @@ async function planRoute(
     ...Object.fromEntries(Object.entries(extra).map(([k, v]) => [k, String(v)])),
   });
 
-  const url = `https://${apiId}@app-bgc5z86utjwh-api-GaDwZKpJxXOY-gateway.appmiaoda.com/direction/v2/${mode}?${params.toString()}`;
+  const url = `https://${apiId}@app-bm0s7wqmrksh-api-GaDwZKpJxXOY-gateway.appmiaoda.com/direction/v2/${mode}?${params.toString()}`;
 
   const response = await fetch(url, {
     method: "GET",
@@ -236,7 +236,7 @@ serve(async (req: Request): Promise<Response> => {
     ...Object.fromEntries(Object.entries(extra).map(([k, v]) => [k, String(v)])),
   });
   const upstreamUrl =
-    `https://${apiId}@app-bgc5z86utjwh-api-GaDwZKpJxXOY-gateway.appmiaoda.com/direction/v2/${mode}?${params.toString()}`;
+    `https://${apiId}@app-bm0s7wqmrksh-api-GaDwZKpJxXOY-gateway.appmiaoda.com/direction/v2/${mode}?${params.toString()}`;
 
   const upstream = await fetch(upstreamUrl, {
     method: "GET",

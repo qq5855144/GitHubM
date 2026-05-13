@@ -6,12 +6,12 @@
 |------|----|
 | Plugin ID | `6c2d8399-c9ba-40d4-9f5f-96dfc9b71a68` |
 | API ID | `api-Q9KWZ2jy8W09` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com/rpc/2.0/tts/v1/query` |
-| 生成期 URL | `https://app-bgc5z86utjwh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com/rpc/2.0/tts/v1/query` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com/rpc/2.0/tts/v1/query` |
+| 生成期 URL | `https://app-bm0s7wqmrksh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com/rpc/2.0/tts/v1/query` |
 | Auth 模式 | `platform_managed`（traefik: true） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| Third-party domain | `app-bgc5z86utjwh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com` |
+| Third-party domain | `app-bm0s7wqmrksh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com` |
 | 计费 | 不计费 |
 
 ---
@@ -75,7 +75,7 @@ async function queryTTSTask(taskId: string): Promise<{
   speech_url?: string;
 }> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com/rpc/2.0/tts/v1/query",
+    "https://app-bm0s7wqmrksh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com/rpc/2.0/tts/v1/query",
     {
       method: "POST",
       headers: {
@@ -173,7 +173,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com/rpc/2.0/tts/v1/query",
+    "https://app-bm0s7wqmrksh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com/rpc/2.0/tts/v1/query",
     {
       method: "POST",
       headers: {
@@ -274,7 +274,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com/rpc/2.0/tts/v1/query",
+    "https://app-bm0s7wqmrksh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com/rpc/2.0/tts/v1/query",
     {
       method: "POST",
       headers: {

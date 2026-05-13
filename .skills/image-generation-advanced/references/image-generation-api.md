@@ -18,9 +18,9 @@
 | 字段 | 值 |
 |------|----|
 | API ID | `api-ra5EZDjVKkXa` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bgc5z86utjwh-api-ra5EZDjVKkXa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-ra5EZDjVKkXa-gateway.appmiaoda.com` |
 | 计费 | 启用（discount_price: 45.00，original_price: 65.00，单价 45） |
 
 ### 请求参数
@@ -65,10 +65,10 @@
 | 字段 | 值 |
 |------|----|
 | API ID | `api-VaOwP2jDmAga` |
-| Endpoint（Web） | `POST https://app-bgc5z86utjwh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task` |
-| Endpoint（MiniProgram） | `GET https://app-bgc5z86utjwh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task?taskId={taskId}` |
+| Endpoint（Web） | `POST https://app-bm0s7wqmrksh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task` |
+| Endpoint（MiniProgram） | `GET https://app-bm0s7wqmrksh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task?taskId={taskId}` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bgc5z86utjwh-api-VaOwP2jDmAga-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-VaOwP2jDmAga-gateway.appmiaoda.com` |
 | 计费 | 不启用 |
 
 **重要（MiniProgram 平台）：** Miaoda 平台代理会静默丢弃小 POST 请求体（如 `{"taskId":"..."}`），
@@ -130,7 +130,7 @@ const apiKey = process.env["INTEGRATIONS_API_KEY"]!;
 /** 提交文生图任务，返回 taskId */
 async function submitTextToImage(prompt: string): Promise<string> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit",
+    "https://app-bm0s7wqmrksh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit",
     {
       method: "POST",
       headers: {
@@ -161,7 +161,7 @@ async function submitImageToImage(
   prompt: string
 ): Promise<string> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit",
+    "https://app-bm0s7wqmrksh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit",
     {
       method: "POST",
       headers: {
@@ -201,7 +201,7 @@ async function submitMultiImageGeneration(
     { text: prompt },
   ];
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit",
+    "https://app-bm0s7wqmrksh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit",
     {
       method: "POST",
       headers: {
@@ -229,7 +229,7 @@ async function queryTaskStatus(taskId: string): Promise<{
   error?: { code: string; message: string };
 }> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task",
+    "https://app-bm0s7wqmrksh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task",
     {
       method: "POST",
       headers: {
@@ -365,7 +365,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // 提交任务
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit",
+    "https://app-bm0s7wqmrksh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit",
     {
       method: "POST",
       headers: {
@@ -467,7 +467,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task",
+    "https://app-bm0s7wqmrksh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task",
     {
       method: "POST",
       headers: {
@@ -580,7 +580,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task",
+    "https://app-bm0s7wqmrksh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task",
     {
       method: "POST",
       headers: {

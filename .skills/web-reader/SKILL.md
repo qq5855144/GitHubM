@@ -10,7 +10,7 @@ license: MIT
 
 | 项目 | 说明 |
 |------|------|
-| Endpoint | `GET https://app-bgc5z86utjwh-api-ELbWqODdAgNY-gateway.appmiaoda.com/{url}` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-ELbWqODdAgNY-gateway.appmiaoda.com/{url}` |
 | 响应格式 | `text/plain`（默认 Markdown） |
 | 鉴权方式 | platform_managed（`INTEGRATIONS_API_KEY`） |
 
@@ -99,7 +99,7 @@ async function fetchWebPage(
 ): Promise<string> {
   const encodedUrl = encodeURIComponent(targetUrl);
   const endpoint =
-    `https://app-bgc5z86utjwh-api-ELbWqODdAgNY-gateway.appmiaoda.com/${encodedUrl}`;
+    `https://app-bm0s7wqmrksh-api-ELbWqODdAgNY-gateway.appmiaoda.com/${encodedUrl}`;
 
   const headers: Record<string, string> = {
     "X-Gateway-Authorization": `Bearer ${apiKey}`,
@@ -211,7 +211,7 @@ serve(async (req: Request): Promise<Response> => {
   // --- 调用上游服务 ---
   const encodedUrl = encodeURIComponent(targetUrl);
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-ELbWqODdAgNY-gateway.appmiaoda.com/${encodedUrl}`,
+    `https://app-bm0s7wqmrksh-api-ELbWqODdAgNY-gateway.appmiaoda.com/${encodedUrl}`,
     { method: "GET", headers: upstreamHeaders }
   );
 
@@ -396,7 +396,7 @@ async function fetchWebPageSSE(
 ): Promise<string> {
   const encodedUrl = encodeURIComponent(targetUrl);
   const endpoint =
-    `https://app-bgc5z86utjwh-api-ELbWqODdAgNY-gateway.appmiaoda.com/${encodedUrl}`;
+    `https://app-bm0s7wqmrksh-api-ELbWqODdAgNY-gateway.appmiaoda.com/${encodedUrl}`;
 
   const response = await fetch(endpoint, {
     method: "GET",

@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `126915de-23d7-454c-accf-b88797feb9e5` |
 | API ID | `api-BYdwQyx58E6L` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-BYdwQyx58E6L-gateway.appmiaoda.com/caipiao/class` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-BYdwQyx58E6L-gateway.appmiaoda.com/caipiao/class` |
 | Auth | `platform_managed`，`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| Third-party Domain | `app-bgc5z86utjwh-api-BYdwQyx58E6L-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-BYdwQyx58E6L-gateway.appmiaoda.com` |
 
 ## 请求参数
 
@@ -68,7 +68,7 @@ interface CaipiaoClassItem {
  */
 async function queryCaipiaoClass(): Promise<CaipiaoClassItem[]> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-BYdwQyx58E6L-gateway.appmiaoda.com/caipiao/class",
+    "https://app-bm0s7wqmrksh-api-BYdwQyx58E6L-gateway.appmiaoda.com/caipiao/class",
     {
       method: "POST",
       headers: {
@@ -115,7 +115,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API（无需请求参数）---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-BYdwQyx58E6L-gateway.appmiaoda.com/caipiao/class",
+    "https://app-bm0s7wqmrksh-api-BYdwQyx58E6L-gateway.appmiaoda.com/caipiao/class",
     {
       method: "POST",
       headers: {

@@ -6,10 +6,10 @@
 |------|-----|
 | Plugin ID | `ea9ecacf-f5ab-4c56-9ed7-2fadaf6e62cc` |
 | API ID | `api-Xa6JZxjyPlNa` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-Xa6JZxjyPlNa-gateway.appmiaoda.com/stock/hs/blocklist` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-Xa6JZxjyPlNa-gateway.appmiaoda.com/stock/hs/blocklist` |
 | Auth | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | `application/x-www-form-urlencoded` |
-| Third-party domain | `app-bgc5z86utjwh-api-Xa6JZxjyPlNa-gateway.appmiaoda.com` |
+| Third-party domain | `app-bm0s7wqmrksh-api-Xa6JZxjyPlNa-gateway.appmiaoda.com` |
 | 计费 | 启用，折扣价 ¥0.13/次，原价 ¥0.20/次 |
 
 ---
@@ -97,7 +97,7 @@ async function fetchBlockList(
   pageSize = "10"
 ): Promise<BlockListData> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-Xa6JZxjyPlNa-gateway.appmiaoda.com/stock/hs/blocklist",
+    "https://app-bm0s7wqmrksh-api-Xa6JZxjyPlNa-gateway.appmiaoda.com/stock/hs/blocklist",
     {
       method: "POST",
       headers: {
@@ -162,7 +162,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-Xa6JZxjyPlNa-gateway.appmiaoda.com/stock/hs/blocklist",
+    "https://app-bm0s7wqmrksh-api-Xa6JZxjyPlNa-gateway.appmiaoda.com/stock/hs/blocklist",
     {
       method: "POST",
       headers: {

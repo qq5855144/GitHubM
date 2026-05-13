@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `feccaf6c-9221-4532-b7e0-f95086eec01d` |
 | API ID | `api-k93RZBjP0zqa` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-k93RZBjP0zqa-gateway.appmiaoda.com/rest/2.0/ocr/v1/idcard` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-k93RZBjP0zqa-gateway.appmiaoda.com/rest/2.0/ocr/v1/idcard` |
 | Content-Type | `application/x-www-form-urlencoded` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | 认证模式 | `platform_managed` |
-| third_part_domain | `app-bgc5z86utjwh-api-k93RZBjP0zqa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-k93RZBjP0zqa-gateway.appmiaoda.com` |
 
 ---
 
@@ -98,7 +98,7 @@ async function recognizeIdCard(
   if (options?.detectDirection !== undefined) params.detect_direction = String(options.detectDirection);
 
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-k93RZBjP0zqa-gateway.appmiaoda.com/rest/2.0/ocr/v1/idcard",
+    "https://app-bm0s7wqmrksh-api-k93RZBjP0zqa-gateway.appmiaoda.com/rest/2.0/ocr/v1/idcard",
     {
       method: "POST",
       headers: {
@@ -187,7 +187,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-k93RZBjP0zqa-gateway.appmiaoda.com/rest/2.0/ocr/v1/idcard",
+    "https://app-bm0s7wqmrksh-api-k93RZBjP0zqa-gateway.appmiaoda.com/rest/2.0/ocr/v1/idcard",
     {
       method: "POST",
       headers: {
@@ -411,4 +411,4 @@ async function handleChooseAndRecognize() {
   - `detect_ps=true`：检测是否被 PS，返回 `card_ps` 字段。
 - **计费**：计费以平台实际配置为准，请在业务逻辑中避免不必要的重复调用（如
   相同图片重复提交）。可结合前端缓存或哈希去重来控制调用次数。
-- **第三方域名**：实际请求转发至 `app-bgc5z86utjwh-api-k93RZBjP0zqa-gateway.appmiaoda.com`，网关代理后客户端无需感知。
+- **第三方域名**：实际请求转发至 `app-bm0s7wqmrksh-api-k93RZBjP0zqa-gateway.appmiaoda.com`，网关代理后客户端无需感知。

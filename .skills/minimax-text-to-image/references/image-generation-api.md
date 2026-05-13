@@ -6,11 +6,11 @@
 |------|-----|
 | Plugin ID | `8f3bac45-47db-47d3-b13c-23e30182316d` |
 | API ID | `api-DLEO7vB8pQba` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-DLEO7vB8pQba-gateway.appmiaoda.com/v1/image_generation` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-DLEO7vB8pQba-gateway.appmiaoda.com/v1/image_generation` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| Third-party Domain | `app-bgc5z86utjwh-api-DLEO7vB8pQba-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-DLEO7vB8pQba-gateway.appmiaoda.com` |
 | 支持平台 | Web、MiniProgram |
 
 ---
@@ -106,7 +106,7 @@ async function generateImages(
   };
 
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-DLEO7vB8pQba-gateway.appmiaoda.com/v1/image_generation",
+    "https://app-bm0s7wqmrksh-api-DLEO7vB8pQba-gateway.appmiaoda.com/v1/image_generation",
     {
       method: "POST",
       headers: {
@@ -153,7 +153,7 @@ async function generateLiveStyleImages(prompt: string, styleType: string): Promi
   };
 
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-DLEO7vB8pQba-gateway.appmiaoda.com/v1/image_generation",
+    "https://app-bm0s7wqmrksh-api-DLEO7vB8pQba-gateway.appmiaoda.com/v1/image_generation",
     {
       method: "POST",
       headers: {
@@ -320,7 +320,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 MiniMax 接口 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-DLEO7vB8pQba-gateway.appmiaoda.com/v1/image_generation",
+    "https://app-bm0s7wqmrksh-api-DLEO7vB8pQba-gateway.appmiaoda.com/v1/image_generation",
     {
       method: "POST",
       headers: {

@@ -8,7 +8,7 @@ license: MIT
 
 调用百度 OCR 接口对二代居民身份证正反面进行结构化识别，返回 JSON 格式的文字识别结果。
 
-- **Endpoint**：`POST https://app-bgc5z86utjwh-api-k93RZBjP0zqa-gateway.appmiaoda.com/rest/2.0/ocr/v1/idcard`
+- **Endpoint**：`POST https://app-bm0s7wqmrksh-api-k93RZBjP0zqa-gateway.appmiaoda.com/rest/2.0/ocr/v1/idcard`
 - **Content-Type**：`application/x-www-form-urlencoded`
 - **认证模式**：`platform_managed`（密钥由平台注入，客户端无需关心）
 - Auth Header 为 `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`（注意不是标准的 `Authorization`）。

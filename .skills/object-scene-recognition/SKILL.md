@@ -8,7 +8,7 @@ license: MIT
 
 调用百度 AI 图像理解接口，对输入图片识别出多个物体及场景标签，可识别超过 10 万类常见物体和场景。
 
-- **Endpoint**：`POST https://app-bgc5z86utjwh-api-zYm4zKQoePjL-gateway.appmiaoda.com/rest/2.0/image-classify/v2/advanced_general`
+- **Endpoint**：`POST https://app-bm0s7wqmrksh-api-zYm4zKQoePjL-gateway.appmiaoda.com/rest/2.0/image-classify/v2/advanced_general`
 - **Content-Type**：`application/x-www-form-urlencoded`
 - **认证模式**：`platform_managed`，密钥由平台注入（`INTEGRATIONS_API_KEY`）
 - Auth Header 为 `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`（注意不是标准的 `Authorization`）。

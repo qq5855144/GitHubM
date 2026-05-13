@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `05c1a6d9-4287-460f-94ec-9ea947d26f79` |
 | API ID | `api-oLpZ74noWOMa` |
-| Endpoint | `GET https://app-bgc5z86utjwh-api-oLpZ74noWOMa-gateway.appmiaoda.com/idcard` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-oLpZ74noWOMa-gateway.appmiaoda.com/idcard` |
 | Content-Type | `application/json; charset=utf-8` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | 认证模式 | `platform_managed` |
-| third_part_domain | `app-bgc5z86utjwh-api-oLpZ74noWOMa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-oLpZ74noWOMa-gateway.appmiaoda.com` |
 
 ---
 

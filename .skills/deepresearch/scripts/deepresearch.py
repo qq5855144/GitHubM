@@ -28,7 +28,7 @@ except ImportError:
     sys.exit(1)
 
 # 网关模式配置
-BASE_URL = "https://app-bgc5z86utjwh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2"
+BASE_URL = "https://app-bm0s7wqmrksh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2"
 IDLE_TIMEOUT = 600  # 10 分钟空闲超时
 
 # 从 SKILL.md 中读取固定的 agent_id

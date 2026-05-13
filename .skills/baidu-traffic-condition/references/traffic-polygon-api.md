@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `afe98a5e-125b-4104-adfc-3f57e2d42da1` |
 | API ID | `api-BYdwQ5e51blL` |
-| Endpoint | `GET https://app-bgc5z86utjwh-api-BYdwQ5e51blL-gateway.appmiaoda.com/traffic/v1/polygon` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-BYdwQ5e51blL-gateway.appmiaoda.com/traffic/v1/polygon` |
 | Auth | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | `application/json`（GET 请求，参数通过 Query String 传递） |
-| third_part_domain | `app-bgc5z86utjwh-api-BYdwQ5e51blL-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-BYdwQ5e51blL-gateway.appmiaoda.com` |
 
 ## 请求参数
 
@@ -59,7 +59,7 @@ async function queryPolygonTraffic(
   if (coordTypeOutput) params.set("coord_type_output", coordTypeOutput);
 
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-BYdwQ5e51blL-gateway.appmiaoda.com/traffic/v1/polygon?${params.toString()}`,
+    `https://app-bm0s7wqmrksh-api-BYdwQ5e51blL-gateway.appmiaoda.com/traffic/v1/polygon?${params.toString()}`,
     {
       method: "GET",
       headers: {
@@ -128,7 +128,7 @@ serve(async (req: Request): Promise<Response> => {
   if (coordTypeOutput) params.set("coord_type_output", coordTypeOutput);
 
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-BYdwQ5e51blL-gateway.appmiaoda.com/traffic/v1/polygon?${params.toString()}`,
+    `https://app-bm0s7wqmrksh-api-BYdwQ5e51blL-gateway.appmiaoda.com/traffic/v1/polygon?${params.toString()}`,
     {
       method: "GET",
       headers: {

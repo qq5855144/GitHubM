@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `d194f9e8-4977-4d57-9915-66ca3a3fc2dd` |
 | API ID | `api-ra5EZDjVv8Xa` |
-| Endpoint | `GET https://app-bgc5z86utjwh-api-ra5EZDjVv8Xa-gateway.appmiaoda.com/beta/video/generations/kling/image2video?task_id={task_id}` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-ra5EZDjVv8Xa-gateway.appmiaoda.com/beta/video/generations/kling/image2video?task_id={task_id}` |
 | Auth 模式 | `platform_managed`（密钥由平台注入） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json`（可选） |
-| third_part_domain | `app-bgc5z86utjwh-api-ra5EZDjVv8Xa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-ra5EZDjVv8Xa-gateway.appmiaoda.com` |
 
 ---
 
@@ -95,7 +95,7 @@ async function queryImageToVideoTask(taskId: string): Promise<{
   updated_at: number;
 }> {
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-ra5EZDjVv8Xa-gateway.appmiaoda.com/beta/video/generations/kling/image2video?task_id=${taskId}`,
+    `https://app-bm0s7wqmrksh-api-ra5EZDjVv8Xa-gateway.appmiaoda.com/beta/video/generations/kling/image2video?task_id=${taskId}`,
     {
       method: "GET",
       headers: {
@@ -233,7 +233,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 查询上游任务状态 ---
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-ra5EZDjVv8Xa-gateway.appmiaoda.com/beta/video/generations/kling/image2video?task_id=${taskId}`,
+    `https://app-bm0s7wqmrksh-api-ra5EZDjVv8Xa-gateway.appmiaoda.com/beta/video/generations/kling/image2video?task_id=${taskId}`,
     {
       method: "GET",
       headers: {

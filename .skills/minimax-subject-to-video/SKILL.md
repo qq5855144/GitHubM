@@ -44,7 +44,7 @@ async function submitVideoGeneration(
   promptOptimizer = true,
 ): Promise<{ taskId: string }> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-oLpZbv47qvea-gateway.appmiaoda.com/v1/video_generation",
+    "https://app-bm0s7wqmrksh-api-oLpZbv47qvea-gateway.appmiaoda.com/v1/video_generation",
     {
       method: "POST",
       headers: {
@@ -72,7 +72,7 @@ async function queryVideoGeneration(
   taskId: string,
 ): Promise<{ status: string; fileId?: string; videoWidth?: number; videoHeight?: number }> {
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-GYX1bq2l5vWa-gateway.appmiaoda.com/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
+    `https://app-bm0s7wqmrksh-api-GYX1bq2l5vWa-gateway.appmiaoda.com/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
     {
       method: "GET",
       headers: {
@@ -93,7 +93,7 @@ async function queryVideoGeneration(
 /** 获取视频文件下载链接 */
 async function retrieveVideoFile(fileId: string): Promise<{ downloadUrl: string; filename: string }> {
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-VaOw5V2Pbqoa-gateway.appmiaoda.com/v1/files/retrieve?file_id=${encodeURIComponent(fileId)}`,
+    `https://app-bm0s7wqmrksh-api-VaOw5V2Pbqoa-gateway.appmiaoda.com/v1/files/retrieve?file_id=${encodeURIComponent(fileId)}`,
     {
       method: "GET",
       headers: {

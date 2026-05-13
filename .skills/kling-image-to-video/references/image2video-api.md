@@ -10,7 +10,7 @@
 | 密钥来源 | `Deno.env.get("INTEGRATIONS_API_KEY")!` |
 | Auth Header | `X-Gateway-Authorization: Bearer <key>` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bgc5z86utjwh-api-DY8MN3QBydBa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-DY8MN3QBydBa-gateway.appmiaoda.com` |
 
 ---
 
@@ -20,7 +20,7 @@
 |------|-----|
 | API ID | `api-DY8MN3QBydBa` |
 | 方法 | POST |
-| Endpoint | `https://app-bgc5z86utjwh-api-DY8MN3QBydBa-gateway.appmiaoda.com/v1/videos/image2video` |
+| Endpoint | `https://app-bm0s7wqmrksh-api-DY8MN3QBydBa-gateway.appmiaoda.com/v1/videos/image2video` |
 | 计费 | 启用（折扣价 235.00 元/千次，原价 377.30 元/千次） |
 
 ### 请求参数表
@@ -78,7 +78,7 @@
 |------|-----|
 | API ID | `api-zYkZzgKook1L` |
 | 方法 | GET |
-| Endpoint | `https://app-bgc5z86utjwh-api-zYkZzgKook1L-gateway.appmiaoda.com/v1/videos/image2video/{id}` |
+| Endpoint | `https://app-bm0s7wqmrksh-api-zYkZzgKook1L-gateway.appmiaoda.com/v1/videos/image2video/{id}` |
 | 计费 | 不启用 |
 
 ### 查询单个任务参数
@@ -114,7 +114,7 @@
 |------|-----|
 | API ID | `api-n9QVoDJ6oykL` |
 | 方法 | GET |
-| Endpoint | `https://app-bgc5z86utjwh-api-n9QVoDJ6oykL-gateway.appmiaoda.com/v1/videos/image2video` |
+| Endpoint | `https://app-bm0s7wqmrksh-api-n9QVoDJ6oykL-gateway.appmiaoda.com/v1/videos/image2video` |
 | 计费 | 不启用 |
 
 ### 查询任务列表参数
@@ -181,7 +181,7 @@ async function submitImage2VideoTask(params: {
   external_task_id?: string;
 }): Promise<{ task_id: string; task_status: string }> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-DY8MN3QBydBa-gateway.appmiaoda.com/v1/videos/image2video",
+    "https://app-bm0s7wqmrksh-api-DY8MN3QBydBa-gateway.appmiaoda.com/v1/videos/image2video",
     {
       method: "POST",
       headers: {
@@ -208,7 +208,7 @@ async function queryImage2VideoTask(taskId: string): Promise<{
   task_result?: { videos: Array<{ id: string; url: string; duration: string }> };
 }> {
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-zYkZzgKook1L-gateway.appmiaoda.com/v1/videos/image2video/${taskId}`,
+    `https://app-bm0s7wqmrksh-api-zYkZzgKook1L-gateway.appmiaoda.com/v1/videos/image2video/${taskId}`,
     {
       method: "GET",
       headers: {
@@ -235,7 +235,7 @@ async function listImage2VideoTasks(pageNum = 1, pageSize = 30): Promise<Array<{
   updated_at: number;
 }>> {
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-n9QVoDJ6oykL-gateway.appmiaoda.com/v1/videos/image2video` +
+    `https://app-bm0s7wqmrksh-api-n9QVoDJ6oykL-gateway.appmiaoda.com/v1/videos/image2video` +
       `?pageNum=${pageNum}&pageSize=${pageSize}`,
     {
       method: "GET",
@@ -380,7 +380,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游创建任务接口 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-DY8MN3QBydBa-gateway.appmiaoda.com/v1/videos/image2video",
+    "https://app-bm0s7wqmrksh-api-DY8MN3QBydBa-gateway.appmiaoda.com/v1/videos/image2video",
     {
       method: "POST",
       headers: {
@@ -509,7 +509,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 查询任务 ---
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-zYkZzgKook1L-gateway.appmiaoda.com/v1/videos/image2video/${task_id}`,
+    `https://app-bm0s7wqmrksh-api-zYkZzgKook1L-gateway.appmiaoda.com/v1/videos/image2video/${task_id}`,
     {
       method: "GET",
       headers: {

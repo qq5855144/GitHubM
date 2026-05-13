@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `b4e50937-a645-487a-bbf0-0a70156a8271` |
 | API ID | `api-zYkZz8qovQ1L` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-zYkZz8qovQ1L-gateway.appmiaoda.com/v2/chat/completions` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-zYkZz8qovQ1L-gateway.appmiaoda.com/v2/chat/completions` |
 | Content-Type | `application/json` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | 认证模式 | `platform_managed`（密钥由平台注入，读取 `INTEGRATIONS_API_KEY`） |
-| Third-party Domain | `app-bgc5z86utjwh-api-zYkZz8qovQ1L-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-zYkZz8qovQ1L-gateway.appmiaoda.com` |
 | 响应模式 | SSE 流式 |
 | 计费 | 原价 ¥0.20 / 0.1单位，优惠价 ¥0.10 / 0.1单位 |
 
@@ -97,7 +97,7 @@ async function callTextGenerationLLM(
   enableThinking = false
 ): Promise<string> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-zYkZz8qovQ1L-gateway.appmiaoda.com/v2/chat/completions",
+    "https://app-bm0s7wqmrksh-api-zYkZz8qovQ1L-gateway.appmiaoda.com/v2/chat/completions",
     {
       method: "POST",
       headers: {
@@ -203,7 +203,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   // 3. 调用上游 SSE 接口
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-zYkZz8qovQ1L-gateway.appmiaoda.com/v2/chat/completions",
+    "https://app-bm0s7wqmrksh-api-zYkZz8qovQ1L-gateway.appmiaoda.com/v2/chat/completions",
     {
       method: "POST",
       headers: {

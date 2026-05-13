@@ -23,9 +23,9 @@ Auth Header 为 `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`（注�
 
 | 功能 | 方法 | 端点 |
 |------|------|------|
-| 创建扩图任务 | POST | `https://app-bgc5z86utjwh-api-Q9KWnzwVQMk9-gateway.appmiaoda.com/v1/images/editing/expand` |
-| 查询单个任务 | GET  | `https://app-bgc5z86utjwh-api-rLobR6vwZJJ9-gateway.appmiaoda.com/v1/images/editing/expand/{task_id}` |
-| 查询任务列表 | GET  | `https://app-bgc5z86utjwh-api-AalZkPVdZX8L-gateway.appmiaoda.com/v1/images/editing/expand` |
+| 创建扩图任务 | POST | `https://app-bm0s7wqmrksh-api-Q9KWnzwVQMk9-gateway.appmiaoda.com/v1/images/editing/expand` |
+| 查询单个任务 | GET  | `https://app-bm0s7wqmrksh-api-rLobR6vwZJJ9-gateway.appmiaoda.com/v1/images/editing/expand/{task_id}` |
+| 查询任务列表 | GET  | `https://app-bm0s7wqmrksh-api-AalZkPVdZX8L-gateway.appmiaoda.com/v1/images/editing/expand` |
 
 ### 关键约束
 

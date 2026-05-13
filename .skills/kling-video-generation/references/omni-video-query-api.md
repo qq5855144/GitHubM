@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `339870a2-4a8b-4633-a8c5-fed34600f5bf` |
 | API ID | `api-o9wN0pyVE2ea` |
-| Endpoint | `GET https://app-bgc5z86utjwh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/{id}` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/{id}` |
 | Auth 模式 | `platform_managed`（`traefik: true`） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bgc5z86utjwh-api-o9wN0pyVE2ea-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-o9wN0pyVE2ea-gateway.appmiaoda.com` |
 
 ---
 
@@ -107,9 +107,9 @@ async function queryOmniVideoTask(
 
   let url: string;
   if (taskId) {
-    url = `https://app-bgc5z86utjwh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/${taskId}`;
+    url = `https://app-bm0s7wqmrksh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/${taskId}`;
   } else {
-    url = `https://app-bgc5z86utjwh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/${externalTaskId}?external_task_id=${externalTaskId}`;
+    url = `https://app-bm0s7wqmrksh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/${externalTaskId}?external_task_id=${externalTaskId}`;
   }
 
   const response = await fetch(url, {
@@ -274,9 +274,9 @@ serve(async (req: Request): Promise<Response> => {
   // --- 构造查询 URL ---
   let queryUrl: string;
   if (taskId) {
-    queryUrl = `https://app-bgc5z86utjwh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/${taskId}`;
+    queryUrl = `https://app-bm0s7wqmrksh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/${taskId}`;
   } else {
-    queryUrl = `https://app-bgc5z86utjwh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/${externalTaskId}?external_task_id=${externalTaskId}`;
+    queryUrl = `https://app-bm0s7wqmrksh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/${externalTaskId}?external_task_id=${externalTaskId}`;
   }
 
   // --- 调用上游接口 ---

@@ -10,8 +10,8 @@ license: MIT
 
 | 属性 | 值 |
 |------|-----|
-| Endpoint | `GET https://app-bgc5z86utjwh-api-zYkZXBBNPe8L-gateway.appmiaoda.com/api_place_pro/v1/region` |
-| 原始 API scheme | 原始 APIDOC 端点为 `http://app-bgc5z86utjwh-api-zYkZXBBNPe8L-gateway.appmiaoda.com/api_place_pro/v1/region`（HTTP），gateway 已将其升级为 HTTPS 代理访问，调用时统一使用上方 HTTPS 地址即可 |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-zYkZXBBNPe8L-gateway.appmiaoda.com/api_place_pro/v1/region` |
+| 原始 API scheme | 原始 APIDOC 端点为 `http://app-bm0s7wqmrksh-api-zYkZXBBNPe8L-gateway.appmiaoda.com/api_place_pro/v1/region`（HTTP），gateway 已将其升级为 HTTPS 代理访问，调用时统一使用上方 HTTPS 地址即可 |
 | 认证模式 | platform_managed（`X-Gateway-Authorization: Bearer ${apiKey}`） |
 | 响应格式 | JSON |
 | 结果上限 | total 最多返回 150 条，单页最多 20 条 |
@@ -105,7 +105,7 @@ async function searchPoiMultidim(
     params.set("extensions_adcode", String(options.extensionsAdcode));
   }
 
-  const url = `https://app-bgc5z86utjwh-api-zYkZXBBNPe8L-gateway.appmiaoda.com/api_place_pro/v1/region?${params.toString()}`;
+  const url = `https://app-bm0s7wqmrksh-api-zYkZXBBNPe8L-gateway.appmiaoda.com/api_place_pro/v1/region?${params.toString()}`;
 
   const response = await fetch(url, {
     method: "GET",
@@ -212,7 +212,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-zYkZXBBNPe8L-gateway.appmiaoda.com/api_place_pro/v1/region?${params.toString()}`,
+    `https://app-bm0s7wqmrksh-api-zYkZXBBNPe8L-gateway.appmiaoda.com/api_place_pro/v1/region?${params.toString()}`,
     {
       method: "GET",
       headers: {

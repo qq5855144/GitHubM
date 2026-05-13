@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `d194f9e8-4977-4d57-9915-66ca3a3fc2dd` |
 | API ID | `api-m9xKX785MdZa` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-m9xKX785MdZa-gateway.appmiaoda.com/beta/video/generations/kling/image2video` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-m9xKX785MdZa-gateway.appmiaoda.com/beta/video/generations/kling/image2video` |
 | Auth 模式 | `platform_managed`（密钥由平台注入） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bgc5z86utjwh-api-m9xKX785MdZa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-m9xKX785MdZa-gateway.appmiaoda.com` |
 
 ---
 
@@ -73,7 +73,7 @@ async function createImageToVideoTask(
   duration: string = "5"
 ): Promise<{ task_id: string; task_status: string; created_at: number; updated_at: number }> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-m9xKX785MdZa-gateway.appmiaoda.com/beta/video/generations/kling/image2video",
+    "https://app-bm0s7wqmrksh-api-m9xKX785MdZa-gateway.appmiaoda.com/beta/video/generations/kling/image2video",
     {
       method: "POST",
       headers: {
@@ -136,7 +136,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-m9xKX785MdZa-gateway.appmiaoda.com/beta/video/generations/kling/image2video",
+    "https://app-bm0s7wqmrksh-api-m9xKX785MdZa-gateway.appmiaoda.com/beta/video/generations/kling/image2video",
     {
       method: "POST",
       headers: {

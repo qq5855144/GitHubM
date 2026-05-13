@@ -10,7 +10,7 @@ license: MIT
 
 | 属性 | 值 |
 |------|-----|
-| Endpoint | `GET https://app-bgc5z86utjwh-api-e94GZ5j0Kxja-gateway.appmiaoda.com/business4/get` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-e94GZ5j0Kxja-gateway.appmiaoda.com/business4/get` |
 | 认证方式 | platform_managed（`X-Gateway-Authorization: Bearer ${apiKey}`） |
 | Content-Type | `application/json;charset=UTF-8` |
 | 响应格式 | JSON |

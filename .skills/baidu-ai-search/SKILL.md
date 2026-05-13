@@ -6,13 +6,13 @@ license: MIT
 
 ## 能力概述
 
-百度AI搜索核心接口，向 `POST https://app-bgc5z86utjwh-api-DYJwo27V8Qya-gateway.appmiaoda.com/v2/ai_search/chat/completions`
+百度AI搜索核心接口，向 `POST https://app-bm0s7wqmrksh-api-DYJwo27V8Qya-gateway.appmiaoda.com/v2/ai_search/chat/completions`
 发送多轮对话消息，调用百度大模型搜索全网实时信息并以 **HTTP SSE 流式** 方式返回智能总结、引用来源、
 推理过程及追问建议。
 
 | 维度 | 说明 |
 |------|------|
-| Endpoint | `POST https://app-bgc5z86utjwh-api-DYJwo27V8Qya-gateway.appmiaoda.com/v2/ai_search/chat/completions` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-DYJwo27V8Qya-gateway.appmiaoda.com/v2/ai_search/chat/completions` |
 | 响应方式 | HTTP SSE 流式（text/event-stream） |
 | 认证 | platform_managed（`X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>`） |
 | 多平台差异 | Web、MiniProgram、App 的 SSE 前端消费方式不同，详见 references/ |

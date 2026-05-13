@@ -27,8 +27,8 @@ license: MIT
 | 计费 | 折扣价 400 元，原价 480 元 |
 
 **端点：**
-- 创建任务：`POST https://app-bgc5z86utjwh-api-oLpZb03wbNBa-gateway.appmiaoda.com/v1/videos/omni-video`
-- 查询任务：`GET https://app-bgc5z86utjwh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/{task_id}`
+- 创建任务：`POST https://app-bm0s7wqmrksh-api-oLpZb03wbNBa-gateway.appmiaoda.com/v1/videos/omni-video`
+- 查询任务：`GET https://app-bm0s7wqmrksh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/{task_id}`
 
 ---
 
@@ -73,7 +73,7 @@ async function generateVideoAndWait(
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
 
     const queryResp = await fetch(
-      `https://app-bgc5z86utjwh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/${taskId}`,
+      `https://app-bm0s7wqmrksh-api-o9wN0pyVE2ea-gateway.appmiaoda.com/v1/videos/omni-video/${taskId}`,
       {
         method: "GET",
         headers: {
@@ -128,7 +128,7 @@ const apiKey = process.env["INTEGRATIONS_API_KEY"]!;
 
 // 1. 提交创建任务
 const createResp = await fetch(
-  "https://app-bgc5z86utjwh-api-oLpZb03wbNBa-gateway.appmiaoda.com/v1/videos/omni-video",
+  "https://app-bm0s7wqmrksh-api-oLpZb03wbNBa-gateway.appmiaoda.com/v1/videos/omni-video",
   {
     method: "POST",
     headers: {

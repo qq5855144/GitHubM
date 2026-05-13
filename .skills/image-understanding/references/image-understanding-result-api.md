@@ -6,12 +6,12 @@
 |------|----|
 | Plugin ID | `b335d1cb-8d7e-44ab-b419-752d3d363680` |
 | API ID | `api-zYkZz8qoKDdL` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-zYkZz8qoKDdL-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/get-result` |
-| 生成期 URL（含 API ID） | `https://app-bgc5z86utjwh-api-zYkZz8qoKDdL-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/get-result` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-zYkZz8qoKDdL-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/get-result` |
+| 生成期 URL（含 API ID） | `https://app-bm0s7wqmrksh-api-zYkZz8qoKDdL-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/get-result` |
 | Content-Type | `application/json` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | 认证模式 | `platform_managed` |
-| third_part_domain | `app-bgc5z86utjwh-api-zYkZz8qoKDdL-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-zYkZz8qoKDdL-gateway.appmiaoda.com` |
 | 计费 | 不启用（查询接口免费） |
 
 ---
@@ -88,7 +88,7 @@ async function getImageUnderstandingResult(
   taskId: string
 ): Promise<{ retCode: number; description: string }> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-zYkZz8qoKDdL-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/get-result",
+    "https://app-bm0s7wqmrksh-api-zYkZz8qoKDdL-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/get-result",
     {
       method: "POST",
       headers: {
@@ -175,7 +175,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-zYkZz8qoKDdL-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/get-result",
+    "https://app-bm0s7wqmrksh-api-zYkZz8qoKDdL-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/get-result",
     {
       method: "POST",
       headers: {

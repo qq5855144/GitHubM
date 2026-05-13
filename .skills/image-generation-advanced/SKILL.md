@@ -18,8 +18,8 @@ license: MIT
 
 | 接口 | 方法 | Endpoint |
 |------|------|----------|
-| 提交任务 | POST | `https://app-bgc5z86utjwh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit` |
-| 查询状态 | POST/GET | `https://app-bgc5z86utjwh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task` |
+| 提交任务 | POST | `https://app-bm0s7wqmrksh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit` |
+| 查询状态 | POST/GET | `https://app-bm0s7wqmrksh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task` |
 
 任务状态：`PENDING` → `PROCESSING` → `SUCCESS` / `FAILED`
 
@@ -47,7 +47,7 @@ const apiKey = process.env["INTEGRATIONS_API_KEY"]!;
 /** 提交图片生成任务（文生图） */
 async function submitImageGeneration(prompt: string): Promise<string> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit",
+    "https://app-bm0s7wqmrksh-api-ra5EZDjVKkXa-gateway.appmiaoda.com/image-generation/submit",
     {
       method: "POST",
       headers: {
@@ -72,7 +72,7 @@ async function queryTaskStatus(taskId: string): Promise<{
   error?: { code: string; message: string };
 }> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task",
+    "https://app-bm0s7wqmrksh-api-VaOwP2jDmAga-gateway.appmiaoda.com/image-generation/task",
     {
       method: "POST",
       headers: {

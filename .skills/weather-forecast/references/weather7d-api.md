@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `50702c77-3813-482c-8815-c50ebdcfc741` |
 | API ID | `api-rY7JZ6jqrV6L` |
-| Endpoint | `GET https://app-bgc5z86utjwh-api-rY7JZ6jqrV6L-gateway.appmiaoda.com/lundear/weather7d` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-rY7JZ6jqrV6L-gateway.appmiaoda.com/lundear/weather7d` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | 无请求体（GET 请求，参数通过 Query String 传递） |
-| Third-Part Domain | `app-bgc5z86utjwh-api-rY7JZ6jqrV6L-gateway.appmiaoda.com` |
+| Third-Part Domain | `app-bm0s7wqmrksh-api-rY7JZ6jqrV6L-gateway.appmiaoda.com` |
 
 ---
 
@@ -118,7 +118,7 @@ async function getWeather7d(params: {
   needObserve?: "0" | "1";
   need1hour?: "0" | "1";
 }): Promise<Weather7dResult> {
-  const url = new URL("https://app-bgc5z86utjwh-api-rY7JZ6jqrV6L-gateway.appmiaoda.com/lundear/weather7d");
+  const url = new URL("https://app-bm0s7wqmrksh-api-rY7JZ6jqrV6L-gateway.appmiaoda.com/lundear/weather7d");
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined) url.searchParams.set(key, value);
   }
@@ -198,7 +198,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   // --- 调用上游接口 ---
-  const upstreamUrl = new URL("https://app-bgc5z86utjwh-api-rY7JZ6jqrV6L-gateway.appmiaoda.com/lundear/weather7d");
+  const upstreamUrl = new URL("https://app-bm0s7wqmrksh-api-rY7JZ6jqrV6L-gateway.appmiaoda.com/lundear/weather7d");
   const paramMap: Record<string, string | undefined> = {
     areaCode, areaCn, ip, lng, lat,
     needalarm, need3hour, needIndex, needObserve, need1hour,

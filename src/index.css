@@ -16,16 +16,14 @@
     -webkit-touch-callout: none;
   }
 
-  /* 导航、按钮、弹窗框架等纯交互元素禁止文字选中，防止长按触发选择手柄 */
+  /* 导航、按钮等纯交互元素禁止文字选中，防止长按触发选择手柄 */
   button,
   [role="button"],
   a,
   nav,
   header,
   [data-radix-dialog-overlay],
-  [data-radix-alert-dialog-overlay],
-  [data-radix-dialog-content],
-  [data-radix-alert-dialog-content] {
+  [data-radix-alert-dialog-overlay] {
     -webkit-user-select: none;
     user-select: none;
   }

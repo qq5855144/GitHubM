@@ -16,12 +16,11 @@ const AlertDialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Overlay
     className={cn(
-      // touch-action:none 告诉 Android WebView 引擎此元素的所有触摸由 JS 接管，
-      // 不触发原生长按手势识别器（LongPressTimer），从根本上阻止 touchcancel 发生
-      "fixed inset-0 z-50 bg-black/80 [touch-action:none] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      // pointer-events-auto：Radix Dialog 打开时会将 body.pointerEvents 设为 none，
+      // Overlay 不在 DismissableLayer 内所以不会被自动恢复，必须显式声明才能拦截点击
+      "fixed inset-0 z-50 bg-black/80 pointer-events-auto [touch-action:none] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className
     )}
-    onContextMenu={(e) => e.preventDefault()}
     {...props}
     ref={ref}
   />

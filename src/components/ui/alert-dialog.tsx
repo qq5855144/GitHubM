@@ -16,11 +16,11 @@ const AlertDialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Overlay
     className={cn(
-      "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      // touch-action:none 告诉 Android WebView 引擎此元素的所有触摸由 JS 接管，
+      // 不触发原生长按手势识别器（LongPressTimer），从根本上阻止 touchcancel 发生
+      "fixed inset-0 z-50 bg-black/80 [touch-action:none] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className
     )}
-    // 直接在 Portal 节点上阻止长按上下文菜单，防止 Android WebView 长按
-    // 触发系统原生菜单与 Radix 遮罩冲突导致页面卡死
     onContextMenu={(e) => e.preventDefault()}
     {...props}
     ref={ref}
@@ -37,10 +37,11 @@ const AlertDialogContent = React.forwardRef<
     <AlertDialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg select-none",
+        // touch-action:pan-y 允许内容区垂直滚动，同时禁止 pinch-zoom 和长按原生手势
+        // select-none 防止长按触发文字选择手柄（二次保障，配合原生层 setOnLongClickListener）
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg select-none [touch-action:pan-y]",
         className
       )}
-      // 弹窗内容区同样拦截长按菜单，防止事件穿透到底层 Overlay 或 body
       onContextMenu={(e) => e.preventDefault()}
       {...props}
     />

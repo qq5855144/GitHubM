@@ -647,6 +647,21 @@ class MainActivity : AppCompatActivity() {
             builtInZoomControls = false
             mediaPlaybackRequiresUserGesture = false
         }
+
+        /*
+         * 禁用 WebView 原生长按上下文菜单（复制/粘贴/链接预览等）。
+         *
+         * 根本原因：Android 原生 LongPressTimer (~500ms) 在任何 JS 事件触发之前就会
+         * 接管手势，随后发出 touchcancel 通知 JS 层。Radix UI DismissableLayer 收到
+         * touchcancel 后指针状态紊乱，遮罩的 pointer-events 无法复位 → 页面卡死。
+         * JS 层的 onContextMenu/preventDefault 在此时序下无法拦截原生接管行为。
+         *
+         * setOnLongClickListener { true }  ：消费 View 级别的 long-click，阻止系统
+         *   将长按事件继续向 WebView 内部手势识别器分发。
+         * setOnCreateContextMenuListener   ：二次保险，如果菜单仍被创建则立即清空。
+         */
+        webView.setOnLongClickListener { true }
+        webView.setOnCreateContextMenuListener { menu, _, _ -> menu.clear() }
     }
 
     private fun setupWebViewClient() {

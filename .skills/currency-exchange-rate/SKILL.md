@@ -8,7 +8,7 @@ license: MIT
 
 调用汇率转换 API，根据指定源货币代码查询该货币对其他所有货币的实时汇率信息。
 
-- **Endpoint**: `POST https://app-bgc5z86utjwh-api-ELbWz8OmBW5Y-gateway.appmiaoda.com/exchange-rate-v2/single`
+- **Endpoint**: `POST https://app-bm0s7wqmrksh-api-ELbWz8OmBW5Y-gateway.appmiaoda.com/exchange-rate-v2/single`
 - **Content-Type**: `application/x-www-form-urlencoded`
 - **认证**: platform_managed（密钥由平台注入）
 - **支持货币**: 200 多种，含 CNY、USD、EUR、JPY、GBP、HKD、SGD 等主流货币及各国小币种
@@ -77,7 +77,7 @@ interface ExchangeRateData {
  */
 async function getExchangeRates(fromCode: string): Promise<ExchangeRateData> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-ELbWz8OmBW5Y-gateway.appmiaoda.com/exchange-rate-v2/single",
+    "https://app-bm0s7wqmrksh-api-ELbWz8OmBW5Y-gateway.appmiaoda.com/exchange-rate-v2/single",
     {
       method: "POST",
       headers: {
@@ -143,7 +143,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-ELbWz8OmBW5Y-gateway.appmiaoda.com/exchange-rate-v2/single",
+    "https://app-bm0s7wqmrksh-api-ELbWz8OmBW5Y-gateway.appmiaoda.com/exchange-rate-v2/single",
     {
       method: "POST",
       headers: {

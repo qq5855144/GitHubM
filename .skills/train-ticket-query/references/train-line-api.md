@@ -6,11 +6,11 @@
 |------|-----|
 | Plugin ID | `c5210d89-bd58-4f98-b24c-06f95635df18` |
 | API ID | `api-DLEO73l7Vjwa` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-DLEO73l7Vjwa-gateway.appmiaoda.com/train/line` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-DLEO73l7Vjwa-gateway.appmiaoda.com/train/line` |
 | 认证方式 | platform_managed（密钥由平台注入） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${apiKey}` |
 | Content-Type | `application/json;charset=UTF-8` |
-| Third-party Domain | `app-bgc5z86utjwh-api-DLEO73l7Vjwa-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-DLEO73l7Vjwa-gateway.appmiaoda.com` |
 
 ---
 
@@ -163,7 +163,7 @@ async function queryTrainLine(trainno: string, date?: string): Promise<TrainLine
   if (date) params.set("date", date);
 
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-DLEO73l7Vjwa-gateway.appmiaoda.com/train/line?${params}`,
+    `https://app-bm0s7wqmrksh-api-DLEO73l7Vjwa-gateway.appmiaoda.com/train/line?${params}`,
     {
       method: "POST",
       headers: {
@@ -238,7 +238,7 @@ serve(async (req: Request): Promise<Response> => {
   if (date) params.set("date", date);
 
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-DLEO73l7Vjwa-gateway.appmiaoda.com/train/line?${params}`,
+    `https://app-bm0s7wqmrksh-api-DLEO73l7Vjwa-gateway.appmiaoda.com/train/line?${params}`,
     {
       method: "POST",
       headers: {

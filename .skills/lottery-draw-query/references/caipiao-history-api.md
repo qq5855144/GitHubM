@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `126915de-23d7-454c-accf-b88797feb9e5` |
 | API ID | `api-qYGW2z745vzY` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-qYGW2z745vzY-gateway.appmiaoda.com/caipiao/history` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-qYGW2z745vzY-gateway.appmiaoda.com/caipiao/history` |
 | Auth | `platform_managed`，`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| Third-party Domain | `app-bgc5z86utjwh-api-qYGW2z745vzY-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-qYGW2z745vzY-gateway.appmiaoda.com` |
 
 ## 请求参数
 
@@ -129,7 +129,7 @@ async function queryCaipiaoHistory(
   if (start) params.set("start", start);
 
   const url =
-    `https://app-bgc5z86utjwh-api-qYGW2z745vzY-gateway.appmiaoda.com/caipiao/history?${params.toString()}`;
+    `https://app-bm0s7wqmrksh-api-qYGW2z745vzY-gateway.appmiaoda.com/caipiao/history?${params.toString()}`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -199,7 +199,7 @@ serve(async (req: Request): Promise<Response> => {
   if (start) params.set("start", start);
 
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-qYGW2z745vzY-gateway.appmiaoda.com/caipiao/history?${params.toString()}`,
+    `https://app-bm0s7wqmrksh-api-qYGW2z745vzY-gateway.appmiaoda.com/caipiao/history?${params.toString()}`,
     {
       method: "POST",
       headers: {

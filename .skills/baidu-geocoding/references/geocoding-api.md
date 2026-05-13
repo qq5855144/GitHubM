@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `dd5f588a-c7bb-4ca1-984e-6d91565eadd1` |
 | API ID | `api-GaDwZ0j3erOY` |
-| Endpoint | `GET https://app-bgc5z86utjwh-api-GaDwZ0j3erOY-gateway.appmiaoda.com/geocoding/v3/` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-GaDwZ0j3erOY-gateway.appmiaoda.com/geocoding/v3/` |
 | 认证模式 | `platform_managed`（`traefik: true`） |
 | Auth Header | `X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>` |
-| third_part_domain | `app-bgc5z86utjwh-api-GaDwZ0j3erOY-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-GaDwZ0j3erOY-gateway.appmiaoda.com` |
 | 计费 | 免费，但会统计调用次数 |
 
 ---
@@ -98,7 +98,7 @@ async function geocodeAddress(
   if (city) params.set("city", city);
 
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-GaDwZ0j3erOY-gateway.appmiaoda.com/geocoding/v3/?${params.toString()}`,
+    `https://app-bm0s7wqmrksh-api-GaDwZ0j3erOY-gateway.appmiaoda.com/geocoding/v3/?${params.toString()}`,
     {
       method: "GET",
       headers: {
@@ -168,7 +168,7 @@ serve(async (req: Request): Promise<Response> => {
   if (city) params.set("city", city);
 
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-GaDwZ0j3erOY-gateway.appmiaoda.com/geocoding/v3/?${params.toString()}`,
+    `https://app-bm0s7wqmrksh-api-GaDwZ0j3erOY-gateway.appmiaoda.com/geocoding/v3/?${params.toString()}`,
     {
       method: "GET",
       headers: {

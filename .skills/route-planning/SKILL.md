@@ -10,13 +10,13 @@ license: MIT
 
 | 接口名称 | Endpoint | 方法 | 说明 |
 |---------|---------|------|------|
-| 驾车路线规划 | `GET https://app-bgc5z86utjwh-api-GaDwZKpJxXOY-gateway.appmiaoda.com/direction/v2/driving` | GET | 单次驾车路线，支持多种策略 |
-| 骑行路线规划 | `GET https://app-bgc5z86utjwh-api-W9z3MpAdKeNL-gateway.appmiaoda.com/direction/v2/riding` | GET | 单次骑行路线 |
-| 步行路线规划 | `GET https://app-bgc5z86utjwh-api-wLNdomNRn42a-gateway.appmiaoda.com/direction/v2/walking` | GET | 单次步行路线 |
-| 公交路线规划 | `GET https://app-bgc5z86utjwh-api-m9xKXQkOKZXa-gateway.appmiaoda.com/direction/v2/transit` | GET | 公共交通路线，含换乘方案和票价 |
-| 驾车批量算路 | `GET https://app-bgc5z86utjwh-api-6LeBrqqMqKQY-gateway.appmiaoda.com/routematrix/v2/driving` | GET | 多起点多终点笛卡尔积算路 |
-| 骑行批量算路 | `GET https://app-bgc5z86utjwh-api-Aa2Pq88pDANL-gateway.appmiaoda.com/routematrix/v2/riding` | GET | 批量骑行距离耗时计算 |
-| 步行批量算路 | `GET https://app-bgc5z86utjwh-api-qYGW2zz1MklY-gateway.appmiaoda.com/routematrix/v2/walking` | GET | 批量步行距离耗时计算 |
+| 驾车路线规划 | `GET https://app-bm0s7wqmrksh-api-GaDwZKpJxXOY-gateway.appmiaoda.com/direction/v2/driving` | GET | 单次驾车路线，支持多种策略 |
+| 骑行路线规划 | `GET https://app-bm0s7wqmrksh-api-W9z3MpAdKeNL-gateway.appmiaoda.com/direction/v2/riding` | GET | 单次骑行路线 |
+| 步行路线规划 | `GET https://app-bm0s7wqmrksh-api-wLNdomNRn42a-gateway.appmiaoda.com/direction/v2/walking` | GET | 单次步行路线 |
+| 公交路线规划 | `GET https://app-bm0s7wqmrksh-api-m9xKXQkOKZXa-gateway.appmiaoda.com/direction/v2/transit` | GET | 公共交通路线，含换乘方案和票价 |
+| 驾车批量算路 | `GET https://app-bm0s7wqmrksh-api-6LeBrqqMqKQY-gateway.appmiaoda.com/routematrix/v2/driving` | GET | 多起点多终点笛卡尔积算路 |
+| 骑行批量算路 | `GET https://app-bm0s7wqmrksh-api-Aa2Pq88pDANL-gateway.appmiaoda.com/routematrix/v2/riding` | GET | 批量骑行距离耗时计算 |
+| 步行批量算路 | `GET https://app-bm0s7wqmrksh-api-qYGW2zz1MklY-gateway.appmiaoda.com/routematrix/v2/walking` | GET | 批量步行距离耗时计算 |
 
 **认证方式**：`platform_managed`，密钥由平台注入，通过 `INTEGRATIONS_API_KEY` 环境变量读取，
 Header 统一使用 `X-Gateway-Authorization: Bearer ${apiKey}`。
@@ -35,7 +35,7 @@ const apiKey = process.env.INTEGRATIONS_API_KEY;
 const origin = "40.056878,116.30815";   // 起点纬度,经度
 const destination = "39.767892,116.527308"; // 终点纬度,经度
 
-const url = new URL("https://app-bgc5z86utjwh-api-GaDwZKpJxXOY-gateway.appmiaoda.com/direction/v2/driving");
+const url = new URL("https://app-bm0s7wqmrksh-api-GaDwZKpJxXOY-gateway.appmiaoda.com/direction/v2/driving");
 url.searchParams.set("origin", origin);
 url.searchParams.set("destination", destination);
 url.searchParams.set("output", "json");

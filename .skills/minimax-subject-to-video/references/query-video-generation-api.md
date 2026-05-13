@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `17196c7a-fca2-41ec-85f3-1e303e1a3ee1` |
 | API ID | `api-GYX1bq2l5vWa` |
-| Endpoint | `GET https://app-bgc5z86utjwh-api-GYX1bq2l5vWa-gateway.appmiaoda.com/v1/query/video_generation` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-GYX1bq2l5vWa-gateway.appmiaoda.com/v1/query/video_generation` |
 | Auth | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | 无请求体 |
-| third_part_domain | `app-bgc5z86utjwh-api-GYX1bq2l5vWa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-GYX1bq2l5vWa-gateway.appmiaoda.com` |
 | 计费 | 否（`enable_billing: false`） |
 
 ---
@@ -103,7 +103,7 @@ async function queryVideoGeneration(
   taskId: string,
 ): Promise<QueryVideoGenerationResponse> {
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-GYX1bq2l5vWa-gateway.appmiaoda.com/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
+    `https://app-bm0s7wqmrksh-api-GYX1bq2l5vWa-gateway.appmiaoda.com/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
     {
       method: "GET",
       headers: {
@@ -157,7 +157,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-GYX1bq2l5vWa-gateway.appmiaoda.com/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
+    `https://app-bm0s7wqmrksh-api-GYX1bq2l5vWa-gateway.appmiaoda.com/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
     {
       method: "GET",
       headers: {

@@ -5,13 +5,13 @@
 | 字段                 | 值                                                           |
 | -------------------- | ------------------------------------------------------------ |
 | API ID               | `api-ELbWqrZ1krJY`                                           |
-| Endpoint（创建会话） | `POST https://app-bgc5z86utjwh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2/agent/deepresearch/create` |
-| Endpoint（发起研究） | `POST https://app-bgc5z86utjwh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2/agent/deepresearch/run` |
+| Endpoint（创建会话） | `POST https://app-bm0s7wqmrksh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2/agent/deepresearch/create` |
+| Endpoint（发起研究） | `POST https://app-bm0s7wqmrksh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2/agent/deepresearch/run` |
 | 认证模式             | platform_managed                                             |
 | Auth Header          | `X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>`     |
 | Content-Type         | `application/json`                                           |
 | 响应类型             | SSE 流式（text/event-stream）                                |
-| third_part_domain    | `app-bgc5z86utjwh-api-ELbWqrZ1krJY-gateway.appmiaoda.com`                                       |
+| third_part_domain    | `app-bm0s7wqmrksh-api-ELbWqrZ1krJY-gateway.appmiaoda.com`                                       |
 
 ---
 
@@ -38,7 +38,7 @@ X-Gateway-Authorization: Bearer {INTEGRATIONS_API_KEY}
 
 ## 创建会话接口
 
-**接口地址**: `POST https://app-bgc5z86utjwh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2/agent/deepresearch/create`
+**接口地址**: `POST https://app-bm0s7wqmrksh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2/agent/deepresearch/create`
 
 **Query 参数**:
 
@@ -51,7 +51,7 @@ X-Gateway-Authorization: Bearer {INTEGRATIONS_API_KEY}
 **请求示例**:
 
 ```bash
-curl -X POST "https://app-bgc5z86utjwh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2/agent/deepresearch/create?agent_id=xxx" \
+curl -X POST "https://app-bm0s7wqmrksh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2/agent/deepresearch/create?agent_id=xxx" \
   -H "X-Gateway-Authorization: Bearer {INTEGRATIONS_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{}'
@@ -79,7 +79,7 @@ Body: { "agent_id": "xxx" }
 
 ## 发起研究接口
 
-**接口地址**: `POST https://app-bgc5z86utjwh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2/agent/deepresearch/run`
+**接口地址**: `POST https://app-bm0s7wqmrksh-api-ELbWqrZ1krJY-gateway.appmiaoda.com/v2/agent/deepresearch/run`
 
 响应为 **SSE 流式数据**，每行格式为 `data: {JSON}` 或 `data:{JSON}`。
 

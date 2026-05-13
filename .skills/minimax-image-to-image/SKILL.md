@@ -10,7 +10,7 @@ license: MIT
 
 | 项目 | 详情 |
 |------|------|
-| Endpoint | `POST https://app-bgc5z86utjwh-api-6LeBzWJjy3QY-gateway.appmiaoda.com/v1/image_generation` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-6LeBzWJjy3QY-gateway.appmiaoda.com/v1/image_generation` |
 | 认证方式 | `platform_managed`，密钥由平台注入 |
 | Content-Type | `application/json` |
 | 返回格式 | 图片 URL 数组（有效期 24 小时），需转存至 Supabase Storage |

@@ -10,7 +10,7 @@ license: MIT
 
 | 项目 | 值 |
 |------|----|
-| Endpoint | `POST https://app-bgc5z86utjwh-api-zYkZz8qovQ1L-gateway.appmiaoda.com/v2/chat/completions` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-zYkZz8qovQ1L-gateway.appmiaoda.com/v2/chat/completions` |
 | 响应模式 | SSE 流式（Server-Sent Events） |
 | 认证模式 | `platform_managed`（密钥由平台注入） |
 | 上下文限制 | 32k token 总长度，27k token 单次输入 |

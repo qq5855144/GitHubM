@@ -6,11 +6,11 @@
 |------|-----|
 | Plugin ID | `c5210d89-bd58-4f98-b24c-06f95635df18` |
 | API ID | `api-DLEO73lBPZ2a` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-DLEO73lBPZ2a-gateway.appmiaoda.com/train/ticket` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-DLEO73lBPZ2a-gateway.appmiaoda.com/train/ticket` |
 | 认证方式 | platform_managed（密钥由平台注入） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${apiKey}` |
 | Content-Type | `application/json;charset=UTF-8` |
-| Third-party Domain | `app-bgc5z86utjwh-api-DLEO73lBPZ2a-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-DLEO73lBPZ2a-gateway.appmiaoda.com` |
 
 ---
 
@@ -160,7 +160,7 @@ async function queryTrainTicket(
   const params = new URLSearchParams({ start, end, date });
 
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-DLEO73lBPZ2a-gateway.appmiaoda.com/train/ticket?${params}`,
+    `https://app-bm0s7wqmrksh-api-DLEO73lBPZ2a-gateway.appmiaoda.com/train/ticket?${params}`,
     {
       method: "POST",
       headers: {
@@ -238,7 +238,7 @@ serve(async (req: Request): Promise<Response> => {
   const params = new URLSearchParams({ start, end, date });
 
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-DLEO73lBPZ2a-gateway.appmiaoda.com/train/ticket?${params}`,
+    `https://app-bm0s7wqmrksh-api-DLEO73lBPZ2a-gateway.appmiaoda.com/train/ticket?${params}`,
     {
       method: "POST",
       headers: {

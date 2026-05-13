@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `0cf63ee3-d579-4191-a267-fe7ec70a10d5` |
 | API ID | `api-rY7JZ6jqrneL` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-rY7JZ6jqrneL-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/request` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-rY7JZ6jqrneL-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/request` |
 | Content-Type | `application/x-www-form-urlencoded` |
 | Auth 模式 | `platform_managed`（`traefik: true`） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
-| third_part_domain | `app-bgc5z86utjwh-api-rY7JZ6jqrneL-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-rY7JZ6jqrneL-gateway.appmiaoda.com` |
 | 计费 | 启用计费，按调用次数计费；原价 ¥2.20 / 次，折扣价 ¥1.80 / 次 |
 
 ---
@@ -79,7 +79,7 @@ async function submitDocConvert(
   if (pdfFileNum) params.pdf_file_num = pdfFileNum;
 
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-rY7JZ6jqrneL-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/request",
+    "https://app-bm0s7wqmrksh-api-rY7JZ6jqrneL-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/request",
     {
       method: "POST",
       headers: {
@@ -159,7 +159,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-rY7JZ6jqrneL-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/request",
+    "https://app-bm0s7wqmrksh-api-rY7JZ6jqrneL-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/request",
     {
       method: "POST",
       headers: {

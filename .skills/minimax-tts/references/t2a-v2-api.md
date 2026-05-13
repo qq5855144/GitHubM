@@ -6,12 +6,12 @@
 |------|----|
 | Plugin ID | `8d92b0a6-f201-4e7e-bc38-b7e65d0e28d5` |
 | API ID | `api-DLEO7Bj0lORa` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-DLEO7Bj0lORa-gateway.appmiaoda.com/v1/t2a_v2` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-DLEO7Bj0lORa-gateway.appmiaoda.com/v1/t2a_v2` |
 | 备用地址 | `https://api-DLEO7Bj0lORa@api-bj.minimaxi.com/v1/t2a_v2` |
 | 认证方式 | platform_managed |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bgc5z86utjwh-api-DLEO7Bj0lORa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-DLEO7Bj0lORa-gateway.appmiaoda.com` |
 | 计费 | 原价 ¥3.60 / 次，优惠价 ¥2.50 / 次 |
 
 ---
@@ -196,7 +196,7 @@ async function callMinimaxTTS(
   if (continuousSound !== undefined) body.continuous_sound = continuousSound;
   if (subtitleEnable !== undefined) body.subtitle_enable = subtitleEnable;
 
-  const response = await fetch("https://app-bgc5z86utjwh-api-DLEO7Bj0lORa-gateway.appmiaoda.com/v1/t2a_v2", {
+  const response = await fetch("https://app-bm0s7wqmrksh-api-DLEO7Bj0lORa-gateway.appmiaoda.com/v1/t2a_v2", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -358,7 +358,7 @@ serve(async (req: Request): Promise<Response> => {
   };
 
   // --- 调用上游 ---
-  const upstream = await fetch("https://app-bgc5z86utjwh-api-DLEO7Bj0lORa-gateway.appmiaoda.com/v1/t2a_v2", {
+  const upstream = await fetch("https://app-bm0s7wqmrksh-api-DLEO7Bj0lORa-gateway.appmiaoda.com/v1/t2a_v2", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

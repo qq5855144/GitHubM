@@ -6,10 +6,10 @@
 |------|---------------------|---------------------|
 | Plugin ID | `0c292e3d-8340-44d0-8c7c-e2ce2f534161` | 同左 |
 | API ID | `api-pLVzAxRQyMWL` | `api-DYJwnJVBwb4a` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-pLVzAxRQyMWL-gateway.appmiaoda.com/vehiclelimit/query` | `POST https://app-bgc5z86utjwh-api-DYJwnJVBwb4a-gateway.appmiaoda.com/vehiclelimit/city` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-pLVzAxRQyMWL-gateway.appmiaoda.com/vehiclelimit/query` | `POST https://app-bm0s7wqmrksh-api-DYJwnJVBwb4a-gateway.appmiaoda.com/vehiclelimit/city` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` | 同左 |
 | Content-Type | `application/json;charset=UTF-8` | `application/json;charset=UTF-8` |
-| third_part_domain | `app-bgc5z86utjwh-api-pLVzAxRQyMWL-gateway.appmiaoda.com` | 同左 |
+| third_part_domain | `app-bm0s7wqmrksh-api-pLVzAxRQyMWL-gateway.appmiaoda.com` | 同左 |
 | 计费 | 是（¥0.85/千次，原价 ¥1.10/千次） | 否 |
 
 ---
@@ -110,7 +110,7 @@ async function queryVehicleLimit(city: string, date: string): Promise<{
   number: string;
 }> {
   const url = new URL(
-    "https://app-bgc5z86utjwh-api-pLVzAxRQyMWL-gateway.appmiaoda.com/vehiclelimit/query"
+    "https://app-bm0s7wqmrksh-api-pLVzAxRQyMWL-gateway.appmiaoda.com/vehiclelimit/query"
   );
   url.searchParams.set("city", city);
   url.searchParams.set("date", date);
@@ -134,7 +134,7 @@ async function queryVehicleLimit(city: string, date: string): Promise<{
 /** 获取所有支持限行查询的城市列表 */
 async function getVehicleLimitCities(): Promise<Array<{city: string; cityname: string}>> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-DYJwnJVBwb4a-gateway.appmiaoda.com/vehiclelimit/city",
+    "https://app-bm0s7wqmrksh-api-DYJwnJVBwb4a-gateway.appmiaoda.com/vehiclelimit/city",
     {
       method: "POST",
       headers: {
@@ -204,7 +204,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const url = new URL(
-    "https://app-bgc5z86utjwh-api-pLVzAxRQyMWL-gateway.appmiaoda.com/vehiclelimit/query"
+    "https://app-bm0s7wqmrksh-api-pLVzAxRQyMWL-gateway.appmiaoda.com/vehiclelimit/query"
   );
   url.searchParams.set("city", city);
   url.searchParams.set("date", date);
@@ -263,7 +263,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-DYJwnJVBwb4a-gateway.appmiaoda.com/vehiclelimit/city",
+    "https://app-bm0s7wqmrksh-api-DYJwnJVBwb4a-gateway.appmiaoda.com/vehiclelimit/city",
     {
       method: "POST",
       headers: {

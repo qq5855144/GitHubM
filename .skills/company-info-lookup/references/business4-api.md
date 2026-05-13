@@ -6,11 +6,11 @@
 |------|-----|
 | Plugin ID | `ee49a105-a594-4d41-a8db-aa55308121f1` |
 | API ID | `api-e94GZ5j0Kxja` |
-| Endpoint | `GET https://app-bgc5z86utjwh-api-e94GZ5j0Kxja-gateway.appmiaoda.com/business4/get` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-e94GZ5j0Kxja-gateway.appmiaoda.com/business4/get` |
 | Auth 模式 | platform_managed |
 | Auth Header | `X-Gateway-Authorization: Bearer ${apiKey}` |
 | Content-Type | `application/json;charset=UTF-8` |
-| third_part_domain | `app-bgc5z86utjwh-api-e94GZ5j0Kxja-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-e94GZ5j0Kxja-gateway.appmiaoda.com` |
 | 计费单价 | 原价 ¥12.00 / 次，折扣价 ¥7.50 / 次 |
 
 ---
@@ -265,7 +265,7 @@ interface BusinessQueryResult {
  */
 async function queryBusinessInfo(keyword: string): Promise<BusinessQueryResult> {
   const url = new URL(
-    "https://app-bgc5z86utjwh-api-e94GZ5j0Kxja-gateway.appmiaoda.com/business4/get"
+    "https://app-bm0s7wqmrksh-api-e94GZ5j0Kxja-gateway.appmiaoda.com/business4/get"
   );
   url.searchParams.set("keyword", keyword);
 
@@ -337,7 +337,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const upstreamUrl = new URL(
-    "https://app-bgc5z86utjwh-api-e94GZ5j0Kxja-gateway.appmiaoda.com/business4/get"
+    "https://app-bm0s7wqmrksh-api-e94GZ5j0Kxja-gateway.appmiaoda.com/business4/get"
   );
   upstreamUrl.searchParams.set("keyword", keyword.trim());
 

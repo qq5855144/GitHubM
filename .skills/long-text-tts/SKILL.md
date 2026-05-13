@@ -59,7 +59,7 @@ async function createTTSTask(
   if (options?.break !== undefined) body.break = options.break;
 
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-nYWNozBb8X3L-gateway.appmiaoda.com/rpc/2.0/tts/v1/create",
+    "https://app-bm0s7wqmrksh-api-nYWNozBb8X3L-gateway.appmiaoda.com/rpc/2.0/tts/v1/create",
     {
       method: "POST",
       headers: {
@@ -80,7 +80,7 @@ async function queryTTSTask(taskId: string): Promise<{
   speech_url?: string;
 }> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com/rpc/2.0/tts/v1/query",
+    "https://app-bm0s7wqmrksh-api-Q9KWZ2jy8W09-gateway.appmiaoda.com/rpc/2.0/tts/v1/query",
     {
       method: "POST",
       headers: {

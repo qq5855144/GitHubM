@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `c2f50034-60cb-4f6d-b6ad-1fcbb11d65bf` |
 | API ID | `api-eLMlJ2jB44g9` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-eLMlJ2jB44g9-gateway.appmiaoda.com/rest/2.0/ocr/v1/accurate_basic` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-eLMlJ2jB44g9-gateway.appmiaoda.com/rest/2.0/ocr/v1/accurate_basic` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/x-www-form-urlencoded` |
-| third_part_domain | `app-bgc5z86utjwh-api-eLMlJ2jB44g9-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-eLMlJ2jB44g9-gateway.appmiaoda.com` |
 | 流式响应 | 否 |
 
 ---
@@ -116,7 +116,7 @@ async function callOcrAccurateBasic(
   if (options.ofdFileNum) params.ofd_file_num = options.ofdFileNum;
 
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-eLMlJ2jB44g9-gateway.appmiaoda.com/rest/2.0/ocr/v1/accurate_basic",
+    "https://app-bm0s7wqmrksh-api-eLMlJ2jB44g9-gateway.appmiaoda.com/rest/2.0/ocr/v1/accurate_basic",
     {
       method: "POST",
       headers: {
@@ -220,7 +220,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-eLMlJ2jB44g9-gateway.appmiaoda.com/rest/2.0/ocr/v1/accurate_basic",
+    "https://app-bm0s7wqmrksh-api-eLMlJ2jB44g9-gateway.appmiaoda.com/rest/2.0/ocr/v1/accurate_basic",
     {
       method: "POST",
       headers: {

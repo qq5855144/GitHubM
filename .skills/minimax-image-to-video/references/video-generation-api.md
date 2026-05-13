@@ -7,11 +7,11 @@
 | Plugin ID | `ad629bb9-46ea-41c1-8eb0-7acfc3e37381` |
 | API ID（单帧） | `api-VaOw5VAJdQBa` |
 | API ID（首尾帧） | `api-nYWNRQr5pV1L` |
-| Endpoint（单帧） | `POST https://app-bgc5z86utjwh-api-VaOw5VAJdQBa-gateway.appmiaoda.com/v1/video_generation` |
-| Endpoint（首尾帧） | `POST https://app-bgc5z86utjwh-api-nYWNRQr5pV1L-gateway.appmiaoda.com/v1/video_generation` |
+| Endpoint（单帧） | `POST https://app-bm0s7wqmrksh-api-VaOw5VAJdQBa-gateway.appmiaoda.com/v1/video_generation` |
+| Endpoint（首尾帧） | `POST https://app-bm0s7wqmrksh-api-nYWNRQr5pV1L-gateway.appmiaoda.com/v1/video_generation` |
 | Auth | `platform_managed`，`X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bgc5z86utjwh-api-VaOw5VAJdQBa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-VaOw5VAJdQBa-gateway.appmiaoda.com` |
 | 计费 | 单帧：按调用次数计费；首尾帧：按调用次数计费 |
 
 ---
@@ -121,7 +121,7 @@ async function submitImageToVideo(
   resolution = "768P"
 ): Promise<string> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-VaOw5VAJdQBa-gateway.appmiaoda.com/v1/video_generation",
+    "https://app-bm0s7wqmrksh-api-VaOw5VAJdQBa-gateway.appmiaoda.com/v1/video_generation",
     {
       method: "POST",
       headers: {
@@ -180,7 +180,7 @@ async function submitFirstLastFrameToVideo(
   if (firstFrameImage) body.first_frame_image = firstFrameImage;
 
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-nYWNRQr5pV1L-gateway.appmiaoda.com/v1/video_generation",
+    "https://app-bm0s7wqmrksh-api-nYWNRQr5pV1L-gateway.appmiaoda.com/v1/video_generation",
     {
       method: "POST",
       headers: {
@@ -263,7 +263,7 @@ serve(async (req: Request): Promise<Response> => {
   if (lastFrameImage) requestBody.last_frame_image = lastFrameImage;
 
   const upstream = await fetch(
-    `https://${apiId}@app-bgc5z86utjwh-api-VaOw5VAJdQBa-gateway.appmiaoda.com/v1/video_generation`,
+    `https://${apiId}@app-bm0s7wqmrksh-api-VaOw5VAJdQBa-gateway.appmiaoda.com/v1/video_generation`,
     {
       method: "POST",
       headers: {

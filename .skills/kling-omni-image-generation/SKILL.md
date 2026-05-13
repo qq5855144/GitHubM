@@ -13,9 +13,9 @@ license: MIT
 
 | 步骤 | API | Endpoint |
 |------|-----|----------|
-| 1. 创建图像生成任务 | 创建图像生成任务 | POST `https://app-bgc5z86utjwh-api-DLEO4zbkvoea-gateway.appmiaoda.com/v1/images/omni-image` |
-| 2. 查询图像生成任务 | 查询单个图像生成任务 | GET `https://app-bgc5z86utjwh-api-79jK6nw4zxDL-gateway.appmiaoda.com/v1/images/omni-image/{id}` |
-| 3. 创建图像生成任务（图像编辑入口） | 创建图像生成任务（图像编辑） | POST `https://app-bgc5z86utjwh-api-eLMlPzV7qWJ9-gateway.appmiaoda.com/v1/images/omni-image` |
+| 1. 创建图像生成任务 | 创建图像生成任务 | POST `https://app-bm0s7wqmrksh-api-DLEO4zbkvoea-gateway.appmiaoda.com/v1/images/omni-image` |
+| 2. 查询图像生成任务 | 查询单个图像生成任务 | GET `https://app-bm0s7wqmrksh-api-79jK6nw4zxDL-gateway.appmiaoda.com/v1/images/omni-image/{id}` |
+| 3. 创建图像生成任务（图像编辑入口） | 创建图像生成任务（图像编辑） | POST `https://app-bm0s7wqmrksh-api-eLMlPzV7qWJ9-gateway.appmiaoda.com/v1/images/omni-image` |
 
 **核心能力：**
 - 支持模型：kling-image-o1（默认）、kling-v3-omni

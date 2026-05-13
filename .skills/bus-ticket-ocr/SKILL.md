@@ -10,7 +10,7 @@ license: MIT
 
 | 属性 | 值 |
 |------|-----|
-| Endpoint | `POST https://app-bgc5z86utjwh-api-Xa6JZxjyqrGa-gateway.appmiaoda.com/rest/2.0/ocr/v1/bus_ticket` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-Xa6JZxjyqrGa-gateway.appmiaoda.com/rest/2.0/ocr/v1/bus_ticket` |
 | Content-Type | `application/x-www-form-urlencoded` |
 | 认证模式 | platform_managed（密钥由平台注入） |
 | 响应格式 | JSON |

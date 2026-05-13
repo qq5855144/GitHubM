@@ -10,8 +10,8 @@ license: MIT
 
 | 接口 | 方法 | Endpoint | 核心参数 |
 |------|------|----------|----------|
-| 企业专利列表查询 | POST | `https://app-bgc5z86utjwh-api-79jKP8yo70AL-gateway.appmiaoda.com/enterprise/patent/list` | keyword（公司名/注册号/统一信用代码）、pageNo、pageSize |
-| 企业专利详情查询 | POST | `https://app-bgc5z86utjwh-api-eLMlJ2jB4oj9-gateway.appmiaoda.com/enterprise/patent/detail` | id（专利 ID） |
+| 企业专利列表查询 | POST | `https://app-bm0s7wqmrksh-api-79jKP8yo70AL-gateway.appmiaoda.com/enterprise/patent/list` | keyword（公司名/注册号/统一信用代码）、pageNo、pageSize |
+| 企业专利详情查询 | POST | `https://app-bm0s7wqmrksh-api-eLMlJ2jB4oj9-gateway.appmiaoda.com/enterprise/patent/detail` | id（专利 ID） |
 
 **认证方式：** `platform_managed`，密钥由平台注入，调用方无需管理密钥。
 - Auth Header 为 `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`（注意不是标准的 `Authorization`）。

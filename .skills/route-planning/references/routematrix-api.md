@@ -10,13 +10,13 @@
 | 密钥来源 | `Deno.env.get("INTEGRATIONS_API_KEY")!` |
 | HTTP 方法 | GET |
 | Content-Type | — (GET 请求，无请求体) |
-| third_part_domain | `app-bgc5z86utjwh-api-6LeBrqqMqKQY-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-6LeBrqqMqKQY-gateway.appmiaoda.com` |
 
 | 接口 | API ID | Endpoint |
 |------|--------|---------|
-| 驾车批量算路 | `api-6LeBrqqMqKQY` | `GET https://app-bgc5z86utjwh-api-6LeBrqqMqKQY-gateway.appmiaoda.com/routematrix/v2/driving` |
-| 骑行批量算路 | `api-Aa2Pq88pDANL` | `GET https://app-bgc5z86utjwh-api-Aa2Pq88pDANL-gateway.appmiaoda.com/routematrix/v2/riding` |
-| 步行批量算路 | `api-qYGW2zz1MklY` | `GET https://app-bgc5z86utjwh-api-qYGW2zz1MklY-gateway.appmiaoda.com/routematrix/v2/walking` |
+| 驾车批量算路 | `api-6LeBrqqMqKQY` | `GET https://app-bm0s7wqmrksh-api-6LeBrqqMqKQY-gateway.appmiaoda.com/routematrix/v2/driving` |
+| 骑行批量算路 | `api-Aa2Pq88pDANL` | `GET https://app-bm0s7wqmrksh-api-Aa2Pq88pDANL-gateway.appmiaoda.com/routematrix/v2/riding` |
+| 步行批量算路 | `api-qYGW2zz1MklY` | `GET https://app-bm0s7wqmrksh-api-qYGW2zz1MklY-gateway.appmiaoda.com/routematrix/v2/walking` |
 
 ---
 
@@ -145,7 +145,7 @@ async function batchCalcRoute(
   });
 
   const url =
-    `https://${apiId}@app-bgc5z86utjwh-api-6LeBrqqMqKQY-gateway.appmiaoda.com/routematrix/v2/${mode}?${params.toString()}`;
+    `https://${apiId}@app-bm0s7wqmrksh-api-6LeBrqqMqKQY-gateway.appmiaoda.com/routematrix/v2/${mode}?${params.toString()}`;
 
   const response = await fetch(url, {
     method: "GET",
@@ -259,7 +259,7 @@ serve(async (req: Request): Promise<Response> => {
     ...Object.fromEntries(Object.entries(extra).map(([k, v]) => [k, String(v)])),
   });
   const upstreamUrl =
-    `https://${apiId}@app-bgc5z86utjwh-api-6LeBrqqMqKQY-gateway.appmiaoda.com/routematrix/v2/${mode}?${params.toString()}`;
+    `https://${apiId}@app-bm0s7wqmrksh-api-6LeBrqqMqKQY-gateway.appmiaoda.com/routematrix/v2/${mode}?${params.toString()}`;
 
   const upstream = await fetch(upstreamUrl, {
     method: "GET",

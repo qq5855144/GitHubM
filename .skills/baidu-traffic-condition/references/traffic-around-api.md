@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `afe98a5e-125b-4104-adfc-3f57e2d42da1` |
 | API ID | `api-Xa6JeEnEb2na` |
-| Endpoint | `GET https://app-bgc5z86utjwh-api-Xa6JeEnEb2na-gateway.appmiaoda.com/traffic/v1/around` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-Xa6JeEnEb2na-gateway.appmiaoda.com/traffic/v1/around` |
 | Auth | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | `application/json`（GET 请求，参数通过 Query String 传递） |
-| third_part_domain | `app-bgc5z86utjwh-api-Xa6JeEnEb2na-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-Xa6JeEnEb2na-gateway.appmiaoda.com` |
 
 ## 请求参数
 
@@ -62,7 +62,7 @@ async function queryAroundTraffic(
   if (coordTypeOutput) params.set("coord_type_output", coordTypeOutput);
 
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-Xa6JeEnEb2na-gateway.appmiaoda.com/traffic/v1/around?${params.toString()}`,
+    `https://app-bm0s7wqmrksh-api-Xa6JeEnEb2na-gateway.appmiaoda.com/traffic/v1/around?${params.toString()}`,
     {
       method: "GET",
       headers: {
@@ -131,7 +131,7 @@ serve(async (req: Request): Promise<Response> => {
   if (coordTypeOutput) params.set("coord_type_output", coordTypeOutput);
 
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-Xa6JeEnEb2na-gateway.appmiaoda.com/traffic/v1/around?${params.toString()}`,
+    `https://app-bm0s7wqmrksh-api-Xa6JeEnEb2na-gateway.appmiaoda.com/traffic/v1/around?${params.toString()}`,
     {
       method: "GET",
       headers: {

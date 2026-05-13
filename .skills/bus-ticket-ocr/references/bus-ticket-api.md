@@ -6,11 +6,11 @@
 |------|-----|
 | Plugin ID | `90ab1592-62ab-4f13-b170-fe46a70dc8cb` |
 | API ID | `api-Xa6JZxjyqrGa` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-Xa6JZxjyqrGa-gateway.appmiaoda.com/rest/2.0/ocr/v1/bus_ticket` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-Xa6JZxjyqrGa-gateway.appmiaoda.com/rest/2.0/ocr/v1/bus_ticket` |
 | Auth 模式 | platform_managed |
 | Auth Header | `X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>` |
 | Content-Type | `application/x-www-form-urlencoded` |
-| third_part_domain | `app-bgc5z86utjwh-api-Xa6JZxjyqrGa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-Xa6JZxjyqrGa-gateway.appmiaoda.com` |
 
 ---
 
@@ -113,7 +113,7 @@ async function recognizeBusTicket(params: {
   if (params.ofd_file_num) formParams["ofd_file_num"] = params.ofd_file_num;
 
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-Xa6JZxjyqrGa-gateway.appmiaoda.com/rest/2.0/ocr/v1/bus_ticket",
+    "https://app-bm0s7wqmrksh-api-Xa6JZxjyqrGa-gateway.appmiaoda.com/rest/2.0/ocr/v1/bus_ticket",
     {
       method: "POST",
       headers: {
@@ -208,7 +208,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-Xa6JZxjyqrGa-gateway.appmiaoda.com/rest/2.0/ocr/v1/bus_ticket",
+    "https://app-bm0s7wqmrksh-api-Xa6JZxjyqrGa-gateway.appmiaoda.com/rest/2.0/ocr/v1/bus_ticket",
     {
       method: "POST",
       headers: {

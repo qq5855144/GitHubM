@@ -11,7 +11,7 @@ license: MIT
 | 项目 | 说明 |
 |------|------|
 | 认证模式 | `platform_managed`（密钥由平台注入，无需用户配置） |
-| 第三方域名 | `app-bgc5z86utjwh-api-V9gDzg15D7BL-gateway.appmiaoda.com` |
+| 第三方域名 | `app-bm0s7wqmrksh-api-V9gDzg15D7BL-gateway.appmiaoda.com` |
 | 支持平台 | Web、MiniProgram |
 | 计费 | 原价 ¥130.00 / 折扣价 ¥100.00（仅创建任务接口计费，查询和下载接口不计费） |
 
@@ -68,7 +68,7 @@ async function submitTextToVideo(
   resolution: string = "768P"
 ): Promise<string> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-V9gDzg15D7BL-gateway.appmiaoda.com/v1/video_generation",
+    "https://app-bm0s7wqmrksh-api-V9gDzg15D7BL-gateway.appmiaoda.com/v1/video_generation",
     {
       method: "POST",
       headers: {
@@ -99,7 +99,7 @@ async function queryTextToVideo(taskId: string): Promise<{
   video_height?: number;
   base_resp: { status_code: number; status_msg: string };
 }> {
-  const url = new URL("https://app-bgc5z86utjwh-api-zYkZz2eDWvPL-gateway.appmiaoda.com/v1/query/video_generation");
+  const url = new URL("https://app-bm0s7wqmrksh-api-zYkZz2eDWvPL-gateway.appmiaoda.com/v1/query/video_generation");
   url.searchParams.set("task_id", taskId);
   const response = await fetch(url.toString(), {
     method: "GET",
@@ -128,7 +128,7 @@ async function retrieveVideoFile(fileId: string): Promise<{
   purpose: string;
   download_url: string;
 }> {
-  const url = new URL("https://app-bgc5z86utjwh-api-GYX1ld3ExkQa-gateway.appmiaoda.com/v1/files/retrieve");
+  const url = new URL("https://app-bm0s7wqmrksh-api-GYX1ld3ExkQa-gateway.appmiaoda.com/v1/files/retrieve");
   url.searchParams.set("file_id", fileId);
   const response = await fetch(url.toString(), {
     method: "GET",

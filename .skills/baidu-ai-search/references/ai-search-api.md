@@ -6,12 +6,12 @@
 |------|----|
 | Plugin ID | `be049c59-00cf-420d-b21a-1486dc4c6812` |
 | API ID | `api-DYJwo27V8Qya` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-DYJwo27V8Qya-gateway.appmiaoda.com/v2/ai_search/chat/completions` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-DYJwo27V8Qya-gateway.appmiaoda.com/v2/ai_search/chat/completions` |
 | 认证模式 | platform_managed |
 | Auth Header | `X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>` |
 | Content-Type | `application/json` |
 | 响应类型 | SSE 流式（text/event-stream） |
-| third_part_domain | `app-bgc5z86utjwh-api-DYJwo27V8Qya-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-DYJwo27V8Qya-gateway.appmiaoda.com` |
 
 ---
 
@@ -102,7 +102,7 @@ async function callBaiduAiSearch(
   params: AiSearchRequest
 ): Promise<{ content: string; references: unknown[] }> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-DYJwo27V8Qya-gateway.appmiaoda.com/v2/ai_search/chat/completions",
+    "https://app-bm0s7wqmrksh-api-DYJwo27V8Qya-gateway.appmiaoda.com/v2/ai_search/chat/completions",
     {
       method: "POST",
       headers: {
@@ -240,7 +240,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游（SSE 流式） ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-DYJwo27V8Qya-gateway.appmiaoda.com/v2/ai_search/chat/completions",
+    "https://app-bm0s7wqmrksh-api-DYJwo27V8Qya-gateway.appmiaoda.com/v2/ai_search/chat/completions",
     {
       method: "POST",
       headers: {

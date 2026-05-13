@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `88ae3607-924e-4dc9-9fb0-2581767dd978` |
 | API ID | `api-wLNdo2j5eQWa` |
-| Endpoint | `GET https://app-bgc5z86utjwh-api-wLNdo2j5eQWa-gateway.appmiaoda.com/v2/baike/lemma/get_content` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-wLNdo2j5eQWa-gateway.appmiaoda.com/v2/baike/lemma/get_content` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Accept | `application/json` |
-| third_part_domain | `app-bgc5z86utjwh-api-wLNdo2j5eQWa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-wLNdo2j5eQWa-gateway.appmiaoda.com` |
 | 计费单价 | 0.50 元 / 次（原价 0.60 元，`enable_billing: true`） |
 
 ---
@@ -99,7 +99,7 @@ async function getBaikeLemma(
     search_key: searchKey,
   });
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-wLNdo2j5eQWa-gateway.appmiaoda.com/v2/baike/lemma/get_content?${params}`,
+    `https://app-bm0s7wqmrksh-api-wLNdo2j5eQWa-gateway.appmiaoda.com/v2/baike/lemma/get_content?${params}`,
     {
       method: "GET",
       headers: {
@@ -167,7 +167,7 @@ serve(async (req: Request): Promise<Response> => {
   // --- 调用上游 ---
   const params = new URLSearchParams({ search_type, search_key });
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-wLNdo2j5eQWa-gateway.appmiaoda.com/v2/baike/lemma/get_content?${params}`,
+    `https://app-bm0s7wqmrksh-api-wLNdo2j5eQWa-gateway.appmiaoda.com/v2/baike/lemma/get_content?${params}`,
     {
       method: "GET",
       headers: {

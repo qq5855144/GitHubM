@@ -22,7 +22,7 @@ license: MIT
 
 **认证方式：** `platform_managed`，密钥由平台注入，代码中读取 `INTEGRATIONS_API_KEY` 环境变量。Auth Header 为 `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`（注意不是标准的 `Authorization`）。
 
-**Host：** `app-bgc5z86utjwh-api-zYkZz8qovO1L-gateway.appmiaoda.com`
+**Host：** `app-bm0s7wqmrksh-api-zYkZz8qovO1L-gateway.appmiaoda.com`
 
 **Content-Type：** `application/x-www-form-urlencoded`
 

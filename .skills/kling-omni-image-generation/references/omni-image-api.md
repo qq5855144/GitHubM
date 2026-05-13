@@ -10,7 +10,7 @@
 | 密钥来源 | `Deno.env.get("INTEGRATIONS_API_KEY")!` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${apiKey}` |
 | Content-Type | `application/json` |
-| Third-party Domain | `app-bgc5z86utjwh-api-DLEO4zbkvoea-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-DLEO4zbkvoea-gateway.appmiaoda.com` |
 
 ---
 
@@ -20,7 +20,7 @@
 |------|-----|
 | API ID | `api-DLEO4zbkvoea` |
 | 方法 | POST |
-| Endpoint | `https://app-bgc5z86utjwh-api-DLEO4zbkvoea-gateway.appmiaoda.com/v1/images/omni-image` |
+| Endpoint | `https://app-bm0s7wqmrksh-api-DLEO4zbkvoea-gateway.appmiaoda.com/v1/images/omni-image` |
 
 ### 请求参数表
 
@@ -85,7 +85,7 @@
 |------|-----|
 | API ID | `api-79jK6nw4zxDL` |
 | 方法 | GET |
-| Endpoint | `https://app-bgc5z86utjwh-api-79jK6nw4zxDL-gateway.appmiaoda.com/v1/images/omni-image/{id}` |
+| Endpoint | `https://app-bm0s7wqmrksh-api-79jK6nw4zxDL-gateway.appmiaoda.com/v1/images/omni-image/{id}` |
 
 ### 请求参数表
 
@@ -205,7 +205,7 @@ async function submitOmniImageTask(
   params: SubmitTaskParams | SubmitSeriesTaskParams
 ): Promise<{ taskId: string }> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-DLEO4zbkvoea-gateway.appmiaoda.com/v1/images/omni-image",
+    "https://app-bm0s7wqmrksh-api-DLEO4zbkvoea-gateway.appmiaoda.com/v1/images/omni-image",
     {
       method: "POST",
       headers: {
@@ -247,7 +247,7 @@ interface QueryTaskResult {
  */
 async function queryOmniImageTask(taskId: string): Promise<QueryTaskResult> {
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-79jK6nw4zxDL-gateway.appmiaoda.com/v1/images/omni-image/${taskId}`,
+    `https://app-bm0s7wqmrksh-api-79jK6nw4zxDL-gateway.appmiaoda.com/v1/images/omni-image/${taskId}`,
     {
       method: "GET",
       headers: {
@@ -398,7 +398,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游创建任务接口 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-DLEO4zbkvoea-gateway.appmiaoda.com/v1/images/omni-image",
+    "https://app-bm0s7wqmrksh-api-DLEO4zbkvoea-gateway.appmiaoda.com/v1/images/omni-image",
     {
       method: "POST",
       headers: {
@@ -524,7 +524,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游查询接口 ---
   const upstream = await fetch(
-    `https://app-bgc5z86utjwh-api-79jK6nw4zxDL-gateway.appmiaoda.com/v1/images/omni-image/${taskId}`,
+    `https://app-bm0s7wqmrksh-api-79jK6nw4zxDL-gateway.appmiaoda.com/v1/images/omni-image/${taskId}`,
     {
       method: "GET",
       headers: {
@@ -864,7 +864,7 @@ export default KlingImageGenerator;
 |------|-----|
 | API ID | `api-eLMlPzV7qWJ9` |
 | 方法 | POST |
-| Endpoint | `https://app-bgc5z86utjwh-api-eLMlPzV7qWJ9-gateway.appmiaoda.com/v1/images/omni-image` |
+| Endpoint | `https://app-bm0s7wqmrksh-api-eLMlPzV7qWJ9-gateway.appmiaoda.com/v1/images/omni-image` |
 
 该接口与"接口一"共享相同的上游端点 `/v1/images/omni-image`，但使用不同的网关 API ID 进行路由。
 适用于以图像编辑为主要场景（如参考图融合、主体替换）的调用入口，参数规格与接口一完全一致。
@@ -942,7 +942,7 @@ async function submitOmniImageEditTask(
   params: SubmitTaskParams | SubmitSeriesTaskParams
 ): Promise<{ taskId: string }> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-eLMlPzV7qWJ9-gateway.appmiaoda.com/v1/images/omni-image",
+    "https://app-bm0s7wqmrksh-api-eLMlPzV7qWJ9-gateway.appmiaoda.com/v1/images/omni-image",
     {
       method: "POST",
       headers: {

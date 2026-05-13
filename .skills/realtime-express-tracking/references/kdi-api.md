@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `b955023f-4f9c-4f2b-b137-6f7b630a2ee4` |
 | API ID | `api-AalZz7v4QEGL` |
-| Endpoint | `GET https://app-bgc5z86utjwh-api-AalZz7v4QEGL-gateway.appmiaoda.com/kdi` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-AalZz7v4QEGL-gateway.appmiaoda.com/kdi` |
 | Auth 模式 | `platform_managed`（密钥由平台注入） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${apiKey}` |
 | Content-Type | `application/json;charset=UTF-8` |
-| third_part_domain | `app-bgc5z86utjwh-api-AalZz7v4QEGL-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-AalZz7v4QEGL-gateway.appmiaoda.com` |
 | 计费 | 未启用（`enable_billing: false`） |
 
 ---
@@ -174,7 +174,7 @@ interface TrackingResult {
 
 async function queryExpressTracking(no: string, type?: string): Promise<TrackingResult> {
   const url = new URL(
-    "https://app-bgc5z86utjwh-api-AalZz7v4QEGL-gateway.appmiaoda.com/kdi"
+    "https://app-bm0s7wqmrksh-api-AalZz7v4QEGL-gateway.appmiaoda.com/kdi"
   );
   url.searchParams.set("no", no);
   if (type) {
@@ -300,7 +300,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const url = new URL(
-    "https://app-bgc5z86utjwh-api-AalZz7v4QEGL-gateway.appmiaoda.com/kdi"
+    "https://app-bm0s7wqmrksh-api-AalZz7v4QEGL-gateway.appmiaoda.com/kdi"
   );
   url.searchParams.set("no", no);
   if (type) {

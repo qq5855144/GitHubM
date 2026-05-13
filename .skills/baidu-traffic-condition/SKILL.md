@@ -10,10 +10,10 @@ license: MIT
 
 | 接口 | 方法 | Endpoint | 核心参数 |
 |------|------|----------|---------|
-| 道路实时路况查询 | GET | `https://app-bgc5z86utjwh-api-rLobR3D3dbg9-gateway.appmiaoda.com/traffic/v1/road` | `road_name`（必填）、`city`（可选） |
-| 矩形区域实时路况查询 | GET | `https://app-bgc5z86utjwh-api-ra5ErGpGM8wa-gateway.appmiaoda.com/traffic/v1/bound` | `bounds`（必填，左下角;右上角坐标） |
-| 多边形区域实时路况查询 | GET | `https://app-bgc5z86utjwh-api-BYdwQ5e51blL-gateway.appmiaoda.com/traffic/v1/polygon` | `polygon`（必填，多边形坐标点序列） |
-| 周边实时路况查询 | GET | `https://app-bgc5z86utjwh-api-Xa6JeEnEb2na-gateway.appmiaoda.com/traffic/v1/around` | `center`（必填，中心坐标）、`radius`（必填，单位米） |
+| 道路实时路况查询 | GET | `https://app-bm0s7wqmrksh-api-rLobR3D3dbg9-gateway.appmiaoda.com/traffic/v1/road` | `road_name`（必填）、`city`（可选） |
+| 矩形区域实时路况查询 | GET | `https://app-bm0s7wqmrksh-api-ra5ErGpGM8wa-gateway.appmiaoda.com/traffic/v1/bound` | `bounds`（必填，左下角;右上角坐标） |
+| 多边形区域实时路况查询 | GET | `https://app-bm0s7wqmrksh-api-BYdwQ5e51blL-gateway.appmiaoda.com/traffic/v1/polygon` | `polygon`（必填，多边形坐标点序列） |
+| 周边实时路况查询 | GET | `https://app-bm0s7wqmrksh-api-Xa6JeEnEb2na-gateway.appmiaoda.com/traffic/v1/around` | `center`（必填，中心坐标）、`radius`（必填，单位米） |
 
 所有接口均返回 JSON，包含整体拥堵评价（`evaluation`）和各拥堵路段详情（`congestion_sections` / `roads`）。
 
@@ -39,7 +39,7 @@ const apiKey = process.env["INTEGRATIONS_API_KEY"]!;
 
 // 查询「长安街」在北京的实时路况
 const response = await fetch(
-  "https://app-bgc5z86utjwh-api-rLobR3D3dbg9-gateway.appmiaoda.com/traffic/v1/road" +
+  "https://app-bm0s7wqmrksh-api-rLobR3D3dbg9-gateway.appmiaoda.com/traffic/v1/road" +
     "?road_name=" + encodeURIComponent("长安街") +
     "&city=" + encodeURIComponent("北京"),
   {

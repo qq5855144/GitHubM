@@ -49,7 +49,7 @@ async function submitImageToVideo(params: {
   resolution?: string;
 }): Promise<{ taskId: string }> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-VaOw5VAJdQBa-gateway.appmiaoda.com/v1/video_generation",
+    "https://app-bm0s7wqmrksh-api-VaOw5VAJdQBa-gateway.appmiaoda.com/v1/video_generation",
     {
       method: "POST",
       headers: {
@@ -83,7 +83,7 @@ async function pollVideoStatus(taskId: string): Promise<{
   videoHeight?: number;
 }> {
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-eLMlPNkelVj9-gateway.appmiaoda.com/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
+    `https://app-bm0s7wqmrksh-api-eLMlPNkelVj9-gateway.appmiaoda.com/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
     {
       method: "GET",
       headers: {
@@ -105,7 +105,7 @@ async function pollVideoStatus(taskId: string): Promise<{
 // Step 3: 获取视频下载链接
 async function retrieveVideoFile(fileId: string): Promise<string> {
   const response = await fetch(
-    `https://app-bgc5z86utjwh-api-rLyOyznAK2Ba-gateway.appmiaoda.com/v1/files/retrieve?file_id=${fileId}`,
+    `https://app-bm0s7wqmrksh-api-rLyOyznAK2Ba-gateway.appmiaoda.com/v1/files/retrieve?file_id=${fileId}`,
     {
       method: "GET",
       headers: {
@@ -176,7 +176,7 @@ async function generateFirstLastFrameVideo(params: {
 }): Promise<{ downloadUrl: string; fileId: string }> {
   // Step 1: 提交首尾帧视频生成任务
   const submitResponse = await fetch(
-    "https://app-bgc5z86utjwh-api-nYWNRQr5pV1L-gateway.appmiaoda.com/v1/video_generation",
+    "https://app-bm0s7wqmrksh-api-nYWNRQr5pV1L-gateway.appmiaoda.com/v1/video_generation",
     {
       method: "POST",
       headers: {
@@ -212,7 +212,7 @@ async function generateFirstLastFrameVideo(params: {
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     const queryResponse = await fetch(
-      `https://app-bgc5z86utjwh-api-eLMlPNkelVj9-gateway.appmiaoda.com/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
+      `https://app-bm0s7wqmrksh-api-eLMlPNkelVj9-gateway.appmiaoda.com/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
       {
         method: "GET",
         headers: { "X-Gateway-Authorization": `Bearer ${apiKey}` },
@@ -224,7 +224,7 @@ async function generateFirstLastFrameVideo(params: {
     if (queryJson.status === "Success") {
       // Step 3: 获取视频下载链接
       const retrieveResponse = await fetch(
-        `https://app-bgc5z86utjwh-api-rLyOyznAK2Ba-gateway.appmiaoda.com/v1/files/retrieve?file_id=${queryJson.file_id}`,
+        `https://app-bm0s7wqmrksh-api-rLyOyznAK2Ba-gateway.appmiaoda.com/v1/files/retrieve?file_id=${queryJson.file_id}`,
         {
           method: "GET",
           headers: { "X-Gateway-Authorization": `Bearer ${apiKey}` },

@@ -8,7 +8,7 @@ license: MIT
 
 调用千帆平台的网页内容总结组件，访问指定 URL 的网页并生成内容分析/总结文本。
 
-- **Endpoint**: `POST https://app-bgc5z86utjwh-api-DY8MNXjBpKAa-gateway.appmiaoda.com/v2/components/c-wf-e1bc471f-1d33-4df1-ab42-87800e89c1ad`
+- **Endpoint**: `POST https://app-bm0s7wqmrksh-api-DY8MNXjBpKAa-gateway.appmiaoda.com/v2/components/c-wf-e1bc471f-1d33-4df1-ab42-87800e89c1ad`
 - **认证方式**: platform_managed（密钥由平台注入，Header: `X-Gateway-Authorization: Bearer <key>`）
 - **Content-Type**: `application/json`
 - **响应格式**: JSON，分析结果在 `content[0].raw_data.origin_response.node_content[0].outputs.output`
@@ -60,7 +60,7 @@ async function callWebPageSummary(
   webUrl: string[]
 ): Promise<string> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-DY8MNXjBpKAa-gateway.appmiaoda.com/v2/components/c-wf-e1bc471f-1d33-4df1-ab42-87800e89c1ad",
+    "https://app-bm0s7wqmrksh-api-DY8MNXjBpKAa-gateway.appmiaoda.com/v2/components/c-wf-e1bc471f-1d33-4df1-ab42-87800e89c1ad",
     {
       method: "POST",
       headers: {
@@ -146,7 +146,7 @@ serve(async (req: Request): Promise<Response> => {
   let upstream: Response;
   try {
     upstream = await fetch(
-      "https://app-bgc5z86utjwh-api-DY8MNXjBpKAa-gateway.appmiaoda.com/v2/components/c-wf-e1bc471f-1d33-4df1-ab42-87800e89c1ad",
+      "https://app-bm0s7wqmrksh-api-DY8MNXjBpKAa-gateway.appmiaoda.com/v2/components/c-wf-e1bc471f-1d33-4df1-ab42-87800e89c1ad",
       {
         method: "POST",
         headers: {

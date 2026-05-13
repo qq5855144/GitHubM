@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `c31c0491-e8f7-444e-9f67-5ee93c952030` |
 | API ID | `api-oLpZbd8ed8wa` |
-| Endpoint | `GET https://app-bgc5z86utjwh-api-oLpZbd8ed8wa-gateway.appmiaoda.com/weather/v1/` |
+| Endpoint | `GET https://app-bm0s7wqmrksh-api-oLpZbd8ed8wa-gateway.appmiaoda.com/weather/v1/` |
 | Auth | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | Query Parameters（GET 请求，无请求体） |
-| Third-party Domain | `app-bgc5z86utjwh-api-oLpZbd8ed8wa-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bm0s7wqmrksh-api-oLpZbd8ed8wa-gateway.appmiaoda.com` |
 
 ---
 
@@ -96,7 +96,7 @@ async function getWeatherByDistrict(
   districtId: string,
   dataType = "all"
 ): Promise<WeatherResult> {
-  const url = new URL("https://app-bgc5z86utjwh-api-oLpZbd8ed8wa-gateway.appmiaoda.com/weather/v1/");
+  const url = new URL("https://app-bm0s7wqmrksh-api-oLpZbd8ed8wa-gateway.appmiaoda.com/weather/v1/");
   url.searchParams.set("district_id", districtId);
   url.searchParams.set("data_type", dataType);
 
@@ -160,7 +160,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   // --- 调用上游 API ---
-  const url = new URL("https://app-bgc5z86utjwh-api-oLpZbd8ed8wa-gateway.appmiaoda.com/weather/v1/");
+  const url = new URL("https://app-bm0s7wqmrksh-api-oLpZbd8ed8wa-gateway.appmiaoda.com/weather/v1/");
   url.searchParams.set("district_id", districtId);
   url.searchParams.set("data_type", dataType);
 

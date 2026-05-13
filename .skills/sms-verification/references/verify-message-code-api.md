@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `3f0f386a-cdcf-47ed-a17a-df726918136d` |
 | API ID | `api-Xa6JZxjyqK0a` |
-| Endpoint | `POST https://app-bgc5z86utjwh-api-Xa6JZxjyqK0a-gateway.appmiaoda.com/v1/code/verify_message_code` |
+| Endpoint | `POST https://app-bm0s7wqmrksh-api-Xa6JZxjyqK0a-gateway.appmiaoda.com/v1/code/verify_message_code` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bgc5z86utjwh-api-Xa6JZxjyqK0a-gateway.appmiaoda.com` |
+| third_part_domain | `app-bm0s7wqmrksh-api-Xa6JZxjyqK0a-gateway.appmiaoda.com` |
 | 计费 | 未启用（`enable_billing: false`） |
 
 ---
@@ -79,7 +79,7 @@ async function verifySmsCode(
   mobile: string,
 ): Promise<VerifyMessageResponse> {
   const response = await fetch(
-    "https://app-bgc5z86utjwh-api-Xa6JZxjyqK0a-gateway.appmiaoda.com/v1/code/verify_message_code",
+    "https://app-bm0s7wqmrksh-api-Xa6JZxjyqK0a-gateway.appmiaoda.com/v1/code/verify_message_code",
     {
       method: "POST",
       headers: {
@@ -147,7 +147,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bgc5z86utjwh-api-Xa6JZxjyqK0a-gateway.appmiaoda.com/v1/code/verify_message_code",
+    "https://app-bm0s7wqmrksh-api-Xa6JZxjyqK0a-gateway.appmiaoda.com/v1/code/verify_message_code",
     {
       method: "POST",
       headers: {

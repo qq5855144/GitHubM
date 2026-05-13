@@ -8,7 +8,7 @@ license: MIT
 
 对各大主要服务商（滴滴企业版等）的网约车行程单进行结构化 OCR 识别，支持识别 16 个关键字段，包括服务商名称、行程起止时间、总金额、行程明细数组等。
 
-- **Endpoint**: `POST https://app-bgc5z86utjwh-api-zYkZz8qoKp1L-gateway.appmiaoda.com/rest/2.0/ocr/v1/online_taxi_itinerary`
+- **Endpoint**: `POST https://app-bm0s7wqmrksh-api-zYkZz8qoKp1L-gateway.appmiaoda.com/rest/2.0/ocr/v1/online_taxi_itinerary`
 - **Content-Type**: `application/x-www-form-urlencoded`
 - **认证模式**: `platform_managed`（密钥由平台注入，客户端无需关心）
 - Auth Header 为 `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`（注意不是标准的 `Authorization`）。

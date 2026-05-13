@@ -8,7 +8,7 @@ license: MIT
 
 调用百度 AI 开放平台通用文字识别（高精度版）接口，对上传图片中的全部文字内容进行检测与识别。
 
-- **Endpoint**：`POST https://app-bgc5z86utjwh-api-eLMlJ2jB44g9-gateway.appmiaoda.com/rest/2.0/ocr/v1/accurate_basic`
+- **Endpoint**：`POST https://app-bm0s7wqmrksh-api-eLMlJ2jB44g9-gateway.appmiaoda.com/rest/2.0/ocr/v1/accurate_basic`
 - **Content-Type**：`application/x-www-form-urlencoded`
 - **认证模式**：`platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`）
 - **核心能力**：高精度文字识别，字库扩展到 2w+，支持 auto_detect、CHN_ENG、ENG、JAP、KOR、FRE 等 20+ 语种

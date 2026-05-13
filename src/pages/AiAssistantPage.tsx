@@ -1783,17 +1783,19 @@ function RepairChecklist({ content }: { content: string }) {
   // 提取清单部分（从 ## 🔧 修复清单 到下一个 ## 或文末）
   const checklistMatch = content.match(/## 🔧 修复清单[\s\S]+/);
   const rest = content.replace(/## 🔧 修复清单[\s\S]+/, '').trim();
-  if (!checklistMatch) return <>{renderMarkdown(content)}</>;
+  // 必须在任何 early return 之前完成所有变量初始化，供 Hook 使用
+  const checklistRaw = checklistMatch ? checklistMatch[0] : '';
+  const sections = checklistRaw ? parseRepairSections(checklistRaw) : [];
 
-  const checklistRaw = checklistMatch[0];
-  const sections = parseRepairSections(checklistRaw);
-
-  // 每个 section 的 items 用 state 管理勾选
+  // Hooks 必须在所有条件分支 / early return 之前调用（Rules of Hooks）
   const [checked, setChecked] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     sections.forEach(s => s.items.forEach(it => { init[it.id] = it.done; }));
     return init;
   });
+
+  // 无清单内容时直接降级渲染普通 Markdown
+  if (!checklistMatch) return <>{renderMarkdown(content)}</>;
 
   const toggle = (id: string) => setChecked(prev => ({ ...prev, [id]: !prev[id] }));
 

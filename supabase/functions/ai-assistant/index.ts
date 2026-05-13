@@ -158,7 +158,8 @@ function diagnose4xx(err: unknown, context?: string): string {
       }
       return `${ctx2} ❌ 409 冲突：${bodyMsg}\n建议：检查资源状态，解决冲突后重试。`;
     case 422: {
-      // 解析 GitHub 422 的结构化 errors 数组（仅靠 message 字段信息不足）
+      // 解析 GitHub 422 的结构化 errors 数组（仅靠顶层 message 字段信息不足）
+      // GitHub 常见格式：{ "message": "Validation Failed", "errors": [{ "message": "No commits between X and Y" }] }
       let errorsDetail = "";
       try {
         const parsed = JSON.parse(body);
@@ -170,14 +171,17 @@ function diagnose4xx(err: unknown, context?: string): string {
         }
       } catch (_) { /* ignore */ }
 
-      if (bodyMsg.includes("No commits between") || bodyMsg.includes("no commits")) {
+      // "No commits between" 可能出现在顶层 message 或 errors[].message 中，两处都要检查
+      const combinedText = `${bodyMsg} ${errorsDetail}`.toLowerCase();
+      if (combinedText.includes("no commits between") || combinedText.includes("no commits")) {
         // head 与 base 分支内容完全一致，GitHub 拒绝创建空 PR
-        const branches = bodyMsg.match(/between\s+(\S+)\s+and\s+(\S+)/i);
+        const searchIn = errorsDetail.toLowerCase().includes("no commits") ? errorsDetail : bodyMsg;
+        const branches = searchIn.match(/between\s+(\S+)\s+and\s+(\S+)/i);
         const bFrom = branches?.[1] ?? "head 分支";
         const bTo   = branches?.[2] ?? "base 分支";
-        return `${ctx2} ❌ 422 无法创建 PR：\`${bFrom}\` 与 \`${bTo}\` 内容完全相同，没有差异提交。\n建议：确认恢复分支上已有新的提交（write_file / patch_file 后再 create_pr），或检查是否选错了分支。`;
+        return `${ctx2} ❌ 422 无法创建 PR：分支 \`${bFrom}\` 与 \`${bTo}\` 内容完全相同，没有差异提交。\n原因：恢复分支是基于 base 创建的，尚未写入任何新提交，两分支 HEAD 指向同一 commit。\n解决：先用 write_file / patch_file 写入要恢复的内容并提交，再调用 create_pr。`;
       }
-      if (bodyMsg.includes("already exists") || bodyMsg.includes("A pull request already")) {
+      if (combinedText.includes("already exists") || combinedText.includes("pull request already")) {
         // 该两分支间已存在 open PR，无需重复创建
         return `${ctx2} ❌ 422 PR 已存在：这两个分支之间已有一个 open 状态的 PR。\n建议：用 list_pull_requests 查看已有 PR，直接对现有 PR 操作（merge_pull_request 或关闭后重建）。`;
       }
@@ -188,11 +192,11 @@ function diagnose4xx(err: unknown, context?: string): string {
         return `${ctx2} ❌ 422 分支保护规则阻止操作：目标分支设有保护规则（需要 PR review / status check 通过）。\n建议：走 create_pr → merge_pull_request 流程，确保 CI 通过并获得 review 后再合并。`;
       }
       if (errorsDetail) {
-        // 有字段级别校验失败（如 head 分支不存在、title 为空等）
-        return `${ctx2} ❌ 422 参数校验失败：${errorsDetail}\n建议：① title 不能为空；② head/base 必须是已存在的分支名（不加 owner: 前缀）；③ 用 list_branches 确认分支名称后重试。`;
+        // 字段级校验失败（head 分支不存在、title 为空等），errorsDetail 含具体原因
+        return `${ctx2} ❌ 422 参数校验失败：${errorsDetail}\n建议：① title 不能为空；② head/base 填写已存在的分支名（不加 owner: 前缀）；③ 用 list_branches 确认分支名称后重试。`;
       }
       if (bodyMsg.includes("Validation Failed")) {
-        return `${ctx2} ❌ 422 参数校验失败：${bodyMsg}\n建议：① title 不能为空；② head/base 填分支名（不加 owner: 前缀，如 restore/main 而非 user:restore/main）；③ 确保 head 分支已存在（list_branches 确认）。`;
+        return `${ctx2} ❌ 422 参数校验失败（无详细字段信息）\n建议：① title 不能为空；② head/base 填分支名（不加 owner: 前缀，如 restore/main 而非 user:restore/main）；③ 确保 head 分支已存在（list_branches 确认）；④ head 与 base 分支必须有差异提交。`;
       }
       return `${ctx2} ❌ 422 无法处理的请求：${bodyMsg}${errorsDetail ? `\n详情：${errorsDetail}` : ""}\n建议：检查参数是否符合 GitHub API 要求，或先查询资源状态再重试。`;
     }

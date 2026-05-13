@@ -1,6 +1,6 @@
 // 设置页
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Settings,
   Key,
@@ -246,12 +246,22 @@ export default function SettingsPage() {
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
-  // ── 版本更新检查 ─────────────────────────────────────────────────
+  // ── 版本更新检查（仅 Android 环境） ─────────────────────────────────
+  // 检测是否在 AndroidBridge 环境中
+  const isAndroid = typeof window !== 'undefined' &&
+    !!(window as unknown as { AndroidBridge?: unknown }).AndroidBridge;
+
   const [updateInfo, setUpdateInfo] = useState<{
     version: string;
     downloadUrl: string;
     releaseNotes: string;
   } | null>(null);
+
+  // checking: 正在检查中 | latest: 已是最新 | error: 检查失败
+  type UpdateCheckState = 'idle' | 'checking' | 'latest' | 'error';
+  const [checkState, setCheckState] = useState<UpdateCheckState>('idle');
+  const [checkErrorMsg, setCheckErrorMsg] = useState('');
+  const checkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 将当前版本号写入 localStorage，供 Android 原生读取对比
   useEffect(() => {
@@ -261,29 +271,57 @@ export default function SettingsPage() {
     }
   }, []);
 
-  // 监听 Android 原生推送的 appUpdateAvailable 事件
+  // 监听 Android 原生推送的三种更新结果事件
   useEffect(() => {
-    const handler = (e: Event) => {
+    const onAvailable = (e: Event) => {
       const detail = (e as CustomEvent<{
-        version: string;
-        downloadUrl: string;
-        releaseNotes: string;
+        version: string; downloadUrl: string; releaseNotes: string;
       }>).detail;
-      if (detail?.version) setUpdateInfo(detail);
+      if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current);
+      if (detail?.version) {
+        setUpdateInfo(detail);
+        setCheckState('idle');
+      }
     };
-    window.addEventListener('appUpdateAvailable', handler);
-    return () => window.removeEventListener('appUpdateAvailable', handler);
+    const onLatest = () => {
+      if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current);
+      setCheckState('latest');
+      // 3 秒后恢复 idle，避免状态一直停留
+      checkTimeoutRef.current = setTimeout(() => setCheckState('idle'), 3000);
+    };
+    const onError = (e: Event) => {
+      const msg = (e as CustomEvent<{ message: string }>).detail?.message || '网络异常，请稍后重试';
+      if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current);
+      setCheckErrorMsg(msg);
+      setCheckState('error');
+      // 5 秒后恢复 idle
+      checkTimeoutRef.current = setTimeout(() => setCheckState('idle'), 5000);
+    };
+
+    window.addEventListener('appUpdateAvailable', onAvailable);
+    window.addEventListener('appUpdateLatest', onLatest);
+    window.addEventListener('appUpdateError', onError);
+    return () => {
+      window.removeEventListener('appUpdateAvailable', onAvailable);
+      window.removeEventListener('appUpdateLatest', onLatest);
+      window.removeEventListener('appUpdateError', onError);
+      if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current);
+    };
   }, []);
 
-  // 主动触发 Android 原生检查更新
+  // 主动触发 Android 原生检查更新（仅 Android 可用）
   const handleCheckUpdate = useCallback(() => {
     const bridge = (window as unknown as { AndroidBridge?: { checkUpdate?: () => void } }).AndroidBridge;
-    if (bridge?.checkUpdate) {
-      bridge.checkUpdate();
-      toast.info('正在检查更新…');
-    } else {
-      window.open('https://github.com/qq5855144/GitHubM/releases/latest', '_blank');
-    }
+    if (!bridge?.checkUpdate) return;
+    setUpdateInfo(null);
+    setCheckState('checking');
+    setCheckErrorMsg('');
+    bridge.checkUpdate();
+    // 15 秒超时保底，防止 Android 无响应时 UI 卡在 checking 状态
+    checkTimeoutRef.current = setTimeout(() => {
+      setCheckState('error');
+      setCheckErrorMsg('检查超时，请检查网络后重试');
+    }, 15_000);
   }, []);
 
   const handleUpdateToken = async () => {
@@ -661,16 +699,49 @@ export default function SettingsPage() {
               )}
             </div>
           )}
-          {/* 检查更新按钮 */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs border-border"
-            onClick={handleCheckUpdate}
-          >
-            <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-            检查更新
-          </Button>
+
+          {/* 已是最新版本提示 */}
+          {checkState === 'latest' && !updateInfo && (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-green-500/10 border border-green-500/20">
+              <svg className="w-4 h-4 text-green-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+              <p className="text-xs text-green-700 dark:text-green-400 font-medium">已是最新版本</p>
+            </div>
+          )}
+
+          {/* 检查失败提示 */}
+          {checkState === 'error' && (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20">
+              <svg className="w-4 h-4 text-destructive shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <p className="text-xs text-destructive text-pretty">{checkErrorMsg}</p>
+            </div>
+          )}
+
+          {/* 检查更新按钮：仅 Android 环境显示 */}
+          {isAndroid && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs border-border"
+              onClick={handleCheckUpdate}
+              disabled={checkState === 'checking'}
+            >
+              {checkState === 'checking' ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  检查中…
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                  检查更新
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
 

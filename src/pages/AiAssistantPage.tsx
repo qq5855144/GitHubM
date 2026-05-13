@@ -11,7 +11,7 @@ import {
   Sparkles, AlertCircle,
   RefreshCw, Plus, GitPullRequest, History, ArrowLeft, Loader2,
   Zap, FolderSearch, PanelRight, Wrench, ListChecks, WifiOff, CheckCircle2, XCircle,
-  Paperclip, X, ImageIcon, FileText, ChevronDown, ChevronRight, Cpu,
+  Paperclip, X, ImageIcon, FileText, ChevronDown, ChevronRight, Cpu, Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -909,6 +909,64 @@ export default function AiAssistantPage() {
     );
   }
 
+  // ── 导出对话为 Markdown ───────────────────────────────────────────────────
+  const handleExportMarkdown = useCallback(() => {
+    if (!selectedRepo || messages.length <= 1) return;
+    const lines: string[] = [
+      `# AI 助手对话记录`,
+      ``,
+      `> 仓库：${selectedRepo.full_name}  分支：\`${selectedBranch}\``,
+      `> 导出时间：${new Date().toLocaleString('zh-CN')}`,
+      ``,
+      `---`,
+      ``,
+    ];
+    messages.forEach(m => {
+      if (m.id === 'welcome') return;
+      if (m.bubbleType === 'thinking' || m.bubbleType === 'tool' || m.bubbleType === 'step') return;
+      if (m.role === 'user') {
+        lines.push(`## 👤 用户`);
+        lines.push(``);
+        lines.push(m.content);
+        lines.push(``);
+        lines.push(`---`);
+        lines.push(``);
+      } else if (m.role === 'assistant' && m.content) {
+        lines.push(`## 🤖 AI 助手`);
+        lines.push(``);
+        lines.push(m.content);
+        lines.push(``);
+        lines.push(`---`);
+        lines.push(``);
+      }
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const filename = `ai-chat-${selectedRepo.name}-${new Date().toISOString().slice(0, 10)}.md`;
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('对话已导出为 Markdown');
+  }, [messages, selectedRepo, selectedBranch]);
+
+  // ── 重试指定消息（从该 AI 消息前的最后一条用户消息开始重发）────────────────
+  const handleRetryFromMsg = useCallback(async (aiMsgId: string) => {
+    if (isStreaming) return;
+    // 找到该 AI 消息的位置
+    const aiIdx = messages.findIndex(m => m.id === aiMsgId);
+    if (aiIdx === -1) return;
+    // 找该 AI 消息之前最近的用户消息
+    const userMsg = [...messages.slice(0, aiIdx)].reverse().find(m => m.role === 'user');
+    if (!userMsg) return;
+    // 截断消息列表到该用户消息之前（不含该用户消息），重新发送
+    const userMsgIdx = messages.slice(0, aiIdx).reduce<number>((acc, m, i) => m.role === 'user' ? i : acc, -1);
+    setMessages(prev => prev.slice(0, userMsgIdx));
+    await handleSend(userMsg.content, false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreaming, messages]);
+
   // ── 对话步骤 ─────────────────────────────────────────────────────────────
 
   const lastAiIdx = [...messages].map((m, i) => (m.role === 'assistant' && m.bubbleType !== 'step') ? i : -1).filter(i => i !== -1).pop() ?? -1;
@@ -998,6 +1056,16 @@ export default function AiAssistantPage() {
               <span className="absolute top-0 right-0 w-2 h-2 bg-primary rounded-full border border-background" />
             )}
           </button>
+          {/* 导出对话按钮 */}
+          {messages.length > 1 && !isStreaming && (
+            <button
+              onClick={handleExportMarkdown}
+              className="p-1.5 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted"
+              title="导出对话为 Markdown"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1249,6 +1317,16 @@ export default function AiAssistantPage() {
                               disabled={isStreaming}
                               className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                               title="重新生成"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {!isLastAi && (
+                            <button
+                              onClick={() => handleRetryFromMsg(msg.id)}
+                              disabled={isStreaming}
+                              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                              title="从此处重试"
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
                             </button>

@@ -1480,6 +1480,134 @@ async function closeIssue(
   } catch (e) { return diagnose4xx(e, `close_issue(#${issueNumber})`); }
 }
 
+/** 搜索 Issues（支持关键词、标签、作者、状态过滤） */
+async function searchIssues(
+  ctx: GithubContext,
+  query: string,
+  state = "open",
+  labels?: string,
+  assignee?: string,
+  limit = 20,
+): Promise<string> {
+  try {
+    // 构造 GitHub Search API 查询
+    let q = `repo:${ctx.owner}/${ctx.repo} is:issue ${query}`;
+    if (state !== "all") q += ` state:${state}`;
+    if (labels) labels.split(",").forEach(l => { q += ` label:"${l.trim()}"`; });
+    if (assignee) q += ` assignee:${assignee}`;
+    const data = await githubRequest(
+      ctx,
+      `/search/issues?q=${encodeURIComponent(q)}&per_page=${Math.min(limit, 30)}&sort=updated&order=desc`,
+    ) as { total_count: number; items: Array<Record<string, unknown>> };
+    if (!data.items?.length) return `未找到匹配"${query}"的 Issue。`;
+    const rows = data.items.map(i => {
+      const lbls = ((i.labels as Array<Record<string, string>>) || []).map(l => l.name).join(", ");
+      const assignees = ((i.assignees as Array<Record<string, string>>) || []).map(a => a.login).join(", ");
+      return `#${i.number} **${i.title}**  状态:${i.state}  标签:${lbls || "无"}  负责人:${assignees || "无"}  [查看](${i.html_url})`;
+    });
+    return `搜索"${query}"找到 ${data.total_count} 个 Issue（显示前 ${rows.length} 个）：\n${rows.join("\n")}`;
+  } catch (e) { return diagnose4xx(e, "search_issues"); }
+}
+
+/** 获取 Issue 详细信息（含正文、评论列表） */
+async function getIssueDetails(
+  ctx: GithubContext,
+  issueNumber: string,
+): Promise<string> {
+  try {
+    const [issue, comments] = await Promise.all([
+      githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/issues/${issueNumber}`) as Promise<Record<string, unknown>>,
+      githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/issues/${issueNumber}/comments?per_page=20`) as Promise<Array<Record<string, unknown>>>,
+    ]);
+    const labels = ((issue.labels as Array<Record<string, string>>) || []).map(l => l.name).join(", ");
+    const assignees = ((issue.assignees as Array<Record<string, string>>) || []).map(a => a.login).join(", ");
+    const lines = [
+      `## Issue #${issue.number}: ${issue.title}`,
+      `- 状态：${issue.state}  作者：${(issue.user as Record<string, string>)?.login}`,
+      `- 标签：${labels || "无"}  负责人：${assignees || "无"}`,
+      `- 创建：${String(issue.created_at).slice(0, 10)}  更新：${String(issue.updated_at).slice(0, 10)}`,
+      `- 链接：${issue.html_url}`,
+      ``,
+      `### 正文`,
+      (issue.body as string) || "（无正文）",
+    ];
+    if (comments.length > 0) {
+      lines.push(``, `### 评论（${comments.length} 条）`);
+      comments.slice(0, 10).forEach(c => {
+        lines.push(`**@${(c.user as Record<string, string>)?.login}** (${String(c.created_at).slice(0, 10)})：`);
+        lines.push((c.body as string)?.slice(0, 300) + ((c.body as string)?.length > 300 ? "…" : ""));
+        lines.push("");
+      });
+      if (comments.length > 10) lines.push(`…还有 ${comments.length - 10} 条评论`);
+    }
+    return lines.join("\n");
+  } catch (e) { return diagnose4xx(e, `get_issue_details(#${issueNumber})`); }
+}
+
+/** 更新 Issue（标题/正文/状态/标签/负责人） */
+async function updateIssue(
+  ctx: GithubContext,
+  issueNumber: string,
+  title?: string,
+  body?: string,
+  state?: string,
+  labels?: string,
+  assignees?: string,
+): Promise<string> {
+  try {
+    const patch: Record<string, unknown> = {};
+    if (title) patch.title = title;
+    if (body !== undefined) patch.body = body;
+    if (state) patch.state = state; // open | closed
+    if (labels !== undefined) patch.labels = labels ? labels.split(",").map(l => l.trim()).filter(Boolean) : [];
+    if (assignees !== undefined) patch.assignees = assignees ? assignees.split(",").map(a => a.trim()).filter(Boolean) : [];
+    if (Object.keys(patch).length === 0) return "未提供任何更新字段，请指定 title/body/state/labels/assignees 之一。";
+    const issue = await githubRequest(
+      ctx,
+      `/repos/${ctx.owner}/${ctx.repo}/issues/${issueNumber}`,
+      { method: "PATCH", body: JSON.stringify(patch) },
+    ) as Record<string, unknown>;
+    const changes = Object.keys(patch).join("、");
+    return `✅ Issue #${issue.number} 已更新（${changes}）：[${issue.title}](${issue.html_url})`;
+  } catch (e) { return diagnose4xx(e, `update_issue(#${issueNumber})`); }
+}
+
+/** 列出仓库 Actions Variables（不含加密 Secrets） */
+async function listActionsVariables(ctx: GithubContext): Promise<string> {
+  try {
+    const data = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/actions/variables?per_page=30`) as { total_count: number; variables: Array<Record<string, string>> };
+    if (!data.variables?.length) return "该仓库没有配置 Actions Variables（环境变量）。";
+    const rows = data.variables.map(v =>
+      `- \`${v.name}\` = \`${v.value}\`  更新时间: ${v.updated_at?.slice(0, 10) || "-"}`
+    );
+    return `共 ${data.total_count} 个 Actions Variables：\n${rows.join("\n")}`;
+  } catch (e) { return diagnose4xx(e, "list_actions_variables"); }
+}
+
+/** 创建或更新单个 Actions Variable */
+async function setActionsVariable(
+  ctx: GithubContext,
+  name: string,
+  value: string,
+): Promise<string> {
+  try {
+    // 先检查是否存在（GET），存在则 PATCH，不存在则 POST
+    let exists = false;
+    try {
+      await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/actions/variables/${name}`);
+      exists = true;
+    } catch { /* 404 → 不存在 */ }
+
+    const method = exists ? "PATCH" : "POST";
+    const url = exists
+      ? `/repos/${ctx.owner}/${ctx.repo}/actions/variables/${name}`
+      : `/repos/${ctx.owner}/${ctx.repo}/actions/variables`;
+    const body = exists ? JSON.stringify({ value }) : JSON.stringify({ name, value });
+    await githubRequest(ctx, url, { method, body });
+    return `✅ Actions Variable \`${name}\` 已${exists ? "更新" : "创建"}，值：\`${value}\``;
+  } catch (e) { return diagnose4xx(e, `set_actions_variable(${name})`); }
+}
+
 /** 关闭 PR */
 async function closePR(
   ctx: GithubContext,
@@ -2051,9 +2179,15 @@ ${branchNote}
 
 🐛 **Issue 管理**
 17. 列出 Issues：{"tool":"list_issues","state":"open"}
-18. 创建 Issue：{"tool":"create_issue","title":"构建失败","body":"描述","labels":"bug,ci"}
-19. 关闭 Issue（可附带结论评论）：{"tool":"close_issue","issue_number":"12","comment":"已在 PR #33 修复，关闭此 Issue"}
-20. 在 Issue 或 PR 下添加评论：{"tool":"add_comment","issue_number":"12","body":"评论内容"}
+18. 搜索 Issues（按关键词、标签、作者）：
+    {"tool":"search_issues","query":"登录失败","state":"open","labels":"bug","assignee":"","limit":"20"}
+    （state 可选：open/closed/all；labels 逗号分隔；不填则不过滤）
+19. 查看 Issue 详情（含正文+评论）：{"tool":"get_issue_details","issue_number":"12"}
+20. 创建 Issue：{"tool":"create_issue","title":"构建失败","body":"描述","labels":"bug,ci"}
+21. 更新 Issue（标题/正文/状态/标签/负责人，仅填需要改的字段）：
+    {"tool":"update_issue","issue_number":"12","state":"closed","labels":"bug,resolved","assignees":"alice,bob"}
+22. 关闭 Issue（可附带结论评论）：{"tool":"close_issue","issue_number":"12","comment":"已在 PR #33 修复，关闭此 Issue"}
+23. 在 Issue 或 PR 下添加评论：{"tool":"add_comment","issue_number":"12","body":"评论内容"}
 
 ⚙️ **工作流 & 部署**
 21. 列出所有工作流：{"tool":"list_workflows"}
@@ -2074,27 +2208,30 @@ ${branchNote}
 27. 取消运行中的工作流：{"tool":"cancel_workflow_run","run_id":"12345678"}
 28. 重新运行失败的工作流：{"tool":"rerun_workflow_run","run_id":"12345678","failed_jobs_only":"true"}
 29. 查看 Actions Secrets 名称：{"tool":"list_actions_secrets"}
-30. 向用户请求上传文件（缺少图片/图标/证书等资源时）：
+30. 查看 Actions Variables（明文环境变量）：{"tool":"list_actions_variables"}
+31. 创建或更新 Actions Variable：{"tool":"set_actions_variable","name":"APP_ENV","value":"production"}
+    ⚠️ Secrets（加密）只能通过 GitHub 网页设置；Variables（明文）可通过此工具读写
+32. 向用户请求上传文件（缺少图片/图标/证书等资源时）：
     {"tool":"request_file","filename":"app-icon.png","description":"需要 512×512 的应用图标 PNG 文件","mime_types":"image/png,image/jpeg"}
 
 🔀 **PR 高级操作**
-30. 关闭 PR（可附带评论）：{"tool":"close_pr","pull_number":"42","comment":"改用 PR #45，关闭此 PR"}
-31. 查看 PR 的文件变更列表：{"tool":"get_pr_files","pull_number":"42"}
-32. 提交 PR 代码审查（APPROVE/REQUEST_CHANGES/COMMENT）：
+33. 关闭 PR（可附带评论）：{"tool":"close_pr","pull_number":"42","comment":"改用 PR #45，关闭此 PR"}
+34. 查看 PR 的文件变更列表：{"tool":"get_pr_files","pull_number":"42"}
+35. 提交 PR 代码审查（APPROVE/REQUEST_CHANGES/COMMENT）：
     {"tool":"submit_pr_review","pull_number":"42","event":"APPROVE","body":"LGTM，代码清晰"}
 
 📊 **仓库分析**
-33. 查看仓库基本信息（语言/Stars/默认分支/Topics 等）：{"tool":"get_repo_info"}
-34. 查看某次提交的 diff（文件变更统计）：{"tool":"get_commit_diff","sha":"abc1234"}
+36. 查看仓库基本信息（语言/Stars/默认分支/Topics 等）：{"tool":"get_repo_info"}
+37. 查看某次提交的 diff（文件变更统计）：{"tool":"get_commit_diff","sha":"abc1234"}
 
 🏷️ **Release 管理**
-35. 列出最近 Releases：{"tool":"list_releases","limit":"10"}
-36. 创建新 Release（tag + 标题 + 发布说明）：
+38. 列出最近 Releases：{"tool":"list_releases","limit":"10"}
+39. 创建新 Release（tag + 标题 + 发布说明）：
     {"tool":"create_release","tag_name":"v1.2.0","name":"v1.2.0 - 新增 XX 功能","body":"## 更新内容\n- 修复 xxx\n- 新增 yyy","draft":"false","prerelease":"false","branch":"main"}
 
 🚀 **Release 自动化**
-37. 获取最新 Release 信息（tag、名称、发布时间）：{"tool":"get_latest_release"}
-38. 获取指定时间点之后已合并的 PR 列表（含 labels、body、作者）：
+40. 获取最新 Release 信息（tag、名称、发布时间）：{"tool":"get_latest_release"}
+41. 获取指定时间点之后已合并的 PR 列表（含 labels、body、作者）：
     {"tool":"get_merged_prs_since","since":"2024-01-15T10:30:00Z"}
 
 ==============================
@@ -2244,6 +2381,28 @@ ${branchNote}
   1. 通过 file_tree / grep_in_file 确认资源路径及名称
   2. 调用 request_file 工具，说明需要的文件名和用途
   3. 等待用户在聊天框上传后，用 write_file 写入到正确路径
+
+🐛 **Issue 全生命周期管理工作流**：
+  当用户说"帮我整理 Issue"、"查看所有 bug"、"关闭已解决的 Issue"等，按此流程处理：
+
+  **查找阶段**
+  - 关键词搜索：{"tool":"search_issues","query":"登录 崩溃","state":"open","labels":"bug"}
+  - 查看详情（含评论）：{"tool":"get_issue_details","issue_number":"12"}
+  - 全量列表：{"tool":"list_issues","state":"open"}
+
+  **更新阶段**（仅填需要修改的字段）
+  - 打标签 + 指派：{"tool":"update_issue","issue_number":"12","labels":"bug,priority-high","assignees":"alice"}
+  - 更新正文：{"tool":"update_issue","issue_number":"12","body":"更新后的描述"}
+  - 重新打开：{"tool":"update_issue","issue_number":"12","state":"open"}
+
+  **关闭阶段**
+  - 附带结论关闭：{"tool":"close_issue","issue_number":"12","comment":"已在 PR #33 中修复，关闭此 Issue"}
+  - 添加跟进评论：{"tool":"add_comment","issue_number":"12","body":"已确认修复，请测试验证"}
+
+  **关键规则**：
+  - 批量处理时逐个处理，每次操作后确认返回结果再继续
+  - 关闭 Issue 前必须先查看详情，确认关闭原因准确
+  - 创建 Issue 时 labels 尽量填写（bug/enhancement/documentation 等）
 
 🏷️ **Release 自动化工作流（自动生成 changelog 并发版）**：
   当用户说"帮我发版"、"合并 PR 后创建 Release"、"生成 changelog 并发布"等，**必须**按此完整流程执行：
@@ -2680,6 +2839,18 @@ function executeTool(
     // ── Issue ────────────────────────────────────────────────────────────────
     case "list_issues":   return listIssues(ctx, call.state || "open");
     case "create_issue":  return createIssue(ctx, call.title, call.body, call.labels);
+    case "search_issues": return searchIssues(
+      ctx, call.query || "",
+      call.state || "open",
+      call.labels,
+      call.assignee,
+      call.limit ? parseInt(call.limit, 10) : 20,
+    );
+    case "get_issue_details": return getIssueDetails(ctx, call.issue_number);
+    case "update_issue":  return updateIssue(
+      ctx, call.issue_number,
+      call.title, call.body, call.state, call.labels, call.assignees,
+    );
     // ── Actions 工作流 ───────────────────────────────────────────────────────
     case "list_workflows":      return listWorkflows(ctx);
     case "get_workflow_runs":   return getWorkflowRuns(ctx, call.workflow_id || "", parseInt(call.limit || "10", 10));
@@ -2693,6 +2864,8 @@ function executeTool(
     case "cancel_workflow_run": return cancelWorkflowRun(ctx, call.run_id);
     case "rerun_workflow_run":  return rerunWorkflowRun(ctx, call.run_id, call.failed_jobs_only === "true");
     case "list_actions_secrets": return listActionsSecrets(ctx);
+    case "list_actions_variables": return listActionsVariables(ctx);
+    case "set_actions_variable": return setActionsVariable(ctx, call.name, call.value);
     case "get_repo_info":        return getRepoInfo(ctx);
     case "add_comment":          return addComment(ctx, call.issue_number || call.pull_number, call.body);
     case "close_issue":          return closeIssue(ctx, call.issue_number, call.comment);
@@ -2984,12 +3157,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       list_pull_requests: "列出 PR", create_pr: "创建 PR", merge_pull_request: "合并 PR",
       // Issue
       list_issues: "列出 Issues", create_issue: "创建 Issue",
+      search_issues: "搜索 Issues", get_issue_details: "Issue 详情", update_issue: "更新 Issue",
       // Actions 工作流
       list_workflows: "列出工作流", get_workflow_runs: "查看运行记录",
       get_run_jobs: "查看 Jobs", get_job_logs: "下载日志",
       trigger_workflow: "触发工作流", check_run_status: "等待运行完成",
       cancel_workflow_run: "取消运行",
       rerun_workflow_run: "重新运行", list_actions_secrets: "查看 Secrets",
+      list_actions_variables: "查看 Variables", set_actions_variable: "设置 Variable",
       // 资源请求
       request_file: "请求上传文件",
       // 新增工具
@@ -3300,9 +3475,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       // 将原始 assistantText（含 PLAN/STEP 标记）压入历史，保持上下文完整性
       fullMessages.push({ role: "assistant", content: rawText });
+      // 工具结果注入时截断至 1500 字符，防止超长结果撑爆上下文窗口
+      const truncatedResult = toolResult.length > 1500
+        ? toolResult.slice(0, 1500) + `\n…（内容已截断，原始长度 ${toolResult.length} 字符，如需完整内容请重新调用工具并缩小查询范围）`
+        : toolResult;
       fullMessages.push({
         role: "user",
-        content: `工具执行结果：\n${toolResult}\n\n请根据结果继续执行下一步。若还有未完成的步骤，继续调用工具；若全部步骤已完成，输出简洁的完成总结（不要再输出工具 JSON）。`,
+        content: `工具执行结果：\n${truncatedResult}\n\n请根据结果继续执行下一步。若还有未完成的步骤，继续调用工具；若全部步骤已完成，输出简洁的完成总结（不要再输出工具 JSON）。`,
       });
 
       // ── 本批次工具轮次耗尽：任务未完则自动续跑 ─────────────────────────────

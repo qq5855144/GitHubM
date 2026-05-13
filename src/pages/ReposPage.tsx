@@ -251,11 +251,8 @@ function RepoDeleteDialog({ repo, open, onOpenChange, onDeleteSuccess }: {
 }
 
 // 移动端仓库卡片下拉菜单（补全移动端的右键菜单功能）
-function RepoCardDropdown({ repo, onDeleteSuccess }: { repo: GitHubRepo; onDeleteSuccess: (name: string) => void }) {
+function RepoCardDropdown({ repo, onDeleteRequest, onDeleteSuccess }: { repo: GitHubRepo; onDeleteRequest: () => void; onDeleteSuccess: (name: string) => void }) {
   const navigate = useNavigate();
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [confirmName, setConfirmName] = useState('');
-  const [deleting, setDeleting] = useState(false);
 
   const handleToggleStar = async () => {
     try {
@@ -283,111 +280,61 @@ function RepoCardDropdown({ repo, onDeleteSuccess }: { repo: GitHubRepo; onDelet
     toast.success('仓库地址已复制');
   };
 
-  const handleDelete = async () => {
-    if (confirmName !== repo.name) { toast.error('仓库名称不一致'); return; }
-    setDeleting(true);
-    try {
-      await deleteRepo(repo.owner.login, repo.name);
-      toast.success(`已删除仓库 ${repo.name}`);
-      setDeleteDialogOpen(false);
-      onDeleteSuccess(repo.name);
-    } catch { toast.error('删除失败，请确认你有足够权限'); } finally { setDeleting(false); }
-  };
-
   return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden w-8 h-8 text-muted-foreground hover:bg-secondary shrink-0"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MoreHorizontal className="w-4 h-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="bg-popover border-border w-52">
-          <DropdownMenuItem className="text-foreground cursor-pointer text-sm"
-            onClick={() => navigate(`/repos/${repo.full_name}`)}>
-            <BookOpen className="w-3.5 h-3.5 mr-2" />查看仓库详情
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-foreground cursor-pointer text-sm"
-            onClick={() => navigate(`/repos/${repo.full_name}/code`)}>
-            <Code2 className="w-3.5 h-3.5 mr-2" />浏览代码
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-foreground cursor-pointer text-sm"
-            onClick={() => navigate(`/repos/${repo.full_name}/issues`)}>
-            <AlertCircle className="w-3.5 h-3.5 mr-2" />查看 Issues
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-foreground cursor-pointer text-sm"
-            onClick={() => navigate(`/repos/${repo.full_name}/pulls`)}>
-            <GitPullRequest className="w-3.5 h-3.5 mr-2" />查看 Pull Requests
-          </DropdownMenuItem>
-          <DropdownMenuSeparator className="bg-border" />
-          <DropdownMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleToggleStar}>
-            <Star className="w-3.5 h-3.5 mr-2" />Star / 取消 Star
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleFork}>
-            <GitFork className="w-3.5 h-3.5 mr-2" />Fork 仓库
-          </DropdownMenuItem>
-          <DropdownMenuSeparator className="bg-border" />
-          <DropdownMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleCopyUrl}>
-            <Copy className="w-3.5 h-3.5 mr-2" />复制仓库地址
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-foreground cursor-pointer text-sm" asChild>
-            <a href={repo.html_url} target="_blank" rel="noopener noreferrer"
-               onClick={(e) => e.stopPropagation()}>
-              <ExternalLink className="w-3.5 h-3.5 mr-2" />在 GitHub 中打开
-            </a>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator className="bg-border" />
-          <DropdownMenuItem
-            className="text-destructive cursor-pointer text-sm focus:text-destructive"
-            onClick={(e) => { e.stopPropagation(); setConfirmName(''); setDeleteDialogOpen(true); }}
-          >
-            <Trash2 className="w-3.5 h-3.5 mr-2" />删除仓库
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      {/* 删除确认对话框 */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-destructive" />删除仓库
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground text-sm space-y-2">
-              <span>此操作将永久删除 </span>
-              <code className="font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded text-xs">{repo.full_name}</code>
-              <span>，包括所有代码、Issues、PR 等，且不可恢复。</span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="px-1 py-2 space-y-1.5">
-            <Label className="text-sm font-normal text-foreground">
-              请输入仓库名称 <code className="font-mono bg-secondary px-1 rounded text-xs">{repo.name}</code> 确认删除
-            </Label>
-            <Input
-              value={confirmName}
-              onChange={(e) => setConfirmName(e.target.value)}
-              placeholder={repo.name}
-              className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono"
-            />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-secondary">取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={handleDelete}
-              disabled={deleting || confirmName !== repo.name}
-            >
-              {deleting ? '删除中...' : '确认删除'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden w-8 h-8 text-muted-foreground hover:bg-secondary shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="bg-popover border-border w-52">
+        <DropdownMenuItem className="text-foreground cursor-pointer text-sm"
+          onClick={() => navigate(`/repos/${repo.full_name}`)}>
+          <BookOpen className="w-3.5 h-3.5 mr-2" />查看仓库详情
+        </DropdownMenuItem>
+        <DropdownMenuItem className="text-foreground cursor-pointer text-sm"
+          onClick={() => navigate(`/repos/${repo.full_name}/code`)}>
+          <Code2 className="w-3.5 h-3.5 mr-2" />浏览代码
+        </DropdownMenuItem>
+        <DropdownMenuItem className="text-foreground cursor-pointer text-sm"
+          onClick={() => navigate(`/repos/${repo.full_name}/issues`)}>
+          <AlertCircle className="w-3.5 h-3.5 mr-2" />查看 Issues
+        </DropdownMenuItem>
+        <DropdownMenuItem className="text-foreground cursor-pointer text-sm"
+          onClick={() => navigate(`/repos/${repo.full_name}/pulls`)}>
+          <GitPullRequest className="w-3.5 h-3.5 mr-2" />查看 Pull Requests
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="bg-border" />
+        <DropdownMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleToggleStar}>
+          <Star className="w-3.5 h-3.5 mr-2" />Star / 取消 Star
+        </DropdownMenuItem>
+        <DropdownMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleFork}>
+          <GitFork className="w-3.5 h-3.5 mr-2" />Fork 仓库
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="bg-border" />
+        <DropdownMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleCopyUrl}>
+          <Copy className="w-3.5 h-3.5 mr-2" />复制仓库地址
+        </DropdownMenuItem>
+        <DropdownMenuItem className="text-foreground cursor-pointer text-sm" asChild>
+          <a href={repo.html_url} target="_blank" rel="noopener noreferrer"
+             onClick={(e) => e.stopPropagation()}>
+            <ExternalLink className="w-3.5 h-3.5 mr-2" />在 GitHub 中打开
+          </a>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="bg-border" />
+        <DropdownMenuItem
+          className="text-destructive cursor-pointer text-sm focus:text-destructive"
+          onClick={(e) => { e.stopPropagation(); onDeleteRequest(); }}
+        >
+          <Trash2 className="w-3.5 h-3.5 mr-2" />删除仓库
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -774,13 +721,21 @@ export default function ReposPage() {
                       </div>
                       {/* 右侧操作区：移动端三点菜单 + 桌面端右箭头 */}
                       <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
-                        <RepoCardDropdown repo={repo} onDeleteSuccess={(name) => {
-                          // 立即从列表中移除（乐观更新），无需等待 API 响应
-                          setRepos(prev => prev.filter(r => r.name !== name));
-                          pageCache.invalidate('repos:');
-                          // 异步静默刷新，同步最终数据（时间戳绕过 GitHub CDN 60s 缓存）
-                          loadRepos(1, false, true);
-                        }} />
+                        <RepoCardDropdown
+                          repo={repo}
+                          onDeleteRequest={() => {
+                            // 移动端删除弹窗也统一在 ContextMenu 树之外渲染，避免 React Portal 事件冒泡
+                            setDeleteTarget(repo);
+                            setDeleteDialogOpen(true);
+                          }}
+                          onDeleteSuccess={(name) => {
+                            // 立即从列表中移除（乐观更新），无需等待 API 响应
+                            setRepos(prev => prev.filter(r => r.name !== name));
+                            pageCache.invalidate('repos:');
+                            // 异步静默刷新，同步最终数据（时间戳绕过 GitHub CDN 60s 缓存）
+                            loadRepos(1, false, true);
+                          }}
+                        />
                         <ChevronRight className="w-4 h-4 text-muted-foreground hidden md:block group-hover:text-foreground transition-colors" />
                       </div>
                     </div>

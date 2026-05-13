@@ -1,0 +1,328 @@
+# GitHub Pages 自动部署 + Android APK 构建 + Release 发布工作流
+# 推送到 main 分支时：
+#   1. 构建 Web 应用（dist/）
+#   2. 部署到 GitHub Pages
+#   3. 打包签名 Release APK（WebView 壳 + dist/ 资源）
+#   4. 自动创建 GitHub Release 并上传 APK
+#
+# ── Secrets 配置说明 ─────────────────────────────────────────────────
+# 仓库 Settings → Secrets and variables → Actions 中可配置：
+#
+#   【签名 Secrets（可选）】
+#   RELEASE_KEYSTORE_BASE64   release.keystore 文件的 base64 内容
+#   RELEASE_KEY_ALIAS         密钥别名（默认 github-manager）
+#   RELEASE_STORE_PASSWORD    keystore 密码
+#   RELEASE_KEY_PASSWORD      key 密码
+#
+#   【自动持久化 Secret（可选，强烈推荐）】
+#   GH_PAT  具有 "repo" 权限的 Personal Access Token（PAT）
+#           首次构建时 CI 自动生成 Keystore，并通过 GH_PAT 将其写回
+#           上方 4 个签名 Secrets，之后所有构建复用同一证书，
+#           支持跨版本覆盖安装。
+#           创建 PAT：GitHub → Settings → Developer settings →
+#           Personal access tokens → Generate new token（classic）
+#           勾选 repo 权限后生成，填入 GH_PAT Secret。
+#
+#   【零配置模式】
+#   以上 Secrets 均不填时，CI 仍可正常构建，但每次生成不同临时证书，
+#   安装后无法被下一个构建版本覆盖安装。
+# ────────────────────────────────────────────────────────────────────
+name: Deploy & Build APK
+
+on:
+  push:
+    branches: [main, master]   # 同时监听 main 和 master 分支
+  workflow_dispatch: # 支持手动触发
+
+# GITHUB_TOKEN 权限
+permissions:
+  contents: write   # 创建 GitHub Release 需要 write 权限
+  pages: write
+  id-token: write
+
+# 同组并发：新部署取消旧部署（仅影响 Pages，APK 构建不受影响）
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+# 强制 Actions 使用 Node.js 24（2026-06 起官方默认，提前适配避免破坏性变更）
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# ─────────────────────────────────────────────────────────────────
+jobs:
+
+  # ── Job 1：构建 Web 应用 ───────────────────────────────────────
+  build-web:
+    name: 构建 Web 应用
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建 Web 应用（注入版本号）
+        run: |
+          # 注入版本号
+          export VITE_APP_VERSION="1.0.${{ github.run_number }}"
+          # 从已提交的 .env 文件中读取 Supabase 配置（如外部未通过 Secret 配置）
+          # 使用 export 而非 env 块，避免 GitHub Actions env 块的空值覆盖问题
+          if [ -f ".env" ]; then
+            while IFS= read -r line || [ -n "$line" ]; do
+              # 跳过空行和注释
+              [[ -z "$line" || "$line" == \#* ]] && continue
+              key="${line%%=*}"
+              val="${line#*=}"
+              # 若环境中该变量尚未设置（或为空），则从 .env 注入
+              if [ -z "${!key}" ]; then
+                export "$key=$val"
+              fi
+            done < .env
+          fi
+          pnpm exec vite build
+
+      - name: 上传 Web 构建产物（供后续 Job 使用）
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+          retention-days: 1
+
+      - name: 配置 GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: 上传 Pages 产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  # ── Job 2：部署到 GitHub Pages ─────────────────────────────────
+  deploy-pages:
+    name: 部署到 GitHub Pages
+    needs: build-web
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # ── Job 3：构建签名 Release APK 并发布 ────────────────────────
+  build-apk:
+    name: 构建 Android APK 并发布 Release
+    needs: build-web
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码（含 android/ 项目源码）
+        uses: actions/checkout@v4
+
+      - name: 下载 Web 构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+
+      - name: 将 Web 资源复制到 Android assets
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp -r dist/. android/app/src/main/assets/
+
+      - name: 设置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: 设置 Gradle 8.7
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+          cache-read-only: false
+
+      - name: 生成 local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+
+      - name: 接受 Android SDK 许可证
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+
+      # ── 签名配置 ──────────────────────────────────────────────────
+      # 优先使用仓库 Secret 中的稳定 Release Keystore（支持跨版本覆盖安装）；
+      # 未配置 Secret 时，用 keytool -genkeypair 自动生成临时 Keystore 并用于签名，
+      # 使 APK 始终以 Release 模式构建（而非 Debug），但该临时证书每次构建都会变化，
+      # 无法跨不同构建版本覆盖安装。如需稳定签名，请按注释说明配置 Secrets。
+      - name: 配置 Release Keystore
+        id: keystore
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEY_ALIAS:       ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_STORE_PASSWORD:  ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD:    ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          KEYSTORE_PATH="${GITHUB_WORKSPACE}/android/release.keystore"
+
+          if [ -n "${RELEASE_KEYSTORE_BASE64}" ]; then
+            # ── 方案 A：使用仓库 Secret 中的稳定 Keystore ────────────
+            echo "✅ 使用 Secret 中的 Release Keystore"
+            echo "${RELEASE_KEYSTORE_BASE64}" | base64 --decode > "${KEYSTORE_PATH}"
+            STORE_PASS="${RELEASE_STORE_PASSWORD}"
+            KEY_ALIAS_VAL="${RELEASE_KEY_ALIAS}"
+            KEY_PASS="${RELEASE_KEY_PASSWORD}"
+            echo "was_generated=false" >> "$GITHUB_OUTPUT"
+
+          elif [ -f "${KEYSTORE_PATH}" ]; then
+            # ── 方案 B：使用仓库中已提交的 Keystore 文件 ──────────────
+            # 这种情况发生在用户已通过 git 提交了证书但未配置 Secret
+            echo "✅ 使用项目内置的 Release Keystore 文件"
+            STORE_PASS="GithubManager@2024"
+            KEY_ALIAS_VAL="github-manager"
+            KEY_PASS="GithubManager@2024"
+            echo "was_generated=false" >> "$GITHUB_OUTPUT"
+
+          else
+            # ── 方案 C：全自动生成临时 Keystore ───────────────────
+            echo "⚠️  未检测到 Keystore Secret 或文件，正在自动生成临时证书..."
+            STORE_PASS="GithubManager@CI"
+            KEY_ALIAS_VAL="github-manager"
+            KEY_PASS="GithubManager@CI"
+
+            keytool -genkeypair -v \
+              -keystore "${KEYSTORE_PATH}" \
+              -alias "${KEY_ALIAS_VAL}" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "${STORE_PASS}" \
+              -keypass "${KEY_PASS}" \
+              -dname "CN=GitHub Manager CI, OU=Build, O=CI, L=CN, S=CN, C=CN" \
+              -noprompt
+
+            echo "✅ 临时 Keystore 生成成功"
+            # 将 base64 写入临时文件，供后续写入 Secrets 步骤使用
+            base64 -w 0 "${KEYSTORE_PATH}" > /tmp/keystore_b64.txt
+            echo "was_generated=true"                 >> "$GITHUB_OUTPUT"
+            echo "keystore_b64_file=/tmp/keystore_b64.txt" >> "$GITHUB_OUTPUT"
+            echo "generated_alias=${KEY_ALIAS_VAL}"   >> "$GITHUB_OUTPUT"
+            echo "generated_store_pass=${STORE_PASS}" >> "$GITHUB_OUTPUT"
+            echo "generated_key_pass=${KEY_PASS}"     >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "keystore_path=${KEYSTORE_PATH}" >> "$GITHUB_OUTPUT"
+          echo "store_password=${STORE_PASS}"   >> "$GITHUB_OUTPUT"
+          echo "key_alias=${KEY_ALIAS_VAL}"     >> "$GITHUB_OUTPUT"
+          echo "key_password=${KEY_PASS}"       >> "$GITHUB_OUTPUT"
+
+      # ── 将自动生成的 Keystore 写回仓库 Secrets（需要 GH_PAT）────────
+      # 写入成功后，下次构建会走方案 A（稳定 Keystore），支持跨版本覆盖安装
+      - name: 写入 Keystore 到仓库 Secrets
+        if: steps.keystore.outputs.was_generated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          B64_FILE: ${{ steps.keystore.outputs.keystore_b64_file }}
+          GEN_ALIAS: ${{ steps.keystore.outputs.generated_alias }}
+          GEN_STORE_PASS: ${{ steps.keystore.outputs.generated_store_pass }}
+          GEN_KEY_PASS: ${{ steps.keystore.outputs.generated_key_pass }}
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "⚠️  未配置 GH_PAT Secret，跳过自动写入仓库 Secrets。"
+            echo "   临时证书仅用于本次构建，下次构建仍会重新生成新证书。"
+            echo ""
+            echo "   📋  如需稳定签名（支持覆盖安装），请："
+            echo "   1. GitHub → Settings → Developer settings →"
+            echo "      Personal access tokens → Generate new token (classic)"
+            echo "   2. 勾选 repo 权限 → 生成 Token"
+            echo "   3. 将 Token 添加为仓库 Secret，名称：GH_PAT"
+            echo "   4. 再次触发构建，CI 将自动完成后续配置"
+          else
+            echo "🔑  GH_PAT 可用，正在将 Keystore 写入仓库 Secrets..."
+            REPO="${{ github.repository }}"
+            gh secret set RELEASE_KEYSTORE_BASE64  --body "$(cat ${B64_FILE})"  --repo "${REPO}"
+            gh secret set RELEASE_KEY_ALIAS        --body "${GEN_ALIAS}"        --repo "${REPO}"
+            gh secret set RELEASE_STORE_PASSWORD   --body "${GEN_STORE_PASS}"   --repo "${REPO}"
+            gh secret set RELEASE_KEY_PASSWORD     --body "${GEN_KEY_PASS}"     --repo "${REPO}"
+            echo "✅  4 个 Secrets 写入成功！"
+            echo "   下次构建将使用稳定证书，支持跨版本覆盖安装。"
+          fi
+
+      # ── 构建签名 Release APK ───────────────────────────────────
+      - name: 构建签名 Release APK
+        working-directory: android
+        env:
+          VERSION_CODE:    ${{ github.run_number }}
+          VERSION_NAME:    "1.0.${{ github.run_number }}"
+          KEYSTORE_PATH:   ${{ steps.keystore.outputs.keystore_path }}
+          STORE_PASSWORD:  ${{ steps.keystore.outputs.store_password }}
+          KEY_ALIAS:       ${{ steps.keystore.outputs.key_alias }}
+          KEY_PASSWORD:    ${{ steps.keystore.outputs.key_password }}
+        run: gradle assembleRelease --no-daemon
+
+      # ── 规范化 APK 文件名 ──────────────────────────────────────
+      - name: 重命名 APK
+        id: rename_apk
+        run: |
+          VERSION_NAME="1.0.${{ github.run_number }}"
+          APK_NAME="github-manager-v${VERSION_NAME}.apk"
+          # 始终使用 Release APK（两种签名方案均走 assembleRelease）
+          cp "android/app/build/outputs/apk/release/app-release.apk" "${APK_NAME}"
+          echo "apk_name=${APK_NAME}"       >> "$GITHUB_OUTPUT"
+          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+
+      # ── 创建 GitHub Release 并上传 APK ────────────────────────
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          VERSION_NAME="${{ steps.rename_apk.outputs.version_name }}"
+          APK_NAME="${{ steps.rename_apk.outputs.apk_name }}"
+          TAG="v${VERSION_NAME}"
+          COMMIT_SHA="${{ github.sha }}"
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+
+          # 根据是否使用了稳定 Secret Keystore 生成不同的签名说明
+          if [ -n "${RELEASE_KEYSTORE_BASE64}" ]; then
+            SIGN_NOTE="✅ **稳定 Release 签名**（可跨版本覆盖安装，正式分发）"
+          else
+            SIGN_NOTE="⚠️ **临时 Release 签名**（keytool 自动生成，本次构建可安装，但无法覆盖安装其他构建版本；配置 RELEASE_KEYSTORE_BASE64 Secret 后升级为稳定签名）"
+          fi
+
+          NOTES="## GitHub Manager ${TAG}
+
+          **构建信息**
+          - 版本号：\`${VERSION_NAME}\`（versionCode: \`${{ github.run_number }}\`）
+          - 提交：[\`${SHORT_SHA}\`](${{ github.server_url }}/${{ github.repository }}/commit/${COMMIT_SHA})
+          - 构建时间：$(date -u '+%Y-%m-%d %H:%M UTC')
+          - ${SIGN_NOTE}
+
+          **安装方式**
+          1. 下载下方 APK 文件到 Android 设备
+          2. 允许「安装未知来源应用」后点击安装
+          3. 如已安装旧版本，使用 Release 签名版本可直接覆盖安装（无需卸载）
+
+          **系统要求**
+          - Android 8.0（API 26）及以上"
+
+          # 如同名 tag 已存在则先删除（workflow_dispatch 重复触发场景）
+          gh release delete "${TAG}" --yes 2>/dev/null || true
+          git push origin --delete "${TAG}" 2>/dev/null || true
+
+          gh release create "${TAG}" \
+            --title "GitHub Manager ${TAG}" \
+            --notes "${NOTES}" \
+            --latest \
+            "${APK_NAME}"
+

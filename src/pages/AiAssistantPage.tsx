@@ -77,6 +77,8 @@ export default function AiAssistantPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /** 聊天页根容器 ref，用于 Android 软键盘弹起时动态修正高度 */
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   // 附件上传相关
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -100,6 +102,43 @@ export default function AiAssistantPage() {
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 112) + 'px'; // max-h-28 = 112px
   }, [input]);
+
+  /**
+   * Android 软键盘适配：监听 visualViewport resize 动态修正容器高度。
+   * 背景：部分 Android WebView（Capacitor 打包）不支持 dvh 随键盘收缩，
+   *       导致输入框被键盘压住。visualViewport.height 是键盘弹起后真实可视高度，
+   *       用"可视高度 - 容器距页面顶部距离"作为容器高度即可将输入框顶到键盘上方。
+   */
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    let rafId = 0;
+    const adjust = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const el = chatContainerRef.current;
+        if (!el) return;
+        // 容器顶部到页面顶部的距离（通常 = header 高度 64px）
+        const topOffset = el.getBoundingClientRect().top + window.scrollY;
+        const available = vv.offsetTop + vv.height - topOffset;
+        el.style.height = Math.max(available, 200) + 'px';
+      });
+    };
+
+    vv.addEventListener('resize', adjust);
+    vv.addEventListener('scroll', adjust);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      vv.removeEventListener('resize', adjust);
+      vv.removeEventListener('scroll', adjust);
+      // 组件卸载时清除内联高度，恢复 CSS class 控制
+      if (chatContainerRef.current) {
+        chatContainerRef.current.style.height = '';
+      }
+    };
+  }, []);
 
   // 自动滚动到底部
   // 直接操作原生 div（不再经过 Radix ScrollArea 的 viewport 选择器）
@@ -846,7 +885,7 @@ export default function AiAssistantPage() {
   const lastAiIdx = [...messages].map((m, i) => (m.role === 'assistant' && m.bubbleType !== 'step') ? i : -1).filter(i => i !== -1).pop() ?? -1;
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-4rem)] md:h-[calc(100dvh-1rem)] overflow-hidden">
+    <div ref={chatContainerRef} className="flex flex-col h-[calc(100dvh-4rem)] md:h-[calc(100dvh-1rem)] overflow-hidden">
       {/* 顶部栏 */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-card shrink-0">
         {/* 返回按钮 */}
@@ -1322,6 +1361,13 @@ export default function AiAssistantPage() {
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
+                  onFocus={() => {
+                    // Android 双保险：键盘动画完成后（~300ms）把输入框滚入可视区
+                    // visualViewport 已处理大多数情况，此处覆盖老机型 / 响应慢的场景
+                    setTimeout(() => {
+                      textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }, 350);
+                  }}
                   placeholder="输入消息… （Enter 发送，Shift+Enter 换行）"
                   className="flex-1 min-w-0 min-h-[36px] max-h-28 resize-none border-0 shadow-none bg-transparent px-0 py-0.5 text-sm focus-visible:ring-0 placeholder:text-muted-foreground/60 overflow-y-auto"
                   disabled={isStreaming}

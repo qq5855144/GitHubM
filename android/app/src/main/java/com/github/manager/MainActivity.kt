@@ -88,8 +88,8 @@ class MainActivity : AppCompatActivity() {
     private var currentNavItemId: Int = R.id.nav_home
     /** 当前底部导航栏选中色（由 notifyAccent 更新，随主题色方案变化） */
     private var currentAccentColor: Int = Color.parseColor("#7c3aed")  // 默认与 Web 端浅色主题 primary 一致
-    /** 当前是否为深色模式（用于 notifyAccent 确定未选中色） */
-    private var darkTheme: Boolean = true
+    /** 当前是否为深色模式（用于 notifyAccent 确定未选中色；默认浅色） */
+    private var darkTheme: Boolean = false
     /** 广播接收器是否已注册（防止 onDestroy 中 unregisterReceiver 二次崩溃） */
     private var isReceiverRegistered: Boolean = false
 
@@ -462,9 +462,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 冷启动时读取上次保存的主题，默认跟随系统（system 模式）
+        // 冷启动时读取上次保存的主题，默认浅色（light 模式）
         val savedTheme = getSharedPreferences("gm_prefs", MODE_PRIVATE)
-            .getString("theme_mode", "system") ?: "system"
+            .getString("theme_mode", "light") ?: "light"
         val isInitialDark = when (savedTheme) {
             "light" -> false
             "dark"  -> true

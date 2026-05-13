@@ -29,12 +29,13 @@ AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName
 const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
->(({ className, onPointerDown, onContextMenu, onClick, ...props }, ref) => (
+>(({ className, ...props }, ref) => (
   <AlertDialogPortal>
     <AlertDialogOverlay />
     <AlertDialogPrimitive.Content
       ref={ref}
       className={cn(
+<<<<<<< HEAD
         // pointer-events-auto: 必须显式声明。Radix 打开弹窗时给 body 设置 pointer-events:none，
         // 虽然 DismissableLayer 会尝试自动恢复，但在 Portal + ContextMenu 等复杂嵌套下可能失效，
         // 缺少此声明会导致弹窗内容区点击穿透到背景元素（仓库列表卡片）。
@@ -47,7 +48,19 @@ const AlertDialogContent = React.forwardRef<
       onPointerDown={(e) => { e.stopPropagation(); onPointerDown?.(e); }}
       onContextMenu={(e) => { e.stopPropagation(); onContextMenu?.(e); }}
       onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
+=======
+        // pointer-events-auto：body.pointerEvents 被 Radix 设为 none 时，Content 区域必须
+        // 显式恢复，否则所有点击穿透到背景 DOM（仓库卡片 onClick 被误触）
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 pointer-events-auto [touch-action:pan-y] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        className
+      )}
+      // {...props} 在 handlers 前展开，确保我们的 handlers 不被外部调用方覆盖（缺陷②修复）
+>>>>>>> 58644f5 (fix: 修复 AlertDialog/Dialog 三个叠加缺陷)
       {...props}
+      // 阻止 React fiber 逻辑树上的事件冒泡穿越 Portal 到达 ContextMenuTrigger / 卡片 onClick
+      onPointerDown={(e) => { e.stopPropagation(); props.onPointerDown?.(e); }}
+      onContextMenu={(e) => { e.stopPropagation(); props.onContextMenu?.(e); }}
+      onClick={(e) => { e.stopPropagation(); props.onClick?.(e); }}
     />
   </AlertDialogPortal>
 ))

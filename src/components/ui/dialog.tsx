@@ -30,20 +30,23 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, onPointerDown, onContextMenu, onClick, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg [touch-action:pan-y]",
+        // pointer-events-auto：body.pointerEvents 被 Radix 设为 none 时，Content 区域必须
+        // 显式恢复，否则所有点击穿透到背景 DOM（仓库卡片 onClick 被误触）
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 pointer-events-auto [touch-action:pan-y] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
         className
       )}
-      // 阻止 React fiber 逻辑树上的事件冒泡穿越 Portal 到达 ContextMenuTrigger / 卡片 onClick
-      onPointerDown={(e) => { e.stopPropagation(); onPointerDown?.(e); }}
-      onContextMenu={(e) => { e.stopPropagation(); onContextMenu?.(e); }}
-      onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
+      // {...props} 在 handlers 前展开，确保我们的 handlers 不被外部调用方覆盖（缺陷②修复）
       {...props}
+      // 阻止 React fiber 逻辑树上的事件冒泡穿越 Portal 到达 ContextMenuTrigger / 卡片 onClick
+      onPointerDown={(e) => { e.stopPropagation(); props.onPointerDown?.(e); }}
+      onContextMenu={(e) => { e.stopPropagation(); props.onContextMenu?.(e); }}
+      onClick={(e) => { e.stopPropagation(); props.onClick?.(e); }}
     >
       {children}
       <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">

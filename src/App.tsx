@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layouts/MainLayout';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import { routes } from './routes';
 
 // 路由守卫：未登录跳转到 /login
@@ -66,6 +67,7 @@ function AppContent() {
         {/* 404 重定向 */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <NetworkStatusBanner />
       <Toaster richColors position="top-right" />
     </>
   );

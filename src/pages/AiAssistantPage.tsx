@@ -648,10 +648,12 @@ export default function AiAssistantPage() {
         networkInterruptedRef.current = false;
         setIsNetworkInterrupted(false);
         streamingAiMsgIdRef.current = null;
-        // 关闭所有仍在 streaming 的 AI 气泡
-        setMessages(prev => prev.map(m =>
-          (m.role === 'assistant' && m.streaming) ? { ...m, streaming: false } : m
-        ));
+        // 关闭所有仍在 streaming 的 AI 气泡；thinking 气泡同时标记 thinkingDone，确保转圈消失
+        setMessages(prev => prev.map(m => {
+          if (m.role !== 'assistant' || !m.streaming) return m;
+          if (m.bubbleType === 'thinking') return { ...m, streaming: false, thinkingDone: true };
+          return { ...m, streaming: false };
+        }));
         setIsStreaming(false);
         // 持久化：只保存最终回答文本（answerMsgId 对应的气泡内容）
         const newMsgs = isRegen
@@ -678,7 +680,9 @@ export default function AiAssistantPage() {
           setMessages(prev => prev.map(m =>
             m.id === errTargetId
               ? { ...m, content: accumulated + (accumulated ? '\n\n' : '') + `⚠️ 连接中断：${err.message}`, streaming: false }
-              : (m.role === 'assistant' && m.streaming ? { ...m, streaming: false } : m)
+              : (m.role === 'assistant' && m.streaming
+                  ? (m.bubbleType === 'thinking' ? { ...m, streaming: false, thinkingDone: true } : { ...m, streaming: false })
+                  : m)
           ));
           setIsStreaming(false);
           if (!document.hidden) {
@@ -696,7 +700,9 @@ export default function AiAssistantPage() {
           setMessages(prev => prev.map(m =>
             m.id === errTargetId
               ? { ...m, content: `❌ ${err.message}`, streaming: false }
-              : (m.role === 'assistant' && m.streaming ? { ...m, streaming: false } : m)
+              : (m.role === 'assistant' && m.streaming
+                  ? (m.bubbleType === 'thinking' ? { ...m, streaming: false, thinkingDone: true } : { ...m, streaming: false })
+                  : m)
           ));
           setIsStreaming(false);
           if (!isUserAbort) toast.error(err.message, { duration: 5000 });
@@ -771,7 +777,12 @@ export default function AiAssistantPage() {
     setIsStreaming(false);
     setIsNetworkInterrupted(false);
     networkInterruptedRef.current = false;
-    setMessages(prev => prev.map(m => m.streaming ? { ...m, streaming: false } : m));
+    // thinking 气泡同时标记 thinkingDone，确保转圈在手动停止时也立即消失
+    setMessages(prev => prev.map(m => {
+      if (!m.streaming) return m;
+      if (m.bubbleType === 'thinking') return { ...m, streaming: false, thinkingDone: true };
+      return { ...m, streaming: false };
+    }));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1826,18 +1837,21 @@ function StepBubble({ msg, onUploadFile }: StepBubbleProps) {
 function ThinkingBubble({ msg }: { msg: Message }) {
   const content = msg.thinkingContent ?? '';
   const done = msg.thinkingDone ?? false;
+  // 双重条件：thinkingDone OR streaming 已结束，任一为真即停止转圈
+  const isThinking = !done && msg.streaming === true;
 
   // 思考中默认展开；完成后自动折叠（留 600ms 让用户感知完成）
-  const [expanded, setExpanded] = useState(!done);
-  const prevDoneRef = useRef(done);
+  const [expanded, setExpanded] = useState(isThinking);
+  const prevThinkingRef = useRef(isThinking);
 
   useEffect(() => {
-    if (!prevDoneRef.current && done) {
-      prevDoneRef.current = true;
+    // isThinking: true→false 触发自动折叠（思考完成 or streaming 结束）
+    if (prevThinkingRef.current && !isThinking) {
+      prevThinkingRef.current = false;
       const t = setTimeout(() => setExpanded(false), 600);
       return () => clearTimeout(t);
     }
-  }, [done]);
+  }, [isThinking]);
 
   // 折叠时展示内容摘要（最多 36 字）
   const preview = content.replace(/\s+/g, ' ').trim().slice(0, 36);
@@ -1848,7 +1862,7 @@ function ThinkingBubble({ msg }: { msg: Message }) {
       <div className="flex flex-col items-center shrink-0">
         <div className={cn(
           'w-px self-stretch mx-3 rounded-full transition-colors duration-500',
-          done ? 'bg-border/30' : 'bg-primary/30'
+          isThinking ? 'bg-primary/30' : 'bg-border/30'
         )} />
       </div>
 
@@ -1858,15 +1872,15 @@ function ThinkingBubble({ msg }: { msg: Message }) {
           onClick={() => setExpanded(v => !v)}
           className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors py-0.5 w-full text-left group"
         >
-          {done
-            ? <CheckCircle2 className="w-3 h-3 text-primary/50 shrink-0" />
-            : <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />}
+          {isThinking
+            ? <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />
+            : <CheckCircle2 className="w-3 h-3 text-primary/50 shrink-0" />}
 
           <span className={cn(
             'font-medium tracking-wide shrink-0',
-            done ? 'text-muted-foreground/70' : 'text-muted-foreground'
+            isThinking ? 'text-muted-foreground' : 'text-muted-foreground/70'
           )}>
-            {done ? '思考完成' : '思考中…'}
+            {isThinking ? '思考中…' : '思考完成'}
           </span>
 
           {/* 折叠时展示预览文本 */}
@@ -1889,13 +1903,13 @@ function ThinkingBubble({ msg }: { msg: Message }) {
         {expanded && content && (
           <div className={cn(
             'mt-1 rounded-lg border px-3 py-2.5 max-h-[200px] overflow-y-auto scrollbar-thin',
-            done
-              ? 'bg-muted/10 border-border/30'
-              : 'bg-primary/5 border-primary/15 animate-pulse-subtle'
+            isThinking
+              ? 'bg-primary/5 border-primary/15 animate-pulse-subtle'
+              : 'bg-muted/10 border-border/30'
           )}>
             <p className="text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap italic break-words">
               {content}
-              {!done && <span className="inline-block w-1 h-3 ml-1 bg-primary/50 animate-pulse align-middle rounded-sm" />}
+              {isThinking && <span className="inline-block w-1 h-3 ml-1 bg-primary/50 animate-pulse align-middle rounded-sm" />}
             </p>
           </div>
         )}

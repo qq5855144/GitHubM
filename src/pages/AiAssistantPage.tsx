@@ -77,10 +77,14 @@ export default function AiAssistantPage() {
   const [autoMode, setAutoMode] = useState<boolean>(() => {
     try { return localStorage.getItem('ai_auto_mode') === 'true'; } catch { return false; }
   });
+  // 提示条独立的关闭状态（仅关闭提示条，不影响自主模式本身）
+  const [autoModeHintDismissed, setAutoModeHintDismissed] = useState(false);
   const toggleAutoMode = () => {
     setAutoMode(prev => {
       const next = !prev;
       try { localStorage.setItem('ai_auto_mode', String(next)); } catch { /* noop */ }
+      // 开启时重置提示条显示
+      if (next) setAutoModeHintDismissed(false);
       return next;
     });
   };
@@ -1019,13 +1023,13 @@ export default function AiAssistantPage() {
             className={cn(
               'flex items-center gap-1 px-1.5 py-1 rounded-md transition-colors text-xs font-medium',
               autoMode
-                ? 'bg-primary/10 text-primary border border-primary/25'
+                ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted'
             )}
             title={autoMode ? '自主模式已开启（点击关闭）' : '开启自主模式：AI 自动执行所有步骤，网络中断后自动重连'}
           >
             <Cpu className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden sm:inline">{autoMode ? '自主' : '自主'}</span>
+            <span className="hidden sm:inline">自主</span>
           </button>
           <button
             onClick={() => setShowFileBrowser(v => !v)}
@@ -1088,7 +1092,7 @@ export default function AiAssistantPage() {
       )}
 
       {/* 自主模式提示条 */}
-      {autoMode && (
+      {autoMode && !autoModeHintDismissed && (
         <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/8 border-b border-primary/15 shrink-0">
           <Cpu className="w-3.5 h-3.5 text-primary shrink-0" />
           <p className="text-xs text-primary flex-1 min-w-0">
@@ -1096,10 +1100,10 @@ export default function AiAssistantPage() {
             <span className="text-primary/70 ml-1">· AI 将自动执行所有步骤，网络中断后自动重连</span>
           </p>
           <button
-            onClick={toggleAutoMode}
+            onClick={() => setAutoModeHintDismissed(true)}
             className="shrink-0 text-xs text-primary/60 hover:text-primary transition-colors underline"
           >
-            关闭
+            关闭提示
           </button>
         </div>
       )}

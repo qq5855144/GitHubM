@@ -1,0 +1,28 @@
+id: supabase-edge-function-get-with-body
+language: ts
+files:
+  - src/**/*.ts
+  - src/**/*.tsx
+severity: error
+message: |
+  ❌ GET 请求不能携带 body：supabase.functions.invoke 使用 method: 'GET' 时参数必须拼接在 URL 里
+ 
+  ✅ 正确写法（GET 请求：参数必须拼接到函数名 URL 中）：
+  supabase.functions.invoke(`function-name?task_id=${taskId}&action=check`)
+ 
+ 
+  原因：
+  - HTTP 规范（RFC 9110）明确 GET 请求不应携带语义化 body
+  - GET 的查询参数必须位于 URL query string 中，不能通过 body 传递
+  - Supabase Edge Functions 的 GET 调用应将参数直接附加在函数名后面
+
+rule:
+  any:
+    # 匹配 method: 'GET' 在 body 之前的写法
+    - pattern: "supabase.functions.invoke($FUNC, {method: 'GET', body: $BODY})"
+    # 匹配 body 在 method: 'GET' 之前的写法
+    - pattern: "supabase.functions.invoke($FUNC, {body: $BODY, method: 'GET'})"
+    # 匹配带泛型参数 + method: 'GET' 在 body 之前的写法
+    - pattern: "supabase.functions.invoke<$TYPE>($FUNC, {method: 'GET', body: $BODY})"
+    # 匹配带泛型参数 + body 在 method: 'GET' 之前的写法
+    - pattern: "supabase.functions.invoke<$TYPE>($FUNC, {body: $BODY, method: 'GET'})"

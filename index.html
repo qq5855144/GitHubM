@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- 相对路径：确保在 WebView file:// 协议下也能正确加载图标 -->
+    <link rel="icon" type="image/svg+xml" href="./logo.svg" />
+    <link rel="apple-touch-icon" href="./logo.svg" />
+
+    <!-- WebView / PWA 视口：关闭用户缩放，支持刘海屏安全区 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
+    <!-- 主题色（Android WebView 工具栏 / PWA 标题栏） -->
+    <meta name="theme-color" content="#1e1b4b" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f3ff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)"  content="#1e1b4b" />
+
+    <!-- iOS PWA / WKWebView 全屏模式 -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="GitHub 管理器" />
+
+    <!-- Android WebView / Chrome -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="GitHub 管理器" />
+
+    <!-- SEO & 分享描述 -->
+    <meta name="description" content="一站式移动管理 GitHub，随时随地管理仓库、Issue、PR，高效便捷的开发者利器。" />
+
+    <title>GitHub 管理器</title>
+
+    <!--
+      主题预初始化脚本：在任何 CSS/JS 加载前同步执行，
+      避免首屏出现错误主题（FOUC）和安卓状态栏色与页面不匹配的问题。
+      1. 读取 localStorage 存储的主题偏好
+      2. 若为 system / 未设置，读取系统 prefers-color-scheme
+      3. 立即为 <html> 添加正确的 dark/light class
+      4. 动态更新 theme-color meta，让安卓 WebView 状态栏与页面同步
+      5. 尝试通知 AndroidBridge（壳注入可能略晚于脚本执行，降级处理）
+    -->
+    <script>
+      (function () {
+        var DARK_COLOR  = '#1e1b4b';
+        var LIGHT_COLOR = '#f5f3ff';
+        var saved = localStorage.getItem('github_manager_theme');
+        var isDark;
+        if (saved === 'light') {
+          isDark = false;
+        } else if (saved === 'system') {
+          // 明确选择跟随系统
+          isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        } else {
+          // 'dark' 或未设置（首次使用默认深色）
+          isDark = true;
+        }
+        // 同步写入 html class，不等待 React
+        var html = document.documentElement;
+        if (isDark) {
+          html.classList.add('dark');
+          html.classList.remove('light');
+        } else {
+          html.classList.add('light');
+          html.classList.remove('dark');
+        }
+
+        // 更新唯一的 theme-color meta（Android WebView 不支持 media query 版本）
+        var metaThemeColor = document.querySelector('meta[name="theme-color"]:not([media])');
+        if (metaThemeColor) {
+          metaThemeColor.setAttribute('content', isDark ? DARK_COLOR : LIGHT_COLOR);
+        }
+
+        // 通知 AndroidBridge（壳注入后会立即可用；若未注入则静默忽略）
+        try {
+          window.AndroidBridge && window.AndroidBridge.notifyTheme && window.AndroidBridge.notifyTheme(isDark);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html>

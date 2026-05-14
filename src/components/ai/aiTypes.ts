@@ -1,7 +1,7 @@
 // AI 助手共享类型定义
 
 // ── 模型类型（在此定义，供 aiUtils.tsx 和其他文件导入，避免循环依赖）──────────────
-export type ModelType = 'wenxin' | 'deepseek' | 'gemini' | 'qwen' | 'groq' | 'openai' | 'custom';
+export type ModelType = 'wenxin' | 'deepseek' | 'gemini' | 'qwen' | 'openai' | 'custom';
 
 // ── 对话历史类型 ────────────────────────────────────────────────────────────────
 

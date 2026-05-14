@@ -1,11 +1,12 @@
 import React, { useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layouts/MainLayout';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import { routes } from './routes';
+import { recordVisit } from '@/lib/visitStats';
 
 // 路由守卫：未登录跳转到 /login
 function RouteGuard({ children }: { children: React.ReactNode }) {
@@ -28,6 +29,13 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
  * 当 auth 加载完成（无论已登录或未登录）后，通知 Android 原生层
  * 隐藏启动遮罩，避免 WebView 初始化过程中的闪烁。
  */
+// 访问统计埋点：每次路由变化时记录一次 PV
+function VisitTracker() {
+  const location = useLocation();
+  useEffect(() => { recordVisit(); }, [location.pathname]);
+  return null;
+}
+
 function AppContent() {
   const { loading } = useAuth();
 
@@ -41,6 +49,7 @@ function AppContent() {
 
   return (
     <>
+      <VisitTracker />
       <Routes>
         {/* 公开路由（登录页） */}
         {routes

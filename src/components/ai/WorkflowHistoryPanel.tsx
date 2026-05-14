@@ -73,6 +73,10 @@ interface StepRow {
 interface Props {
   userId: string;
   onResume?: (workflowId: string, taskSummary: string) => void;
+  /** 值变化时自动重新拉取列表（切换到本 Tab 时递增即可） */
+  refreshTrigger?: number;
+  /** 加载完成后上报可恢复任务数量 */
+  onInterruptedCount?: (count: number) => void;
 }
 
 // ── 辅助 ──────────────────────────────────────────────────────────────────
@@ -206,7 +210,7 @@ function StepDetailDialog({
 
 // ── 主组件 ────────────────────────────────────────────────────────────────
 
-export default function WorkflowHistoryPanel({ userId, onResume }: Props) {
+export default function WorkflowHistoryPanel({ userId, onResume, refreshTrigger, onInterruptedCount }: Props) {
   const [workflows, setWorkflows] = useState<WorkflowRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | WorkflowRow['status'] | 'interrupted'>('all');
@@ -222,11 +226,23 @@ export default function WorkflowHistoryPanel({ userId, onResume }: Props) {
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(100);
-    setWorkflows((data as WorkflowRow[]) ?? []);
+    const rows = (data as WorkflowRow[]) ?? [];
+    setWorkflows(rows);
     setLoading(false);
-  }, [userId]);
+    // 上报可恢复数量
+    const resumable = rows.filter(w => w.interrupted || w.status === 'running').length;
+    onInterruptedCount?.(resumable);
+  }, [userId, onInterruptedCount]);
 
+  // 初始加载
   useEffect(() => { load(); }, [load]);
+
+  // refreshTrigger 变化时重新拉取（切换到 Tab 时触发）
+  useEffect(() => {
+    if (refreshTrigger === undefined) return;
+    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTrigger]);
 
   const handleDelete = async (id: string) => {
     await supabase.from('task_workflows').delete().eq('id', id);
@@ -235,12 +251,12 @@ export default function WorkflowHistoryPanel({ userId, onResume }: Props) {
 
   const filtered = workflows.filter(w => {
     if (statusFilter === 'all') return true;
-    if (statusFilter === 'interrupted') return w.interrupted;
+    if (statusFilter === 'interrupted') return w.interrupted || w.status === 'running';
     return w.status === statusFilter;
   });
 
-  // 可恢复任务数（侧边栏角标用）
-  const interruptedCount = workflows.filter(w => w.interrupted).length;
+  // 可恢复任务数（侧边栏角标用）— 包含 interrupted 或 running（超时未完成）
+  const interruptedCount = workflows.filter(w => w.interrupted || w.status === 'running').length;
 
   return (
     <div className="flex flex-col h-full">
@@ -305,7 +321,7 @@ export default function WorkflowHistoryPanel({ userId, onResume }: Props) {
                       {wf.task_summary}
                     </p>
                     <div className="flex items-center gap-1 shrink-0">
-                      {wf.interrupted && (
+                      {(wf.interrupted || wf.status === 'running') && (
                         <Badge variant="outline" className="text-xs h-4 px-1.5 border-amber-500/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30">
                           可恢复
                         </Badge>
@@ -331,8 +347,8 @@ export default function WorkflowHistoryPanel({ userId, onResume }: Props) {
                     )}
                   </div>
 
-                  {/* 恢复执行按钮（仅 interrupted 工作流显示） */}
-                  {wf.interrupted && onResume && (
+                  {/* 恢复执行按钮（interrupted 或 running 超时未完成均显示） */}
+                  {(wf.interrupted || wf.status === 'running') && onResume && (
                     <Button
                       variant="outline"
                       size="sm"

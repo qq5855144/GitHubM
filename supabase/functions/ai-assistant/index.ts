@@ -665,10 +665,20 @@ async function patchFile(
       snapLines.push(`${String(i).padStart(6, " ")}   | ${patchedLines[i - 1]}`);
     }
 
+    // 行数发生变化时，计算偏移量并附加强制警告，防止后续 patch 使用错误行号
+    const lineDelta = newCount - replacedCount;
+    const deltaWarning = lineDelta !== 0
+      ? `\n\n⚠️ 行号偏移警告：本次替换使文件行数净变化 ${lineDelta > 0 ? "+" : ""}${lineDelta} 行（${replacedCount} 行 → ${newCount} 行）。` +
+        `\n文件当前共 ${patchedLines.length} 行。` +
+        `\n**如果你还有其他针对本文件的 patch 计划，其中位于第 ${safeEnd + 1} 行之后的所有 start_line/end_line 必须在原始行号基础上加 ${lineDelta > 0 ? "+" : ""}${lineDelta}。` +
+        `强烈建议：将剩余所有修改合并为一次 batch_patch 调用，避免行号累积偏移导致错误。**`
+      : "";
+
     return (
       `✅ patch "${filePath}" 成功：第 ${startLine}–${safeEnd} 行（${replacedCount} 行→${newCount} 行），` +
       `commit: ${commitSha}，信息：${commitMessage}\n\n` +
-      `📋 修改验证快照（- 已删除  + 新增  上下文 ${CONTEXT} 行）：\n\`\`\`diff\n${snapLines.join("\n")}\n\`\`\``
+      `📋 修改验证快照（- 已删除  + 新增  上下文 ${CONTEXT} 行）：\n\`\`\`diff\n${snapLines.join("\n")}\n\`\`\`` +
+      deltaWarning
     );
   } catch (e) {
     // ── 智能错误诊断 ────────────────────────────────────────────────────────
@@ -2603,18 +2613,20 @@ ${branchNote}
 长内容输出与 patch 自动验证规则
 ==============================
 
-**写入大内容时（代码超过 200 行）必须分批 patch，不得一次性 write_file**：
+**写入大内容时（代码超过 200 行）必须分批修改，不得一次性 write_file**：
 1. 先用 get_file_info 确认目标文件总行数
 2. 将要写入的内容拆分为多段，每段不超过 200 行
-3. 按顺序逐段调用 patch_file，每段对应原文件的精确行范围
-4. 每次 patch_file 返回「修改验证快照」（▶ 标注新内容），**必须核查快照**：
-   - 内容正确 → 继续下一段 patch
-   - 发现错误 → 立即再次 patch_file 修正，不得跳过
+3. **必须使用 batch_patch 一次性提交所有段落**，格式：`[{"start_line":N1,"end_line":M1,"content":"段落1"},{"start_line":N2,"end_line":M2,"content":"段落2"},...]`
+   - batch_patch 内部按倒序处理各段，不存在行号偏移问题
+   - ❌ 严禁分多次调用 patch_file：每次 patch 会改变文件行数，导致后续调用行号偏移，产生重复或错误内容
+4. batch_patch 返回「各处修改 diff 快照」，**必须核查每处快照**：
+   - 内容正确 → 完成
+   - 发现错误 → read_file 重新读取当前行号，再次 batch_patch 修正
 
-**patch_file 自动验证流程**（每次 patch 后系统自动回显，无需额外 read_file）：
-- 返回结果包含「📋 修改验证快照」，显示修改区域 ±5 行上下文
-- ▶ 标记的行是本次新写入的内容
-- AI 必须阅读快照确认无误，再继续后续操作
+**patch_file 使用规则**（单处修改专用）：
+- patch_file 仅适合对同一文件做**单处修改**；同一文件多处修改必须用 batch_patch
+- 返回结果包含「📋 修改验证快照」，显示修改区域 ±5 行上下文，AI 必须阅读快照确认无误
+- 若返回包含「⚠️ 行号偏移警告」，说明本次行数发生变化，后续如需再次修改该文件，必须先 read_file 获取最新行号，或改用 batch_patch
 
 **grep_in_file 搜索翻页**（搜索结果超 100 条时）：
 - 返回末尾会出现 ⚠️ 提示，附带 offset 翻页调用示例
@@ -2625,7 +2637,8 @@ ${branchNote}
 ==============================
 - 查看日志时先用 get_run_jobs 找到失败 Job ID，再用 get_job_logs 获取日志
 - patch_file 比 write_file 更安全，修改工作流文件时优先使用 patch
-- **同一文件多处修改时，优先使用 batch_patch，合并为单个 commit，避免多次 patch 产生冗余提交**
+- **同一文件多处修改时，必须使用 batch_patch，合并为单个 commit；❌ 严禁多次顺序调用 patch_file——每次行数变化均会使后续行号偏移，导致重复或错误覆盖**
+- **batch_patch 的各 patch 行号均基于原始文件，内部自动处理偏移，无需手动修正**
 - 修改前必须先用 grep_in_file 或 read_file 确认精确的行号
 - **全仓库定位关键词用 grep_in_repo（返回行号）；跨文件批量替换用 search_and_replace（自动完成全流程）；只需文件路径列表用 search_code（更快但无行号）**
 - **对比两个分支/tag/commit 差异用 compare_commits（含 diff 片段）；查看单个 commit 详情用 get_commit_diff**

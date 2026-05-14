@@ -12,6 +12,7 @@ import {
   RefreshCw, Plus, GitPullRequest, History, ArrowLeft, Loader2,
   Zap, FolderSearch, PanelRight, Wrench, ListChecks, WifiOff, CheckCircle2, XCircle,
   Paperclip, X, ImageIcon, FileText, ChevronDown, ChevronRight, Cpu, Download, ClipboardList,
+  RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -64,6 +65,12 @@ export default function AiAssistantPage() {
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
   // 侧边面板 Tab：'tools' | 'plan' | 'history'
   const [sidePanelTab, setSidePanelTab] = useState<'tools' | 'plan' | 'history'>('plan');
+  // 任务历史 Tab 自动刷新触发（切换到该 tab 时递增）
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
+  // 任务历史可恢复数量（WorkflowHistoryPanel 上报，用于 Tab 角标）
+  const [interruptedWorkflowCount, setInterruptedWorkflowCount] = useState(0);
+  // 超时/停止后的恢复提示信息
+  const [pendingResumeInfo, setPendingResumeInfo] = useState<{ workflowId?: string; taskSummary: string } | null>(null);
   // 当前会话 ID（用于持久化）
   const [sessionId, setSessionId] = useState<string | null>(null);
   // 待持久化消息队列（本轮对话新增的）
@@ -391,6 +398,7 @@ export default function AiAssistantPage() {
     if (!isRegen) {
       setInput('');
       setAttachments([]);
+      setPendingResumeInfo(null); // 新消息发出时清除恢复提示
       // 同步重置 textarea 高度
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -705,15 +713,26 @@ export default function AiAssistantPage() {
             break;
           }
           case 'timeout': {
-            // 任务超时：弹出提示，切换到任务历史 Tab 提醒用户恢复执行
+            // 任务超时：弹出提示，同时在输入区上方显示可恢复提示条
+            const wfId = chunk.workflow_id;
+            const summary = lastUserTextRef.current.slice(0, 60) || '上次任务';
+            setPendingResumeInfo({ workflowId: wfId, taskSummary: summary });
             toast.warning('任务执行超时（超过 8 分钟），已自动暂停', {
-              description: '请打开右侧面板的「任务历史」Tab，点击「恢复执行」继续未完成的任务。',
-              duration: 10000,
+              description: wfId
+                ? '点击「立即恢复」可从断点处继续，或稍后在「任务历史」中恢复。'
+                : '请在右侧「任务历史」Tab 中找到该任务并点击「恢复执行」继续。',
+              duration: 12000,
               action: {
-                label: '查看历史',
+                label: wfId ? '立即恢复' : '查看历史',
                 onClick: () => {
-                  setShowToolHistory(true);
-                  setSidePanelTab('history');
+                  if (wfId) {
+                    setPendingResumeInfo(null);
+                    handleSend(`继续上次未完成的任务：${summary}`, false, wfId);
+                  } else {
+                    setShowToolHistory(true);
+                    setSidePanelTab('history');
+                    setHistoryRefreshTrigger(v => v + 1);
+                  }
                 },
               },
             });
@@ -898,6 +917,17 @@ export default function AiAssistantPage() {
       if (m.bubbleType === 'thinking') return { ...m, streaming: false, thinkingDone: true };
       return { ...m, streaming: false };
     }));
+    // 有任务计划且步骤未全部完成时，提示用户可恢复
+    if (taskPlanSteps.length > 0) {
+      const allDone = taskPlanSteps.every(s => {
+        const st = stepStatuses[s.id];
+        return st === 'done' || st === 'error';
+      });
+      if (!allDone) {
+        const summary = lastUserTextRef.current.slice(0, 60) || '上次任务';
+        setPendingResumeInfo({ taskSummary: summary });
+      }
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -919,6 +949,7 @@ export default function AiAssistantPage() {
     if (!selectedRepo) return;
     setSessionId(null);
     pendingMsgsRef.current = [];
+    setPendingResumeInfo(null);
     setMessages([{
       id: 'welcome-' + Date.now(),
       role: 'assistant',
@@ -1132,6 +1163,11 @@ export default function AiAssistantPage() {
             <Wrench className="w-3.5 h-3.5" />
             {(toolHistory.length > 0 || taskPlanSteps.length > 0) && !showToolHistory && (
               <span className="absolute top-0 right-0 w-2 h-2 bg-primary rounded-full border border-background" />
+            )}
+            {interruptedWorkflowCount > 0 && !showToolHistory && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 flex items-center justify-center bg-amber-500 text-white rounded-full text-[9px] font-bold border border-background">
+                {interruptedWorkflowCount}
+              </span>
             )}
           </button>
           {/* 导出对话按钮 */}
@@ -1524,6 +1560,51 @@ export default function AiAssistantPage() {
                 </div>
               )}
 
+              {/* 任务超时/停止恢复提示条 */}
+              {pendingResumeInfo && !isStreaming && !isNetworkInterrupted && (
+                <div className="mx-3 mt-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="flex-1 min-w-0 text-xs text-amber-700 dark:text-amber-300 truncate">
+                    {pendingResumeInfo.workflowId ? '任务已超时暂停，可从断点处继续' : '任务已停止，可继续执行剩余步骤'}
+                  </span>
+                  {pendingResumeInfo.workflowId ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2.5 text-xs shrink-0 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
+                      onClick={() => {
+                        const { workflowId, taskSummary } = pendingResumeInfo;
+                        setPendingResumeInfo(null);
+                        handleSend(`继续上次未完成的任务：${taskSummary}`, false, workflowId);
+                      }}
+                    >
+                      <RotateCcw className="w-3 h-3 mr-1" />
+                      立即恢复
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2.5 text-xs shrink-0 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
+                      onClick={() => {
+                        setShowToolHistory(true);
+                        setSidePanelTab('history');
+                        setHistoryRefreshTrigger(v => v + 1);
+                        setPendingResumeInfo(null);
+                      }}
+                    >
+                      <ClipboardList className="w-3 h-3 mr-1" />
+                      查看历史
+                    </Button>
+                  )}
+                  <button
+                    className="text-amber-500/60 hover:text-amber-600 dark:hover:text-amber-400 text-xs shrink-0"
+                    onClick={() => setPendingResumeInfo(null)}
+                    title="忽略"
+                  >✕</button>
+                </div>
+              )}
+
               {/* 附件预览条（有附件时显示在输入框上方） */}
               {attachments.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 px-3 pt-2">
@@ -1695,7 +1776,10 @@ export default function AiAssistantPage() {
                   )}
                 </button>
                 <button
-                  onClick={() => setSidePanelTab('history')}
+                  onClick={() => {
+                    setSidePanelTab('history');
+                    setHistoryRefreshTrigger(v => v + 1);
+                  }}
                   className={cn(
                     'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-medium transition-colors relative',
                     sidePanelTab === 'history'
@@ -1705,6 +1789,11 @@ export default function AiAssistantPage() {
                 >
                   <ClipboardList className="w-3.5 h-3.5 shrink-0" />
                   任务历史
+                  {interruptedWorkflowCount > 0 && sidePanelTab !== 'history' && (
+                    <span className="text-[9px] font-mono bg-amber-500/15 text-amber-600 dark:text-amber-400 px-1 rounded">
+                      {interruptedWorkflowCount}
+                    </span>
+                  )}
                   {sidePanelTab === 'history' && (
                     <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-primary rounded-t" />
                   )}
@@ -1733,6 +1822,8 @@ export default function AiAssistantPage() {
                 ) : sidePanelTab === 'history' ? (
                   <WorkflowHistoryPanel
                     userId={user?.login ?? 'anonymous'}
+                    refreshTrigger={historyRefreshTrigger}
+                    onInterruptedCount={setInterruptedWorkflowCount}
                     onResume={(workflowId, taskSummary) => {
                       // 切换到聊天面板，传入断点恢复参数
                       setSidePanelTab('plan');

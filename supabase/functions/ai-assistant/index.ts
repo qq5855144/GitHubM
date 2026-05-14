@@ -3307,6 +3307,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // 每批最多 20 轮工具调用；最多自动续跑 3 批，总上限 60 轮
     const MAX_ROUNDS_PER_BATCH = 20;
     const MAX_BATCHES = 3;
+    // 整体任务超时：8 分钟（480000ms），超时后自动保存快照并通知用户
+    const TASK_TIMEOUT_MS = 480_000;
+    const taskStartTime = Date.now();
+    // 检查是否已超时（在每轮循环开始时调用）
+    const isTaskTimedOut = () => Date.now() - taskStartTime >= TASK_TIMEOUT_MS;
     // 当前正在执行的计划步骤 ID
     let currentStepId: string | null = resumedLastStepId;
     // 连续"无工具调用"的 nudge 计数（最多纠正 2 次，防止死循环）
@@ -3329,6 +3334,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
     for (let round = 0; round < MAX_ROUNDS_PER_BATCH; round++, totalRound++) {
       // ── 用户主动中断：立即退出循环 ────────────────────────────────────────
       if (abortSig.aborted) { batchDone = true; break; }
+
+      // ── 整体任务超时保护：超过 8 分钟自动中断，保存快照供断点恢复 ──────────
+      if (isTaskTimedOut()) {
+        console.warn(`[timeout] 任务超时（已运行 ${Math.round((Date.now() - taskStartTime) / 1000)}s），自动中断`);
+        if (sb && workflowDbId) {
+          await dbSaveSnapshot(sb, workflowDbId, fullMessages, currentStepId, true);
+        }
+        await sendTyped({ type: "status_info", message: "⏱️ 任务执行超时（超过 8 分钟），已自动暂停。您可以在「任务历史」中点击「恢复执行」继续。" });
+        await sendTyped({ type: "timeout", workflow_id: workflowDbId ?? undefined });
+        batchDone = true;
+        break;
+      }
 
       let assistantText = "";
       let thinkingStarted = false;

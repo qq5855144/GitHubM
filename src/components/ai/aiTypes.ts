@@ -149,7 +149,8 @@ export type SSEChunk =
   | { type: 'heartbeat' }
   | { type: 'status_info'; message: string }
   | { type: 'status_warning'; message: string }
-  | { type: 'file_request'; id: string; filename: string; description: string; mime_types?: string };
+  | { type: 'file_request'; id: string; filename: string; description: string; mime_types?: string }
+  | { type: 'timeout'; workflow_id?: string };
 
 // ── 模型配置 ────────────────────────────────────────────────────────────────────
 

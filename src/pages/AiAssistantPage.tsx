@@ -11,7 +11,7 @@ import {
   Sparkles, AlertCircle,
   RefreshCw, Plus, GitPullRequest, History, ArrowLeft, Loader2,
   Zap, FolderSearch, PanelRight, Wrench, ListChecks, WifiOff, CheckCircle2, XCircle,
-  Paperclip, X, ImageIcon, FileText, ChevronDown, ChevronRight, Cpu, Download,
+  Paperclip, X, ImageIcon, FileText, ChevronDown, ChevronRight, Cpu, Download, ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -311,6 +311,8 @@ export default function AiAssistantPage() {
     branch: string,
   ) => {
     if (!user?.login) return;
+    // 仓库未选择时跳过（repo_full_name 为 NOT NULL）
+    if (!repo?.full_name) return;
     let sid = sessionId;
     if (!sid) {
       const firstUser = newMsgs.find(m => m.role === 'user');
@@ -661,6 +663,21 @@ export default function AiAssistantPage() {
             }));
             break;
           }
+          case 'timeout': {
+            // 任务超时：弹出提示，切换到任务历史 Tab 提醒用户恢复执行
+            toast.warning('任务执行超时（超过 8 分钟），已自动暂停', {
+              description: '请打开右侧面板的「任务历史」Tab，点击「恢复执行」继续未完成的任务。',
+              duration: 10000,
+              action: {
+                label: '查看历史',
+                onClick: () => {
+                  setShowToolHistory(true);
+                  setSidePanelTab('history');
+                },
+              },
+            });
+            break;
+          }
         }
       },
       onComplete: async () => {
@@ -675,9 +692,11 @@ export default function AiAssistantPage() {
         }));
         setIsStreaming(false);
         // 持久化：只保存最终回答文本（answerMsgId 对应的气泡内容）
+        // accumulated 为空时（纯工具任务无最终文字）用占位符替代，确保消息记录完整
+        const assistantContent = accumulated.trim() || '（任务已执行完成）';
         const newMsgs = isRegen
-          ? [{ role: 'assistant', content: accumulated }]
-          : [{ role: 'user', content: userText }, { role: 'assistant', content: accumulated }];
+          ? [{ role: 'assistant', content: assistantContent }]
+          : [{ role: 'user', content: userText }, { role: 'assistant', content: assistantContent }];
         await persistMessages(newMsgs, selectedRepo, selectedBranch);
         pendingMsgsRef.current = [];
       },
@@ -1634,6 +1653,21 @@ export default function AiAssistantPage() {
                     </span>
                   )}
                   {sidePanelTab === 'tools' && (
+                    <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-primary rounded-t" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setSidePanelTab('history')}
+                  className={cn(
+                    'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-medium transition-colors relative',
+                    sidePanelTab === 'history'
+                      ? 'text-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <ClipboardList className="w-3.5 h-3.5 shrink-0" />
+                  任务历史
+                  {sidePanelTab === 'history' && (
                     <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-primary rounded-t" />
                   )}
                 </button>

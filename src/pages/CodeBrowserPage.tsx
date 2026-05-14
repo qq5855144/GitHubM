@@ -1,7 +1,8 @@
-// 代码浏览页（含在线编辑 + 右键上下文菜单 + 全屏编辑 + 文件图标 + 图片预览）
+// 代码浏览页（含在线编辑 + 文件树 + 右键上下文菜单 + 全屏编辑 + 文件图标 + 图片预览）
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import FileTree from '@/components/code/FileTree';
 import {
   ChevronRight,
   GitBranch,
@@ -33,6 +34,8 @@ import {
   ChevronDown,
   ZoomIn,
   ZoomOut,
+  PanelLeftOpen,
+  PanelLeftClose,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -72,6 +75,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import {
   getRepoContents,
   getBranches,
@@ -247,6 +256,13 @@ export default function CodeBrowserPage() {
   // 判断当前文件是否是图片
   const currentIsImage = currentFile ? isImageFile(currentFile.name) : false;
 
+  // 文件树状态
+  const [treeRefreshKey, setTreeRefreshKey] = useState(0);
+  const [treeOpen, setTreeOpen] = useState(false);       // 移动端 Sheet 展开
+  const [treeVisible, setTreeVisible] = useState(true);  // 桌面端显隐
+  // 由文件树触发新建时记录目标目录（用于绕过 URL filePath）
+  const [pendingDirPath, setPendingDirPath] = useState<string | null>(null);
+
   const loadContents = useCallback(async () => {
     if (!owner || !repo || !currentBranch) return;
     setLoading(true);
@@ -337,9 +353,11 @@ export default function CodeBrowserPage() {
     }
   };
 
-  const openAction = (mode: ActionMode, target?: GitHubContent) => {
+  const openAction = (mode: ActionMode, target?: GitHubContent, dirPath?: string) => {
     setActionMode(mode);
     setActionTarget(target || null);
+    // 文件树触发时记录目标目录；未传则清空（沿用 URL filePath）
+    setPendingDirPath(dirPath !== undefined ? dirPath : null);
     if (mode === 'edit' && fileContent) {
       setEditContent(fileContent);
       setCommitMsg(`Update ${currentFile?.name || 'file'}`);
@@ -373,7 +391,8 @@ export default function CodeBrowserPage() {
   // ─── 新建文件 ───
   const handleCreateFile = async () => {
     if (!owner || !repo || !newFileName.trim()) { toast.error('请填写文件名'); return; }
-    const targetPath = filePath ? `${filePath}/${newFileName.trim()}` : newFileName.trim();
+    const baseDir = pendingDirPath !== null ? pendingDirPath : filePath;
+    const targetPath = baseDir ? `${baseDir}/${newFileName.trim()}` : newFileName.trim();
     const finalMsg = commitMsg.trim() || `Add ${newFileName.trim()}`;
     setActionBusy(true);
     try {
@@ -384,6 +403,7 @@ export default function CodeBrowserPage() {
       toast.success(`已创建文件 ${newFileName.trim()}`);
       closeAction();
       loadContents();
+      setTreeRefreshKey(k => k + 1);
     } catch (err) { toast.error(err instanceof Error ? err.message : '创建失败'); }
     finally { setActionBusy(false); }
   };
@@ -391,7 +411,8 @@ export default function CodeBrowserPage() {
   // ─── 新建文件夹 ───
   const handleCreateFolder = async () => {
     if (!owner || !repo || !newFolderName.trim()) { toast.error('请填写文件夹名'); return; }
-    const gitkeepPath = filePath ? `${filePath}/${newFolderName.trim()}/.gitkeep` : `${newFolderName.trim()}/.gitkeep`;
+    const baseDir = pendingDirPath !== null ? pendingDirPath : filePath;
+    const gitkeepPath = baseDir ? `${baseDir}/${newFolderName.trim()}/.gitkeep` : `${newFolderName.trim()}/.gitkeep`;
     const finalMsg = commitMsg.trim() || `Add ${newFolderName.trim()} folder`;
     setActionBusy(true);
     try {
@@ -399,6 +420,7 @@ export default function CodeBrowserPage() {
       toast.success(`已创建文件夹 ${newFolderName.trim()}`);
       closeAction();
       loadContents();
+      setTreeRefreshKey(k => k + 1);
     } catch (err) { toast.error(err instanceof Error ? err.message : '创建失败'); }
     finally { setActionBusy(false); }
   };
@@ -468,6 +490,7 @@ export default function CodeBrowserPage() {
         message: commitMsg.trim(), sha: actionTarget.sha, branch: currentBranch,
       });
       toast.success(`已删除文件 ${actionTarget.name}`);
+      setTreeRefreshKey(k => k + 1);
       closeAction();
       if (currentFile?.path === actionTarget.path) {
         const parentParts = filePath.split('/').slice(0, -1);
@@ -489,6 +512,7 @@ export default function CodeBrowserPage() {
       );
       if (result.failed === 0) toast.success(`已删除文件夹 ${actionTarget.name}（共 ${result.success} 个文件）`);
       else toast.warning(`删除完成：${result.success} 个成功，${result.failed} 个失败`);
+      setTreeRefreshKey(k => k + 1);
       closeAction();
       loadContents();
     } catch (err) { toast.error(err instanceof Error ? err.message : '删除失败'); }
@@ -512,6 +536,7 @@ export default function CodeBrowserPage() {
         await createFileContent(owner, repo, newPath, { message: `${commitMsg.trim()} (rename)`, content: fileInfo.content.replace(/\n/g, ''), branch: currentBranch });
         await deleteFileContent(owner, repo, actionTarget.path, { message: `${commitMsg.trim()} (remove old)`, sha: actionTarget.sha, branch: currentBranch });
         toast.success(`已重命名为 ${renameTo.trim()}`);
+        setTreeRefreshKey(k => k + 1);
         closeAction();
         navigate(`/repos/${owner}/${repo}/code/${newPath}`);
       } else {
@@ -538,6 +563,7 @@ export default function CodeBrowserPage() {
           await deleteFileContent(owner, repo, f.path, { message: `${commitMsg.trim()} (remove old)`, sha: f.sha, branch: currentBranch });
         }
         toast.success(`已重命名文件夹为 ${renameTo.trim()}`);
+        setTreeRefreshKey(k => k + 1);
         closeAction();
         loadContents();
       }
@@ -559,6 +585,7 @@ export default function CodeBrowserPage() {
       await createFileContent(owner, repo, moveTo.trim(), { message: `${commitMsg.trim()} (move to ${moveTo.trim()})`, content: fileInfo.content.replace(/\n/g, ''), branch: currentBranch });
       await deleteFileContent(owner, repo, actionTarget.path, { message: `${commitMsg.trim()} (remove original)`, sha: actionTarget.sha, branch: currentBranch });
       toast.success(`已移动到 ${moveTo.trim()}`);
+      setTreeRefreshKey(k => k + 1);
       closeAction();
       loadContents();
     } catch (err) { toast.error(err instanceof Error ? err.message : '移动失败'); }
@@ -791,8 +818,8 @@ export default function CodeBrowserPage() {
   }, [editorFullscreen]);
 
   return (
-    <div className="p-4 md:p-6 space-y-4 max-w-5xl mx-auto">
-      {/* 全屏编辑器（文本文件自动激活，JSX 内联避免子组件重挂载丢失焦点） */}
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* ─── 全屏编辑器（fixed overlay，文本文件自动激活） ─── */}
       {editorFullscreen && actionMode === 'edit' && (
         <div className="fixed inset-0 z-50 bg-background flex flex-col">
           {/* ── 顶栏 ── */}
@@ -1059,20 +1086,44 @@ export default function CodeBrowserPage() {
         </div>
       )}
 
-      {/* 面包屑 */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-primary transition-colors" onClick={() => navigate('/repos')}>仓库</button>
-        <ChevronRight className="w-3 h-3" />
-        <button type="button" className="hover:text-primary transition-colors" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
-        <ChevronRight className="w-3 h-3" />
-        <span className="text-foreground">代码浏览</span>
-      </div>
+      {/* ─── 顶栏：面包屑 + 分支选择 + 移动端树按钮 ─── */}
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-card/80 shrink-0 flex-wrap">
+        {/* 移动端：展开文件树按钮 */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden h-8 w-8 text-muted-foreground hover:bg-secondary shrink-0"
+          onClick={() => setTreeOpen(true)}
+          title="打开文件树"
+        >
+          <PanelLeftOpen className="w-4 h-4" />
+        </Button>
 
-      {/* 工具栏 */}
-      <div className="flex items-center gap-3 flex-wrap">
+        {/* 面包屑 */}
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground flex-wrap flex-1 min-w-0">
+          <button type="button" className="hover:text-primary transition-colors shrink-0" onClick={() => navigate('/repos')}>仓库</button>
+          <ChevronRight className="w-3 h-3 shrink-0" />
+          <button type="button" className="hover:text-primary transition-colors shrink-0" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
+          <ChevronRight className="w-3 h-3 shrink-0" />
+          <span className="text-foreground shrink-0">代码</span>
+          {pathParts.map((part, i) => (
+            <span key={i} className="flex items-center gap-1 shrink-0">
+              <ChevronRight className="w-3 h-3 text-muted-foreground" />
+              <button
+                type="button"
+                className={`text-sm ${i === pathParts.length - 1 ? 'text-foreground font-medium' : 'text-primary hover:underline'}`}
+                onClick={() => i < pathParts.length - 1 ? navigateTo(pathParts.slice(0, i + 1)) : undefined}
+              >
+                {part}
+              </button>
+            </span>
+          ))}
+        </div>
+
+        {/* 分支选择 */}
         <Select value={currentBranch} onValueChange={setCurrentBranch}>
-          <SelectTrigger className="bg-secondary border-border text-foreground w-40 h-9">
-            <GitBranch className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+          <SelectTrigger className="bg-secondary border-border text-foreground w-36 h-8 text-xs shrink-0">
+            <GitBranch className="w-3 h-3 mr-1 text-muted-foreground" />
             <SelectValue placeholder="选择分支" />
           </SelectTrigger>
           <SelectContent className="bg-popover border-border max-h-48">
@@ -1084,56 +1135,107 @@ export default function CodeBrowserPage() {
           </SelectContent>
         </Select>
 
-        {/* 路径导航 */}
-        <div className="flex items-center gap-1 flex-wrap min-w-0 flex-1">
-          <button type="button" className="text-sm text-primary hover:underline" onClick={() => navigate(`/repos/${owner}/${repo}/code`)}>
-            {repo}
-          </button>
-          {pathParts.map((part, i) => (
-            <span key={i} className="flex items-center gap-1">
-              <ChevronRight className="w-3 h-3 text-muted-foreground" />
-              <button
-                type="button"
-                className={`text-sm ${i === pathParts.length - 1 ? 'text-foreground' : 'text-primary hover:underline'}`}
-                onClick={() => i < pathParts.length - 1 ? navigateTo(pathParts.slice(0, i + 1)) : undefined}
-              >
-                {part}
-              </button>
-            </span>
-          ))}
-        </div>
-
-        {/* 目录操作按钮 */}
-        {!currentFile && !loading && (
-          <div className="flex items-center gap-2 shrink-0">
-            <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground border border-border hover:bg-secondary"
-              onClick={() => openAction('new-file')}>
-              <FilePlus className="w-3.5 h-3.5 mr-1.5" />新建文件
-            </Button>
-            <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground border border-border hover:bg-secondary"
-              onClick={() => openAction('new-folder')}>
-              <FolderPlus className="w-3.5 h-3.5 mr-1.5" />新建文件夹
-            </Button>
-            <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground border border-border hover:bg-secondary"
-              onClick={() => openAction('upload')}>
-              <Upload className="w-3.5 h-3.5 mr-1.5" />上传文件
-            </Button>
-          </div>
-        )}
-
-        {filePath && (
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:bg-secondary shrink-0"
-            onClick={() => {
-              const parentParts = pathParts.slice(0, -1);
-              navigate(`/repos/${owner}/${repo}/code${parentParts.length > 0 ? '/' + parentParts.join('/') : ''}`);
-            }}>
-            <ArrowLeft className="w-4 h-4 mr-1.5" />返回
-          </Button>
-        )}
+        {/* 桌面端：收起/展开侧边树 */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden md:flex h-8 w-8 text-muted-foreground hover:bg-secondary shrink-0"
+          onClick={() => setTreeVisible(v => !v)}
+          title={treeVisible ? '收起文件树' : '展开文件树'}
+        >
+          {treeVisible ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+        </Button>
       </div>
 
-      {/* 内容区域 */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      {/* ─── 主体：左侧文件树 + 右侧内容 ─── */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+
+        {/* 桌面端固定侧边树 */}
+        {treeVisible && (
+          <aside className="hidden md:flex flex-col w-56 shrink-0 border-r border-border bg-sidebar overflow-hidden">
+            <FileTree
+              owner={owner!}
+              repo={repo!}
+              branch={currentBranch}
+              activePath={filePath || undefined}
+              refreshKey={treeRefreshKey}
+              onFileClick={(item) => navigate(`/repos/${owner}/${repo}/code/${item.path}`)}
+              onNewFile={(dirPath) => openAction('new-file', undefined, dirPath)}
+              onNewFolder={(dirPath) => openAction('new-folder', undefined, dirPath)}
+              onRename={(item) => openAction('rename', item)}
+              onDelete={(item) => {
+                setCommitMsg(`Delete ${item.name}`);
+                openAction(item.type === 'dir' ? 'delete-folder' : 'delete-file', item);
+              }}
+            />
+          </aside>
+        )}
+
+        {/* 移动端：Sheet 抽屉文件树 */}
+        <Sheet open={treeOpen} onOpenChange={setTreeOpen}>
+          <SheetContent side="left" className="w-72 p-0 flex flex-col bg-sidebar">
+            <SheetHeader className="px-3 py-2 border-b border-border">
+              <SheetTitle className="text-sm font-medium text-foreground">{repo} 文件树</SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <FileTree
+                owner={owner!}
+                repo={repo!}
+                branch={currentBranch}
+                activePath={filePath || undefined}
+                refreshKey={treeRefreshKey}
+                onFileClick={(item) => { navigate(`/repos/${owner}/${repo}/code/${item.path}`); setTreeOpen(false); }}
+                onNewFile={(dirPath) => { openAction('new-file', undefined, dirPath); setTreeOpen(false); }}
+                onNewFolder={(dirPath) => { openAction('new-folder', undefined, dirPath); setTreeOpen(false); }}
+                onRename={(item) => { openAction('rename', item); setTreeOpen(false); }}
+                onDelete={(item) => {
+                  setCommitMsg(`Delete ${item.name}`);
+                  openAction(item.type === 'dir' ? 'delete-folder' : 'delete-file', item);
+                  setTreeOpen(false);
+                }}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* 右侧内容区 */}
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          {/* 路径操作工具条 */}
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-secondary/20 shrink-0 flex-wrap">
+            {filePath ? (
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 shrink-0"
+                onClick={() => {
+                  const parentParts = pathParts.slice(0, -1);
+                  navigate(`/repos/${owner}/${repo}/code${parentParts.length > 0 ? '/' + parentParts.join('/') : ''}`);
+                }}>
+                <ArrowLeft className="w-3.5 h-3.5" />返回上级
+              </Button>
+            ) : (
+              <span className="text-xs text-muted-foreground px-1">根目录</span>
+            )}
+            <div className="flex-1" />
+            {/* 目录操作按钮（仅目录页显示） */}
+            {!currentFile && !loading && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1"
+                  onClick={() => openAction('new-file')}>
+                  <FilePlus className="w-3 h-3" /><span className="hidden sm:inline">新建文件</span>
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1"
+                  onClick={() => openAction('new-folder')}>
+                  <FolderPlus className="w-3 h-3" /><span className="hidden sm:inline">新建文件夹</span>
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1"
+                  onClick={() => openAction('upload')}>
+                  <Upload className="w-3 h-3" /><span className="hidden sm:inline">上传</span>
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* 内容区域 */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="bg-card border-x-0 overflow-hidden">
         {loading ? (
           <div className="p-4 space-y-2">
             {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-9 bg-muted rounded" />)}
@@ -1243,6 +1345,9 @@ export default function CodeBrowserPage() {
           </div>
         )}
       </div>
+          </div>{/* end overflow-y-auto */}
+        </div>{/* end 右侧内容区 */}
+      </div>{/* end 主体左右布局 */}
 
       {/* ── 新建文件对话框 ── */}
       <Dialog open={actionMode === 'new-file'} onOpenChange={(open) => { if (!open) closeAction(); }}>
@@ -1257,7 +1362,7 @@ export default function CodeBrowserPage() {
               <Label className="text-sm font-normal text-foreground">文件名 *</Label>
               <Input value={newFileName} onChange={(e) => setNewFileName(e.target.value)} placeholder="example.txt"
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono" />
-              {filePath && <p className="text-xs text-muted-foreground">将在 <code className="font-mono bg-secondary px-1 rounded">{filePath}/</code> 目录下创建</p>}
+              {(() => { const d = pendingDirPath !== null ? pendingDirPath : filePath; return d ? <p className="text-xs text-muted-foreground">将在 <code className="font-mono bg-secondary px-1 rounded">{d}/</code> 目录下创建</p> : <p className="text-xs text-muted-foreground">将在根目录下创建</p>; })()}
             </div>
             <div className="space-y-1.5">
               <Label className="text-sm font-normal text-foreground">文件内容（可选）</Label>

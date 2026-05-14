@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  M3 Active Indicator 颜色选择器：
+  - 选中（checked）：primaryContainer 色（淡紫 / 深紫）
+  - 未选中：透明（不显示 indicator）
+  运行时 applyNativeTheme 会动态替换选中色以匹配 accent 主题色。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:color="@color/bottom_nav_indicator_bg" />
+    <item android:color="#00000000" />
+</selector>

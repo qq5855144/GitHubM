@@ -1,5 +1,5 @@
 // AI 助手 Edge Function v3
-// 支持多模型：文心 ERNIE / DeepSeek / Gemini / Qwen / Groq / OpenAI / 自定义兼容接口
+// 支持多模型：文心 ERNIE / DeepSeek / Gemini / Qwen / OpenAI / 自定义兼容接口
 // ReAct Agent：AI 通过工具链读取/写入 GitHub 仓库文件
 // 新增：任务计划持久化到 Supabase + 步骤失败自动重试
 
@@ -13,9 +13,9 @@ const corsHeaders = {
 // ── 模型配置 ────────────────────────────────────────────────────────────────
 
 interface ModelConfig {
-  /** wenxin | deepseek | gemini | qwen | groq | openai | custom */
+  /** wenxin | deepseek | gemini | qwen | openai | custom */
   type: string;
-  /** 用户自带 API Key（DeepSeek/Gemini/Qwen/Groq/OpenAI/Custom） */
+  /** 用户自带 API Key（DeepSeek/Gemini/Qwen/OpenAI/Custom） */
   api_key?: string;
   /** 自定义接口地址（custom 时必填） */
   endpoint?: string;
@@ -55,17 +55,6 @@ function buildLLMRequest(cfg: ModelConfig, platformKey: string): {
         headers: { Authorization: `Bearer ${cfg.api_key}` },
         bodyExtra: {
           model: cfg.model || "qwen2.5-coder-32b-instruct",
-          stream: true,
-          max_tokens: 8192,
-        },
-      };
-    case "groq":
-      // Groq 硬件加速推理，兼容 OpenAI 接口
-      return {
-        url: "https://api.groq.com/openai/v1/chat/completions",
-        headers: { Authorization: `Bearer ${cfg.api_key}` },
-        bodyExtra: {
-          model: cfg.model || "llama-3.3-70b-versatile",
           stream: true,
           max_tokens: 8192,
         },
@@ -2770,14 +2759,7 @@ async function callLLM(
     let friendly = errMsg;
     if (res.status === 401) friendly = `API Key 无效或已过期（${errMsg || "401 Unauthorized"}）`;
     else if (res.status === 402) friendly = `账户余额不足，请前往平台充值（${errMsg || "402 Payment Required"}）`;
-    else if (res.status === 403) {
-      // Groq 会封锁来自数据中心（AWS/GCP 等）的请求，通过服务器端调用会触发此错误
-      if (cfg.type === "groq") {
-        friendly = `Groq 封锁了服务器端 IP（数据中心 IP 被限制访问），建议改用 DeepSeek 或 Qwen。若坚持使用 Groq，请确认 API Key 格式为 gsk_ 开头且账号已在 console.groq.com 激活。（原始错误：${errMsg || "403 Forbidden"}）`;
-      } else {
-        friendly = `无访问权限（${errMsg || "403 Forbidden"}）`;
-      }
-    }
+    else if (res.status === 403) friendly = `无访问权限（${errMsg || "403 Forbidden"}）`;
     else if (res.status === 429) friendly = `请求频率超限，请稍后再试（${errMsg || "429 Too Many Requests"}）`;
     else if (res.status >= 500) friendly = `平台服务异常（${res.status}），请稍后重试`;
     const fullMsg = `LLM 调用失败（HTTP ${res.status}）：${friendly}`;

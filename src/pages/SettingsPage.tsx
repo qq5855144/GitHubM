@@ -22,6 +22,9 @@ import {
   Bot,
   CheckCircle2,
   BarChart3,
+  ChevronDown,
+  ChevronUp,
+  DollarSign,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,6 +56,7 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { MODEL_DEFS, loadProviderKey, saveProviderKey } from '@/components/ai/aiUtils';
 import { getProviderStats, getTotalRequestCount, clearAllUsage, type ProviderStats } from '@/components/ai/usageStats';
+import { formatCostUsd, getModelPrice, SOURCES } from '@/components/ai/modelPricing';
 
 const themeOptions: { value: ThemeMode; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { value: 'light', label: '浅色', Icon: Sun },
@@ -274,6 +278,15 @@ export default function SettingsPage() {
   // ── AI 用量统计 ─────────────────────────────────────────────────────
   const [usageStats, setUsageStats] = useState<ProviderStats[]>(() => getProviderStats());
   const [totalRequests, setTotalRequests] = useState(() => getTotalRequestCount());
+  // 展开模型明细的 provider set
+  const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set());
+
+  const toggleProviderExpand = (pt: string) =>
+    setExpandedProviders(prev => {
+      const next = new Set(prev);
+      next.has(pt) ? next.delete(pt) : next.add(pt);
+      return next;
+    });
 
   const handleClearUsage = () => {
     clearAllUsage();
@@ -768,7 +781,7 @@ export default function SettingsPage() {
           )}
         </div>
         <p className="text-xs text-muted-foreground mb-4">
-          近 30 天 AI 对话 Token 用量，数据存储在本地。费用估算仅供参考。
+          近 30 天 AI 对话 Token 用量及费用估算，数据存储在本地，自动清理超期记录。
         </p>
 
         {usageStats.length === 0 ? (
@@ -780,44 +793,139 @@ export default function SettingsPage() {
         ) : (
           <div className="space-y-3">
             {/* 总览行 */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-secondary/50 rounded-lg px-3 py-2">
-              <Info className="w-3.5 h-3.5 shrink-0" />
-              <span>共 <span className="font-medium text-foreground">{totalRequests}</span> 次对话，覆盖 <span className="font-medium text-foreground">{usageStats.length}</span> 个平台</span>
+            <div className="flex items-center justify-between gap-2 bg-secondary/50 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Info className="w-3.5 h-3.5 shrink-0" />
+                <span>共 <span className="font-medium text-foreground">{totalRequests}</span> 次对话，覆盖 <span className="font-medium text-foreground">{usageStats.length}</span> 个平台</span>
+              </div>
+              <div className="flex items-center gap-1 text-xs font-medium text-foreground shrink-0">
+                <DollarSign className="w-3.5 h-3.5 text-primary" />
+                <span>{formatCostUsd(usageStats.reduce((s, p) => s + p.costUsd, 0))}</span>
+                <span className="text-muted-foreground font-normal">合计</span>
+              </div>
             </div>
+
             {/* 按平台分组 */}
             <div className="space-y-2">
               {usageStats.map(stat => {
                 const providerLabel = MODEL_DEFS.find(m => m.type === stat.providerType)?.label ?? stat.providerType;
+                const expanded = expandedProviders.has(stat.providerType);
+                const hasMultipleModels = stat.modelBreakdown.length > 1;
+                const singleModel = stat.modelBreakdown[0]?.model ?? '';
+                // 定价源 URL（按 provider 兜底）
+                const priceInfo = getModelPrice(stat.providerType, singleModel);
+                const sourceUrl = priceInfo.sourceUrl ?? (SOURCES as Record<string, string>)[stat.providerType];
+
                 return (
-                  <div key={stat.providerType} className="border border-border rounded-lg p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-foreground">{providerLabel}</span>
-                      <span className="text-xs text-muted-foreground">{stat.requestCount} 次对话</span>
-                    </div>
-                    {/* Token 明细 */}
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-muted-foreground">输入 Tokens</span>
-                        <span className="text-sm font-mono font-medium text-foreground">{stat.promptTokens.toLocaleString()}</span>
+                  <div key={stat.providerType} className="border border-border rounded-lg overflow-hidden">
+                    {/* Provider 头部行 */}
+                    <div className="p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm font-medium text-foreground truncate">{providerLabel}</span>
+                          <span className="text-xs text-muted-foreground shrink-0">{stat.requestCount} 次</span>
+                        </div>
+                        {/* 费用主显示 */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-base font-semibold font-mono text-primary">
+                            {formatCostUsd(stat.costUsd)}
+                          </span>
+                          {priceInfo.isFree && stat.costUsd === 0 && (
+                            <span className="text-[10px] bg-green-500/10 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded font-medium">免费额度</span>
+                          )}
+                          {priceInfo.isEstimated && (
+                            <span className="text-[10px] bg-secondary text-muted-foreground px-1.5 py-0.5 rounded">估算</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-muted-foreground">输出 Tokens</span>
-                        <span className="text-sm font-mono font-medium text-foreground">{stat.completionTokens.toLocaleString()}</span>
+
+                      {/* Token 三列 */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[10px] text-muted-foreground">输入 Tokens</span>
+                          <span className="text-sm font-mono font-medium text-foreground">{stat.promptTokens.toLocaleString()}</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[10px] text-muted-foreground">输出 Tokens</span>
+                          <span className="text-sm font-mono font-medium text-foreground">{stat.completionTokens.toLocaleString()}</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[10px] text-muted-foreground">合计 Tokens</span>
+                          <span className="text-sm font-mono font-medium text-foreground">{stat.totalTokens.toLocaleString()}</span>
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-muted-foreground">合计 Tokens</span>
-                        <span className="text-sm font-mono font-medium text-primary">{stat.totalTokens.toLocaleString()}</span>
+
+                      {/* 底部：定价来源 + 展开按钮 */}
+                      <div className="flex items-center justify-between pt-1 border-t border-border/50">
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <Info className="w-3 h-3 shrink-0" />
+                          {priceInfo.note ? (
+                            <span className="truncate max-w-[180px]">{priceInfo.note}</span>
+                          ) : (
+                            <span>官方定价</span>
+                          )}
+                          {sourceUrl && (
+                            <a
+                              href={sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-0.5 text-primary hover:underline ml-1 shrink-0"
+                            >
+                              查看定价 <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                        </div>
+                        {/* 仅多模型时显示展开按钮 */}
+                        {hasMultipleModels && (
+                          <button
+                            type="button"
+                            onClick={() => toggleProviderExpand(stat.providerType)}
+                            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                          >
+                            {expanded ? (
+                              <><ChevronUp className="w-3 h-3" />收起明细</>
+                            ) : (
+                              <><ChevronDown className="w-3 h-3" />{stat.modelBreakdown.length} 个模型</>
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
-                    {/* 费用估算 */}
-                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground border-t border-border/50 pt-2 mt-1">
-                      <Info className="w-3 h-3 shrink-0" />
-                      <span>费用估算：<span className="font-medium text-foreground">$0.00</span>（免费额度，仅供参考）</span>
-                    </div>
+
+                    {/* 模型级明细（展开时显示） */}
+                    {expanded && hasMultipleModels && (
+                      <div className="border-t border-border bg-secondary/30 divide-y divide-border/50">
+                        {stat.modelBreakdown.map(ms => {
+                          const mp = getModelPrice(stat.providerType, ms.model);
+                          return (
+                            <div key={ms.model} className="px-3 py-2 flex items-center justify-between gap-2">
+                              <div className="flex flex-col gap-0.5 min-w-0">
+                                <span className="text-xs font-mono text-foreground truncate">{ms.model || '(默认)'}</span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {ms.requestCount} 次 · {ms.totalTokens.toLocaleString()} tokens
+                                  {mp.inputPer1M > 0 && (
+                                    <> · 输入 ${(mp.inputPer1M).toFixed(mp.inputPer1M < 0.1 ? 4 : 2)}/M · 输出 ${(mp.outputPer1M).toFixed(mp.outputPer1M < 0.1 ? 4 : 2)}/M</>
+                                  )}
+                                </span>
+                              </div>
+                              <span className="text-sm font-semibold font-mono text-foreground shrink-0">
+                                {formatCostUsd(ms.costUsd)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
+
+            {/* 底部说明 */}
+            <p className="text-[10px] text-muted-foreground text-center">
+              费用按各平台官方定价估算，免费额度内实际费用为 $0，仅供参考。
+              CNY 定价按 1 USD = 7.2 CNY 换算。
+            </p>
           </div>
         )}
       </div>

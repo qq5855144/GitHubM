@@ -3,6 +3,8 @@
 // 结构：每条记录含平台、模型、token 用量和时间戳
 // 自动清理 30 天前记录
 
+import { calcCostUsd } from './modelPricing';
+
 export interface UsageRecord {
   id: string;           // 唯一 ID
   providerType: string; // 平台类型（deepseek/gemini/qwen/groq/openai/custom）
@@ -13,13 +15,27 @@ export interface UsageRecord {
   timestamp: number;    // ms since epoch
 }
 
+/** 按模型细分的统计 */
+export interface ModelStats {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  requestCount: number;
+}
+
 export interface ProviderStats {
   providerType: string;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  /** 估算总费用（USD） */
+  costUsd: number;
   requestCount: number;
   lastUsed: number;
+  /** 按模型细分 */
+  modelBreakdown: ModelStats[];
 }
 
 const STORAGE_KEY = 'ai_usage_stats';
@@ -72,30 +88,67 @@ export function appendUsageRecord(
   saveAll(all);
 }
 
-/** 获取近 30 天按平台分组的汇总统计 */
+/** 获取近 30 天按平台分组的汇总统计（含费用估算 + 按模型细分） */
 export function getProviderStats(): ProviderStats[] {
   const all = prune(loadAll());
-  const map = new Map<string, ProviderStats>();
+
+  // provider 级汇总 map
+  const providerMap = new Map<string, ProviderStats>();
+  // model 级汇总 map：key = `${providerType}::${model}`
+  const modelMap = new Map<string, ModelStats>();
+
   for (const r of all) {
-    let s = map.get(r.providerType);
-    if (!s) {
-      s = {
+    // 计算本条记录的费用
+    const { costUsd } = calcCostUsd(r.providerType, r.model, r.promptTokens, r.completionTokens);
+
+    // ── provider 级 ──
+    let ps = providerMap.get(r.providerType);
+    if (!ps) {
+      ps = {
         providerType: r.providerType,
         promptTokens: 0,
         completionTokens: 0,
         totalTokens: 0,
+        costUsd: 0,
         requestCount: 0,
         lastUsed: 0,
+        modelBreakdown: [],
       };
-      map.set(r.providerType, s);
+      providerMap.set(r.providerType, ps);
     }
-    s.promptTokens += r.promptTokens;
-    s.completionTokens += r.completionTokens;
-    s.totalTokens += r.totalTokens;
-    s.requestCount += 1;
-    if (r.timestamp > s.lastUsed) s.lastUsed = r.timestamp;
+    ps.promptTokens += r.promptTokens;
+    ps.completionTokens += r.completionTokens;
+    ps.totalTokens += r.totalTokens;
+    ps.costUsd += costUsd;
+    ps.requestCount += 1;
+    if (r.timestamp > ps.lastUsed) ps.lastUsed = r.timestamp;
+
+    // ── model 级 ──
+    const mKey = `${r.providerType}::${r.model}`;
+    let ms = modelMap.get(mKey);
+    if (!ms) {
+      ms = { model: r.model, promptTokens: 0, completionTokens: 0, totalTokens: 0, costUsd: 0, requestCount: 0 };
+      modelMap.set(mKey, ms);
+    }
+    ms.promptTokens += r.promptTokens;
+    ms.completionTokens += r.completionTokens;
+    ms.totalTokens += r.totalTokens;
+    ms.costUsd += costUsd;
+    ms.requestCount += 1;
   }
-  return Array.from(map.values()).sort((a, b) => b.lastUsed - a.lastUsed);
+
+  // 将 model 细分挂入 provider
+  for (const [mKey, ms] of modelMap) {
+    const providerType = mKey.split('::')[0];
+    const ps = providerMap.get(providerType);
+    if (ps) ps.modelBreakdown.push(ms);
+  }
+  // model breakdown 按费用降序
+  for (const ps of providerMap.values()) {
+    ps.modelBreakdown.sort((a, b) => b.costUsd - a.costUsd);
+  }
+
+  return Array.from(providerMap.values()).sort((a, b) => b.lastUsed - a.lastUsed);
 }
 
 /** 获取近 30 天总记录数 */

@@ -476,6 +476,59 @@ export default function AiAssistantPage() {
     // toolCallId → 气泡 id 映射（tool_end 时用于定位并更新）
     const toolBubbleMap = new Map<string, string>();
 
+    // ── rAF 批量 setState 防抖：将高频 setMessages / setToolHistory 合并到每帧一次 ──
+    // 每帧内所有 Message 变更函数排队，rAF 触发时一次性 reduce 应用
+    type MsgMutFn = (prev: Message[]) => Message[];
+    type ToolMutFn = (prev: ToolHistoryItem[]) => ToolHistoryItem[];
+    const msgQueue: MsgMutFn[] = [];
+    const toolQueue: ToolMutFn[] = [];
+    let rafId = 0;
+    let rafPending = false;
+
+    const flushQueues = () => {
+      rafPending = false;
+      if (msgQueue.length) {
+        const fns = msgQueue.splice(0);
+        setMessages(prev => fns.reduce((acc, fn) => fn(acc), prev));
+      }
+      if (toolQueue.length) {
+        const fns = toolQueue.splice(0);
+        setToolHistory(prev => fns.reduce((acc, fn) => fn(acc), prev));
+      }
+    };
+
+    // 将 Message 变更入队，并安排一次 rAF flush（同帧内多次调用只安排一次）
+    const queueMsg = (fn: MsgMutFn) => {
+      msgQueue.push(fn);
+      if (!rafPending) {
+        rafPending = true;
+        rafId = requestAnimationFrame(flushQueues);
+      }
+    };
+
+    // 将 ToolHistory 变更入队
+    const queueTool = (fn: ToolMutFn) => {
+      toolQueue.push(fn);
+      if (!rafPending) {
+        rafPending = true;
+        rafId = requestAnimationFrame(flushQueues);
+      }
+    };
+
+    // 流结束（complete / error）时取消未执行的 rAF 并立即同步 flush，确保最终状态正确
+    const cancelAndFlush = () => {
+      cancelAnimationFrame(rafId);
+      rafPending = false;
+      if (msgQueue.length) {
+        const fns = msgQueue.splice(0);
+        setMessages(prev => fns.reduce((acc, fn) => fn(acc), prev));
+      }
+      if (toolQueue.length) {
+        const fns = toolQueue.splice(0);
+        setToolHistory(prev => fns.reduce((acc, fn) => fn(acc), prev));
+      }
+    };
+
     await sendStreamRequest({
       functionUrl: `${SUPABASE_URL}/functions/v1/ai-assistant`,
       requestBody: reqBody,
@@ -490,24 +543,26 @@ export default function AiAssistantPage() {
             // ── 首次 content：若已有步骤气泡则新建 answer 气泡，否则复用初始气泡 ──
             if (answerMsgId === null) {
               if (hasSteps) {
-                // 新建 answer 气泡，追加到消息列表末尾
+                // 新建 answer 气泡，追加到消息列表末尾（同步 append，rAF 对追加也安全）
                 const newId = `ans-${Date.now()}`;
                 answerMsgId = newId;
                 streamingAiMsgIdRef.current = newId;
                 const answerMsg: Message = { id: newId, role: 'assistant', content: '', streaming: true, bubbleType: 'answer' };
-                setMessages(prev => [...prev, answerMsg]);
+                queueMsg(prev => [...prev, answerMsg]);
               } else {
                 // 没有步骤时直接复用初始气泡
                 answerMsgId = initMsgId;
               }
             }
+            // 高频路径：仅追加文字，入队合并，避免每个 token 都触发 re-render
             accumulated += chunk.content;
             const aid = answerMsgId;
-            setMessages(prev => prev.map(m => m.id === aid ? { ...m, content: accumulated } : m));
+            const snapshot = accumulated; // 闭包快照，防止 rAF 延迟时 accumulated 已变化
+            queueMsg(prev => prev.map(m => m.id === aid ? { ...m, content: snapshot } : m));
             break;
           }
           case 'think_start': {
-            // 思考气泡：每次思考创建独立气泡
+            // 思考气泡：低频，直接 append（仍走队列保持顺序）
             const tbId = `think-${Date.now()}`;
             thinkingBubbleId = tbId;
             const thinkMsg: Message = {
@@ -515,28 +570,30 @@ export default function AiAssistantPage() {
               streaming: true, bubbleType: 'thinking',
               thinkingContent: '', thinkingDone: false,
             };
-            setMessages(prev => [...prev, thinkMsg]);
+            queueMsg(prev => [...prev, thinkMsg]);
             break;
           }
           case 'think_chunk': {
+            // 高频：思考内容也合并到帧内
             currentThinking += chunk.content;
             if (thinkingBubbleId) {
               const tid = thinkingBubbleId;
-              setMessages(prev => prev.map(m => m.id === tid ? { ...m, thinkingContent: currentThinking } : m));
+              const snap = currentThinking;
+              queueMsg(prev => prev.map(m => m.id === tid ? { ...m, thinkingContent: snap } : m));
             }
             break;
           }
           case 'think_end': {
             if (thinkingBubbleId) {
               const tid = thinkingBubbleId;
-              setMessages(prev => prev.map(m => m.id === tid ? { ...m, thinkingDone: true, streaming: false } : m));
+              queueMsg(prev => prev.map(m => m.id === tid ? { ...m, thinkingDone: true, streaming: false } : m));
             }
             thinkingBubbleId = null;
             currentThinking = '';
             break;
           }
           case 'tool_start': {
-            setToolHistory(prev => [...prev, {
+            queueTool(prev => [...prev, {
               id: chunk.id, tool: chunk.tool,
               label: chunk.label, hint: chunk.hint,
               status: 'running', startedAt: Date.now(),
@@ -552,27 +609,28 @@ export default function AiAssistantPage() {
               toolLabel: chunk.label, toolHint: chunk.hint,
               toolStatus: 'running',
             };
-            setMessages(prev => [...prev, toolMsg]);
+            queueMsg(prev => [...prev, toolMsg]);
             break;
           }
           case 'tool_end': {
-            setToolHistory(prev => prev.map(item => item.id === chunk.id
-              ? { ...item, status: chunk.status, result: chunk.result, elapsedMs: chunk.elapsedMs }
+            const { id: toolId, status: toolStatus, result: toolResult, elapsedMs } = chunk;
+            queueTool(prev => prev.map(item => item.id === toolId
+              ? { ...item, status: toolStatus, result: toolResult, elapsedMs }
               : item
             ));
             // 更新对应工具气泡
-            const toolMsgId = toolBubbleMap.get(chunk.id);
-            if (toolMsgId) {
-              setMessages(prev => prev.map(m =>
-                m.id === toolMsgId
-                  ? { ...m, streaming: false, toolStatus: chunk.status, toolElapsedMs: chunk.elapsedMs, toolResult: chunk.result }
+            const endMsgId = toolBubbleMap.get(toolId);
+            if (endMsgId) {
+              queueMsg(prev => prev.map(m =>
+                m.id === endMsgId
+                  ? { ...m, streaming: false, toolStatus, toolElapsedMs: elapsedMs, toolResult }
                   : m
               ));
             }
             break;
           }
           case 'plan': {
-            // 收到计划：初始化侧边面板状态
+            // 收到计划：低频，直接调用非消息相关 setState（不走队列）
             hasSteps = true;
             planStepsLocal = chunk.steps;
             setTaskPlanSteps(chunk.steps);
@@ -582,7 +640,7 @@ export default function AiAssistantPage() {
             setSidePanelTab('plan');
             if (window.innerWidth >= 768) setShowToolHistory(true);
             // 初始气泡显示计划概览（折叠列表）
-            setMessages(prev => prev.map(m => {
+            queueMsg(prev => prev.map(m => {
               if (m.id !== initMsgId) return m;
               const inlinePlan: InlineStep[] = chunk.steps.map(s => ({ id: s.id, title: s.title, desc: s.desc, status: 'pending' }));
               return { ...m, inlinePlan, bubbleType: 'step', stepTitle: '任务规划' };
@@ -601,20 +659,17 @@ export default function AiAssistantPage() {
             // 首个 step：判断是否可复用初始气泡
             const reuseInit = !currentStepBubbleId && !answerMsgId;
             if (reuseInit) {
-              // 将初始气泡转换为第一个步骤气泡
               currentStepBubbleId = initMsgId;
-              setMessages(prev => prev.map(m =>
+              queueMsg(prev => prev.map(m =>
                 m.id === initMsgId
                   ? { ...m, bubbleType: 'step', stepTitle, stepId: chunk.stepId, inlinePlan: undefined, streaming: true }
                   : m
               ));
             } else {
-              // 关闭上一个步骤气泡
               if (currentStepBubbleId) {
                 const prevId = currentStepBubbleId;
-                setMessages(prev => prev.map(m => m.id === prevId ? { ...m, streaming: false } : m));
+                queueMsg(prev => prev.map(m => m.id === prevId ? { ...m, streaming: false } : m));
               }
-              // 新建步骤气泡
               const newId = `step-${chunk.stepId}-${Date.now()}`;
               currentStepBubbleId = newId;
               const stepMsg: Message = {
@@ -622,7 +677,7 @@ export default function AiAssistantPage() {
                 streaming: true, bubbleType: 'step',
                 stepTitle, stepId: chunk.stepId,
               };
-              setMessages(prev => [...prev, stepMsg]);
+              queueMsg(prev => [...prev, stepMsg]);
             }
             break;
           }
@@ -639,10 +694,9 @@ export default function AiAssistantPage() {
               setCurrentStepId(null);
               localCurrentStepId = null;
             }
-            // 关闭当前步骤气泡的 streaming
             if (currentStepBubbleId) {
               const sid = currentStepBubbleId;
-              setMessages(prev => prev.map(m => m.id === sid ? { ...m, streaming: false } : m));
+              queueMsg(prev => prev.map(m => m.id === sid ? { ...m, streaming: false } : m));
               currentStepBubbleId = null;
             }
             break;
@@ -654,11 +708,10 @@ export default function AiAssistantPage() {
             toast.warning(chunk.message, { duration: 5000 });
             break;
           case 'file_request': {
-            // 文件请求写入当前活跃气泡
             const tid = answerMsgId ?? currentStepBubbleId ?? initMsgId;
-            setMessages(prev => prev.map(m => {
+            queueMsg(prev => prev.map(m => {
               if (m.id !== tid) return m;
-              const req = { id: chunk.id, filename: chunk.filename, description: chunk.description, mime_types: chunk.mime_types, fulfilled: false };
+              const req: FileRequest = { id: chunk.id, filename: chunk.filename, description: chunk.description, mime_types: chunk.mime_types, fulfilled: false };
               return { ...m, fileRequests: [...(m.fileRequests ?? []), req] };
             }));
             break;
@@ -681,6 +734,8 @@ export default function AiAssistantPage() {
         }
       },
       onComplete: async () => {
+        // 取消待执行的 rAF，立即同步 flush 所有 pending mutations，确保最终状态一致
+        cancelAndFlush();
         networkInterruptedRef.current = false;
         setIsNetworkInterrupted(false);
         streamingAiMsgIdRef.current = null;
@@ -701,6 +756,8 @@ export default function AiAssistantPage() {
         pendingMsgsRef.current = [];
       },
       onError: (err) => {
+        // 同样先 flush 所有 pending mutations，再写入错误状态
+        cancelAndFlush();
         const isUserAbort = abortRef.current?.signal.aborted;
         const isNetworkDrop = !isUserAbort && (
           err.message.includes('网络') ||
@@ -780,6 +837,30 @@ export default function AiAssistantPage() {
     const newReqBody = { ...prevBody, messages: reconnectHistory };
     lastRequestBodyRef.current = newReqBody as Record<string, unknown>;
 
+    // 重连 rAF 批量机制（与主流程相同策略）
+    type MsgMutFn = (prev: Message[]) => Message[];
+    const msgQueue: MsgMutFn[] = [];
+    let rafId = 0;
+    let rafPending = false;
+    const flushMsgQueue = () => {
+      rafPending = false;
+      if (!msgQueue.length) return;
+      const fns = msgQueue.splice(0);
+      setMessages(prev => fns.reduce((acc, fn) => fn(acc), prev));
+    };
+    const queueMsg = (fn: MsgMutFn) => {
+      msgQueue.push(fn);
+      if (!rafPending) { rafPending = true; rafId = requestAnimationFrame(flushMsgQueue); }
+    };
+    const cancelAndFlush = () => {
+      cancelAnimationFrame(rafId);
+      rafPending = false;
+      if (msgQueue.length) {
+        const fns = msgQueue.splice(0);
+        setMessages(prev => fns.reduce((acc, fn) => fn(acc), prev));
+      }
+    };
+
     sendStreamRequest({
       functionUrl: `${SUPABASE_URL}/functions/v1/ai-assistant`,
       requestBody: newReqBody,
@@ -791,10 +872,12 @@ export default function AiAssistantPage() {
         if (!chunk) return;
         if (chunk.type === 'content') {
           accumulated += chunk.content;
-          setMessages(prev => prev.map(m => m.id === aiMsg.id ? { ...m, content: accumulated } : m));
+          const snap = accumulated;
+          queueMsg(prev => prev.map(m => m.id === aiMsg.id ? { ...m, content: snap } : m));
         }
       },
       onComplete: async () => {
+        cancelAndFlush();
         networkInterruptedRef.current = false;
         setIsNetworkInterrupted(false);
         streamingAiMsgIdRef.current = null;
@@ -806,6 +889,7 @@ export default function AiAssistantPage() {
         );
       },
       onError: (err) => {
+        cancelAndFlush();
         setMessages(prev => prev.map(m =>
           m.id === aiMsg.id ? { ...m, content: `❌ 重连失败：${err.message}`, streaming: false } : m
         ));

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  启动屏背景：纯色底 + 中央径向光晕 + 顶/底边缘渐变
+  深色模式：深紫黑底 + 明显紫色辉光 + 顶/底暗角（4层叠加，层次分明）
+  浅色模式：柔白灰底 + 淡紫光晕 + 顶部轻晕 + 底部极淡紫
+  颜色由 values/colors.xml 与 values-night/colors.xml 自动切换
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 第1层：纯色背景底色 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/splash_bg_solid" />
+        </shape>
+    </item>
+
+    <!-- 第2层：中央径向光晕
+         深色：#8C3D1B69（55% 深紫） → 肉眼清晰可见的紫色发光圆
+         浅色：#4D7C3AED（30% 紫色） → 柔和紫晕 -->
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:type="radial"
+                android:centerX="0.5"
+                android:centerY="0.43"
+                android:startColor="@color/splash_glow_center"
+                android:endColor="@color/splash_glow_edge"
+                android:gradientRadius="60%p" />
+        </shape>
+    </item>
+
+    <!-- 第3层：顶部渐变叠加
+         深色：暗角加深，使顶部更沉、中央光晕更突出
+         浅色：淡蓝白晕，营造清爽轻盈感 -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:startColor="@color/splash_top_vignette"
+                android:endColor="@color/splash_glow_edge"
+                android:angle="270" />
+        </shape>
+    </item>
+
+    <!-- 第4层：底部渐变叠加
+         深色：底部更深沉，视觉重心向中央聚焦
+         浅色：底部极淡紫渐变，丰富层次 -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:startColor="@color/splash_glow_edge"
+                android:endColor="@color/splash_bottom_vignette"
+                android:angle="270" />
+        </shape>
+    </item>
+
+</layer-list>
+

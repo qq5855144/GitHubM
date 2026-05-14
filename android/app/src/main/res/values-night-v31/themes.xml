@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+（API 31）深色模式启动画面主题。
+  API 35 强制边到边，移除 statusBarColor / navigationBarColor（已废弃）。
+-->
+<resources>
+    <style name="Theme.GitHubManager" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- 系统启动画面背景色（深色模式）：与自定义启动页背景色完全一致，无缝衔接 -->
+        <!-- 不设置 windowSplashScreenAnimatedIcon，避免在自定义启动页前出现额外的系统图标层 -->
+        <item name="android:windowSplashScreenBackground">@color/splash_bg_solid</item>
+        <item name="android:windowBackground">@color/splash_bg_solid</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="colorPrimary">#8B4CF8</item>
+        <item name="colorPrimaryVariant">#7C3AED</item>
+        <item name="colorOnPrimary">#ffffff</item>
+        <!-- M3 Active Indicator 填充色（API 31+ 深色模式） -->
+        <item name="colorSecondaryContainer">#3D2B6B</item>
+        <item name="colorOnSecondaryContainer">#D4BBFF</item>
+    </style>
+</resources>

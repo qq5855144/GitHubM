@@ -36,16 +36,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -55,7 +45,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, type ThemeMode, ACCENT_SCHEMES } from '@/contexts/ThemeContext';
 import { updateUserProfile } from '@/services/github';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { MODEL_DEFS, loadProviderKey, saveProviderKey } from '@/components/ai/aiUtils';
 import { getProviderStats, getTotalRequestCount, clearAllUsage, type ProviderStats } from '@/components/ai/usageStats';
@@ -250,9 +239,8 @@ function saveCollapsed(data: Record<string, boolean>) {
 
 // ── 主页面 ───────────────────────────────────────────────────────────────────
 export default function SettingsPage() {
-  const { user, rateLimit, logout, login, token, refreshRateLimit } = useAuth();
+  const { user, rateLimit, login, token, refreshRateLimit } = useAuth();
   const { theme: currentTheme, setTheme, accentSchemeId, setAccentScheme } = useTheme();
-  const navigate = useNavigate();
 
   // 折叠状态：key = 分组 id，value = true 表示折叠
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => loadCollapsed());
@@ -270,7 +258,6 @@ export default function SettingsPage() {
   const [newToken, setNewToken] = useState('');
   const [showNewToken, setShowNewToken] = useState(false);
   const [updatingToken, setUpdatingToken] = useState(false);
-  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
   const maskedToken = token
@@ -290,8 +277,6 @@ export default function SettingsPage() {
       setUpdatingToken(false);
     }
   };
-
-  const handleLogout = () => { logout(); navigate('/login'); };
 
   // ── AI API Key ──────────────────────────────────────────────────────────────
   const aiKeyProviders = MODEL_DEFS.filter(m => m.needKey && m.type !== 'custom');
@@ -524,7 +509,7 @@ export default function SettingsPage() {
         id="appearance"
         title="外观"
         icon={<Palette className="w-4 h-4" />}
-        collapsed={collapsed['appearance'] ?? false}
+        collapsed={collapsed['appearance'] ?? true}
         onToggle={toggleSection}
       >
         {/* 外观主题 */}
@@ -602,7 +587,7 @@ export default function SettingsPage() {
         id="account"
         title="账户与令牌"
         icon={<Key className="w-4 h-4" />}
-        collapsed={collapsed['account'] ?? false}
+        collapsed={collapsed['account'] ?? true}
         onToggle={toggleSection}
       >
         {/* API 速率限制 */}
@@ -719,7 +704,7 @@ export default function SettingsPage() {
         id="ai"
         title="AI 配置"
         icon={<Bot className="w-4 h-4" />}
-        collapsed={collapsed['ai'] ?? false}
+        collapsed={collapsed['ai'] ?? true}
         onToggle={toggleSection}
       >
         {/* AI API Key */}
@@ -949,7 +934,7 @@ export default function SettingsPage() {
         id="visit"
         title="访问统计"
         icon={<TrendingUp className="w-4 h-4" />}
-        collapsed={collapsed['visit'] ?? false}
+        collapsed={collapsed['visit'] ?? true}
         onToggle={toggleSection}
       >
         {/* 汇总卡片 */}
@@ -1020,34 +1005,14 @@ export default function SettingsPage() {
         </p>
       </SectionGroup>
 
-      {/* ── 分组 5：其他（危险操作 + 关于） ─────────────────────────────── */}
+      {/* ── 分组 5：关于 ─────────────────────────────────────────────── */}
       <SectionGroup
         id="danger"
-        title="其他"
-        icon={<Trash2 className="w-4 h-4" />}
-        collapsed={collapsed['danger'] ?? false}
+        title="关于"
+        icon={<Info className="w-4 h-4" />}
+        collapsed={collapsed['danger'] ?? true}
         onToggle={toggleSection}
-        danger
       >
-        {/* 退出登录 */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-foreground">退出登录</p>
-            <p className="text-xs text-muted-foreground">清除本地保存的令牌并退出</p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-destructive text-destructive hover:bg-destructive/10 shrink-0"
-            onClick={() => setLogoutDialogOpen(true)}
-          >
-            <Trash2 className="w-4 h-4 mr-1.5" />
-            退出登录
-          </Button>
-        </div>
-
-        <div className="border-t border-border/60" />
-
         {/* 关于 */}
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-2">关于</p>
@@ -1134,27 +1099,6 @@ export default function SettingsPage() {
           </div>
         </div>
       </SectionGroup>
-
-      {/* 退出确认 */}
-      <AlertDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
-        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">确认退出登录</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
-              退出后将清除本地保存的令牌，需要重新输入才能使用。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={handleLogout}
-            >
-              退出登录
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* 编辑资料 Dialog */}
       {user && <EditProfileDialog open={editOpen} onOpenChange={setEditOpen} />}

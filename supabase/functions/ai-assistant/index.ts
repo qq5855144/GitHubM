@@ -442,35 +442,65 @@ async function readFile(
 
     const allLines = fullContent.split("\n");
     const totalLines = allLines.length;
-
-    // 确定实际读取范围（转为 0-based 索引）
-    const from = startLine ? Math.max(1, startLine) : 1;
-    // 每次最多读 500 行，减少 token 消耗同时覆盖更多代码
     const MAX_CHUNK = 500;
+    // 自动全文读取阈值：不带行范围且文件 ≤ 3000 行时，自动分段拼接完整返回
+    const AUTO_FULL_READ_LIMIT = 3000;
+
+    const fileSizeKB = data.size ? Math.round(data.size / 1024) : null;
+    const sizeNote = fileSizeKB && fileSizeKB > 100 ? ` | 文件大小: ${fileSizeKB}KB` : "";
+
+    // ── 未指定行范围 + 文件 ≤ AUTO_FULL_READ_LIMIT 行 → 自动全文返回 ──────────
+    if (!startLine && !endLine && totalLines <= AUTO_FULL_READ_LIMIT) {
+      const numberedContent = allLines
+        .map((line, i) => `${String(i + 1).padStart(6, " ")} | ${line}`)
+        .join("\n");
+      return (
+        `文件 "${filePath}" 第 1–${totalLines} 行（共 ${totalLines} 行，完整内容）${sizeNote}：\n\`\`\`\n${numberedContent}\n\`\`\`` +
+        `\n_SHA: ${data.sha} | 总行数: ${totalLines}${sizeNote}_`
+      );
+    }
+
+    // ── 未指定行范围 + 文件 > AUTO_FULL_READ_LIMIT 行 → 读第一段并强制续读提示 ─
+    if (!startLine && !endLine && totalLines > AUTO_FULL_READ_LIMIT) {
+      const from = 1;
+      const to = MAX_CHUNK;
+      const selectedLines = allLines.slice(0, to);
+      const numberedContent = selectedLines
+        .map((line, i) => `${String(i + 1).padStart(6, " ")} | ${line}`)
+        .join("\n");
+      return (
+        `文件 "${filePath}" 第 ${from}–${to} 行（共 ${totalLines} 行${sizeNote}）：\n\`\`\`\n${numberedContent}\n\`\`\`` +
+        `\n_SHA: ${data.sha} | 总行数: ${totalLines}${sizeNote}_` +
+        `\n\n🔴 **[必读]** 文件共 ${totalLines} 行，本次仅返回第 ${from}–${to} 行，内容不完整。` +
+        `\n⚠️ **必须立即继续读取剩余内容，不得停止**，按以下顺序逐段调用：` +
+        Array.from({ length: Math.ceil((totalLines - to) / MAX_CHUNK) }, (_, k) => {
+          const s = to + k * MAX_CHUNK + 1;
+          const e = Math.min(totalLines, to + (k + 1) * MAX_CHUNK);
+          return `\n   {"tool":"read_file","path":"${filePath}","start_line":"${s}","end_line":"${e}"}`;
+        }).join("")
+      );
+    }
+
+    // ── 指定了行范围 → 读取指定段 ────────────────────────────────────────────
+    const from = Math.max(1, startLine ?? 1);
     const rawTo = endLine ? Math.min(totalLines, endLine) : totalLines;
     const to    = Math.min(rawTo, from + MAX_CHUNK - 1);
 
     const selectedLines = allLines.slice(from - 1, to);
     const isTruncated = to < rawTo || (to < totalLines && !endLine);
-    const fileSizeKB = data.size ? Math.round(data.size / 1024) : null;
-    const sizeNote = fileSizeKB && fileSizeKB > 100 ? ` | 文件大小: ${fileSizeKB}KB` : "";
 
-    const lineHeader = (startLine || endLine)
-      ? ` 第 ${from}–${to} 行（共 ${totalLines} 行）`
-      : ` 第 ${from}–${to} 行（共 ${totalLines} 行）`;
-
-    // 每行加行号，方便 patch_file 精确定位
     const numberedContent = selectedLines
       .map((line, i) => `${String(from + i).padStart(6, " ")} | ${line}`)
       .join("\n");
 
     const truncationHint = isTruncated
-      ? `\n\n⚠️ 文件共 ${totalLines} 行，本次只返回第 ${from}–${to} 行。` +
-        `继续读取请调用：{"tool":"read_file","path":"${filePath}","start_line":"${to + 1}","end_line":"${Math.min(totalLines, to + MAX_CHUNK)}"}`
+      ? `\n\n🔴 **[必读]** 文件共 ${totalLines} 行，本次只返回第 ${from}–${to} 行，内容不完整。` +
+        `\n⚠️ **必须立即继续读取下一段，不得停止**：` +
+        `\n   {"tool":"read_file","path":"${filePath}","start_line":"${to + 1}","end_line":"${Math.min(totalLines, to + MAX_CHUNK)}"}`
       : "";
 
     return (
-      `文件 "${filePath}"${lineHeader}${sizeNote}：\n\`\`\`\n${numberedContent}\n\`\`\`` +
+      `文件 "${filePath}" 第 ${from}–${to} 行（共 ${totalLines} 行）${sizeNote}：\n\`\`\`\n${numberedContent}\n\`\`\`` +
       `\n_SHA: ${data.sha} | 总行数: ${totalLines}${sizeNote}_` +
       truncationHint
     );
@@ -2459,9 +2489,13 @@ ${branchNote}
 大文件完整读取策略
 ==============================
 
+**read_file 自动全文模式（优先使用）**：
+- 文件 ≤ 3000 行时，直接调用 \`{"tool":"read_file","path":"src/App.tsx"}\`（不带行范围），系统自动一次性返回完整内容
+- 文件 > 3000 行时，系统返回第一段并附带**所有后续段落的调用列表**，必须逐段执行完毕
+
 **识别大文件**：文件 > 200 行或 > 100KB 时，视为大文件，必须分段读取。
 
-**标准流程（读取完整大文件的唯一正确方式）**：
+**标准流程（文件 > 3000 行时）**：
 1. 先调用 get_file_info 获取总行数和大小（零内容消耗、快速）
    {"tool":"get_file_info","path":"src/App.tsx"}
 2. 根据总行数制定分段计划：每段 500 行，计算需要几次 read_file
@@ -2469,16 +2503,16 @@ ${branchNote}
    第1段：{"tool":"read_file","path":"src/App.tsx","start_line":"1","end_line":"500"}
    第2段：{"tool":"read_file","path":"src/App.tsx","start_line":"501","end_line":"1000"}
    …以此类推，直到读完最后一段
-4. 每次 read_file 返回结果末尾若有 ⚠️ 提示，说明还有未读内容，**必须继续读取**，不得停止
+4. 收到 🔴 [必读] 提示时，说明还有未读内容，**必须立即继续读取，不得以任何理由停止或跳过**
 
 **大文件（>1MB）特别说明**：
 - GitHub Contents API 对 >1MB 文件返回空内容，read_file 已自动切换到 Git Blobs API
 - 用户无需感知此切换，直接正常调用 read_file 即可
 - get_file_info 同样会自动处理大文件的行数统计
 
-**关键规则**：
-- 每段最多 500 行（系统自动限制，超出会截断并附提示）
-- **收到 ⚠️ 截断提示后，必须立即继续读取下一段，不得中断**
+**关键规则（违反即视为任务失败）**：
+- **收到 🔴 截断提示后，必须立即继续读取下一段，不得中断、不得向用户汇报"已读取部分"**
+- **不得在文件未读完时就开始修改代码**，必须先读完全文再分析
 - 若只需定位特定代码，优先用 grep_in_file 精确定位，避免读取无关内容
 - batch_read 适合同时了解多个小文件（如配置文件组合），每文件返回前 300 行，自动支持大文件
 

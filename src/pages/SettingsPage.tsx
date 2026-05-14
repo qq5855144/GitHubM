@@ -49,10 +49,8 @@ import { cn } from '@/lib/utils';
 import { MODEL_DEFS, loadProviderKey, saveProviderKey } from '@/components/ai/aiUtils';
 import { getProviderStats, getTotalRequestCount, clearAllUsage, type ProviderStats } from '@/components/ai/usageStats';
 import { formatCostUsd, getModelPrice, SOURCES } from '@/components/ai/modelPricing';
-import { getRecentDays, getVisitSummary, type DailyStats, type VisitSummary } from '@/lib/visitStats';
+import { fetchVisitStats, type DailyStats, type VisitSummary } from '@/lib/visitStats';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -317,12 +315,25 @@ export default function SettingsPage() {
 
   // ── 访问统计 ────────────────────────────────────────────────────────────────
   const [visitDays, setVisitDays] = useState<DailyStats[]>([]);
-  const [visitSummary, setVisitSummary] = useState<VisitSummary>({ todayPv: 0, totalPv: 0, activeDays: 0, totalUv: 0 });
+  const [visitSummary, setVisitSummary] = useState<VisitSummary>({ todayPv: 0, todayUv: 0, totalPv: 0, totalUv: 0, activeDays: 0 });
+  const [visitLoading, setVisitLoading] = useState(false);
+  const [visitError, setVisitError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setVisitDays(getRecentDays(7));
-    setVisitSummary(getVisitSummary());
+  const loadVisitStats = useCallback(async () => {
+    setVisitLoading(true);
+    setVisitError(null);
+    try {
+      const result = await fetchVisitStats(7);
+      setVisitDays(result.trend);
+      setVisitSummary(result.summary);
+    } catch {
+      setVisitError('获取访问统计失败，请重试');
+    } finally {
+      setVisitLoading(false);
+    }
   }, []);
+
+  useEffect(() => { loadVisitStats(); }, [loadVisitStats]);
 
   // ── 版本更新检查 ────────────────────────────────────────────────────────────
   const isAndroid = typeof window !== 'undefined' &&
@@ -389,12 +400,10 @@ export default function SettingsPage() {
   // ── 访问统计卡片 ─────────────────────────────────────────────────────────────
   const summaryCards = [
     { label: '今日访问', value: visitSummary.todayPv, icon: <Activity className="w-4 h-4" />, color: 'text-primary' },
-    { label: '总访问量', value: visitSummary.totalPv, icon: <TrendingUp className="w-4 h-4" />, color: 'text-primary' },
-    { label: '活跃天数', value: visitSummary.activeDays, icon: <Calendar className="w-4 h-4" />, color: 'text-primary' },
-    { label: '独立访客', value: visitSummary.totalUv, icon: <Users className="w-4 h-4" />, color: 'text-primary' },
+    { label: '今日独立 IP', value: visitSummary.todayUv, icon: <Users className="w-4 h-4" />, color: 'text-primary' },
+    { label: '近7天 PV', value: visitSummary.totalPv, icon: <TrendingUp className="w-4 h-4" />, color: 'text-primary' },
+    { label: '近7天 UV', value: visitSummary.totalUv, icon: <Calendar className="w-4 h-4" />, color: 'text-primary' },
   ];
-
-  const hasVisitData = visitDays.some(d => d.pv > 0 || d.uv > 0);
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-2xl mx-auto">
@@ -937,6 +946,31 @@ export default function SettingsPage() {
         collapsed={collapsed['visit'] ?? true}
         onToggle={toggleSection}
       >
+        {/* 刷新按钮 + 标注 */}
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Activity className="w-3 h-3" />
+            全网真实访问数据，按客户端 IP 去重计算 UV
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1"
+            onClick={loadVisitStats}
+            disabled={visitLoading}
+          >
+            <RefreshCw className={cn('w-3 h-3', visitLoading && 'animate-spin')} />
+            刷新
+          </Button>
+        </div>
+
+        {/* 错误提示 */}
+        {visitError && (
+          <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+            {visitError}
+          </div>
+        )}
+
         {/* 汇总卡片 */}
         <div className="grid grid-cols-2 gap-3">
           {summaryCards.map(card => (
@@ -944,7 +978,11 @@ export default function SettingsPage() {
               <div className={cn('shrink-0', card.color)}>{card.icon}</div>
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">{card.label}</p>
-                <p className="text-xl font-bold font-mono text-foreground leading-tight">{card.value}</p>
+                {visitLoading ? (
+                  <div className="h-7 w-12 bg-muted animate-pulse rounded mt-0.5" />
+                ) : (
+                  <p className="text-xl font-bold font-mono text-foreground leading-tight">{card.value}</p>
+                )}
               </div>
             </div>
           ))}
@@ -955,7 +993,11 @@ export default function SettingsPage() {
           <p className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
             <BarChart3 className="w-3.5 h-3.5" />近 7 天访问趋势
           </p>
-          {!hasVisitData ? (
+          {visitLoading ? (
+            <div className="h-[180px] bg-secondary/30 rounded-lg flex items-center justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : !visitDays.some(d => d.pv > 0 || d.uv > 0) ? (
             <div className="flex flex-col items-center justify-center py-8 gap-2 bg-secondary/30 rounded-lg">
               <TrendingUp className="w-8 h-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">暂无访问数据</p>
@@ -1001,7 +1043,7 @@ export default function SettingsPage() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          统计数据存储在本地，UV 基于设备标识计算，跨设备数据相互独立。
+          UV 基于客户端 IP 的 SHA-256 哈希计算，不存储明文 IP，符合隐私保护要求。
         </p>
       </SectionGroup>
 

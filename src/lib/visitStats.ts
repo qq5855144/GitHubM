@@ -53,6 +53,8 @@ export interface VisitSummary {
   todayUv:    number;  // 今日 UV
   totalPv:    number;  // 近 N 天总 PV
   totalUv:    number;  // 近 N 天总 UV（按 IP 哈希去重）
+  allTimePv:  number;  // 历史累计总 PV
+  allTimeUv:  number;  // 历史累计总 UV
   activeDays: number;  // 有访问的天数
 }
 
@@ -83,7 +85,7 @@ export async function fetchVisitStats(days = 7): Promise<VisitStatsResult> {
     });
     return {
       trend:   emptyTrend,
-      summary: { todayPv: 0, todayUv: 0, totalPv: 0, totalUv: 0, activeDays: 0 },
+      summary: { todayPv: 0, todayUv: 0, totalPv: 0, totalUv: 0, allTimePv: 0, allTimeUv: 0, activeDays: 0 },
     };
   }
 

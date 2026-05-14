@@ -88,16 +88,30 @@ Deno.serve(async (req: Request) => {
         uv: v.uvSet.size,
       }));
 
-      // 汇总指标
+      // 汇总指标（近 N 天范围内）
       const today = now.toISOString().slice(0, 10);
       const todayData = dateMap[today] ?? { pv: 0, uvSet: new Set() };
       const allIpHashes = new Set((data ?? []).map((r) => r.ip_hash));
 
+      // ── 历史全量总计（不受 days 限制）──────────────────────────────────────
+      // PV：全表行数
+      const { count: allTimePvRaw } = await supabase
+        .from("visit_logs")
+        .select("*", { count: "exact", head: true });
+
+      // UV：全量去重 ip_hash 数（通过 RPC 或聚合）
+      const { data: uvData } = await supabase
+        .from("visit_logs")
+        .select("ip_hash");
+      const allTimeUv = new Set((uvData ?? []).map((r) => r.ip_hash)).size;
+
       const summary = {
-        todayPv: todayData.pv,
-        todayUv: todayData.uvSet.size,
-        totalPv: (data ?? []).length,
-        totalUv: allIpHashes.size,
+        todayPv:    todayData.pv,
+        todayUv:    todayData.uvSet.size,
+        totalPv:    (data ?? []).length,            // 近 N 天 PV
+        totalUv:    allIpHashes.size,               // 近 N 天 UV
+        allTimePv:  allTimePvRaw ?? 0,              // 历史总 PV
+        allTimeUv,                                  // 历史总 UV
         activeDays: Object.values(dateMap).filter((v) => v.pv > 0).length,
       };
 

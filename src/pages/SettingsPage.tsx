@@ -315,7 +315,7 @@ export default function SettingsPage() {
 
   // ── 访问统计 ────────────────────────────────────────────────────────────────
   const [visitDays, setVisitDays] = useState<DailyStats[]>([]);
-  const [visitSummary, setVisitSummary] = useState<VisitSummary>({ todayPv: 0, todayUv: 0, totalPv: 0, totalUv: 0, activeDays: 0 });
+  const [visitSummary, setVisitSummary] = useState<VisitSummary>({ todayPv: 0, todayUv: 0, totalPv: 0, totalUv: 0, allTimePv: 0, allTimeUv: 0, activeDays: 0 });
   const [visitLoading, setVisitLoading] = useState(false);
   const [visitError, setVisitError] = useState<string | null>(null);
 
@@ -403,6 +403,8 @@ export default function SettingsPage() {
     { label: '今日独立 IP', value: visitSummary.todayUv, icon: <Users className="w-4 h-4" />, color: 'text-primary' },
     { label: '近7天 PV', value: visitSummary.totalPv, icon: <TrendingUp className="w-4 h-4" />, color: 'text-primary' },
     { label: '近7天 UV', value: visitSummary.totalUv, icon: <Calendar className="w-4 h-4" />, color: 'text-primary' },
+    { label: '历史总访问量', value: visitSummary.allTimePv, icon: <BarChart3 className="w-4 h-4" />, color: 'text-primary' },
+    { label: '历史总独立 IP', value: visitSummary.allTimeUv, icon: <Users className="w-4 h-4" />, color: 'text-primary' },
   ];
 
   return (

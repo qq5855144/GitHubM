@@ -1,7 +1,7 @@
 // 模型设置弹窗：memo 优化，config/open 不变则不重渲染
 import { memo, useState, useEffect } from 'react';
 import {
-  Eye, EyeOff, RefreshCw, RotateCw,
+  RefreshCw, RotateCw,
   CheckCircle2, XCircle, Sparkles, Timer, Wifi,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { ModelConfig } from './aiTypes';
-import { MODEL_DEFS, maskApiKey, getModelDef, loadProviderKey, saveProviderKey } from './aiUtils';
+import { MODEL_DEFS, getModelDef, loadProviderKey, saveProviderKey } from './aiUtils';
 import type { ModelType } from './aiUtils';
 import { fetchModelsFromAPI } from './aiSupabase';
 
@@ -47,7 +47,6 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
   onSave,
 }: ModelSettingsDialogProps) {
   const [draft, setDraft] = useState<ModelConfig>(config);
-  const [showKey, setShowKey] = useState(false);
   const [fetchState, setFetchState] = useState<FetchState>('idle');
   const [fetchError, setFetchError] = useState('');
   // 测试连接状态
@@ -216,9 +215,9 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
                 )}
               </div>
               <div className="flex gap-2">
-                <div className="relative flex-1 min-w-0">
+                <div className="flex-1 min-w-0">
                   <Input
-                    className="px-3 pr-10"
+                    className="px-3"
                     type="text"
                     autoComplete="off"
                     autoCorrect="off"
@@ -226,21 +225,12 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
                     spellCheck={false}
                     inputMode="text"
                     placeholder={def.keyPlaceholder}
-                    value={showKey ? (draft.api_key || '') : maskApiKey(draft.api_key || '')}
+                    value={draft.api_key || ''}
                     onChange={e => {
-                      if (!showKey) return;
                       setDraft(prev => ({ ...prev, api_key: e.target.value }));
                       setFetchState('idle');
                     }}
-                    onFocus={() => setShowKey(true)}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowKey(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
                 </div>
                 <Button
                   type="button"

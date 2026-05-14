@@ -193,6 +193,31 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
     previewColor: '#ca8a04',
     lightThemeColor: '#a16207',
   },
+  // ── 扩展色 ──────────────────────────────────────────────────────────────
+  {
+    id: 'coral',
+    label: '珊瑚橙',
+    lightPrimary: '16 88% 50%',
+    lightAccent:  '22 92% 54%',
+    lightRing:    '16 88% 50%',
+    darkPrimary:  '16 88% 64%',
+    darkAccent:   '22 92% 68%',
+    darkRing:     '16 88% 64%',
+    previewColor: '#f0572a',
+    lightThemeColor: '#d94420',
+  },
+  {
+    id: 'lime',
+    label: '荧光绿',
+    lightPrimary: '82 66% 38%',
+    lightAccent:  '90 70% 40%',
+    lightRing:    '82 66% 38%',
+    darkPrimary:  '82 66% 54%',
+    darkAccent:   '90 70% 58%',
+    darkRing:     '82 66% 54%',
+    previewColor: '#65a30d',
+    lightThemeColor: '#4d7c0f',
+  },
 ];
 
 interface ThemeContextValue {

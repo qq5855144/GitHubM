@@ -146,6 +146,7 @@ Deno.serve(async (req) => {
       // 常见错误码友好提示
       let hint = errMsg;
       if (res.status === 401) hint = `API Key 无效或已过期（${errMsg || "401 Unauthorized"}）`;
+      else if (res.status === 402) hint = `账户余额不足，请前往平台充值（${errMsg || "402 Payment Required"}）`;
       else if (res.status === 403) hint = `无访问权限（${errMsg || "403 Forbidden"}）`;
       else if (res.status === 429) hint = `请求频率超限，请稍后再试（${errMsg || "429 Too Many Requests"}）`;
       else if (res.status >= 500) hint = `平台服务异常（${res.status}），请稍后重试`;

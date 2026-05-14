@@ -2766,8 +2766,14 @@ async function callLLM(
       }
     }
 
-    // 附带 HTTP 状态码，便于区分 401/403/429/5xx
-    const fullMsg = `LLM 调用失败（HTTP ${res.status}）：${errMsg}`;
+    // 附带 HTTP 状态码，为常见错误提供中文友好提示
+    let friendly = errMsg;
+    if (res.status === 401) friendly = `API Key 无效或已过期（${errMsg || "401 Unauthorized"}）`;
+    else if (res.status === 402) friendly = `账户余额不足，请前往平台充值（${errMsg || "402 Payment Required"}）`;
+    else if (res.status === 403) friendly = `无访问权限（${errMsg || "403 Forbidden"}）`;
+    else if (res.status === 429) friendly = `请求频率超限，请稍后再试（${errMsg || "429 Too Many Requests"}）`;
+    else if (res.status >= 500) friendly = `平台服务异常（${res.status}），请稍后重试`;
+    const fullMsg = `LLM 调用失败（HTTP ${res.status}）：${friendly}`;
     console.error(`[callLLM] 失败 status=${res.status} msg=${errMsg.slice(0, 200)}`);
     throw new Error(fullMsg);
   }
@@ -3477,11 +3483,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
       } catch (e) {
         const errMsg = (e as Error).message ?? String(e);
         // ── 错误分类：永久性错误立即终止；瞬时错误指数退避重试 ──────────────────
-        // 永久性：401/403 API Key 问题，重试无意义
+        // 永久性：401/403/402 API Key 或余额问题，重试无意义
         const isPermanent =
-          errMsg.includes("HTTP 401") || errMsg.includes("HTTP 403") ||
-          errMsg.includes("401）") || errMsg.includes("403）") ||
-          errMsg.includes("认证失败") || errMsg.includes("无权限");
+          errMsg.includes("HTTP 401") || errMsg.includes("HTTP 403") || errMsg.includes("HTTP 402") ||
+          errMsg.includes("401）") || errMsg.includes("403）") || errMsg.includes("402）") ||
+          errMsg.includes("认证失败") || errMsg.includes("无权限") || errMsg.includes("余额不足");
         // 瞬时性：429 限流 / 5xx 服务异常 / 超时 / 网络抖动
         const isTransient =
           errMsg.includes("HTTP 429") || errMsg.includes("429）") ||

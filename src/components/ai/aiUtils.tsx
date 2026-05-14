@@ -84,12 +84,11 @@ export const MODEL_DEFS: ModelDef[] = [
   {
     type: 'groq',
     label: 'Groq（Llama）',
-    desc: 'Groq 硬件加速推理，速度极快（数百 token/s），Llama 3.3 70B',
-    badge: '免费',
+    desc: '⚠️ 注意：Groq 会封锁服务器端 IP，建议改用 DeepSeek 或 Qwen。如需使用请确保 API Key 有效且账号已激活。',
+    badge: '受限',
     models: [
       { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B（推荐）' },
-      { value: 'llama-3.1-70b-versatile', label: 'Llama 3.1 70B' },
-      { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B（长上下文）' },
+      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B（快速）' },
       { value: 'gemma2-9b-it', label: 'Gemma 2 9B（Google · 轻量）' },
     ],
     needKey: true,

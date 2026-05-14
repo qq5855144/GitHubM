@@ -5,7 +5,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Star,
   GitFork,
-  Eye,
   AlertCircle,
   GitPullRequest,
   GitBranch,
@@ -415,11 +414,6 @@ export default function RepoDetailPage() {
             </Button>
           </>
         )}
-        {/* 通用只读展示 */}
-        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-          <Eye className="w-3.5 h-3.5" />
-          <span>{formatNumber(repo.watchers_count)}</span>
-        </div>
         {repo.license && (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Tag className="w-3.5 h-3.5" />

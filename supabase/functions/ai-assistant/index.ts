@@ -2616,7 +2616,7 @@ ${branchNote}
 **写入大内容时（代码超过 200 行）必须分批修改，不得一次性 write_file**：
 1. 先用 get_file_info 确认目标文件总行数
 2. 将要写入的内容拆分为多段，每段不超过 200 行
-3. **必须使用 batch_patch 一次性提交所有段落**，格式：`[{"start_line":N1,"end_line":M1,"content":"段落1"},{"start_line":N2,"end_line":M2,"content":"段落2"},...]`
+3. **必须使用 batch_patch 一次性提交所有段落**，格式：\`[{"start_line":N1,"end_line":M1,"content":"段落1"},{"start_line":N2,"end_line":M2,"content":"段落2"},...]\`
    - batch_patch 内部按倒序处理各段，不存在行号偏移问题
    - ❌ 严禁分多次调用 patch_file：每次 patch 会改变文件行数，导致后续调用行号偏移，产生重复或错误内容
 4. batch_patch 返回「各处修改 diff 快照」，**必须核查每处快照**：

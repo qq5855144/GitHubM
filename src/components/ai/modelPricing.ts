@@ -29,7 +29,6 @@ const SOURCES = {
   deepseek: 'https://platform.deepseek.com/docs/api/pricing',
   gemini:   'https://ai.google.dev/pricing',
   qwen:     'https://help.aliyun.com/zh/model-studio/developer-reference/tongyi-qianwen-7b-14b-72b-api',
-  groq:     'https://console.groq.com/settings/billing',
   openai:   'https://openai.com/api/pricing',
   wenxin:   'https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Blfmc9dlf',
 } as const;
@@ -145,40 +144,6 @@ const MODEL_PRICES: Record<string, ModelPrice> = {
     note: '原价 ¥2.40/¥9.60 per 1M tokens',
   },
 
-  // ── Groq ─────────────────────────────────────────────────────────────────
-  // https://console.groq.com/settings/billing（2025-05）
-  'llama-3.3-70b-versatile': {
-    inputPer1M: 0.59,
-    outputPer1M: 0.79,
-    sourceUrl: SOURCES.groq,
-    isFree: true,
-    note: '含免费额度（每日 1000 次）',
-  },
-  'llama-3.1-70b-versatile': {
-    inputPer1M: 0.59,
-    outputPer1M: 0.79,
-    sourceUrl: SOURCES.groq,
-    isFree: true,
-  },
-  'llama-3.1-8b-instant': {
-    inputPer1M: 0.05,
-    outputPer1M: 0.08,
-    sourceUrl: SOURCES.groq,
-    isFree: true,
-  },
-  'mixtral-8x7b-32768': {
-    inputPer1M: 0.24,
-    outputPer1M: 0.24,
-    sourceUrl: SOURCES.groq,
-    isFree: true,
-  },
-  'gemma2-9b-it': {
-    inputPer1M: 0.20,
-    outputPer1M: 0.20,
-    sourceUrl: SOURCES.groq,
-    isFree: true,
-  },
-
   // ── OpenAI ────────────────────────────────────────────────────────────────
   // https://openai.com/api/pricing（2025-05）
   'gpt-4o': {
@@ -247,14 +212,6 @@ const PROVIDER_FALLBACK: Record<string, ModelPrice> = {
     currency: 'CNY',
     sourceUrl: SOURCES.qwen,
     note: '未知通义模型，按 qwen2.5-coder-7b 估算',
-  },
-  groq: {
-    inputPer1M: 0.40,
-    outputPer1M: 0.60,
-    isEstimated: true,
-    isFree: true,
-    sourceUrl: SOURCES.groq,
-    note: '未知 Groq 模型，按均价估算',
   },
   openai: {
     inputPer1M: 0.15,

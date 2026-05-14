@@ -258,6 +258,9 @@ export default function WorkflowHistoryPanel({ userId, onResume, refreshTrigger,
   // 可恢复任务数（侧边栏角标用）— 包含 interrupted 或 running（超时未完成）
   const interruptedCount = workflows.filter(w => w.interrupted || w.status === 'running').length;
 
+  // 只有最新一条可恢复任务才允许恢复（workflows 已按 created_at DESC 排序）
+  const latestResumableId = workflows.find(w => w.interrupted || w.status === 'running')?.id ?? null;
+
   return (
     <div className="flex flex-col h-full">
       {/* 顶部工具栏 */}
@@ -321,7 +324,7 @@ export default function WorkflowHistoryPanel({ userId, onResume, refreshTrigger,
                       {wf.task_summary}
                     </p>
                     <div className="flex items-center gap-1 shrink-0">
-                      {(wf.interrupted || wf.status === 'running') && (
+                      {wf.id === latestResumableId && (
                         <Badge variant="outline" className="text-xs h-4 px-1.5 border-amber-500/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30">
                           可恢复
                         </Badge>
@@ -347,8 +350,8 @@ export default function WorkflowHistoryPanel({ userId, onResume, refreshTrigger,
                     )}
                   </div>
 
-                  {/* 恢复执行按钮（interrupted 或 running 超时未完成均显示） */}
-                  {(wf.interrupted || wf.status === 'running') && onResume && (
+                  {/* 恢复执行按钮：仅最新一条可恢复任务显示 */}
+                  {wf.id === latestResumableId && onResume && (
                     <Button
                       variant="outline"
                       size="sm"

@@ -4116,8 +4116,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
       catch (e) { toolResult = `工具执行出错：${(e as Error).message}`; }
       
       const elapsedMs = Date.now() - startTime;
-      // 判定工具失败：捕获异常前缀 或 diagnose4xx 返回的 ❌ 错误前缀
-      const toolFailed = toolResult.startsWith("工具执行出错：") || toolResult.startsWith("❌");
+      // 判定工具失败：仅捕获异常前缀 或 diagnose4xx 返回的 ❌ 错误前缀
+      // ⚠️ 排除"监控类工具"：这类工具执行本身成功，❌ 只是业务结论（构建失败/运行失败），
+      //   不应触发智能重试（重试会误导 LLM 换参数重试工具，而不是分析日志修复代码）。
+      const businessResultTools = new Set([
+        "trigger_and_monitor_build",
+        "check_run_status",
+      ]);
+      const isBusinessResult = businessResultTools.has(String(toolCall.tool));
+      const toolFailed = !isBusinessResult && (
+        toolResult.startsWith("工具执行出错：") || toolResult.startsWith("❌")
+      );
       const toolStatus = toolFailed ? "fail" : "success";
       
       await sendTyped({ 

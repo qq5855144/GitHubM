@@ -8,6 +8,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// ── 工具函数：将 UTC Date 转换为 CST（UTC+8）日期字符串 "YYYY-MM-DD" ─────────
+// Edge Function 运行在 UTC 环境，new Date().toISOString() 返回 UTC 时间。
+// 中国用户在 UTC+8，需要加 8 小时后再取日期，否则凌晨前显示前一天日期。
+function toCSTDateKey(date: Date): string {
+  const cst = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  return cst.toISOString().slice(0, 10); // "YYYY-MM-DD"（CST 日期）
+}
+
 // SHA-256 哈希（隐私保护：不存明文 IP）
 async function sha256(text: string): Promise<string> {
   const buf = await crypto.subtle.digest(
@@ -44,9 +52,10 @@ Deno.serve(async (req: Request) => {
     if (action === "stats") {
       const days = parseInt(url.searchParams.get("days") ?? "7", 10);
       const now = new Date();
-      const since = new Date(now);
-      since.setDate(since.getDate() - days + 1);
-      since.setHours(0, 0, 0, 0);
+      // since 基于 CST 凌晨 00:00（UTC+8），防止凌晨期间漏掉当天数据
+      const todayCSTMidnight = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+      todayCSTMidnight.setUTCHours(0, 0, 0, 0); // 归零为 CST 当天 0:00:00（等价于 UTC 前一天 16:00:00）
+      const since = new Date(todayCSTMidnight.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
 
       // 查询近 N 天所有日志
       const { data, error } = await supabase
@@ -69,12 +78,12 @@ Deno.serve(async (req: Request) => {
       for (let i = 0; i < days; i++) {
         const d = new Date(since);
         d.setDate(d.getDate() + i);
-        const key = d.toISOString().slice(0, 10); // "YYYY-MM-DD"
+        const key = toCSTDateKey(d); // CST 日期 key
         dateMap[key] = { pv: 0, uvSet: new Set() };
       }
 
       for (const row of data ?? []) {
-        const key = new Date(row.visited_at).toISOString().slice(0, 10);
+        const key = toCSTDateKey(new Date(row.visited_at)); // CST 日期 key
         if (dateMap[key]) {
           dateMap[key].pv++;
           dateMap[key].uvSet.add(row.ip_hash);
@@ -83,13 +92,13 @@ Deno.serve(async (req: Request) => {
 
       const trend = Object.entries(dateMap).map(([date, v]) => ({
         date,
-        label: `${parseInt(date.slice(5, 7))}/${parseInt(date.slice(8, 10))}`, // "5/13"
+        label: `${parseInt(date.slice(5, 7))}/${parseInt(date.slice(8, 10))}`, // "5/15"
         pv: v.pv,
         uv: v.uvSet.size,
       }));
 
       // 汇总指标（近 N 天范围内）
-      const today = now.toISOString().slice(0, 10);
+      const today = toCSTDateKey(now); // 今日 CST 日期 key
       const todayData = dateMap[today] ?? { pv: 0, uvSet: new Set() };
       const allIpHashes = new Set((data ?? []).map((r) => r.ip_hash));
 

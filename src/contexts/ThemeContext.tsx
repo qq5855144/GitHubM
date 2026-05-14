@@ -239,6 +239,8 @@ function applyAccentScheme(scheme: AccentScheme, resolved: 'dark' | 'light') {
   root.style.setProperty('--sidebar-ring',    isDark ? scheme.darkRing    : scheme.lightRing);
   // 更新 theme-color meta（影响 Android WebView 状态栏/工具栏颜色）
   updateThemeColorMeta(isDark, scheme);
+  // 动态更新 favicon（浏览器标签页 + PWA 主屏快捷方式图标）
+  updateFaviconAccent(scheme.previewColor);
   // 通知 Android 原生层同步强调色（底部导航选中色 + 最近任务图标色）
   notifyAndroidAccent(scheme.previewColor);
 }
@@ -298,6 +300,37 @@ function notifyAndroidAccent(primaryHex: string) {
 }
 
 /**
+ * 动态更新 favicon / apple-touch-icon。
+ * 将 logo.svg 的填充色替换为当前强调色，生成 data URI SVG 并写入 <link rel="icon">。
+ * 这样浏览器标签页图标、PWA 主屏快捷方式图标均会跟随主题色变化。
+ */
+function updateFaviconAccent(hex: string) {
+  // GitHub Octocat path (与 public/logo.svg 保持一致)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 16 16">
+    <path fill="${hex}" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59c.4.07.55-.17.55-.38c0-.19-.01-.82-.01-1.49c-2.01.37-2.53-.49-2.69-.94c-.09-.23-.48-.94-.82-1.13c-.28-.15-.68-.52-.01-.53c.63-.01 1.08.58 1.23.82c.72 1.21 1.87.87 2.33.66c.07-.52.28-.87.51-1.07c-1.78-.2-3.64-.89-3.64-3.95c0-.87.31-1.59.82-2.15c-.08-.2-.36-1.02.08-2.12c0 0 .67-.21 2.2.82c.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82c.44 1.1.16 1.92.08 2.12c.51.56.82 1.27.82 2.15c0 3.07-1.87 3.75-3.65 3.95c.29.25.54.73.54 1.48c0 1.07-.01 1.93-.01 2.2c0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/>
+  </svg>`;
+  const dataUri = `data:image/svg+xml;base64,${btoa(svg)}`;
+
+  // 更新 favicon
+  let link: HTMLLinkElement | null =
+    document.querySelector('link[rel*="icon"]') ||
+    document.querySelector('link[rel="shortcut icon"]');
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'icon';
+    document.head.appendChild(link);
+  }
+  link.type = 'image/svg+xml';
+  link.href = dataUri;
+
+  // 更新 apple-touch-icon
+  let appleLink: HTMLLinkElement | null = document.querySelector('link[rel="apple-touch-icon"]');
+  if (appleLink) {
+    appleLink.href = dataUri;
+  }
+}
+
+/**
  * 触发主题切换过渡动画：
  * 向 <html> 添加 theme-transitioning class，CSS 中借助它激活全局 transition，
  * 动画结束后移除，避免页面初始加载时也触发不必要的过渡。
@@ -315,21 +348,22 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const saved = localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
     return saved || 'system';
   });
-  const [resolvedTheme, setResolvedTheme] = useState<'dark' | 'light'>(() =>
-    applyTheme((localStorage.getItem(STORAGE_KEY) as ThemeMode | null) || 'system')
-  );
+  // 同步初始化：applyTheme + applyAccentScheme 在同一个 useState 初始化器里执行，
+  // 确保 notifyAndroidTheme / notifyAndroidAccent / notifyAccentIcon 在 React mount
+  // 之前就已通知 AndroidBridge，避免原生层收不到首次颜色信号。
+  const [resolvedTheme, setResolvedTheme] = useState<'dark' | 'light'>(() => {
+    const mode = (localStorage.getItem(STORAGE_KEY) as ThemeMode | null) || 'system';
+    const resolved = applyTheme(mode);
+    const savedId = localStorage.getItem(ACCENT_STORAGE_KEY) || 'purple';
+    const scheme = ACCENT_SCHEMES.find(s => s.id === savedId) ?? ACCENT_SCHEMES[0];
+    applyAccentScheme(scheme, resolved);
+    return resolved;
+  });
 
   // ── 主题色方案 ──────────────────────────────────────────────────────────
   const [accentSchemeId, setAccentSchemeIdState] = useState<string>(() => {
     return localStorage.getItem(ACCENT_STORAGE_KEY) || 'purple';
   });
-
-  // 初始化时立即应用已保存的色方案
-  useEffect(() => {
-    const scheme = ACCENT_SCHEMES.find(s => s.id === accentSchemeId) ?? ACCENT_SCHEMES[0];
-    applyAccentScheme(scheme, resolvedTheme);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const setAccentScheme = useCallback((id: string) => {
     const scheme = ACCENT_SCHEMES.find(s => s.id === id) ?? ACCENT_SCHEMES[0];

@@ -34,24 +34,40 @@
       1. 读取 localStorage 存储的主题偏好
       2. 若为 system / 未设置，读取系统 prefers-color-scheme
       3. 立即为 <html> 添加正确的 dark/light class
-      4. 动态更新 theme-color meta，让安卓 WebView 状态栏与页面同步
+      4. 动态更新 theme-color meta，让安卓 WebView 状态栏与强调色同步
       5. 尝试通知 AndroidBridge（壳注入可能略晚于脚本执行，降级处理）
     -->
     <script>
       (function () {
-        var DARK_COLOR  = '#1e1b4b';
-        var LIGHT_COLOR = '#f5f3ff';
+        // ── 强调色映射表（与 ThemeContext.tsx ACCENT_SCHEMES 保持同步） ──
+        var ACCENT_COLORS = {
+          purple:  { dark: '#7c3aed', light: '#6d28d9' },
+          blue:    { dark: '#1d6be3', light: '#1d4ed8' },
+          green:   { dark: '#16a34a', light: '#15803d' },
+          orange:  { dark: '#f97316', light: '#ea580c' },
+          rose:    { dark: '#e11d48', light: '#be123c' },
+          cyan:    { dark: '#0891b2', light: '#0e7490' },
+          indigo:  { dark: '#4f46e5', light: '#4338ca' },
+          sky:     { dark: '#0ea5e9', light: '#0284c7' },
+          emerald: { dark: '#059669', light: '#047857' },
+          teal:    { dark: '#0d9488', light: '#0f766e' },
+          amber:   { dark: '#d97706', light: '#b45309' },
+          pink:    { dark: '#ec4899', light: '#db2777' },
+          violet:  { dark: '#8b5cf6', light: '#7c3aed' },
+          gold:    { dark: '#ca8a04', light: '#a16207' },
+        };
+
         var saved = localStorage.getItem('github_manager_theme');
         var isDark;
         if (saved === 'light') {
           isDark = false;
         } else if (saved === 'system') {
-          // 明确选择跟随系统
           isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         } else {
           // 'dark' 或未设置（首次使用默认深色）
           isDark = true;
         }
+
         // 同步写入 html class，不等待 React
         var html = document.documentElement;
         if (isDark) {
@@ -62,15 +78,23 @@
           html.classList.remove('dark');
         }
 
-        // 更新唯一的 theme-color meta（Android WebView 不支持 media query 版本）
+        // 读取已保存的强调色，更新 theme-color meta
+        var accentId = localStorage.getItem('github_manager_accent') || 'purple';
+        var accentEntry = ACCENT_COLORS[accentId] || ACCENT_COLORS.purple;
+        var accentHex = isDark ? accentEntry.dark : accentEntry.light;
+
         var metaThemeColor = document.querySelector('meta[name="theme-color"]:not([media])');
         if (metaThemeColor) {
-          metaThemeColor.setAttribute('content', isDark ? DARK_COLOR : LIGHT_COLOR);
+          metaThemeColor.setAttribute('content', accentHex);
         }
 
-        // 通知 AndroidBridge（壳注入后会立即可用；若未注入则静默忽略）
+        // 通知 AndroidBridge（壳注入后立即可用；若未注入则静默忽略）
         try {
-          window.AndroidBridge && window.AndroidBridge.notifyTheme && window.AndroidBridge.notifyTheme(isDark);
+          if (window.AndroidBridge) {
+            window.AndroidBridge.notifyTheme && window.AndroidBridge.notifyTheme(isDark);
+            window.AndroidBridge.notifyAccent && window.AndroidBridge.notifyAccent(accentHex);
+            window.AndroidBridge.notifyAccentIcon && window.AndroidBridge.notifyAccentIcon(accentHex);
+          }
         } catch (e) {}
       })();
     </script>

@@ -261,7 +261,6 @@ export default function SettingsPage() {
   const [aiKeys, setAiKeys] = useState<Record<string, string>>(() =>
     Object.fromEntries(aiKeyProviders.map(m => [m.type, loadProviderKey(m.type as import('@/components/ai/aiUtils').ModelType)]))
   );
-  const [showAiKeys, setShowAiKeys] = useState<Record<string, boolean>>({});
   const [savedAiKeys, setSavedAiKeys] = useState<Record<string, boolean>>({});
 
   const handleSaveAiKey = (type: string, key: string) => {
@@ -701,7 +700,6 @@ export default function SettingsPage() {
         <div className="space-y-4">
           {aiKeyProviders.map(provider => {
             const key = aiKeys[provider.type] ?? '';
-            const visible = showAiKeys[provider.type] ?? false;
             const saved = savedAiKeys[provider.type] ?? false;
             return (
               <div key={provider.type} className="space-y-1.5">
@@ -727,21 +725,19 @@ export default function SettingsPage() {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <div className="relative flex-1 min-w-0">
+                  <div className="flex-1 min-w-0">
                     <Input
-                      type={visible ? 'text' : 'password'}
+                      type="text"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      inputMode="text"
                       value={key}
                       onChange={e => setAiKeys(prev => ({ ...prev, [provider.type]: e.target.value }))}
                       placeholder={provider.keyPlaceholder ?? '请输入 API Key'}
-                      className="bg-secondary border-border text-foreground placeholder:text-muted-foreground pr-10 font-mono text-sm"
+                      className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono text-sm"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowAiKeys(prev => ({ ...prev, [provider.type]: !visible }))}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
                   </div>
                   <Button
                     size="sm"

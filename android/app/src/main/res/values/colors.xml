@@ -21,18 +21,18 @@
 
     <!--
       ══ 启动画面 · 浅色模式配色 ══
-      GitHub Light 风格：柔白底 + 紫色点缀
+      纯白背景，光晕/渐变层全部透明
     -->
-    <!-- 背景层 -->
-    <color name="splash_bg_solid">#F6F8FA</color>
-    <!-- 光晕中心：30% 透明度紫色，柔和不刺眼 -->
-    <color name="splash_glow_center">#4D7C3AED</color>
-    <!-- 光晕边缘：完全透明 -->
-    <color name="splash_glow_edge">#00F6F8FA</color>
-    <!-- 顶部渐变晕染：淡蓝白，营造轻盈感 -->
-    <color name="splash_top_vignette">#18C8D8FF</color>
-    <!-- 底部渐变晕染（浅色）：极淡紫，增加层次 -->
-    <color name="splash_bottom_vignette">#0F7C3AED</color>
+    <!-- 背景层：纯白 -->
+    <color name="splash_bg_solid">#FFFFFF</color>
+    <!-- 光晕中心：透明（无光晕） -->
+    <color name="splash_glow_center">#00FFFFFF</color>
+    <!-- 光晕边缘：透明 -->
+    <color name="splash_glow_edge">#00FFFFFF</color>
+    <!-- 顶部渐变：透明（无叠加） -->
+    <color name="splash_top_vignette">#00FFFFFF</color>
+    <!-- 底部渐变：透明（无叠加） -->
+    <color name="splash_bottom_vignette">#00FFFFFF</color>
 
     <!-- Logo（无光圈，直接展示） -->
     <color name="splash_icon_tint">#7C3AED</color>        <!-- Octocat：主题紫，清晰醒目 -->

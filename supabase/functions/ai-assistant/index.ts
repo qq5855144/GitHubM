@@ -3841,21 +3841,27 @@ async function callLLM(
   console.log(`[callLLM] type=${cfg.type} model=${cfg.model || "default"} url=${url}`);
 
   // ── DeepSeek-R1 reasoning_content 一致性修复 ──────────────────────────────
-  // DeepSeek API 规则：messages 中只要有任意一条 assistant 消息携带了 reasoning_content，
-  // 则同一请求里【所有】assistant 消息都必须携带该字段（可为空字符串""）。
-  // 在此处做防御性修复，确保无论外部代码如何构建 messages，发出去的总是合法的。
-  const hasAnyReasoning = messages.some(m => m.role === "assistant" && m.reasoning_content != null);
-  const safeMessages: Message[] = hasAnyReasoning
+  // DeepSeek API（reasoner 模型）要求：所有 assistant 消息都必须携带 reasoning_content 字段。
+  // 原因：
+  //   1. 前端不保存 reasoning_content，断点恢复或页面刷新后历史消息里缺少该字段
+  //   2. 外部代码（reasoningContentEverSeen）只能覆盖同一次请求内的多轮循环，无法跨请求
+  //   3. API 的检测逻辑可能是基于 model 类型（reasoner），而不是基于历史里是否有该字段
+  // 修复策略：如果任意 assistant 消息缺失 reasoning_content（null/undefined），则给所有缺失的补上""
+  //   ；如果是 reasoner 模型，则无条件给所有 assistant 消息补上该字段。
+  const isReasoner = cfg.type === "deepseek" && (cfg.model?.includes("reasoner") || !cfg.model);
+  const missingRC = messages.filter(m => m.role === "assistant" && m.reasoning_content == null).length;
+  const needFix = isReasoner || missingRC > 0;
+  const safeMessages: Message[] = needFix
     ? messages.map(m =>
         m.role === "assistant" && m.reasoning_content == null
           ? { ...m, reasoning_content: "" }
           : m
       )
     : messages;
-  if (hasAnyReasoning) {
+  if (needFix) {
     const fixed = safeMessages.filter(m => m.role === "assistant" && m.reasoning_content === "").length;
     if (fixed > 0) {
-      console.log(`[callLLM] reasoning_content 修复：为 ${fixed} 条 assistant 消息补充了空字符串，防止 HTTP 400`);
+      console.log(`[callLLM] reasoning_content 修复：为 ${fixed} 条 assistant 消息补充了空字符串（isReasoner=${isReasoner} missingRC=${missingRC}）`);
     }
   }
 

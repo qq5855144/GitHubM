@@ -30,6 +30,590 @@ interface ModelConfig {
 }
 
 // 根据模型配置构建 LLM 请求参数
+// ── Function Calling 工具 Schema 定义 ────────────────────────────────────────
+// 仅用于支持 FC 的模型（deepseek / openai / gemini / qwen）
+// 文心 / custom 仍走 system prompt 纯文本模式
+
+/** 判断模型类型是否支持 OpenAI 兼容 function calling */
+function supportsFunctionCalling(type: string): boolean {
+  return ["deepseek", "openai", "gemini", "qwen"].includes(type);
+}
+
+// 单个工具的 Schema 定义（OpenAI function 格式）
+interface ToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: "object";
+      properties: Record<string, { type: string; description: string }>;
+      required?: string[];
+    };
+  };
+}
+
+const TOOL_DEFINITIONS: ToolDefinition[] = [
+  // ── 文件操作 ────────────────────────────────────────────────────────────
+  {
+    type: "function", function: {
+      name: "list_files",
+      description: "列出仓库指定目录下的文件和子目录",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "目录路径，根目录传空字符串 \"\"" },
+      }, required: ["path"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "file_tree",
+      description: "递归获取完整文件树，适合快速了解项目结构（推荐优先使用）",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "起始路径，根目录传空字符串 \"\"" },
+        depth: { type: "string", description: "最大递归深度，默认 \"3\"" },
+      }, required: ["path"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "read_file",
+      description: "读取文件内容（带行号）。大文件可用 start_line/end_line 分段读取，每次最多 500 行",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "文件路径" },
+        start_line: { type: "string", description: "起始行号（可选，不填则从第 1 行开始）" },
+        end_line: { type: "string", description: "结束行号（可选，不填则读到文件末尾）" },
+      }, required: ["path"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "get_file_info",
+      description: "获取文件基本信息（总行数、文件大小），适合读取大文件前制定分段计划",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "文件路径" },
+      }, required: ["path"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "grep_in_file",
+      description: "在单个文件内搜索关键词（支持大文件全文搜索），返回匹配行及上下文",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "文件路径" },
+        pattern: { type: "string", description: "搜索关键词或正则表达式" },
+        case_sensitive: { type: "string", description: "是否大小写敏感，\"true\" 或 \"false\"，默认 \"false\"" },
+        offset: { type: "string", description: "翻页偏移量，第一页传 \"0\"" },
+      }, required: ["path", "pattern"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "batch_read",
+      description: "批量读取多个文件（逗号分隔路径，最多 5 个），每个文件返回前 300 行",
+      parameters: { type: "object", properties: {
+        paths: { type: "string", description: "逗号分隔的文件路径列表，如 \"src/a.ts,src/b.ts\"" },
+      }, required: ["paths"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "grep_in_repo",
+      description: "全仓库搜索关键词，返回匹配文件路径和精确行号",
+      parameters: { type: "object", properties: {
+        query: { type: "string", description: "搜索关键词" },
+        file_pattern: { type: "string", description: "限制搜索的目录前缀，如 \"src/\"（可选）" },
+        offset: { type: "string", description: "翻页偏移量，第一页传 \"0\"" },
+      }, required: ["query"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "search_code",
+      description: "通过 GitHub Search API 搜索代码（仅返回文件路径，无行号）",
+      parameters: { type: "object", properties: {
+        query: { type: "string", description: "搜索关键词" },
+      }, required: ["query"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "patch_file",
+      description: "局部修改文件指定行范围（推荐，仅替换 start_line 到 end_line 的内容）",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "文件路径" },
+        start_line: { type: "string", description: "起始行号（从 1 开始）" },
+        end_line: { type: "string", description: "结束行号（含）" },
+        content: { type: "string", description: "替换内容（多行用 \\n 分隔）" },
+        message: { type: "string", description: "commit 消息" },
+        branch: { type: "string", description: "目标分支（可选，默认用仓库目标分支）" },
+      }, required: ["path", "start_line", "end_line", "content", "message"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "batch_patch",
+      description: "批量局部修改同一文件多处非连续行，合并为单个 commit",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "文件路径" },
+        patches: { type: "string", description: "JSON 数组字符串，每项含 start_line/end_line/content" },
+        message: { type: "string", description: "commit 消息" },
+        branch: { type: "string", description: "目标分支（可选）" },
+      }, required: ["path", "patches", "message"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "write_file",
+      description: "全量写入文件（新建文件或大幅重写时使用）",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "文件路径" },
+        content: { type: "string", description: "完整文件内容" },
+        message: { type: "string", description: "commit 消息" },
+        branch: { type: "string", description: "目标分支（可选）" },
+      }, required: ["path", "content", "message"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "delete_file",
+      description: "删除仓库中的文件",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "文件路径" },
+        message: { type: "string", description: "commit 消息" },
+        branch: { type: "string", description: "目标分支（可选）" },
+      }, required: ["path", "message"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "search_and_replace",
+      description: "全仓库一键搜索替换，自动找到所有匹配行并批量修改，合并 commit",
+      parameters: { type: "object", properties: {
+        pattern: { type: "string", description: "要替换的目标字符串" },
+        replacement: { type: "string", description: "替换为的新字符串" },
+        file_pattern: { type: "string", description: "限制搜索范围的目录前缀（可选）" },
+        message: { type: "string", description: "commit 消息" },
+        branch: { type: "string", description: "目标分支（可选）" },
+      }, required: ["pattern", "replacement", "message"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "preview_diff",
+      description: "预览修改效果（不实际写入），修改前确认内容正确",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "文件路径" },
+        start_line: { type: "string", description: "起始行号" },
+        end_line: { type: "string", description: "结束行号" },
+        content: { type: "string", description: "新内容" },
+      }, required: ["path", "start_line", "end_line", "content"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "undo_last_commit",
+      description: "撤销最后一次提交（逐文件恢复到上一版本，生成新的 Revert commit）",
+      parameters: { type: "object", properties: {
+        branch: { type: "string", description: "目标分支（可选）" },
+      } },
+    },
+  },
+  // ── 分支 & PR ────────────────────────────────────────────────────────────
+  {
+    type: "function", function: {
+      name: "list_branches",
+      description: "列出仓库所有分支",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "list_commits",
+      description: "获取提交历史（可按路径或分支筛选）",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "限制到特定文件路径（可选）" },
+        branch: { type: "string", description: "分支名（可选）" },
+      } },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "create_branch",
+      description: "新建分支",
+      parameters: { type: "object", properties: {
+        branch: { type: "string", description: "新分支名" },
+        from: { type: "string", description: "基于哪个分支创建（可选，默认用目标分支）" },
+      }, required: ["branch"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "list_pull_requests",
+      description: "列出 Pull Requests",
+      parameters: { type: "object", properties: {
+        state: { type: "string", description: "状态过滤：\"open\"（默认）、\"closed\" 或 \"all\"" },
+      } },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "create_pr",
+      description: "创建 Pull Request。head/base 填写分支名（不加 owner: 前缀），title 不能为空，head 与 base 必须有差异提交",
+      parameters: { type: "object", properties: {
+        title: { type: "string", description: "PR 标题（不能为空）" },
+        head: { type: "string", description: "来源分支名（不加 owner: 前缀）" },
+        base: { type: "string", description: "目标分支名（不加 owner: 前缀）" },
+        body: { type: "string", description: "PR 描述（可选）" },
+      }, required: ["title", "head", "base"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "merge_pull_request",
+      description: "合并 Pull Request",
+      parameters: { type: "object", properties: {
+        pull_number: { type: "string", description: "PR 编号" },
+        merge_method: { type: "string", description: "合并方式：\"squash\"（默认）、\"merge\" 或 \"rebase\"" },
+        commit_title: { type: "string", description: "合并 commit 标题（可选）" },
+      }, required: ["pull_number"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "close_pr",
+      description: "关闭 Pull Request（不合并）",
+      parameters: { type: "object", properties: {
+        pull_number: { type: "string", description: "PR 编号" },
+        comment: { type: "string", description: "关闭时附带的评论（可选）" },
+      }, required: ["pull_number"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "get_pr_files",
+      description: "查看 PR 的文件变更列表",
+      parameters: { type: "object", properties: {
+        pull_number: { type: "string", description: "PR 编号" },
+      }, required: ["pull_number"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "submit_pr_review",
+      description: "提交 PR 代码审查（APPROVE / REQUEST_CHANGES / COMMENT）",
+      parameters: { type: "object", properties: {
+        pull_number: { type: "string", description: "PR 编号" },
+        event: { type: "string", description: "审查类型：\"APPROVE\"、\"REQUEST_CHANGES\" 或 \"COMMENT\"" },
+        body: { type: "string", description: "审查意见" },
+      }, required: ["pull_number", "event", "body"] },
+    },
+  },
+  // ── Issue ────────────────────────────────────────────────────────────────
+  {
+    type: "function", function: {
+      name: "list_issues",
+      description: "列出 Issues",
+      parameters: { type: "object", properties: {
+        state: { type: "string", description: "状态：\"open\"（默认）、\"closed\" 或 \"all\"" },
+      } },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "search_issues",
+      description: "按关键词、标签、作者搜索 Issues 或 PR",
+      parameters: { type: "object", properties: {
+        query: { type: "string", description: "搜索关键词" },
+        state: { type: "string", description: "状态：\"open\"、\"closed\" 或 \"all\"" },
+        labels: { type: "string", description: "标签（逗号分隔，可选）" },
+        assignee: { type: "string", description: "负责人用户名（可选）" },
+        limit: { type: "string", description: "返回数量限制（默认 \"20\"）" },
+      }, required: ["query"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "get_issue_details",
+      description: "获取 Issue 详情（含正文和所有评论）",
+      parameters: { type: "object", properties: {
+        issue_number: { type: "string", description: "Issue 编号" },
+      }, required: ["issue_number"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "create_issue",
+      description: "创建新 Issue",
+      parameters: { type: "object", properties: {
+        title: { type: "string", description: "Issue 标题" },
+        body: { type: "string", description: "Issue 正文描述" },
+        labels: { type: "string", description: "标签（逗号分隔，可选）" },
+      }, required: ["title", "body"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "update_issue",
+      description: "更新 Issue（标题、正文、状态、标签、负责人，仅填需要改的字段）",
+      parameters: { type: "object", properties: {
+        issue_number: { type: "string", description: "Issue 编号" },
+        title: { type: "string", description: "新标题（可选）" },
+        body: { type: "string", description: "新正文（可选）" },
+        state: { type: "string", description: "新状态：\"open\" 或 \"closed\"（可选）" },
+        labels: { type: "string", description: "新标签（逗号分隔，可选）" },
+        assignees: { type: "string", description: "新负责人（逗号分隔，可选）" },
+      }, required: ["issue_number"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "close_issue",
+      description: "关闭 Issue（可附带结论评论）",
+      parameters: { type: "object", properties: {
+        issue_number: { type: "string", description: "Issue 编号" },
+        comment: { type: "string", description: "关闭时附带的评论（可选）" },
+      }, required: ["issue_number"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "add_comment",
+      description: "在 Issue 或 PR 下添加评论",
+      parameters: { type: "object", properties: {
+        issue_number: { type: "string", description: "Issue 或 PR 编号" },
+        body: { type: "string", description: "评论内容" },
+      }, required: ["issue_number", "body"] },
+    },
+  },
+  // ── 仓库信息 ─────────────────────────────────────────────────────────────
+  {
+    type: "function", function: {
+      name: "get_repo_info",
+      description: "查看仓库基本信息（语言、Stars、默认分支、Topics 等）",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "get_commit_diff",
+      description: "查看某次提交的文件变更统计（diff）",
+      parameters: { type: "object", properties: {
+        sha: { type: "string", description: "commit SHA" },
+      }, required: ["sha"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "compare_commits",
+      description: "对比两个 commit / 分支 / tag 的所有文件变更（含 diff patch 片段）",
+      parameters: { type: "object", properties: {
+        base: { type: "string", description: "基准 commit / 分支 / tag" },
+        head: { type: "string", description: "比较目标 commit / 分支 / tag" },
+      }, required: ["base", "head"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "auto_review",
+      description: "自动代码审查：检查最近 N 次 commit 变更文件的质量问题",
+      parameters: { type: "object", properties: {
+        commit_count: { type: "string", description: "检查最近几次 commit（默认 \"1\"）" },
+        sha: { type: "string", description: "指定从某个 commit SHA 开始检查（可选）" },
+      } },
+    },
+  },
+  // ── Actions 工作流 ───────────────────────────────────────────────────────
+  {
+    type: "function", function: {
+      name: "list_workflows",
+      description: "列出仓库所有 Actions 工作流",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "get_workflow_runs",
+      description: "查看工作流最近运行记录（仅查历史，不等待）",
+      parameters: { type: "object", properties: {
+        workflow_id: { type: "string", description: "工作流文件名或 ID（如 \"deploy.yml\"），不填则查全部" },
+        limit: { type: "string", description: "返回数量（默认 \"5\"）" },
+      } },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "trigger_workflow",
+      description: "触发工作流（workflow_dispatch 事件）。触发后必须立即调用 check_run_status 等待结果",
+      parameters: { type: "object", properties: {
+        workflow_id: { type: "string", description: "工作流文件名或 ID（如 \"deploy.yml\"）" },
+        ref: { type: "string", description: "触发的分支或 tag" },
+      }, required: ["workflow_id", "ref"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "check_run_status",
+      description: "等待工作流运行完成并返回结果。workflow_type: \"normal\"（普通）、\"build_apk\"（Android 构建约3分钟）、\"fast\"（快速脚本）",
+      parameters: { type: "object", properties: {
+        run_id: { type: "string", description: "运行 ID（trigger_workflow 返回的 run_id）" },
+        workflow_type: { type: "string", description: "工作流类型：\"normal\"、\"build_apk\" 或 \"fast\"" },
+      }, required: ["run_id", "workflow_type"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "get_run_jobs",
+      description: "查看某次运行的 Jobs 及步骤（check_run_status 失败时才需要）",
+      parameters: { type: "object", properties: {
+        run_id: { type: "string", description: "运行 ID" },
+      }, required: ["run_id"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "get_job_logs",
+      description: "下载 Job 完整日志（含详细报错信息）",
+      parameters: { type: "object", properties: {
+        job_id: { type: "string", description: "Job ID（check_run_status 失败时自动附带）" },
+      }, required: ["job_id"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "cancel_workflow_run",
+      description: "取消正在运行的工作流",
+      parameters: { type: "object", properties: {
+        run_id: { type: "string", description: "运行 ID" },
+      }, required: ["run_id"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "rerun_workflow_run",
+      description: "重新运行失败的工作流（可选择只重跑失败的 jobs）",
+      parameters: { type: "object", properties: {
+        run_id: { type: "string", description: "运行 ID" },
+        failed_jobs_only: { type: "string", description: "是否只重跑失败 jobs：\"true\" 或 \"false\"" },
+      }, required: ["run_id"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "list_actions_secrets",
+      description: "查看仓库 Actions Secrets 名称列表（值不可见）",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "list_actions_variables",
+      description: "查看仓库 Actions Variables（明文环境变量）",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "set_actions_variable",
+      description: "创建或更新 Actions Variable（明文环境变量，加密 Secrets 需在 GitHub 网页设置）",
+      parameters: { type: "object", properties: {
+        name: { type: "string", description: "变量名（大写字母+下划线）" },
+        value: { type: "string", description: "变量值" },
+      }, required: ["name", "value"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "get_run_artifacts",
+      description: "查询某次运行产生的构建产物（Artifacts）列表",
+      parameters: { type: "object", properties: {
+        run_id: { type: "string", description: "运行 ID" },
+      }, required: ["run_id"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "run_lint",
+      description: "触发并运行 Lint 检查工作流，等待结果",
+      parameters: { type: "object", properties: {
+        branch: { type: "string", description: "检查的目标分支（可选）" },
+      } },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "check_security",
+      description: "安全扫描：检查硬编码密钥、eval、SQL 注入、XSS 等常见安全隐患",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "扫描路径（如 \"src/\"）" },
+      }, required: ["path"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "trigger_and_monitor_build",
+      description: "触发构建工作流并全程自动监控：失败时自动提取日志供分析修复，循环直到成功",
+      parameters: { type: "object", properties: {
+        workflow_id: { type: "string", description: "工作流文件名（如 \"build.yml\"）" },
+        ref: { type: "string", description: "触发分支" },
+        branch: { type: "string", description: "修复提交的目标分支（可选）" },
+        max_fix_attempts: { type: "string", description: "最大自动修复次数（默认 \"3\"）" },
+      }, required: ["workflow_id", "ref"] },
+    },
+  },
+  // ── Release ──────────────────────────────────────────────────────────────
+  {
+    type: "function", function: {
+      name: "list_releases",
+      description: "列出最近的 Releases",
+      parameters: { type: "object", properties: {
+        limit: { type: "string", description: "返回数量（默认 \"10\"）" },
+      } },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "get_latest_release",
+      description: "获取最新 Release 信息（tag、名称、发布时间）",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "create_release",
+      description: "创建新 Release（tag + 标题 + 发布说明）",
+      parameters: { type: "object", properties: {
+        tag_name: { type: "string", description: "tag 名称（如 \"v1.2.0\"）" },
+        name: { type: "string", description: "Release 标题" },
+        body: { type: "string", description: "发布说明（Markdown 格式）" },
+        draft: { type: "string", description: "是否为草稿：\"true\" 或 \"false\"" },
+        prerelease: { type: "string", description: "是否为预发布：\"true\" 或 \"false\"" },
+        branch: { type: "string", description: "基于哪个分支创建 tag（可选）" },
+      }, required: ["tag_name", "name", "body"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "get_merged_prs_since",
+      description: "获取指定时间点之后已合并的 PR 列表（含 labels、body、作者）",
+      parameters: { type: "object", properties: {
+        since: { type: "string", description: "起始时间（ISO 8601 格式，如 \"2024-01-15T10:30:00Z\"）" },
+      }, required: ["since"] },
+    },
+  },
+  // ── 文件请求 ─────────────────────────────────────────────────────────────
+  {
+    type: "function", function: {
+      name: "request_file",
+      description: "向用户请求上传文件（缺少图片/图标/证书等资源时使用）",
+      parameters: { type: "object", properties: {
+        filename: { type: "string", description: "需要的文件名（如 \"app-icon.png\"）" },
+        description: { type: "string", description: "描述需要什么文件及规格要求" },
+        mime_types: { type: "string", description: "允许的 MIME 类型（逗号分隔，如 \"image/png,image/jpeg\"）" },
+      }, required: ["filename", "description"] },
+    },
+  },
+];
+
 function buildLLMRequest(cfg: ModelConfig, platformKey: string): {
   url: string;
   headers: Record<string, string>;
@@ -37,13 +621,16 @@ function buildLLMRequest(cfg: ModelConfig, platformKey: string): {
 } {
   // 仅当 temperature 有值时才附加，避免覆盖模型默认行为
   const tempExtra = cfg.temperature !== undefined ? { temperature: cfg.temperature } : {};
+  // 支持 FC 的模型注入 tools 定义，并设置 tool_choice:"auto" 让模型自主决定是否调用工具
+  const fcExtra = supportsFunctionCalling(cfg.type)
+    ? { tools: TOOL_DEFINITIONS, tool_choice: "auto", parallel_tool_calls: false }
+    : {};
   switch (cfg.type) {
     case "deepseek":
       return {
         url: "https://api.deepseek.com/v1/chat/completions",
         headers: { Authorization: `Bearer ${cfg.api_key}` },
-        // max_tokens: 8192 防止 DeepSeek 在任务中途截断输出
-        bodyExtra: { model: cfg.model || "deepseek-chat", stream: true, max_tokens: 8192, ...tempExtra },
+        bodyExtra: { model: cfg.model || "deepseek-chat", stream: true, max_tokens: 8192, ...tempExtra, ...fcExtra },
       };
     case "gemini":
       // Google AI Studio 提供 OpenAI 兼容接口，无需额外适配
@@ -55,6 +642,7 @@ function buildLLMRequest(cfg: ModelConfig, platformKey: string): {
           stream: true,
           max_tokens: 16384,
           ...tempExtra,
+          ...fcExtra,
         },
       };
     case "qwen":
@@ -67,20 +655,20 @@ function buildLLMRequest(cfg: ModelConfig, platformKey: string): {
           stream: true,
           max_tokens: 8192,
           ...tempExtra,
+          ...fcExtra,
         },
       };
     case "openai":
       return {
         url: "https://api.openai.com/v1/chat/completions",
         headers: { Authorization: `Bearer ${cfg.api_key}` },
-        // max_tokens: 16384 给 GPT 系列充足输出空间
-        bodyExtra: { model: cfg.model || "gpt-4o-mini", stream: true, max_tokens: 16384, ...tempExtra },
+        bodyExtra: { model: cfg.model || "gpt-4o-mini", stream: true, max_tokens: 16384, ...tempExtra, ...fcExtra },
       };
     case "custom":
       return {
         url: cfg.endpoint!,
         headers: cfg.api_key ? { Authorization: `Bearer ${cfg.api_key}` } : {},
-        // 自定义接口同样设大 max_tokens，避免中途截断
+        // 自定义接口不注入 tools（不确定是否支持 FC）
         bodyExtra: cfg.model
           ? { model: cfg.model, stream: true, max_tokens: 8192, ...tempExtra }
           : { stream: true, max_tokens: 8192, ...tempExtra },
@@ -2554,12 +3142,80 @@ function inferTemperature(
   return 0.7;
 }
 
-function buildSystemPrompt(targetBranch?: string, isAutoMode = false): string {
+/**
+ * 构建 system prompt。
+ * - FC 模型（deepseek/openai/gemini/qwen）：精简版，工具通过 schema 传递，不再在文本里列举
+ * - 非 FC 模型（wenxin/custom）：完整版，包含工具清单说明
+ */
+function buildSystemPrompt(targetBranch?: string, isAutoMode = false, modelType = "wenxin"): string {
   const branchNote = targetBranch
     ? `**当前目标分支：\`${targetBranch}\`**（所有写入操作默认提交到此分支，除非用户明确指定其他分支）`
     : "（未指定分支，写入时使用仓库默认分支）";
 
-  // ── 普通对话模式 ────────────────────────────────────────────────────────────
+  // ── FC 模型精简版 prompt ─────────────────────────────────────────────────
+  // 工具已通过 JSON Schema 传递，不需要在 prompt 里列举；只保留行为规则
+  if (supportsFunctionCalling(modelType)) {
+    if (!isAutoMode) {
+      return `你是 GitHub 仓库开发助手，帮助用户管理仓库、查询信息、执行操作。
+${branchNote}
+
+## 核心规则
+1. 查询类问题直接调用工具给出简洁回答，不输出 PLAN。
+2. 单一操作（创建文件、合并PR、关闭Issue 等）直接执行，完成后告知结果。
+3. 复杂任务（多文件修改、新功能开发、重构）先提方案，等用户确认后再执行。
+4. 不确定意图时可以礼貌询问，而不是盲目执行。
+
+## 新功能/重构请求必须走的四阶段流程
+**阶段 1**：先用工具探索项目（file_tree → batch_read 关键文件 → grep_in_repo 定位相关代码）
+**阶段 2**：输出方案（格式见下方），等用户确认
+**阶段 3**：用户确认后，输出 PLAN 并开始执行
+**阶段 4**：完成后输出 TASK_DONE
+
+方案格式：
+## 📋 需求理解
+[需求核心、受影响代码、约束和风险]
+## 💡 方案选项
+### 方案 A — [方案名]
+- **思路**：[一句话]
+- **优点/缺点**：[关键点]
+- **预计改动**：[小/中/大]
+**我的建议**：[推荐哪个方案及理由]
+
+## 回复规范
+- 简洁：1-3 句话说明结果，不展开不必要细节
+- 遇错：告知原因和建议，询问用户如何处理
+- 语气：像熟悉 GitHub 的开发者朋友，自然简洁
+- 代码/命令：必要时用行内代码，文件名不需要全部加反引号`;
+    }
+
+    // FC + autoMode
+    return `你是 GitHub 仓库全流程开发助手。
+${branchNote}
+
+## 核心规则
+1. **首轮必须输出任务计划**：收到任务后，在回复开头输出 PLAN，然后立即开始执行第一步。
+   格式（合法 JSON，不加 markdown 代码块）：
+   PLAN:{"steps":[{"id":"1","title":"步骤名（≤8字）","desc":"一句话说明"},{"id":"2","title":"...","desc":"..."}]}
+2. **步骤标记**：切换到新步骤时输出 STEP:步骤ID（仅切换步骤时，不是每次工具调用都要输出）。
+3. **自主执行**：禁止询问用户是否继续，禁止提前结束，工具报错时分析原因后继续。
+4. **任务完成**：全部步骤完成后，在回复最开头输出 TASK_DONE，然后给一句简洁的完成总结。
+
+## 开发需求分析工作流（新功能/重构必须遵循）
+触发条件：用户说"想新增"、"帮我实现"、"重构"等涉及新功能或较大改动时：
+1. file_tree → batch_read 关键配置 → grep_in_repo 定位相关代码（探索阶段）
+2. 输出方案选项等用户确认（唯一的暂停点）
+3. 用户确认后立即输出 PLAN 并执行（不要再次询问）
+
+排查构建/部署失败时，必须自主完成全链路修复：
+get_workflow_runs → get_run_jobs → get_job_logs → 分析 → patch/write 修复 → rerun → check_run_status
+
+## 回复规范
+- 用 1-3 句话直接说明结果，不铺垫废话
+- 不使用 ## 二级标题；层次感用换行和项目符号体现
+- 错误时直接说明原因和建议`;
+  }
+
+  // ── 非 FC 模型：完整版 prompt（文心 / custom） ─────────────────────────────
   // 直接回答查询类问题；单步骤操作直接执行；复杂任务先提方案等待确认
   if (!isAutoMode) {
     return `你是 GitHub 仓库开发助手，帮助用户管理仓库、查询信息、执行简单操作。
@@ -3112,9 +3768,46 @@ GitHub API 4xx 错误自愈规则
 
 }
 
-interface Message { role: "user" | "assistant" | "system"; content: string; }
+interface Message {
+  role: "user" | "assistant" | "system" | "tool";
+  content: string;
+  /** function calling 模式下 assistant 消息携带的工具调用信息 */
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }>;
+  /** function calling 模式下 tool 角色消息必须携带的 call_id */
+  tool_call_id?: string;
+}
+
+/** callLLM 的返回结构：文本内容 + 可能的结构化工具调用 */
+interface LLMResult {
+  /** 模型输出的自由文本（FC 模式下可能为空） */
+  text: string;
+  /** 结构化工具调用（FC 模式下有值；自由文本模式下为 null） */
+  toolCall: {
+    id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+  } | null;
+}
+
 interface ChatChunk {
-  choices: Array<{ delta: { content?: string; reasoning_content?: string }; finish_reason: string | null }>;
+  choices: Array<{
+    delta: {
+      content?: string;
+      reasoning_content?: string;
+      /** FC 模式：工具调用增量 */
+      tool_calls?: Array<{
+        index: number;
+        id?: string;
+        type?: "function";
+        function?: { name?: string; arguments?: string };
+      }>;
+    };
+    finish_reason: string | null;
+  }>;
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 
@@ -3133,7 +3826,7 @@ async function callLLM(
   onThinkingChunk?: (chunk: string) => Promise<void>,
   onHeartbeat?: () => Promise<void>,
   onUsage?: (usage: LLMUsage) => void,
-): Promise<string> {
+): Promise<LLMResult> {
   const { url, headers, bodyExtra } = buildLLMRequest(cfg, platformKey);
   console.log(`[callLLM] type=${cfg.type} model=${cfg.model || "default"} url=${url}`);
 
@@ -3201,6 +3894,12 @@ async function callLLM(
   let hadReasoningContent = false; // 标记是否收到过 reasoning_content（思考过程）
   let capturedUsage: ChatChunk["usage"] | null = null;
 
+  // ── Function Calling 工具调用累积 ──────────────────────────────────────────
+  // 流式模式下，tool_calls 数据跨多个 chunk，需要逐步拼接
+  let fcId = "";
+  let fcName = "";
+  let fcArgsBuf = ""; // arguments 字符串，分多次 chunk 追加
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -3216,6 +3915,16 @@ async function callLLM(
         if (chunk.usage?.total_tokens) capturedUsage = chunk.usage;
         const delta = chunk.choices?.[0]?.delta;
         if (!delta) continue;
+
+        // ── FC 模式：累积 tool_calls ────────────────────────────────────────
+        if (delta.tool_calls && delta.tool_calls.length > 0) {
+          const tc = delta.tool_calls[0]; // parallel_tool_calls=false，只取第一个
+          if (tc.id) fcId = tc.id;
+          if (tc.function?.name) fcName = tc.function.name;
+          if (tc.function?.arguments) fcArgsBuf += tc.function.arguments;
+          if (onHeartbeat) await onHeartbeat();
+          continue; // FC 响应不产生文本 content
+        }
 
         // ── 思考过程 (DeepSeek Reasoner) ──
         if (delta.reasoning_content) {
@@ -3246,7 +3955,7 @@ async function callLLM(
     } else {
       // 粗估：平均 1 token ≈ 3 字符（中英混合）
       const inputChars = messages.reduce((s, m) => s + (typeof m.content === "string" ? m.content.length : 0), 0);
-      const outputChars = full.length;
+      const outputChars = full.length + fcArgsBuf.length;
       const est_prompt = Math.ceil(inputChars / 3);
       const est_completion = Math.ceil(outputChars / 3);
       onUsage({
@@ -3257,6 +3966,18 @@ async function callLLM(
         type: cfg.type,
       });
     }
+  }
+
+  // ── FC 工具调用优先返回 ─────────────────────────────────────────────────────
+  if (fcName) {
+    let parsedArgs: Record<string, unknown> = {};
+    try {
+      parsedArgs = JSON.parse(fcArgsBuf || "{}");
+    } catch {
+      console.warn(`[callLLM] FC arguments JSON 解析失败，原始内容：${fcArgsBuf.slice(0, 200)}`);
+    }
+    console.log(`[callLLM] FC 工具调用 name=${fcName} id=${fcId} argsLen=${fcArgsBuf.length}`);
+    return { text: full, toolCall: { id: fcId || `call-${Date.now()}`, name: fcName, arguments: parsedArgs } };
   }
 
   // ── 空响应检测：仅有 reasoning_content 但 content 始终为空 ──────────────────
@@ -3273,7 +3994,7 @@ async function callLLM(
   }
 
   console.log(`[callLLM] 完成 full.length=${full.length}`);
-  return full;
+  return { text: full, toolCall: null };
 }
 
 // ── 解析辅助工具 ──────────────────────────────────────────────────────────────
@@ -3952,7 +4673,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
-    const fullMessages: Message[] = [{ role: "system", content: buildSystemPrompt(targetBranch, isAutoMode) }, ...messages];
+    const fullMessages: Message[] = [{ role: "system", content: buildSystemPrompt(targetBranch, isAutoMode, modelConfig.type) }, ...messages];
     console.log(`[main] model=${modelConfig.type} hasApiKey=${!!modelConfig.api_key} owner=${owner} repo=${repo} resume=${isResuming} autoMode=${isAutoMode}`);
     
     // 心跳辅助函数：每次调用都向 SSE 写入一条 heartbeat，保持连接活跃
@@ -4039,6 +4760,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       let assistantText = "";
       let thinkingStarted = false;
+      // FC 模式下存储结构化工具调用（非 FC 模型保持 null，走 extractToolCall）
+      let fcToolCall: LLMResult["toolCall"] = null;
 
       // 定义思考过程回调；普通内容 chunk 触发心跳
       const onThinkingChunk = async (chunk: string) => {
@@ -4055,7 +4778,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       };
 
       try {
-        assistantText = await callLLM(modelConfig, platformKey, fullMessages, onThinkingChunk, heartbeat, onUsageCb);
+        const llmResult = await callLLM(modelConfig, platformKey, fullMessages, onThinkingChunk, heartbeat, onUsageCb);
+        assistantText = llmResult.text;
+        // FC 模式下，结构化工具调用直接挂到本轮作用域；非 FC 则为 null（后续走 extractToolCall）
+        fcToolCall = llmResult.toolCall;
         if (thinkingStarted) await sendTyped({ type: "think_end" });
       } catch (e) {
         const errMsg = (e as Error).message ?? String(e);
@@ -4139,7 +4865,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       // 移除 STEP:N 标记行（在提取工具调用前清除，避免干扰解析）
       assistantText = assistantText.replace(/\bSTEP\s*:\s*\S+[ \t]*\n?/i, "").trim();
 
-      const toolCall = extractToolCall(assistantText);
+      // ── 工具调用解析：FC 模式优先，否则退回文本解析 ─────────────────────────
+      // FC 模式：直接用 callLLM 返回的结构化工具调用（精确、无歧义）
+      // 文本模式：走 extractToolCall 正则解析（文心/custom 专用）
+      const toolCall = fcToolCall
+        ? {
+            tool: fcToolCall.name,
+            // 保留原始类型（数组参数如 batch_patch.patches 需要 Array 类型）
+            ...fcToolCall.arguments,
+            // 记录 FC 元数据供消息历史注入使用
+            _fcId: fcToolCall.id,
+          }
+        : extractToolCall(assistantText);
       if (!toolCall) {
         // ── 任务完成检测：AI 输出了 TASK_DONE 标记 或 明确的完成性语句 ──────────
         // 优先于 nudge 检查：若 AI 已确认任务完成，直接跳到最终回答，不催促工具调用
@@ -4152,13 +4889,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
         // 自主模式下：只要还在自主模式，无论 currentStepId 是否为 null 都应 nudge，
         // 防止步骤间歇期（上一步刚结束 currentStepId=null，LLM 还没开始下一步）
         // 输出文字后直接结束。nudgeCount 上限自身控制退出条件。
-        const taskOngoing = isAutoMode && !isTaskDone;
+        // FC 模式：模型已使用 function calling，但本轮没有调用工具，说明任务完成或需要纯文字回答
+        // FC 模式下不发 nudge（FC 模型能精确决策何时结束）
+        const isFCModel = supportsFunctionCalling(modelConfig.type);
+        const taskOngoing = isAutoMode && !isTaskDone && !isFCModel;
         if (taskOngoing && nudgeCount < MAX_NUDGE) {
           nudgeCount++;
           console.log(`[nudge ${nudgeCount}] totalRound=${totalRound} currentStepId=${currentStepId} 无工具调用，注入纠正提示`);
           // 保留 LLM 已输出的文字内容，再追加纠正指令
           const displayText = assistantText.replace(/\bPLAN\s*:\s*\{[\s\S]*?\}/i, "").replace(/\bTASK_DONE\b\s*/g, "").trim();
           if (displayText) await sendChunk(displayText + "\n");
+          // 非 FC 模式才注入 JSON 格式纠正（FC 模型已通过 schema 约束工具格式）
           fullMessages.push({ role: "assistant", content: rawText });
           fullMessages.push({
             role: "user",
@@ -4239,11 +4980,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
           mime_types: toolCall.mime_types || "",
         });
         // 向上下文追加：AI 已发出请求，等待用户回复
-        fullMessages.push({ role: "assistant", content: rawText });
-        fullMessages.push({
-          role: "user",
-          content: `已向用户请求上传文件"${toolCall.filename || 'file'}"，请继续等待用户上传。上传完成后系统会将文件内容附加到对话中。`,
-        });
+        // FC 模式下 assistant 消息要带 tool_calls 字段
+        if (fcToolCall) {
+          fullMessages.push({
+            role: "assistant", content: "",
+            tool_calls: [{ id: fcToolCall.id, type: "function", function: { name: fcToolCall.name, arguments: JSON.stringify(fcToolCall.arguments) } }],
+          });
+          fullMessages.push({ role: "tool", content: `已向用户请求上传文件"${toolCall.filename || 'file'}"，请继续等待用户上传。`, tool_call_id: fcToolCall.id });
+        } else {
+          fullMessages.push({ role: "assistant", content: rawText });
+          fullMessages.push({
+            role: "user",
+            content: `已向用户请求上传文件"${toolCall.filename || 'file'}"，请继续等待用户上传。上传完成后系统会将文件内容附加到对话中。`,
+          });
+        }
         // 结束本次流式（前端收到 file_request 后会引导用户上传，并开启新一轮对话）
         batchDone = true;
         break;
@@ -4308,18 +5058,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
         if (prevFails < MAX_SMART_RETRIES) {
           // ── 未超限：注入错误分析请求，让 LLM 修正策略后继续 ──────────────
           console.log(`[smart-retry] step=${failKey} failCount=${prevFails}，注入错误分析，LLM 决定下一步`);
-          // 先把这轮结果压入历史（LLM 需要看到错误内容）
-          fullMessages.push({ role: "assistant", content: rawText });
-          fullMessages.push({
-            role: "user",
-            content: [
-              `⚠️ 工具执行失败（第 ${prevFails} 次，最多允许 ${MAX_SMART_RETRIES} 次）。`,
-              `\n\n错误详情：\n${toolResult.slice(0, 2000)}`,
-              `\n\n请分析上述错误，判断失败原因（参数错误？路径不存在？权限问题？），`,
-              `然后采取修正行动：换用正确参数重试、换一个工具、或拆分步骤。`,
-              `不要重复使用完全相同的参数。`,
-            ].join(""),
-          });
+          const retryContent = [
+            `⚠️ 工具执行失败（第 ${prevFails} 次，最多允许 ${MAX_SMART_RETRIES} 次）。`,
+            `\n\n错误详情：\n${toolResult.slice(0, 2000)}`,
+            `\n\n请分析上述错误，判断失败原因（参数错误？路径不存在？权限问题？），`,
+            `然后采取修正行动：换用正确参数重试、换一个工具、或拆分步骤。`,
+            `不要重复使用完全相同的参数。`,
+          ].join("");
+          // FC 模式：assistant 带 tool_calls，结果用 role:tool
+          if (fcToolCall) {
+            fullMessages.push({
+              role: "assistant", content: "",
+              tool_calls: [{ id: fcToolCall.id, type: "function", function: { name: fcToolCall.name, arguments: JSON.stringify(fcToolCall.arguments) } }],
+            });
+            fullMessages.push({ role: "tool", content: retryContent, tool_call_id: fcToolCall.id });
+          } else {
+            fullMessages.push({ role: "assistant", content: rawText });
+            fullMessages.push({ role: "user", content: retryContent });
+          }
           // break 让外层主循环重新调用 LLM 做决策
           break;
         }
@@ -4335,23 +5091,29 @@ Deno.serve(async (req: Request): Promise<Response> => {
         }
         currentStepId = null;
         // 注入修复清单生成指令
-        fullMessages.push({ role: "assistant", content: rawText });
-        fullMessages.push({
-          role: "user",
-          content: [
-            `⚠️ 系统提示：步骤 "${failKey}" 已连续失败 ${MAX_SMART_RETRIES} 次，自动修复终止。`,
-            `\n最终错误：${toolResult.slice(0, 1000)}`,
-            `\n\n请根据以上错误信息，以 Markdown 清单格式输出完整的手动修复步骤，`,
-            `帮助用户自行处理问题。不要再调用工具，直接输出清单即可。`,
-          ].join(""),
-        });
+        const repairInstruction = [
+          `⚠️ 系统提示：步骤 "${failKey}" 已连续失败 ${MAX_SMART_RETRIES} 次，自动修复终止。`,
+          `\n最终错误：${toolResult.slice(0, 1000)}`,
+          `\n\n请根据以上错误信息，以 Markdown 清单格式输出完整的手动修复步骤，`,
+          `帮助用户自行处理问题。不要再调用工具，直接输出清单即可。`,
+        ].join("");
+        if (fcToolCall) {
+          fullMessages.push({
+            role: "assistant", content: "",
+            tool_calls: [{ id: fcToolCall.id, type: "function", function: { name: fcToolCall.name, arguments: JSON.stringify(fcToolCall.arguments) } }],
+          });
+          fullMessages.push({ role: "tool", content: repairInstruction, tool_call_id: fcToolCall.id });
+        } else {
+          fullMessages.push({ role: "assistant", content: rawText });
+          fullMessages.push({ role: "user", content: repairInstruction });
+        }
         try {
-          const repairResp = await callLLM(
+          const repairResult = await callLLM(
             { ...modelConfig, temperature: 0.3 }, // 修复清单用低温度，确保输出聚焦
             platformKey,
             fullMessages,
           );
-          await streamAnswer(repairResp, sendChunk, 10, () => abortSig.aborted);
+          await streamAnswer(repairResult.text, sendChunk, 10, () => abortSig.aborted);
         } catch (_e) {
           await streamAnswer(
             `⚠️ 步骤 "${failKey}" 执行失败（已重试 ${MAX_SMART_RETRIES} 次），自动修复终止。请检查上方日志并手动处理。`,
@@ -4362,18 +5124,29 @@ Deno.serve(async (req: Request): Promise<Response> => {
         break;
       }
 
-      // 将原始 assistantText（含 PLAN/STEP 标记）压入历史，保持上下文完整性
-      fullMessages.push({ role: "assistant", content: rawText });
+      // ── 将本轮工具调用压入消息历史（保持上下文完整）────────────────────────
       // 工具结果注入截断：文件内容类工具允许 30000 字符（约 600 行代码），其他工具 4000 字符
       const fileContentTools = ["read_file", "batch_read", "grep_in_file", "get_file_info"];
       const resultLimit = fileContentTools.includes(String(toolCall.tool)) ? 30000 : 4000;
       const truncatedResult = toolResult.length > resultLimit
         ? toolResult.slice(0, resultLimit) + `\n…（内容已截断，原始长度 ${toolResult.length} 字符，如需完整内容请重新调用工具并缩小查询范围）`
         : toolResult;
-      fullMessages.push({
-        role: "user",
-        content: `工具执行结果：\n${truncatedResult}\n\n请根据结果继续执行下一步。若还有未完成的步骤，继续调用工具；若全部步骤已完成，在回复最开头输出 TASK_DONE，然后跟一句简洁的完成总结，不要再输出工具 JSON。`,
-      });
+      if (fcToolCall) {
+        // FC 模式：标准 OpenAI function calling 消息格式
+        // assistant → tool（不是 user），保证模型的消息历史格式完全兼容
+        fullMessages.push({
+          role: "assistant", content: "",
+          tool_calls: [{ id: fcToolCall.id, type: "function", function: { name: fcToolCall.name, arguments: JSON.stringify(fcToolCall.arguments) } }],
+        });
+        fullMessages.push({ role: "tool", content: truncatedResult, tool_call_id: fcToolCall.id });
+      } else {
+        // 非 FC 模式：保持原有文本交互格式
+        fullMessages.push({ role: "assistant", content: rawText });
+        fullMessages.push({
+          role: "user",
+          content: `工具执行结果：\n${truncatedResult}\n\n请根据结果继续执行下一步。若还有未完成的步骤，继续调用工具；若全部步骤已完成，在回复最开头输出 TASK_DONE，然后跟一句简洁的完成总结，不要再输出工具 JSON。`,
+        });
+      }
 
       // ── 上下文滑动窗口压缩：消息超过 60 条时，压缩中间的工具交互历史 ──────────
       // 保留：[0]=system、[1..4]=前4条用户/助手消息（任务背景）、[-20..]=最近20条

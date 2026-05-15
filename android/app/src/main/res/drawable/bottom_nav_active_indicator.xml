@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  M3 BottomNavigationView Active Indicator：
+  圆角胶囊形状（cornerRadius = 50%，符合 Material 3 规范）。
+  填充色由 itemActiveIndicatorColor 在运行时覆盖，此处仅定义形状。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="999dp" />
+    <solid android:color="@color/bottom_nav_indicator_bg" />
+</shape>

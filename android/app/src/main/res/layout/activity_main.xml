@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  LinearLayout（竖向）：
+    - WebView：填充剩余空间，显示 Web 应用内容
+    - BottomNavigationView：固定在底部，高度 56dp，映射核心导航功能
+  splashOverlay 叠加于整个布局顶层，启动时遮盖初始化闪烁。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- 主体：状态栏占位 + WebView + 底部导航栏垂直排列 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!--
+          系统状态栏占位符：高度由 WindowInsets statusBars().top 动态设置。
+          确保 WebView 内容从状态栏下方开始，避免与状态栏图标重叠。
+          启动画面期间状态栏被隐藏，insets = 0，spacer 高度 = 0，不占空间。
+          dismissSplash 后状态栏恢复显示，insets 更新，spacer 自动撑开正确高度。
+        -->
+        <View
+            android:id="@+id/statusBarSpacer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:background="@color/main_bg" />
+
+        <WebView
+            android:id="@+id/webView"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!--
+          ══ 底部导航容器 ═════════════════════════════════════════════
+          结构：顶部分割线 + BottomNavigationView（62dp，紧凑规格）+ navBarSpacer
+
+          高度说明（labeled 模式，紧凑版）：
+            图标区域                : 20dp
+            图标与文字间距          : 2dp
+            标签文字（10sp）        : ~13dp
+            上下内边距              : ~13dp（合计 ~27dp）
+            总计                   : 62dp
+
+          Active Indicator：
+            透明色，选中状态仅通过图标/文字强调色区分，
+            点击涟漪效果覆盖整个 item 区域（图标+文字视为整体）。
+
+          不使用 updatePadding(bottom)：系统导航条高度由 navBarSpacer 独立承接。
+        -->
+        <LinearLayout
+            android:id="@+id/bottomNavContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@color/bottom_nav_background"
+            android:elevation="8dp">
+
+            <!-- 顶部分割线：1dp 高，与 Web 端 border token 对齐 -->
+            <View
+                android:id="@+id/navDivider"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/bottom_nav_divider" />
+
+            <com.google.android.material.bottomnavigation.BottomNavigationView
+                android:id="@+id/bottomNav"
+                style="@style/Widget.Material3.BottomNavigationView"
+                android:layout_width="match_parent"
+                android:layout_height="62dp"
+                android:background="@android:color/transparent"
+                app:menu="@menu/bottom_nav_menu"
+                app:itemIconTint="@color/bottom_nav_colors"
+                app:itemTextColor="@color/bottom_nav_colors"
+                app:itemTextAppearanceActive="@style/BottomNavTextActive"
+                app:itemTextAppearanceInactive="@style/BottomNavTextInactive"
+                app:itemIconSize="20dp"
+                app:itemActiveIndicatorStyle="@style/BottomNavActiveIndicator"
+                app:labelVisibilityMode="labeled"
+                app:elevation="0dp" />
+
+            <!-- 系统导航条占位符：由 WindowInsets 动态设置高度，不影响 BottomNavView 布局 -->
+            <View
+                android:id="@+id/navBarSpacer"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:background="@color/bottom_nav_background" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- 启动遮罩：全屏启动画面，WebView 就绪后淡出 -->
+    <include
+        android:id="@+id/splashOverlay"
+        layout="@layout/splash_screen"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>
+

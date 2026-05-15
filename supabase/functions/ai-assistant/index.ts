@@ -4690,6 +4690,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const fullMessages: Message[] = [{ role: "system", content: buildSystemPrompt(targetBranch, isAutoMode, modelConfig.type) }, ...messages];
     console.log(`[main] model=${modelConfig.type} hasApiKey=${!!modelConfig.api_key} owner=${owner} repo=${repo} resume=${isResuming} autoMode=${isAutoMode}`);
+    // 检查前端传来的历史消息：如果已有带 reasoning_content 的 assistant 消息，
+    // 后续所有 assistant 消息也必须携带该字段（DeepSeek-R1 API 强制要求）
+    // 注：前端目前不保存此字段，所以 messages 里的历史不会触发此标志，
+    //     但对未来兼容性保留此检测
+    const historyHasReasoning = messages.some(m => m.role === "assistant" && m.reasoning_content);
     
     // 心跳辅助函数：每次调用都向 SSE 写入一条 heartbeat，保持连接活跃
     const heartbeat = () => sendTyped({ type: "heartbeat" });
@@ -4745,6 +4750,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // 智能重试：记录每个步骤（stepId）的失败次数，超过 MAX_SMART_RETRIES 才终止
     const stepFailCount = new Map<string, number>();
     const MAX_SMART_RETRIES = 2;
+    /**
+     * 本批次内是否曾经收到过 reasoning_content（DeepSeek-R1 思考模式）。
+     * ⚠️ 一旦为 true，后续所有 assistant 消息都必须携带 reasoning_content（可为空字符串），
+     *    否则 DeepSeek API 报 HTTP 400：reasoning_content must be passed back。
+     */
+    let reasoningContentEverSeen = historyHasReasoning;
 
     // ── 恢复执行时，首轮注入续跑指令 ───────────────────────────────────────
     if (isResuming) {
@@ -4801,6 +4812,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         fcToolCall = llmResult.toolCall;
         // 保存思考内容：DeepSeek-R1 等思考模型要求下轮 assistant 消息必须原样传回
         lastReasoningContent = llmResult.reasoningContent;
+        // 标记：本批次曾收到过 reasoning_content；后续所有 assistant 消息均需携带该字段
+        if (llmResult.reasoningContent) reasoningContentEverSeen = true;
         if (thinkingStarted) await sendTyped({ type: "think_end" });
       } catch (e) {
         const errMsg = (e as Error).message ?? String(e);
@@ -4919,7 +4932,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           const displayText = assistantText.replace(/\bPLAN\s*:\s*\{[\s\S]*?\}/i, "").replace(/\bTASK_DONE\b\s*/g, "").trim();
           if (displayText) await sendChunk(displayText + "\n");
           // 非 FC 模式才注入 JSON 格式纠正（FC 模型已通过 schema 约束工具格式）
-          fullMessages.push({ role: "assistant", content: rawText, ...(lastReasoningContent ? { reasoning_content: lastReasoningContent } : {}) });
+          fullMessages.push({ role: "assistant", content: rawText, ...(reasoningContentEverSeen ? { reasoning_content: lastReasoningContent ?? "" } : {}) });
           fullMessages.push({
             role: "user",
             content: "⚠️ 系统提示：你刚才没有输出工具调用 JSON。请直接输出下一个工具的 JSON，不要有任何 markdown 围栏或额外解释，格式示例：\n{\"tool\":\"list_files\",\"path\":\"\"}\n请继续执行任务。",
@@ -5007,7 +5020,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           });
           fullMessages.push({ role: "tool", content: `已向用户请求上传文件"${toolCall.filename || 'file'}"，请继续等待用户上传。`, tool_call_id: fcToolCall.id });
         } else {
-          fullMessages.push({ role: "assistant", content: rawText, ...(lastReasoningContent ? { reasoning_content: lastReasoningContent } : {}) });
+          fullMessages.push({ role: "assistant", content: rawText, ...(reasoningContentEverSeen ? { reasoning_content: lastReasoningContent ?? "" } : {}) });
           fullMessages.push({
             role: "user",
             content: `已向用户请求上传文件"${toolCall.filename || 'file'}"，请继续等待用户上传。上传完成后系统会将文件内容附加到对话中。`,
@@ -5092,7 +5105,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
             });
             fullMessages.push({ role: "tool", content: retryContent, tool_call_id: fcToolCall.id });
           } else {
-            fullMessages.push({ role: "assistant", content: rawText, ...(lastReasoningContent ? { reasoning_content: lastReasoningContent } : {}) });
+            fullMessages.push({ role: "assistant", content: rawText, ...(reasoningContentEverSeen ? { reasoning_content: lastReasoningContent ?? "" } : {}) });
             fullMessages.push({ role: "user", content: retryContent });
           }
           // break 让外层主循环重新调用 LLM 做决策
@@ -5123,7 +5136,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           });
           fullMessages.push({ role: "tool", content: repairInstruction, tool_call_id: fcToolCall.id });
         } else {
-          fullMessages.push({ role: "assistant", content: rawText, ...(lastReasoningContent ? { reasoning_content: lastReasoningContent } : {}) });
+          fullMessages.push({ role: "assistant", content: rawText, ...(reasoningContentEverSeen ? { reasoning_content: lastReasoningContent ?? "" } : {}) });
           fullMessages.push({ role: "user", content: repairInstruction });
         }
         try {
@@ -5160,7 +5173,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         fullMessages.push({ role: "tool", content: truncatedResult, tool_call_id: fcToolCall.id });
       } else {
         // 非 FC 模式：保持原有文本交互格式
-        fullMessages.push({ role: "assistant", content: rawText, ...(lastReasoningContent ? { reasoning_content: lastReasoningContent } : {}) });
+        fullMessages.push({ role: "assistant", content: rawText, ...(reasoningContentEverSeen ? { reasoning_content: lastReasoningContent ?? "" } : {}) });
         fullMessages.push({
           role: "user",
           content: `工具执行结果：\n${truncatedResult}\n\n请根据结果继续执行下一步。若还有未完成的步骤，继续调用工具；若全部步骤已完成，在回复最开头输出 TASK_DONE，然后跟一句简洁的完成总结，不要再输出工具 JSON。`,

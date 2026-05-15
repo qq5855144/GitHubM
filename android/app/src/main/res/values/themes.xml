@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      使用 Theme.Material3（material 1.12.0 的默认主题基础）。
+      statusBarColor / navigationBarColor 已在 API 35 废弃，
+      统一由 MainActivity 通过 WindowInsetsControllerCompat 控制。
+    -->
+    <style name="Theme.GitHubManager" parent="Theme.Material3.Light.NoActionBar">
+        <!--
+          冷启动窗口背景：与浅色模式启动画面背景色一致，避免白屏闪烁。
+          使用颜色资源（@color/splash_bg_solid），values-night 自动切换。
+        -->
+        <item name="android:windowBackground">@color/splash_bg_solid</item>
+        <!-- API 28+ 刘海屏延伸；低版本自动忽略 -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <!-- Material3 主题色 -->
+        <item name="colorPrimary">#7c3aed</item>
+        <item name="colorPrimaryVariant">#6d28d9</item>
+        <item name="colorOnPrimary">#ffffff</item>
+        <!-- M3 Active Indicator 填充色（BottomNav 选中指示器背景）：浅紫 -->
+        <item name="colorSecondaryContainer">#EDE9FE</item>
+        <item name="colorOnSecondaryContainer">#5B21B6</item>
+    </style>
+
+    <!--
+      ══ 底部导航栏 M3 样式 ══════════════════════════════════════════
+
+      BottomNavTextActive / BottomNavTextInactive
+        紧凑规格：10sp，图标与文字间距更小，整体高度更紧凑。
+        选中与未选中使用相同字号，靠颜色区分；选中加粗增强层次感。
+    -->
+    <style name="BottomNavTextActive">
+        <item name="android:textSize">10sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.01</item>
+    </style>
+
+    <style name="BottomNavTextInactive">
+        <item name="android:textSize">10sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:letterSpacing">0.01</item>
+    </style>
+
+    <!--
+      BottomNavActiveIndicator
+        Active Indicator 设为透明：选中状态仅通过图标/文字强调色区分，
+        不显示胶囊背景；点击涟漪覆盖整个 item 区域（图标+文字视为整体）。
+        尺寸保留（运行时颜色由 applyNativeTheme 设为透明）。
+    -->
+    <style name="BottomNavActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:width">48dp</item>
+        <item name="android:height">24dp</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+    </style>
+
+</resources>

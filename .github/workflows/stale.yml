@@ -1,0 +1,62 @@
+# Issue 自动化管理工作流
+# 每天 UTC 02:00（北京时间 10:00）扫描 stale Issues 和 PR：
+#   - 超过 30 天无活跃的 Issue/PR 打上 stale 标签并发送提醒
+#   - 打上 stale 标签后再过 7 天仍无回复则自动关闭
+#   - 带有 pinned / security / critical 标签的 Issue 不受影响
+name: Issue 自动管理
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 每天 UTC 02:00 触发
+  workflow_dispatch:        # 支持手动触发，方便调试
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    name: 清理长期无响应的 Issue / PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          # ── Issue 配置 ────────────────────────────────────────────
+          stale-issue-label: 'stale'
+          stale-issue-message: |
+            👋 你好！此 Issue 已超过 30 天没有新的活动。
+
+            如果问题仍然存在，请在此留言提供更多信息或更新最新状态；
+            如果问题已解决，欢迎直接关闭此 Issue。
+
+            如果没有新的更新，将在 **7 天后自动关闭**。感谢理解 🙏
+          close-issue-message: |
+            由于长期没有新的活动，此 Issue 已被自动关闭。
+            如果问题仍然存在，欢迎随时重新开启或创建新 Issue，并提供最新的复现信息。
+
+          # ── PR 配置 ──────────────────────────────────────────────
+          stale-pr-label: 'stale'
+          stale-pr-message: |
+            👋 此 Pull Request 已超过 45 天没有新的活动。
+
+            请确认是否仍需要合并此 PR，如有需要请更新代码并留言告知。
+            如果没有新的更新，将在 **7 天后自动关闭**。
+          close-pr-message: |
+            由于长期没有新的活动，此 Pull Request 已被自动关闭。
+            如仍需合并，请重新开启并 rebase 到最新 main 分支。
+
+          # ── 时间配置 ─────────────────────────────────────────────
+          days-before-issue-stale: 30    # Issue 超过 30 天无活跃 → stale
+          days-before-issue-close: 7     # stale 后再过 7 天 → 自动关闭
+          days-before-pr-stale: 45       # PR 超过 45 天无活跃 → stale
+          days-before-pr-close: 7        # stale 后再过 7 天 → 自动关闭
+
+          # ── 豁免配置（带这些标签的不触发 stale 机制） ─────────────
+          exempt-issue-labels: 'pinned,security,critical,roadmap,help-wanted'
+          exempt-pr-labels: 'pinned,security,critical,do-not-close'
+
+          # ── 每次运行最多处理数量（避免 API rate limit） ───────────
+          operations-per-run: 100
+
+          # ── 允许重新激活（有新活动时自动移除 stale 标签） ──────────
+          remove-stale-when-updated: true

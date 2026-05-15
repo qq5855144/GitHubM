@@ -3779,12 +3779,19 @@ interface Message {
   }>;
   /** function calling 模式下 tool 角色消息必须携带的 call_id */
   tool_call_id?: string;
+  /**
+   * DeepSeek-R1 等思考模型的推理过程。
+   * ⚠️ 必须在下一轮 assistant 消息中原样传回，否则 API 报 HTTP 400。
+   */
+  reasoning_content?: string;
 }
 
 /** callLLM 的返回结构：文本内容 + 可能的结构化工具调用 */
 interface LLMResult {
   /** 模型输出的自由文本（FC 模式下可能为空） */
   text: string;
+  /** DeepSeek-R1 等思考模型的推理过程，必须在下轮 assistant 消息中原样传回 */
+  reasoningContent?: string;
   /** 结构化工具调用（FC 模式下有值；自由文本模式下为 null） */
   toolCall: {
     id: string;
@@ -3899,6 +3906,9 @@ async function callLLM(
   let fcId = "";
   let fcName = "";
   let fcArgsBuf = ""; // arguments 字符串，分多次 chunk 追加
+  // ── 思考内容累积（DeepSeek-R1 等）──────────────────────────────────────────
+  // reasoning_content 必须在下轮 assistant 消息中原样传回，此处完整保留
+  let reasoningFull = "";
 
   while (true) {
     const { done, value } = await reader.read();
@@ -3929,6 +3939,7 @@ async function callLLM(
         // ── 思考过程 (DeepSeek Reasoner) ──
         if (delta.reasoning_content) {
           hadReasoningContent = true;
+          reasoningFull += delta.reasoning_content; // 累积完整思考内容，供下轮传回
           if (onThinkingChunk) await onThinkingChunk(delta.reasoning_content);
         } else if (onHeartbeat) {
           // 非思考内容时，每次收到 chunk 就发心跳，防止 SSE 连接超时
@@ -3977,7 +3988,11 @@ async function callLLM(
       console.warn(`[callLLM] FC arguments JSON 解析失败，原始内容：${fcArgsBuf.slice(0, 200)}`);
     }
     console.log(`[callLLM] FC 工具调用 name=${fcName} id=${fcId} argsLen=${fcArgsBuf.length}`);
-    return { text: full, toolCall: { id: fcId || `call-${Date.now()}`, name: fcName, arguments: parsedArgs } };
+    return {
+      text: full,
+      reasoningContent: reasoningFull || undefined,
+      toolCall: { id: fcId || `call-${Date.now()}`, name: fcName, arguments: parsedArgs },
+    };
   }
 
   // ── 空响应检测：仅有 reasoning_content 但 content 始终为空 ──────────────────
@@ -3994,7 +4009,7 @@ async function callLLM(
   }
 
   console.log(`[callLLM] 完成 full.length=${full.length}`);
-  return { text: full, toolCall: null };
+  return { text: full, reasoningContent: reasoningFull || undefined, toolCall: null };
 }
 
 // ── 解析辅助工具 ──────────────────────────────────────────────────────────────
@@ -4762,6 +4777,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       let thinkingStarted = false;
       // FC 模式下存储结构化工具调用（非 FC 模型保持 null，走 extractToolCall）
       let fcToolCall: LLMResult["toolCall"] = null;
+      /** 本轮 LLM 思考内容（DeepSeek-R1 等），下轮 assistant 消息必须原样传回 */
+      let lastReasoningContent: string | undefined;
 
       // 定义思考过程回调；普通内容 chunk 触发心跳
       const onThinkingChunk = async (chunk: string) => {
@@ -4782,6 +4799,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         assistantText = llmResult.text;
         // FC 模式下，结构化工具调用直接挂到本轮作用域；非 FC 则为 null（后续走 extractToolCall）
         fcToolCall = llmResult.toolCall;
+        // 保存思考内容：DeepSeek-R1 等思考模型要求下轮 assistant 消息必须原样传回
+        lastReasoningContent = llmResult.reasoningContent;
         if (thinkingStarted) await sendTyped({ type: "think_end" });
       } catch (e) {
         const errMsg = (e as Error).message ?? String(e);
@@ -4900,7 +4919,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           const displayText = assistantText.replace(/\bPLAN\s*:\s*\{[\s\S]*?\}/i, "").replace(/\bTASK_DONE\b\s*/g, "").trim();
           if (displayText) await sendChunk(displayText + "\n");
           // 非 FC 模式才注入 JSON 格式纠正（FC 模型已通过 schema 约束工具格式）
-          fullMessages.push({ role: "assistant", content: rawText });
+          fullMessages.push({ role: "assistant", content: rawText, ...(lastReasoningContent ? { reasoning_content: lastReasoningContent } : {}) });
           fullMessages.push({
             role: "user",
             content: "⚠️ 系统提示：你刚才没有输出工具调用 JSON。请直接输出下一个工具的 JSON，不要有任何 markdown 围栏或额外解释，格式示例：\n{\"tool\":\"list_files\",\"path\":\"\"}\n请继续执行任务。",
@@ -4988,7 +5007,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           });
           fullMessages.push({ role: "tool", content: `已向用户请求上传文件"${toolCall.filename || 'file'}"，请继续等待用户上传。`, tool_call_id: fcToolCall.id });
         } else {
-          fullMessages.push({ role: "assistant", content: rawText });
+          fullMessages.push({ role: "assistant", content: rawText, ...(lastReasoningContent ? { reasoning_content: lastReasoningContent } : {}) });
           fullMessages.push({
             role: "user",
             content: `已向用户请求上传文件"${toolCall.filename || 'file'}"，请继续等待用户上传。上传完成后系统会将文件内容附加到对话中。`,
@@ -5073,7 +5092,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
             });
             fullMessages.push({ role: "tool", content: retryContent, tool_call_id: fcToolCall.id });
           } else {
-            fullMessages.push({ role: "assistant", content: rawText });
+            fullMessages.push({ role: "assistant", content: rawText, ...(lastReasoningContent ? { reasoning_content: lastReasoningContent } : {}) });
             fullMessages.push({ role: "user", content: retryContent });
           }
           // break 让外层主循环重新调用 LLM 做决策
@@ -5104,7 +5123,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           });
           fullMessages.push({ role: "tool", content: repairInstruction, tool_call_id: fcToolCall.id });
         } else {
-          fullMessages.push({ role: "assistant", content: rawText });
+          fullMessages.push({ role: "assistant", content: rawText, ...(lastReasoningContent ? { reasoning_content: lastReasoningContent } : {}) });
           fullMessages.push({ role: "user", content: repairInstruction });
         }
         try {
@@ -5141,7 +5160,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         fullMessages.push({ role: "tool", content: truncatedResult, tool_call_id: fcToolCall.id });
       } else {
         // 非 FC 模式：保持原有文本交互格式
-        fullMessages.push({ role: "assistant", content: rawText });
+        fullMessages.push({ role: "assistant", content: rawText, ...(lastReasoningContent ? { reasoning_content: lastReasoningContent } : {}) });
         fullMessages.push({
           role: "user",
           content: `工具执行结果：\n${truncatedResult}\n\n请根据结果继续执行下一步。若还有未完成的步骤，继续调用工具；若全部步骤已完成，在回复最开头输出 TASK_DONE，然后跟一句简洁的完成总结，不要再输出工具 JSON。`,

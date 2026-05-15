@@ -4479,6 +4479,40 @@ async function dbUpdateStep(
   } catch (e) { console.error("[db] updateStep exception", (e as Error).message); }
 }
 
+/**
+ * 清理消息链中的不完整 tool_calls 对。
+ * slice(-60) 截断可能导致：
+ * 1. 开头保留的第一条是 tool 消息（前面的 assistant 被截掉）
+ * 2. 末尾保留的最后一条是 assistant(tool_calls)（后面的 tool 被截掉）
+ * 这两种情况都会触发 LLM API 的 HTTP 400 错误。
+ */
+function sanitizeToolCallMessages(msgs: Message[]): Message[] {
+  if (msgs.length === 0) return [];
+  const result = [...msgs];
+
+  // 1. 从开头移除：没有对应 assistant(tool_calls) 的孤立 tool 消息
+  while (result.length > 0) {
+    const first = result[0];
+    if (first.role === "tool" && first.tool_call_id) {
+      result.shift();
+    } else {
+      break;
+    }
+  }
+
+  // 2. 从末尾移除：没有对应 tool 回复的不完整 assistant(tool_calls)
+  while (result.length > 0) {
+    const last = result[result.length - 1];
+    if (last.role === "assistant" && last.tool_calls && last.tool_calls.length > 0) {
+      result.pop();
+    } else {
+      break;
+    }
+  }
+
+  return result;
+}
+
 /** 保存 messages 快照（用于批次中断后恢复） */
 async function dbSaveSnapshot(
   sb: ReturnType<typeof createClient>,
@@ -4489,7 +4523,8 @@ async function dbSaveSnapshot(
 ) {
   try {
     // 保留最近 60 条消息，防止快照过大（jsonb 列最大 1GB，但实际控制合理大小）
-    const snapshot = messages.slice(-60);
+    // ⚠️ 截断可能导致不完整的 tool_calls 对，保存前必须清理
+    const snapshot = sanitizeToolCallMessages(messages.slice(-60));
     await sb
       .from("task_workflows")
       .update({
@@ -4513,8 +4548,10 @@ async function dbLoadSnapshot(
       .eq("id", workflowId)
       .maybeSingle();
     if (error || !data) return null;
+    // ⚠️ 加载后再次清理：旧快照可能包含不完整的 tool_calls 对
+    const rawMessages = (data.messages_snapshot as Message[]) ?? [];
     return {
-      messages: (data.messages_snapshot as Message[]) ?? [],
+      messages: sanitizeToolCallMessages(rawMessages),
       lastStepId: (data.last_step_id as string) ?? null,
       taskSummary: (data.task_summary as string) ?? "",
     };

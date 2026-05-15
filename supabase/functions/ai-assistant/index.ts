@@ -35,7 +35,10 @@ interface ModelConfig {
 // 文心 / custom 仍走 system prompt 纯文本模式
 
 /** 判断模型类型是否支持 OpenAI 兼容 function calling */
-function supportsFunctionCalling(type: string): boolean {
+function supportsFunctionCalling(type: string, model?: string): boolean {
+  // deepseek-reasoner 是思考模型，不支持 Function Calling（会忽略 tools 参数并产生兼容性问题）
+  // 其他 deepseek 模型（如 deepseek-chat）支持 FC
+  if (type === "deepseek" && model && model.includes("reasoner")) return false;
   return ["deepseek", "openai", "gemini", "qwen"].includes(type);
 }
 
@@ -622,7 +625,7 @@ function buildLLMRequest(cfg: ModelConfig, platformKey: string): {
   // 仅当 temperature 有值时才附加，避免覆盖模型默认行为
   const tempExtra = cfg.temperature !== undefined ? { temperature: cfg.temperature } : {};
   // 支持 FC 的模型注入 tools 定义，并设置 tool_choice:"auto" 让模型自主决定是否调用工具
-  const fcExtra = supportsFunctionCalling(cfg.type)
+  const fcExtra = supportsFunctionCalling(cfg.type, cfg.model)
     ? { tools: TOOL_DEFINITIONS, tool_choice: "auto", parallel_tool_calls: false }
     : {};
   switch (cfg.type) {
@@ -3147,14 +3150,14 @@ function inferTemperature(
  * - FC 模型（deepseek/openai/gemini/qwen）：精简版，工具通过 schema 传递，不再在文本里列举
  * - 非 FC 模型（wenxin/custom）：完整版，包含工具清单说明
  */
-function buildSystemPrompt(targetBranch?: string, isAutoMode = false, modelType = "wenxin"): string {
+function buildSystemPrompt(targetBranch?: string, isAutoMode = false, modelType = "wenxin", modelConfig?: { model?: string }): string {
   const branchNote = targetBranch
     ? `**当前目标分支：\`${targetBranch}\`**（所有写入操作默认提交到此分支，除非用户明确指定其他分支）`
     : "（未指定分支，写入时使用仓库默认分支）";
 
   // ── FC 模型精简版 prompt ─────────────────────────────────────────────────
   // 工具已通过 JSON Schema 传递，不需要在 prompt 里列举；只保留行为规则
-  if (supportsFunctionCalling(modelType)) {
+  if (supportsFunctionCalling(modelType, modelConfig?.model)) {
     if (!isAutoMode) {
       return `你是 GitHub 仓库开发助手，帮助用户管理仓库、查询信息、执行操作。
 ${branchNote}
@@ -3837,6 +3840,25 @@ async function callLLM(
   const { url, headers, bodyExtra } = buildLLMRequest(cfg, platformKey);
   console.log(`[callLLM] type=${cfg.type} model=${cfg.model || "default"} url=${url}`);
 
+  // ── DeepSeek-R1 reasoning_content 一致性修复 ──────────────────────────────
+  // DeepSeek API 规则：messages 中只要有任意一条 assistant 消息携带了 reasoning_content，
+  // 则同一请求里【所有】assistant 消息都必须携带该字段（可为空字符串""）。
+  // 在此处做防御性修复，确保无论外部代码如何构建 messages，发出去的总是合法的。
+  const hasAnyReasoning = messages.some(m => m.role === "assistant" && m.reasoning_content != null);
+  const safeMessages: Message[] = hasAnyReasoning
+    ? messages.map(m =>
+        m.role === "assistant" && m.reasoning_content == null
+          ? { ...m, reasoning_content: "" }
+          : m
+      )
+    : messages;
+  if (hasAnyReasoning) {
+    const fixed = safeMessages.filter(m => m.role === "assistant" && m.reasoning_content === "").length;
+    if (fixed > 0) {
+      console.log(`[callLLM] reasoning_content 修复：为 ${fixed} 条 assistant 消息补充了空字符串，防止 HTTP 400`);
+    }
+  }
+
   // ── LLM fetch 超时：90s 防止 TCP 连接永久挂起 ─────────────────────────────
   // Edge Function 自身有 ~240s 超时，此处设 90s 确保在 Edge 超时前得到错误反馈
   const llmAbort = new AbortController();
@@ -3847,7 +3869,7 @@ async function callLLM(
     res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({ messages, ...bodyExtra }),
+      body: JSON.stringify({ messages: safeMessages, ...bodyExtra }),
       signal: llmAbort.signal,
     });
   } catch (e) {
@@ -4688,7 +4710,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
-    const fullMessages: Message[] = [{ role: "system", content: buildSystemPrompt(targetBranch, isAutoMode, modelConfig.type) }, ...messages];
+    const fullMessages: Message[] = [{ role: "system", content: buildSystemPrompt(targetBranch, isAutoMode, modelConfig.type, modelConfig) }, ...messages];
     console.log(`[main] model=${modelConfig.type} hasApiKey=${!!modelConfig.api_key} owner=${owner} repo=${repo} resume=${isResuming} autoMode=${isAutoMode}`);
     // 检查前端传来的历史消息：如果已有带 reasoning_content 的 assistant 消息，
     // 后续所有 assistant 消息也必须携带该字段（DeepSeek-R1 API 强制要求）
@@ -4923,7 +4945,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         // 输出文字后直接结束。nudgeCount 上限自身控制退出条件。
         // FC 模式：模型已使用 function calling，但本轮没有调用工具，说明任务完成或需要纯文字回答
         // FC 模式下不发 nudge（FC 模型能精确决策何时结束）
-        const isFCModel = supportsFunctionCalling(modelConfig.type);
+        const isFCModel = supportsFunctionCalling(modelConfig.type, modelConfig.model);
         const taskOngoing = isAutoMode && !isTaskDone && !isFCModel;
         if (taskOngoing && nudgeCount < MAX_NUDGE) {
           nudgeCount++;

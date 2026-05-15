@@ -76,6 +76,7 @@ export const MODEL_DEFS: ModelDef[] = [
       { value: 'deepseek-chat', label: 'DeepSeek V3（综合代码 · 推荐）' },
       { value: 'deepseek-coder', label: 'DeepSeek Coder V2（专用代码模型）' },
       { value: 'deepseek-reasoner', label: 'DeepSeek R1（深度推理）' },
+      { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro（最新 · 含思考模式）' },
     ],
     needKey: true,
     needEndpoint: false,

@@ -56,6 +56,12 @@ const MODEL_PRICES: Record<string, ModelPrice> = {
     sourceUrl: SOURCES.deepseek,
     note: 'R1 推理模型，含 Chain-of-Thought 输出',
   },
+  'deepseek-v4-pro': {
+    inputPer1M: 0.55,
+    outputPer1M: 2.19,
+    sourceUrl: SOURCES.deepseek,
+    note: 'V4 Pro 含思考模式（reasoning_content），价格参考 R1',
+  },
 
   // ── Google Gemini ─────────────────────────────────────────────────────────
   // https://ai.google.dev/pricing（2025-05）

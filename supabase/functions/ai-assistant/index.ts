@@ -2748,7 +2748,7 @@ ${branchNote}
 用户确认后，**立即**输出 PLAN 并开始执行（不要再次询问）：
 1. 输出 \`PLAN:{"steps":[...]}\` 包含 4-8 个步骤（步骤粒度适中，不要过细或过粗）
 2. 按步骤顺序自主执行，切换步骤时输出 \`STEP:id\`
-3. 全部完成后输出简洁的完成总结
+3. 全部步骤完成后，**必须**在回复的最开头输出 \`TASK_DONE\`，然后紧跟简洁的完成总结。例如：\`TASK_DONE\n已完成 xxx，触发了构建，请等待结果。\`
 
 ---
 
@@ -3055,13 +3055,13 @@ GitHub API 4xx 错误自愈规则
 - 你拥有 15 次工具调用机会，必须充分利用，不得提前放弃
 - 每次调用完工具后，立即分析结果，继续执行下一步，不要询问用户是否继续
 - 任务未完成时，绝对禁止输出"任务完成"、"请问是否需要继续"等终止性语句
-- 只有当所有步骤都已完成、结果已验证，才输出最终总结
+- 只有当所有步骤都已完成、结果已验证，才输出最终总结；**输出总结时必须在最开头写 `TASK_DONE`**（不可省略，系统依靠此标记判断任务完成）
 - 遇到工具报错时，自行分析原因并尝试修正，而不是停下来询问用户
 - 面对复杂任务，按以下方式执行：
   1. 先输出 PLAN（首轮）
   2. 逐步执行每个步骤，切换步骤时输出 STEP:id
   3. 每步完成后检查结果，决定下一步
-  4. 全部完成后输出简洁的完成总结
+  4. 全部完成后输出 `TASK_DONE` 后跟简洁的完成总结
 
 ==============================
 回复语气与格式规范（自然对话）
@@ -4108,17 +4108,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       const toolCall = extractToolCall(assistantText);
       if (!toolCall) {
-        // ── Nudge 机制：仅自主模式下生效 ─────────────────────────────────────
+        // ── 任务完成检测：AI 输出了 TASK_DONE 标记 或 明确的完成性语句 ──────────
+        // 优先于 nudge 检查：若 AI 已确认任务完成，直接跳到最终回答，不催促工具调用
+        const isTaskDone =
+          /\bTASK_DONE\b/.test(assistantText) ||
+          /(?:全部步骤已完成|所有步骤(?:均)?已完成|任务(?:已)?全部完成|已全部完成)/.test(assistantText);
+
+        // ── Nudge 机制：仅自主模式 且 未检测到任务完成 时生效 ─────────────────
         // 普通对话模式允许 AI 直接给最终文字回答，不强制续跑工具调用
         // 自主模式下：只要还在自主模式，无论 currentStepId 是否为 null 都应 nudge，
         // 防止步骤间歇期（上一步刚结束 currentStepId=null，LLM 还没开始下一步）
         // 输出文字后直接结束。nudgeCount 上限自身控制退出条件。
-        const taskOngoing = isAutoMode;
+        const taskOngoing = isAutoMode && !isTaskDone;
         if (taskOngoing && nudgeCount < MAX_NUDGE) {
           nudgeCount++;
           console.log(`[nudge ${nudgeCount}] totalRound=${totalRound} currentStepId=${currentStepId} 无工具调用，注入纠正提示`);
           // 保留 LLM 已输出的文字内容，再追加纠正指令
-          const displayText = assistantText.replace(/\bPLAN\s*:\s*\{[\s\S]*?\}/i, "").trim();
+          const displayText = assistantText.replace(/\bPLAN\s*:\s*\{[\s\S]*?\}/i, "").replace(/\bTASK_DONE\b\s*/g, "").trim();
           if (displayText) await sendChunk(displayText + "\n");
           fullMessages.push({ role: "assistant", content: rawText });
           fullMessages.push({
@@ -4140,8 +4146,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
         }
         // 持久化工作流完成
         if (sb && workflowDbId) await dbFinishWorkflow(sb, workflowDbId);
+        // 去除 TASK_DONE 标记再展示给用户（用户不需要看到内部标记）
+        const finalDisplayText = assistantText.replace(/\bTASK_DONE\b\s*/g, "").trim();
         // 逐词流式输出最终回答，模拟打字机效果
-        await streamAnswer(assistantText, sendChunk, 10, () => abortSig.aborted);
+        await streamAnswer(finalDisplayText, sendChunk, 10, () => abortSig.aborted);
         batchDone = true; // 任务已完成，退出外层批次循环
         break;
       }
@@ -4331,7 +4339,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         : toolResult;
       fullMessages.push({
         role: "user",
-        content: `工具执行结果：\n${truncatedResult}\n\n请根据结果继续执行下一步。若还有未完成的步骤，继续调用工具；若全部步骤已完成，输出简洁的完成总结（不要再输出工具 JSON）。`,
+        content: `工具执行结果：\n${truncatedResult}\n\n请根据结果继续执行下一步。若还有未完成的步骤，继续调用工具；若全部步骤已完成，在回复最开头输出 TASK_DONE，然后跟一句简洁的完成总结，不要再输出工具 JSON。`,
       });
 
       // ── 上下文滑动窗口压缩：消息超过 60 条时，压缩中间的工具交互历史 ──────────

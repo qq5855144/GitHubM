@@ -1,7 +1,6 @@
 <p align="center">
   <img src="https://api.iconify.design/fe:github.svg?color=%237c3aed" alt="GitHubM" width="80" />
 </p>
-
 <h1 align="center">GitHubM</h1>
 
 <p align="center">

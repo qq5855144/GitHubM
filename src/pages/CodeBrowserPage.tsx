@@ -819,17 +819,17 @@ export default function CodeBrowserPage() {
 
   // 编辑器打开时聚焦 textarea
   useEffect(() => {
-    if (editorFullscreen) {
+    if (actionMode === 'edit') {
       const timer = setTimeout(() => textareaRef.current?.focus(), 80);
       return () => clearTimeout(timer);
     }
-  }, [editorFullscreen]);
+  }, [actionMode]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* ─── 全屏编辑器（fixed overlay，文本文件自动激活） ─── */}
+      {/* ─── 全屏编辑器（fixed overlay，仅移动端 / 小屏） ─── */}
       {editorFullscreen && actionMode === 'edit' && (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col">
+        <div className="fixed inset-0 z-50 bg-background flex flex-col md:hidden">
           {/* ── 顶栏 ── */}
           <div className="flex items-center gap-2 px-4 h-12 shrink-0 border-b border-border bg-card/95 backdrop-blur-sm">
             <Button
@@ -1223,8 +1223,169 @@ export default function CodeBrowserPage() {
 
         {/* 右侧内容区 */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-          {/* 路径操作工具条 */}
-          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-secondary/20 shrink-0">
+          {/* ─── 桌面端内联编辑器（md+ 直接嵌入右侧面板） ─── */}
+          {actionMode === 'edit' && (
+            <div className="hidden md:flex flex-col flex-1 min-h-0">
+              {/* 编辑器顶栏 */}
+              <div className="flex items-center gap-2 px-3 h-11 shrink-0 border-b border-border bg-card/95">
+                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                  <FileItemIcon filename={currentFile?.name ?? ''} isDir={false} size="w-4 h-4" />
+                  <span className="text-sm font-mono text-foreground truncate">{currentFile?.name}</span>
+                  {currentFile && (
+                    <span className="text-xs text-muted-foreground hidden lg:inline">
+                      · {formatFileSize(currentFile.size)} · {fsLineCount} 行
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-0.5 shrink-0">
+                  {/* 缩小字号 */}
+                  <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
+                    onClick={() => setEditorFontSize(s => Math.max(10, s - 1))} disabled={editorFontSize <= 10}
+                    title={`缩小字号 (${editorFontSize}px)`}>
+                    <ZoomOut className="w-3.5 h-3.5" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground w-7 text-center tabular-nums">{editorFontSize}</span>
+                  <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
+                    onClick={() => setEditorFontSize(s => Math.min(22, s + 1))} disabled={editorFontSize >= 22}
+                    title={`放大字号 (${editorFontSize}px)`}>
+                    <ZoomIn className="w-3.5 h-3.5" />
+                  </Button>
+                  <div className="w-px h-4 bg-border shrink-0 mx-0.5" />
+                  {/* 搜索 */}
+                  <Button variant={showSearch ? 'secondary' : 'ghost'} size="icon"
+                    className="w-7 h-7 text-muted-foreground hover:bg-secondary"
+                    onClick={() => { const next = !showSearch; setShowSearch(next); if (next) setTimeout(() => searchInputRef.current?.focus(), 50); else { setSearchQuery(''); textareaRef.current?.focus(); } }}
+                    title="搜索 (Ctrl+F)">
+                    <Search className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
+                    onClick={() => { navigator.clipboard.writeText(editContent); toast.success('代码已复制'); }}
+                    title="复制内容">
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
+                  {currentFile?.download_url && (
+                    <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
+                      title="下载文件"
+                      onClick={async () => { try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); } catch { toast.error('下载失败'); } }}>
+                      <Download className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
+                    onClick={() => closeAction(true)} title="关闭编辑器">
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* 搜索栏 */}
+              {showSearch && (
+                <div className="flex items-center gap-2 px-3 h-10 shrink-0 border-b border-border bg-secondary/40">
+                  <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <input ref={searchInputRef} type="text" value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value); setSearchMatchIndex(0); }}
+                    onKeyDown={fsHandleSearchKeyDown}
+                    placeholder="搜索代码... (Enter 下一个)"
+                    className="flex-1 min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none border-none font-mono" />
+                  <span className="text-xs text-muted-foreground shrink-0 min-w-[4rem] text-right">
+                    {searchQuery.trim() ? (fsMatchCount === 0 ? '无匹配' : `${fsSafeIndex + 1} / ${fsMatchCount}`) : ''}
+                  </span>
+                  <Button variant="ghost" size="icon" className="w-6 h-6 text-muted-foreground hover:bg-secondary shrink-0"
+                    onPointerDown={(e) => { e.preventDefault(); skipNavClickRef.current = true; fsHandleSearchPrev(); }}
+                    onClick={() => { if (skipNavClickRef.current) { skipNavClickRef.current = false; return; } fsHandleSearchPrev(); }}
+                    disabled={fsMatchCount === 0} title="上一个">
+                    <ChevronUp className="w-3 h-3" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="w-6 h-6 text-muted-foreground hover:bg-secondary shrink-0"
+                    onPointerDown={(e) => { e.preventDefault(); skipNavClickRef.current = true; fsHandleSearchNext(); }}
+                    onClick={() => { if (skipNavClickRef.current) { skipNavClickRef.current = false; return; } fsHandleSearchNext(); }}
+                    disabled={fsMatchCount === 0} title="下一个">
+                    <ChevronDown className="w-3 h-3" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="w-6 h-6 text-muted-foreground hover:bg-secondary shrink-0"
+                    onClick={() => { setShowSearch(false); setSearchQuery(''); textareaRef.current?.focus(); }}
+                    title="关闭搜索 (Esc)">
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
+
+              {/* 代码编辑区 */}
+              <div className="flex-1 min-h-0 flex overflow-hidden">
+                {/* 行号 */}
+                {!fsIsLarge && (
+                  <div ref={lineNumRef}
+                    className="w-10 shrink-0 overflow-hidden bg-secondary/40 border-r border-border select-none"
+                    aria-hidden="true">
+                    <div style={{ padding: '0.75rem 0.25rem 0.75rem 0' }}>
+                      {editContent.split('\n').map((_, i) => (
+                        <div key={i} className="text-right text-muted-foreground/50 font-mono"
+                          style={{ fontSize: `${editorFontSize}px`, lineHeight: '1.625' }}>
+                          {i + 1}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* 编辑区容器 */}
+                <div className="relative flex-1 min-h-0 overflow-hidden bg-background">
+                  <div ref={scrollContainerRef} onScroll={fsSyncScroll}
+                    style={{ position: 'absolute', inset: 0, overflowY: 'scroll', overflowX: 'hidden' }}>
+                    <div style={{ position: 'relative' }}>
+                      <pre ref={highlightRef} aria-hidden="true"
+                        style={{
+                          margin: 0, padding: '0.75rem 1rem',
+                          pointerEvents: 'none',
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                          fontSize: `${editorFontSize}px`, lineHeight: '1.625',
+                          whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                          color: 'hsl(var(--foreground))', boxSizing: 'border-box',
+                        }}>
+                        {fsHighlightNodes}
+                      </pre>
+                      <textarea ref={textareaRef} value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        onKeyDown={fsHandleEditorKeyDown}
+                        spellCheck={false}
+                        style={{
+                          position: 'absolute', inset: 0, width: '100%', height: '100%',
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                          fontSize: `${editorFontSize}px`, lineHeight: '1.625',
+                          padding: '0.75rem 1rem',
+                          whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                          resize: 'none', border: 'none', outline: 'none', borderRadius: 0,
+                          background: 'transparent', color: 'transparent',
+                          caretColor: 'hsl(var(--foreground))',
+                          boxSizing: 'border-box', overflow: 'hidden',
+                        }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 底栏：提交 */}
+              <div className="flex items-center gap-2 px-3 h-12 shrink-0 border-t border-border bg-card/95">
+                <div className="flex-1 min-w-0">
+                  <Input value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)}
+                    placeholder="提交信息（必填）..."
+                    className="h-8 bg-secondary border-border text-foreground placeholder:text-muted-foreground text-sm" />
+                </div>
+                <Button variant="ghost" size="sm"
+                  className="h-8 text-xs text-muted-foreground border border-border hover:bg-secondary shrink-0 px-3"
+                  onClick={() => closeAction(true)}>
+                  <X className="w-3 h-3 mr-1" />取消
+                </Button>
+                <Button size="sm" className="h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 px-3"
+                  onClick={handleSaveEdit} disabled={actionBusy || !commitMsg.trim()}>
+                  {actionBusy
+                    ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />提交中...</>
+                    : <><Save className="w-3 h-3 mr-1" />保存并提交</>}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* 路径操作工具条（非编辑状态，或移动端编辑状态） */}
+          <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border bg-secondary/20 shrink-0 ${actionMode === 'edit' ? 'md:hidden' : ''}`}>
             {filePath ? (
               <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 shrink-0 px-2"
                 onClick={() => {
@@ -1307,8 +1468,8 @@ export default function CodeBrowserPage() {
             )}
           </div>
 
-          {/* 内容区域 */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          {/* 内容区域（非编辑状态，或移动端） */}
+          <div className={`flex-1 min-h-0 overflow-y-auto ${actionMode === 'edit' ? 'md:hidden' : ''}`}>
       <div className="bg-card border-x-0 overflow-hidden">
         {loading ? (
           <div className="p-4 space-y-2">
@@ -1360,8 +1521,8 @@ export default function CodeBrowserPage() {
                 </div>
               </div>
             ) : (
-              /* 文本文件 - 正在加载编辑器时的占位 */
-              <div className="flex flex-col items-center justify-center py-16 gap-4">
+              /* 文本文件 - 移动端等待全屏编辑器打开时的占位 */
+              <div className="flex md:hidden flex-col items-center justify-center py-16 gap-4">
                 <div className="flex items-center gap-3 text-muted-foreground">
                   <FileEdit className="w-6 h-6 text-primary animate-pulse" />
                   <span className="text-sm">正在打开编辑器...</span>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      ══ 主界面颜色语义化 token（深色模式）══
+      与 Web 端 index.css 深色 HSL 变量完全对应，确保冷启动零闪烁
+    -->
+    <color name="main_bg">#111117</color>              <!-- WebView 背景色（深色模式 background 变量） -->
+    <color name="sidebar_bg">#0d0d11</color>           <!-- BottomNav 背景色（深色模式 sidebar-background 变量） -->
+    <color name="nav_unselected">#9292A8</color>       <!-- 底部导航未选中色（深色模式 muted-foreground 变量） -->
+
+    <!-- 底部导航栏颜色（深色模式覆盖） -->
+    <color name="bottom_nav_background">@color/sidebar_bg</color>
+    <color name="bottom_nav_selected">#8B4CF8</color>     <!-- 选中色：深色主题紫色 -->
+    <color name="bottom_nav_unselected">@color/nav_unselected</color>
+    <color name="bottom_nav_divider">#21212b</color>      <!-- 分割线：dark border -->
+    <!-- M3 Active Indicator 背景色：primaryContainer 深色（深紫） -->
+    <color name="bottom_nav_indicator_bg">#3D2B6B</color>
+
+    <!--
+      ══ 启动画面 · 深色模式配色 ══
+      极客终端风格：深黑紫底 + 明显紫色辉光（4层叠加增强层次感）
+    -->
+    <!-- 背景底色：深紫黑，有色温不死黑 -->
+    <color name="splash_bg_solid">#0D0B1A</color>
+    <!-- 光晕中心：55% 透明度深紫，肉眼可见的发光感 -->
+    <color name="splash_glow_center">#8C3D1B69</color>
+    <!-- 光晕边缘：完全透明 -->
+    <color name="splash_glow_edge">#000D0B1A</color>
+    <!-- 顶部暗角叠加：使顶部更深沉，突出中央光晕 -->
+    <color name="splash_top_vignette">#3A060610</color>
+    <!-- 底部暗角叠加：底部沉淀感，聚焦视觉到中央 -->
+    <color name="splash_bottom_vignette">#5A050510</color>
+
+    <!-- Logo（无光圈，直接展示） -->
+    <color name="splash_icon_tint">#E8DEFF</color>        <!-- Octocat：淡紫白，在深底上散发光感 -->
+
+    <!-- 文字与装饰 -->
+    <color name="splash_corner_line">#508B4CF8</color>    <!-- 角落线：64% 透明紫色，更明显 -->
+    <color name="splash_title">#F0F6FF</color>            <!-- 主标题：冷白 -->
+    <color name="splash_subtitle">#8B949E</color>         <!-- 副标题：中性灰 -->
+    <color name="splash_prompt">#A97AF8</color>           <!-- 终端提示符 $：浅紫，高对比 -->
+    <color name="splash_terminal">#6B7280</color>         <!-- 终端命令文字：中灰 -->
+    <color name="splash_cursor">#8B4CF8</color>           <!-- 光标块：主题紫 -->
+    <color name="splash_accent">#8B4CF8</color>           <!-- 进度条：主题紫 -->
+</resources>

@@ -1045,10 +1045,10 @@ export default function AiAssistantPage() {
             <p className="text-sm text-muted-foreground">选择仓库，开始智能编程</p>
           </div>
 
-          {/* ── 当前模型 chip — 移除边框 ── */}
+          {/* ── 当前模型 chip ── */}
           <button
             onClick={() => setShowModelSettings(true)}
-            className="flex items-center gap-2.5 w-full max-w-sm px-3.5 py-2.5 rounded-xl hover:bg-accent/50 transition-colors group"
+            className="flex items-center gap-2.5 w-full max-w-sm px-3.5 py-2.5 rounded-xl border border-border bg-card hover:bg-accent/50 transition-colors group"
           >
             <ModelAvatar modelDef={currentModelDef} size="sm" />
             <div className="flex-1 min-w-0 text-left">
@@ -1072,12 +1072,12 @@ export default function AiAssistantPage() {
           <div className="flex items-center gap-2 w-full max-w-sm">
             <button
               onClick={() => setShowHistory(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-accent/50 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card hover:bg-accent/50 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <History className="w-4 h-4" />
               历史对话
             </button>
-            <div className="flex-1 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/8 text-xs text-amber-600 dark:text-amber-400">
+            <div className="flex-1 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/8 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400">
               <AlertCircle className="w-3.5 h-3.5 shrink-0" />
               <span className="text-pretty leading-snug">建议在测试仓库或非主分支操作</span>
             </div>

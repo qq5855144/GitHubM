@@ -3859,6 +3859,10 @@ async function callLLM(
     }
   }
 
+  // ── 调试：打印所有 assistant 消息的 reasoning_content 状态 ──────────────────
+  const dbgMsgs = safeMessages.map(m => m.role === "assistant" ? { role: m.role, hasRC: m.reasoning_content != null, rcLen: m.reasoning_content?.length ?? -1 } : { role: m.role });
+  console.log(`[callLLM] debug-messages-structure: ${JSON.stringify(dbgMsgs)}`);
+
   // ── LLM fetch 超时：90s 防止 TCP 连接永久挂起 ─────────────────────────────
   // Edge Function 自身有 ~240s 超时，此处设 90s 确保在 Edge 超时前得到错误反馈
   const llmAbort = new AbortController();
@@ -3903,6 +3907,17 @@ async function callLLM(
         // 纯文本：截断到 400 字符，避免超大错误对象
         errMsg = errText.replace(/\s+/g, " ").trim().slice(0, 400) || res.statusText;
       }
+    }
+
+    // ── 调试：HTTP 400 时打印发出去的 messages（开发调试专用，生产环境可删除） ──
+    if (res.status === 400 && errMsg.includes("reasoning_content")) {
+      const dbg = safeMessages.map(m => ({
+        role: m.role,
+        hasRC: m.reasoning_content != null,
+        rcLen: m.reasoning_content?.length ?? -1,
+        contentPreview: (m.content || "").slice(0, 60),
+      }));
+      console.error(`[callLLM] HTTP 400 reasoning_content 诊断：发出去的 messages 结构 = ${JSON.stringify(dbg)}`);
     }
 
     // 附带 HTTP 状态码，为常见错误提供中文友好提示

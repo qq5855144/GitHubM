@@ -490,9 +490,16 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: "function", function: {
       name: "get_job_logs",
-      description: "下载 Job 完整日志；日志超限时自动提取错误块（ERROR/FAILED/Exception 上下文各 35 行）+ 末尾 Build Summary，确保关键报错不被截断",
+      description: [
+        "下载 Job 日志。",
+        "• 不传 start_line/end_line：返回全局统计（总行数/字符数）+ 智能错误摘要（ERROR/FAILED/Exception 上下文各 35 行）+ 末尾 Build Summary，适合首次分析。",
+        "• 传入 start_line/end_line：精准返回指定行范围（1-based），每次最多 800 行，可多次调用覆盖全部日志。",
+        "• 使用策略：先不传范围拿错误摘要；若需完整日志，先看总行数，再按 800 行一段循环读取。",
+      ].join(" "),
       parameters: { type: "object", properties: {
-        job_id: { type: "string", description: "Job ID（check_run_status 失败时自动附带）" },
+        job_id:     { type: "string", description: "Job ID" },
+        start_line: { type: "string", description: "起始行号（1-based，含），不传则智能摘要模式" },
+        end_line:   { type: "string", description: "结束行号（1-based，含），不传则智能摘要模式" },
       }, required: ["job_id"] },
     },
   },
@@ -1855,8 +1862,21 @@ async function getRunJobs(ctx: GithubContext, runId: string): Promise<string> {
   } catch (e) { return diagnose4xx(e, "get_run_jobs"); }
 }
 
-/** 下载并返回某个 Job 的日志，智能提取错误块 + 末尾摘要，避免截断关键信息 */
-async function getJobLogs(ctx: GithubContext, jobId: string): Promise<string> {
+/**
+ * 下载 Job 日志，支持两种模式：
+ *  - 智能摘要模式（不传 startLine/endLine）：返回全局统计 + 错误块上下文 + 末尾 Summary
+ *  - 分段读取模式（传入 startLine/endLine）：精准返回指定行范围，每次最多 PAGE_LINES 行
+ *
+ * AI 工作流：
+ *   1. 首次不传范围 → 获取总行数 + 错误摘要
+ *   2. 如需完整日志 → 循环按 PAGE_LINES 行一页读取，直到覆盖全部行
+ */
+async function getJobLogs(
+  ctx: GithubContext,
+  jobId: string,
+  startLine?: number,
+  endLine?: number,
+): Promise<string> {
   try {
     // GitHub 返回 302 重定向到实际日志 URL，需要手动跟随
     const redirectResp = await fetch(
@@ -1881,33 +1901,60 @@ async function getJobLogs(ctx: GithubContext, jobId: string): Promise<string> {
       return `获取日志失败：HTTP ${redirectResp.status}`;
     }
 
-    const totalLen = logText.length;
-    const TOTAL_LIMIT = 60_000;   // 最大返回字符数
+    const lines = logText.split("\n");
+    const totalLines = lines.length;
+    const totalChars = logText.length;
+
+    // ── 分段读取模式 ──────────────────────────────────────────────────────────
+    // AI 传入 start_line / end_line，精准返回指定范围
+    const PAGE_LINES = 800; // 每次最多返回行数（约 40-80k 字符）
+    if (startLine !== undefined || endLine !== undefined) {
+      const s = Math.max(1, startLine ?? 1);
+      const e = Math.min(totalLines, endLine ?? (s + PAGE_LINES - 1));
+      const clampedE = Math.min(e, s + PAGE_LINES - 1); // 单次上限保护
+      const slice = lines.slice(s - 1, clampedE).join("\n");
+      const hasMore = clampedE < totalLines;
+      const nextHint = hasMore
+        ? `\n💡 还有更多：下一段 start_line=${clampedE + 1} end_line=${Math.min(totalLines, clampedE + PAGE_LINES)}`
+        : `\n✅ 已到达日志末尾（第 ${totalLines} 行）`;
+      return [
+        `Job \`${jobId}\` 日志分段 [行 ${s}–${clampedE} / 共 ${totalLines} 行，${totalChars} 字符]：`,
+        "```",
+        slice,
+        "```",
+        nextHint,
+      ].join("\n");
+    }
+
+    // ── 智能摘要模式（首次调用，不传范围）───────────────────────────────────
+    const TOTAL_LIMIT = 60_000;   // 摘要模式最大返回字符
     const TAIL_CHARS  = 20_000;   // 末尾保留字符（含 build summary）
     const CTX_LINES   = 35;       // 错误块前后各保留行数
 
-    // ── 日志未超限：完整返回 ────────────────────────────────────────────────
-    if (totalLen <= TOTAL_LIMIT) {
-      return `Job \`${jobId}\` 日志（共 ${totalLen} 字符，完整输出）：\n\`\`\`\n${logText}\n\`\`\``;
+    // 统计头：帮助 AI 决定是否需要分段读取
+    const statsHint = [
+      `Job \`${jobId}\` 日志统计：共 **${totalLines} 行** / **${totalChars} 字符**`,
+      totalChars > TOTAL_LIMIT
+        ? `（日志较大，以下为智能摘要；如需完整日志，使用 start_line/end_line 每次读取 ${PAGE_LINES} 行）`
+        : "（日志较小，完整返回）",
+    ].join(" ");
+
+    // 日志未超限：完整返回
+    if (totalChars <= TOTAL_LIMIT) {
+      return `${statsHint}\n\`\`\`\n${logText}\n\`\`\``;
     }
 
-    // ── 日志超限：智能提取 ───────────────────────────────────────────────────
-    const lines = logText.split("\n");
-    const totalLines = lines.length;
-
-    // 1. 找出所有含错误关键词的行索引
+    // 错误块提取
     const errorPattern = /\b(error|Error|ERROR|FAILED|failed|FAILURE|Exception|exception|fatal|Fatal|FATAL|cannot|Cannot|undefined reference|unresolved)\b/;
     const errorLineIndices: Set<number> = new Set();
     for (let i = 0; i < totalLines; i++) {
       if (errorPattern.test(lines[i])) {
-        // 取上下文窗口
         const from = Math.max(0, i - CTX_LINES);
         const to   = Math.min(totalLines - 1, i + CTX_LINES);
         for (let j = from; j <= to; j++) errorLineIndices.add(j);
       }
     }
 
-    // 2. 将连续索引合并为区间，并转为文本块
     const sortedIndices = Array.from(errorLineIndices).sort((a, b) => a - b);
     const errorSections: string[] = [];
     let charCount = 0;
@@ -1926,20 +1973,16 @@ async function getJobLogs(ctx: GithubContext, jobId: string): Promise<string> {
       i++;
     }
 
-    // 3. 末尾部分（build summary 通常在此）
     const tail = logText.slice(-TAIL_CHARS);
 
-    // 4. 拼装输出
-    const header = `Job \`${jobId}\` 日志（共 ${totalLen} 字符 / ${totalLines} 行，已超限智能提取）：\n`;
-    let output = header;
-
+    let output = statsHint + "\n";
     if (errorSections.length > 0) {
-      output += `\n## ⚠️ 错误相关段落（共 ${errorLineIndices.size} 行上下文）\n\`\`\`\n${errorSections.join("\n")}\n\`\`\`\n`;
+      output += `\n## ⚠️ 错误相关段落（${errorLineIndices.size} 行上下文）\n\`\`\`\n${errorSections.join("\n")}\n\`\`\`\n`;
     } else {
-      output += `\n（未检测到明确错误关键词，仅返回末尾内容）\n`;
+      output += "\n（未检测到明确错误关键词，仅返回末尾内容）\n";
     }
-
     output += `\n## 📋 末尾 ${TAIL_CHARS} 字符（Build Summary）\n\`\`\`\n${tail}\n\`\`\``;
+    output += `\n\n💡 如需读取特定区段，使用 start_line/end_line，例如读取前 ${PAGE_LINES} 行：{"tool":"get_job_logs","job_id":"${jobId}","start_line":"1","end_line":"${PAGE_LINES}"}`;
 
     return output;
   } catch (e) { return diagnose4xx(e, "get_job_logs"); }
@@ -3533,8 +3576,12 @@ ${branchNote}
 34. 等待已知 run_id（push 自动触发的运行）：
     {"tool":"check_run_status","run_id":"12345678","workflow_type":"normal"}
 35. 查看某次运行的 Jobs 及步骤（check_run_status 失败时才需要）：{"tool":"get_run_jobs","run_id":"12345678"}
-36. 下载 Job 日志（含报错详情）：{"tool":"get_job_logs","job_id":"87654321"}
+36. 下载 Job 日志（智能摘要，首次调用不传范围）：{"tool":"get_job_logs","job_id":"87654321"}
     ⚡ check_run_status 失败时会自动附带 job_id，可直接用。
+    📖 日志较大时，摘要会告知总行数；如需完整日志，按行分段读取（每次 800 行）：
+    {"tool":"get_job_logs","job_id":"87654321","start_line":"1","end_line":"800"}
+    {"tool":"get_job_logs","job_id":"87654321","start_line":"801","end_line":"1600"}
+    …依此类推直到"已到达日志末尾"提示出现。
 37. 取消运行中的工作流：{"tool":"cancel_workflow_run","run_id":"12345678"}
 38. 重新运行失败的工作流：{"tool":"rerun_workflow_run","run_id":"12345678","failed_jobs_only":"true"}
 39. 查看 Actions Secrets 名称：{"tool":"list_actions_secrets"}
@@ -3672,7 +3719,9 @@ ${branchNote}
   遇到用户提到"构建失败"、"部署报错"、"CI 挂了"等情况，**必须**按此流程自主完成全链路修复，无需询问用户：
   1. get_workflow_runs 找到最新失败的运行 ID（状态为 failure/cancelled）
   2. get_run_jobs 查看哪个 Job/步骤失败，获取 job_id
-  3. get_job_logs 下载该 Job 的完整日志，仔细阅读报错信息
+  3. get_job_logs 下载该 Job 的日志（不传范围，获取智能摘要 + 总行数）
+     - 若日志较大且错误信息不足，按 800 行分段读取直到找到根因：
+       {"tool":"get_job_logs","job_id":"<id>","start_line":"1","end_line":"800"} …
   4. 根据日志内容定位问题根源：
      - 依赖问题 → 检查 package.json / pom.xml / go.mod 等
      - 代码错误 → grep_in_file / search_code 定位具体行
@@ -4549,7 +4598,11 @@ function executeTool(
     case "list_workflows":      return listWorkflows(ctx);
     case "get_workflow_runs":   return getWorkflowRuns(ctx, p("workflow_id"), parseInt(p("limit", "10"), 10));
     case "get_run_jobs":        return getRunJobs(ctx, p("run_id"));
-    case "get_job_logs":        return getJobLogs(ctx, p("job_id"));
+    case "get_job_logs":        return getJobLogs(
+      ctx, p("job_id"),
+      p("start_line") ? parseInt(p("start_line"), 10) : undefined,
+      p("end_line")   ? parseInt(p("end_line"),   10) : undefined,
+    );
     case "trigger_workflow":    return triggerWorkflow(ctx, p("workflow_id"), p("ref"), undefined);
     case "check_run_status":    return checkRunStatus(
       ctx, p("run_id"),
@@ -4998,7 +5051,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       search_issues: "搜索 Issues", get_issue_details: "Issue 详情", update_issue: "更新 Issue",
       // Actions 工作流
       list_workflows: "列出工作流", get_workflow_runs: "查看运行记录",
-      get_run_jobs: "查看 Jobs", get_job_logs: "下载日志",
+      get_run_jobs: "查看 Jobs", get_job_logs: "下载/分段读取日志",
       trigger_workflow: "触发工作流", check_run_status: "等待运行完成",
       cancel_workflow_run: "取消运行",
       rerun_workflow_run: "重新运行", list_actions_secrets: "查看 Secrets",
@@ -5278,7 +5331,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
             : toolCall.tool === "get_run_jobs" || toolCall.tool === "cancel_workflow_run" || toolCall.tool === "rerun_workflow_run"
               ? `run_id: ${toolCall.run_id}`
               : toolCall.tool === "get_job_logs"
-                ? `job_id: ${toolCall.job_id}`
+                ? toolCall.start_line
+                  ? `job_id: ${toolCall.job_id} 行 ${toolCall.start_line}–${toolCall.end_line || "末尾"}`
+                  : `job_id: ${toolCall.job_id}`
                 : toolCall.tool === "trigger_workflow"
                   ? `${toolCall.workflow_id} @ ${toolCall.ref}`
                   : toolCall.tool === "merge_pull_request"

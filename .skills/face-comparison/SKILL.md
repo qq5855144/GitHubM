@@ -8,7 +8,7 @@ license: MIT
 
 百度人脸识别 1:1 对比接口，通过上传两张包含人脸的图片，计算两张图中人脸的相似度分数。
 
-- **Endpoint**: `POST https://app-bm0s7wqmrksh-api-5YrZz81oerkY-gateway.appmiaoda.com/rest/2.0/face/v3/match`
+- **Endpoint**: `POST https://app-bo4w33bsdqm9-api-5YrZz81oerkY-gateway.appmiaoda.com/rest/2.0/face/v3/match`
 - **认证方式**: platform_managed（密钥由平台注入，读取 `INTEGRATIONS_API_KEY`）
 - Auth Header 为 `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`（注意不是标准的 `Authorization`）。
 - **Content-Type**: `application/json`

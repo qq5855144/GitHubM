@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `104b3752-acf1-49dd-813b-b207b360d977` |
 | API ID | `api-l9nZz8ro3my9` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-l9nZz8ro3my9-gateway.appmiaoda.com/v2/tools/ai_command_ppt/command_ppt` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-l9nZz8ro3my9-gateway.appmiaoda.com/v2/tools/ai_command_ppt/command_ppt` |
 | 认证模式 | platform_managed |
 | Auth Header | `X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bm0s7wqmrksh-api-l9nZz8ro3my9-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-l9nZz8ro3my9-gateway.appmiaoda.com` |
 | 响应形式 | 流式（chunked JSON 行） |
 
 ---
@@ -113,7 +113,7 @@ interface PptFinalResult {
  */
 async function generatePpt(query: string): Promise<PptFinalResult> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-l9nZz8ro3my9-gateway.appmiaoda.com/v2/tools/ai_command_ppt/command_ppt",
+    "https://app-bo4w33bsdqm9-api-l9nZz8ro3my9-gateway.appmiaoda.com/v2/tools/ai_command_ppt/command_ppt",
     {
       method: "POST",
       headers: {
@@ -285,7 +285,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游（流式） ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-l9nZz8ro3my9-gateway.appmiaoda.com/v2/tools/ai_command_ppt/command_ppt",
+    "https://app-bo4w33bsdqm9-api-l9nZz8ro3my9-gateway.appmiaoda.com/v2/tools/ai_command_ppt/command_ppt",
     {
       method: "POST",
       headers: {

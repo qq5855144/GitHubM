@@ -10,7 +10,7 @@ license: MIT
 
 | 项目 | 值 |
 |------|-----|
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-e94GZ5j0ljja-gateway.appmiaoda.com/text2audio` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-e94GZ5j0ljja-gateway.appmiaoda.com/text2audio` |
 | Content-Type | `application/x-www-form-urlencoded` |
 | 认证 | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | 响应 | 二进制音频流（`application/octet-stream`），aue=3 为 MP3，aue=6 为 WAV |

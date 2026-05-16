@@ -8,7 +8,7 @@ license: MIT
 
 基于百度文库 AI 能力，根据输入的主题文本自动生成包含标题、大纲和封面的完整 PPT 文档。
 
-- **Endpoint**：`POST https://app-bm0s7wqmrksh-api-l9nZz8ro3my9-gateway.appmiaoda.com/v2/tools/ai_command_ppt/command_ppt`
+- **Endpoint**：`POST https://app-bo4w33bsdqm9-api-l9nZz8ro3my9-gateway.appmiaoda.com/v2/tools/ai_command_ppt/command_ppt`
 - **认证**：platform_managed（`X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>`）
 - **请求体**：JSON，仅需 `query` 字段（PPT 主题内容）
 - **响应形式**：流式返回多条 JSON 行

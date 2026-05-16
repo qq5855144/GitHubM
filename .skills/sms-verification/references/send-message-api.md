@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `3f0f386a-cdcf-47ed-a17a-df726918136d` |
 | API ID | `api-W9z3M74x6ZNL` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-W9z3M74x6ZNL-gateway.appmiaoda.com/v1/code/send_message` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-W9z3M74x6ZNL-gateway.appmiaoda.com/v1/code/send_message` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bm0s7wqmrksh-api-W9z3M74x6ZNL-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-W9z3M74x6ZNL-gateway.appmiaoda.com` |
 | 计费 | 启用，原价 ¥2.70 / 次，折扣价 ¥2.00 / 次（price_unit: 2） |
 
 ---
@@ -88,7 +88,7 @@ async function sendSmsCode(
   }
 
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-W9z3M74x6ZNL-gateway.appmiaoda.com/v1/code/send_message",
+    "https://app-bo4w33bsdqm9-api-W9z3M74x6ZNL-gateway.appmiaoda.com/v1/code/send_message",
     {
       method: "POST",
       headers: {
@@ -156,7 +156,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-W9z3M74x6ZNL-gateway.appmiaoda.com/v1/code/send_message",
+    "https://app-bo4w33bsdqm9-api-W9z3M74x6ZNL-gateway.appmiaoda.com/v1/code/send_message",
     {
       method: "POST",
       headers: {

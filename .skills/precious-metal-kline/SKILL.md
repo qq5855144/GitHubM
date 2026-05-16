@@ -11,12 +11,12 @@ license: MIT
 
 | 接口 | 方法 | 端点 |
 |------|------|------|
-| 国内贵金属报价 | POST | `https://app-bm0s7wqmrksh-api-ra5Err8G2Rla-gateway.appmiaoda.com/precious-metal/domestic/price` |
-| 国内贵金属K线 | POST | `https://app-bm0s7wqmrksh-api-rLobRR63mpd9-gateway.appmiaoda.com/precious-metal/domestic/kline` |
-| 国内贵金属期货合约 | POST | `https://app-bm0s7wqmrksh-api-DY8Mnnl0GGAa-gateway.appmiaoda.com/precious-metal/domestic/contract` |
-| 国际贵金属报价 | POST | `https://app-bm0s7wqmrksh-api-NLZ133Rnwr29-gateway.appmiaoda.com/precious-metal/inter/price` |
-| 国际贵金属K线 | POST | `https://app-bm0s7wqmrksh-api-2Y00VV8Rkb2Y-gateway.appmiaoda.com/precious-metal/inter/kline` |
-| 国际贵金属期货合约 | POST | `https://app-bm0s7wqmrksh-api-nYWNRRkexgKL-gateway.appmiaoda.com/precious-metal/inter/contract` |
+| 国内贵金属报价 | POST | `https://app-bo4w33bsdqm9-api-ra5Err8G2Rla-gateway.appmiaoda.com/precious-metal/domestic/price` |
+| 国内贵金属K线 | POST | `https://app-bo4w33bsdqm9-api-rLobRR63mpd9-gateway.appmiaoda.com/precious-metal/domestic/kline` |
+| 国内贵金属期货合约 | POST | `https://app-bo4w33bsdqm9-api-DY8Mnnl0GGAa-gateway.appmiaoda.com/precious-metal/domestic/contract` |
+| 国际贵金属报价 | POST | `https://app-bo4w33bsdqm9-api-NLZ133Rnwr29-gateway.appmiaoda.com/precious-metal/inter/price` |
+| 国际贵金属K线 | POST | `https://app-bo4w33bsdqm9-api-2Y00VV8Rkb2Y-gateway.appmiaoda.com/precious-metal/inter/kline` |
+| 国际贵金属期货合约 | POST | `https://app-bo4w33bsdqm9-api-nYWNRRkexgKL-gateway.appmiaoda.com/precious-metal/inter/contract` |
 
 所有接口均返回 JSON，`Content-Type: application/x-www-form-urlencoded`，认证方式为 `platform_managed`。
 
@@ -44,7 +44,7 @@ license: MIT
 const apiKey = process.env["INTEGRATIONS_API_KEY"]!;
 
 const response = await fetch(
-  "https://app-bm0s7wqmrksh-api-ra5Err8G2Rla-gateway.appmiaoda.com/precious-metal/domestic/price",
+  "https://app-bo4w33bsdqm9-api-ra5Err8G2Rla-gateway.appmiaoda.com/precious-metal/domestic/price",
   {
     method: "POST",
     headers: {

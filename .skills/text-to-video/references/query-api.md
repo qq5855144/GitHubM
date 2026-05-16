@@ -6,11 +6,11 @@
 |------|-----|
 | Plugin ID | `284585aa-3c6e-4827-b46e-a1e610aa3100` |
 | API ID | `api-nYWNozBb5qML` |
-| Endpoint | `GET https://app-bm0s7wqmrksh-api-nYWNozBb5qML-gateway.appmiaoda.com/beta/video/generations/kling/text2video` |
+| Endpoint | `GET https://app-bo4w33bsdqm9-api-nYWNozBb5qML-gateway.appmiaoda.com/beta/video/generations/kling/text2video` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| 第三方域名 | `app-bm0s7wqmrksh-api-nYWNozBb5qML-gateway.appmiaoda.com` |
+| 第三方域名 | `app-bo4w33bsdqm9-api-nYWNozBb5qML-gateway.appmiaoda.com` |
 | 计费 | 不启用（查询接口免费） |
 
 ---
@@ -71,7 +71,7 @@ async function queryTextToVideo(taskId: string): Promise<{
   updated_at: number;
 }> {
   const url = new URL(
-    "https://app-bm0s7wqmrksh-api-nYWNozBb5qML-gateway.appmiaoda.com/beta/video/generations/kling/text2video"
+    "https://app-bo4w33bsdqm9-api-nYWNozBb5qML-gateway.appmiaoda.com/beta/video/generations/kling/text2video"
   );
   url.searchParams.set("task_id", taskId);
 
@@ -135,7 +135,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游查询接口 ---
   const queryUrl = new URL(
-    "https://app-bm0s7wqmrksh-api-nYWNozBb5qML-gateway.appmiaoda.com/beta/video/generations/kling/text2video"
+    "https://app-bo4w33bsdqm9-api-nYWNozBb5qML-gateway.appmiaoda.com/beta/video/generations/kling/text2video"
   );
   queryUrl.searchParams.set("task_id", taskId);
 

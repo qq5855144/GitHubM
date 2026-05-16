@@ -16,17 +16,17 @@
 
 | API ID | Title | Endpoint | Method | Content-Type |
 |--------|-------|----------|--------|--------------|
-| `api-Xa6Jew6JjAqa` | Create Video | `https://app-bm0s7wqmrksh-api-Xa6Jew6JjAqa-gateway.appmiaoda.com/openai/v1/videos` | POST | multipart/form-data |
-| `api-M9v0w87KjxoY` | Query Status | `https://app-bm0s7wqmrksh-api-M9v0w87KjxoY-gateway.appmiaoda.com/query` | POST | application/json |
-| `api-W9z3qro1AVZL` | Video from Reference | `https://app-bm0s7wqmrksh-api-W9z3qro1AVZL-gateway.appmiaoda.com/openai/v1/videos` | POST | multipart/form-data |
-| `api-M9v0wP10kQjY` | Remix Video | `https://app-bm0s7wqmrksh-api-M9v0wP10kQjY-gateway.appmiaoda.com/openai/v1/videos/remix` | POST | application/json |
+| `api-Xa6Jew6JjAqa` | Create Video | `https://app-bo4w33bsdqm9-api-Xa6Jew6JjAqa-gateway.appmiaoda.com/openai/v1/videos` | POST | multipart/form-data |
+| `api-M9v0w87KjxoY` | Query Status | `https://app-bo4w33bsdqm9-api-M9v0w87KjxoY-gateway.appmiaoda.com/query` | POST | application/json |
+| `api-W9z3qro1AVZL` | Video from Reference | `https://app-bo4w33bsdqm9-api-W9z3qro1AVZL-gateway.appmiaoda.com/openai/v1/videos` | POST | multipart/form-data |
+| `api-M9v0wP10kQjY` | Remix Video | `https://app-bo4w33bsdqm9-api-M9v0wP10kQjY-gateway.appmiaoda.com/openai/v1/videos/remix` | POST | application/json |
 
 ---
 
 ## 1. Create Video（文生视频 / 图生视频）
 
 **API ID:** `api-Xa6Jew6JjAqa`
-**third_part_domain:** `app-bm0s7wqmrksh-api-Xa6Jew6JjAqa-gateway.appmiaoda.com`
+**third_part_domain:** `app-bo4w33bsdqm9-api-Xa6Jew6JjAqa-gateway.appmiaoda.com`
 **计费:** 启用（`enable_billing: true`, `need_count_calls: true`）
 
 ### 请求参数
@@ -65,7 +65,7 @@
 ## 2. Query Status（任务查询）
 
 **API ID:** `api-M9v0w87KjxoY`
-**third_part_domain:** `app-bm0s7wqmrksh-api-M9v0w87KjxoY-gateway.appmiaoda.com`
+**third_part_domain:** `app-bo4w33bsdqm9-api-M9v0w87KjxoY-gateway.appmiaoda.com`
 **计费:** 不启用（`enable_billing: false`）
 
 ### 请求参数
@@ -98,7 +98,7 @@
 ## 3. Video from Reference（图生视频）
 
 **API ID:** `api-W9z3qro1AVZL`
-**third_part_domain:** `app-bm0s7wqmrksh-api-Xa6Jew6JjAqa-gateway.appmiaoda.com`
+**third_part_domain:** `app-bo4w33bsdqm9-api-Xa6Jew6JjAqa-gateway.appmiaoda.com`
 **计费:** 启用（`enable_billing: true`, `need_count_calls: true`）
 
 ### 请求参数
@@ -122,7 +122,7 @@
 ## 4. Remix Video（视频 Remix）
 
 **API ID:** `api-M9v0wP10kQjY`
-**third_part_domain:** `app-bm0s7wqmrksh-api-Xa6Jew6JjAqa-gateway.appmiaoda.com`
+**third_part_domain:** `app-bo4w33bsdqm9-api-Xa6Jew6JjAqa-gateway.appmiaoda.com`
 **计费:** 启用（`enable_billing: true`, `need_count_calls: true`）
 
 ### 请求参数
@@ -165,7 +165,7 @@ async function createVideo(params: {
   form.append("seconds", String(params.seconds ?? 4));
 
   const res = await fetch(
-    "https://app-bm0s7wqmrksh-api-Xa6Jew6JjAqa-gateway.appmiaoda.com/openai/v1/videos",
+    "https://app-bo4w33bsdqm9-api-Xa6Jew6JjAqa-gateway.appmiaoda.com/openai/v1/videos",
     {
       method: "POST",
       headers: { "X-Gateway-Authorization": `Bearer ${apiKey}` },
@@ -215,7 +215,7 @@ async function createVideoFromReference(params: {
   form.append("input_reference", imageBlob, filename);
 
   const res = await fetch(
-    "https://app-bm0s7wqmrksh-api-W9z3qro1AVZL-gateway.appmiaoda.com/openai/v1/videos",
+    "https://app-bo4w33bsdqm9-api-W9z3qro1AVZL-gateway.appmiaoda.com/openai/v1/videos",
     {
       method: "POST",
       headers: { "X-Gateway-Authorization": `Bearer ${apiKey}` },
@@ -233,7 +233,7 @@ async function remixVideo(params: {
   prompt: string;
 }): Promise<string> {
   const res = await fetch(
-    "https://app-bm0s7wqmrksh-api-M9v0wP10kQjY-gateway.appmiaoda.com/openai/v1/videos/remix",
+    "https://app-bo4w33bsdqm9-api-M9v0wP10kQjY-gateway.appmiaoda.com/openai/v1/videos/remix",
     {
       method: "POST",
       headers: {
@@ -257,7 +257,7 @@ async function queryVideoStatus(videoId: string): Promise<{
   error?: string | null;
 }> {
   const res = await fetch(
-    "https://app-bm0s7wqmrksh-api-M9v0w87KjxoY-gateway.appmiaoda.com/query",
+    "https://app-bo4w33bsdqm9-api-M9v0w87KjxoY-gateway.appmiaoda.com/query",
     {
       method: "POST",
       headers: {
@@ -445,7 +445,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-Xa6Jew6JjAqa-gateway.appmiaoda.com/openai/v1/videos",
+    "https://app-bo4w33bsdqm9-api-Xa6Jew6JjAqa-gateway.appmiaoda.com/openai/v1/videos",
     {
       method: "POST",
       headers: { "X-Gateway-Authorization": `Bearer ${apiKey}` },
@@ -557,7 +557,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用 api-W9z3qro1AVZL（Video from Reference 专用接口）---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-W9z3qro1AVZL-gateway.appmiaoda.com/openai/v1/videos",
+    "https://app-bo4w33bsdqm9-api-W9z3qro1AVZL-gateway.appmiaoda.com/openai/v1/videos",
     {
       method: "POST",
       headers: { "X-Gateway-Authorization": `Bearer ${apiKey}` },
@@ -650,7 +650,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-M9v0w87KjxoY-gateway.appmiaoda.com/query",
+    "https://app-bo4w33bsdqm9-api-M9v0w87KjxoY-gateway.appmiaoda.com/query",
     {
       method: "POST",
       headers: {
@@ -734,7 +734,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-M9v0wP10kQjY-gateway.appmiaoda.com/openai/v1/videos/remix",
+    "https://app-bo4w33bsdqm9-api-M9v0wP10kQjY-gateway.appmiaoda.com/openai/v1/videos/remix",
     {
       method: "POST",
       headers: {

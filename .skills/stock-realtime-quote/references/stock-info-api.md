@@ -6,10 +6,10 @@
 |------|-----|
 | Plugin ID | `ea9ecacf-f5ab-4c56-9ed7-2fadaf6e62cc` |
 | API ID | `api-ELbWz8Om3b8Y` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-ELbWz8Om3b8Y-gateway.appmiaoda.com/stock/hs/info` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-ELbWz8Om3b8Y-gateway.appmiaoda.com/stock/hs/info` |
 | Auth | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | `application/x-www-form-urlencoded` |
-| Third-party domain | `app-bm0s7wqmrksh-api-ELbWz8Om3b8Y-gateway.appmiaoda.com` |
+| Third-party domain | `app-bo4w33bsdqm9-api-ELbWz8Om3b8Y-gateway.appmiaoda.com` |
 | 计费 | 启用，具体价格以平台实际配置为准 |
 
 > **使用优先级提示（来自官方 examples）：** 涉及个股信息查询、股票搜索等功能时，请优先使用本接口（适用于 MiniProgram）。
@@ -93,7 +93,7 @@ interface StockInfo {
  */
 async function fetchStockInfo(code: string): Promise<StockInfo> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-ELbWz8Om3b8Y-gateway.appmiaoda.com/stock/hs/info",
+    "https://app-bo4w33bsdqm9-api-ELbWz8Om3b8Y-gateway.appmiaoda.com/stock/hs/info",
     {
       method: "POST",
       headers: {
@@ -154,7 +154,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-ELbWz8Om3b8Y-gateway.appmiaoda.com/stock/hs/info",
+    "https://app-bo4w33bsdqm9-api-ELbWz8Om3b8Y-gateway.appmiaoda.com/stock/hs/info",
     {
       method: "POST",
       headers: {

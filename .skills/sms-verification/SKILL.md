@@ -36,8 +36,8 @@ const { data, error } = await supabase.auth.verifyOtp({
 
 | 接口 | 端点 | 说明 |
 |------|------|------|
-| 发送短信验证码 | POST `https://app-bm0s7wqmrksh-api-W9z3M74x6ZNL-gateway.appmiaoda.com/v1/code/send_message` | 向指定手机号发送验证码，返回 sessionId |
-| 验证短信验证码 | POST `https://app-bm0s7wqmrksh-api-Xa6JZxjyqK0a-gateway.appmiaoda.com/v1/code/verify_message_code` | 根据 sessionId + 手机号 + 验证码进行校验 |
+| 发送短信验证码 | POST `https://app-bo4w33bsdqm9-api-W9z3M74x6ZNL-gateway.appmiaoda.com/v1/code/send_message` | 向指定手机号发送验证码，返回 sessionId |
+| 验证短信验证码 | POST `https://app-bo4w33bsdqm9-api-Xa6JZxjyqK0a-gateway.appmiaoda.com/v1/code/verify_message_code` | 根据 sessionId + 手机号 + 验证码进行校验 |
 
 **核心流程：**
 1. 调用"发送"接口，传入手机号（可选 sessionId），获得 `sessionId`

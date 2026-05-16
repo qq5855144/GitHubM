@@ -6,11 +6,11 @@
 |------|-----|
 | Plugin ID | `37acada7-121e-4016-a1e5-d3cbbf53d6b2` |
 | API ID | `api-e94GZ5j0ljja` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-e94GZ5j0ljja-gateway.appmiaoda.com/text2audio` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-e94GZ5j0ljja-gateway.appmiaoda.com/text2audio` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/x-www-form-urlencoded` |
-| Third-party Domain | `app-bm0s7wqmrksh-api-e94GZ5j0ljja-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bo4w33bsdqm9-api-e94GZ5j0ljja-gateway.appmiaoda.com` |
 | 响应格式 | 二进制音频流（`application/octet-stream`） |
 | 支持平台 | Web、MiniProgram、App |
 
@@ -97,7 +97,7 @@ async function callTextToAudio(
     vol: String(options.vol ?? 5),
   });
 
-  const response = await fetch("https://app-bm0s7wqmrksh-api-e94GZ5j0ljja-gateway.appmiaoda.com/text2audio", {
+  const response = await fetch("https://app-bo4w33bsdqm9-api-e94GZ5j0ljja-gateway.appmiaoda.com/text2audio", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -187,7 +187,7 @@ serve(async (req: Request): Promise<Response> => {
     vol: String(vol),
   });
 
-  const upstream = await fetch("https://app-bm0s7wqmrksh-api-e94GZ5j0ljja-gateway.appmiaoda.com/text2audio", {
+  const upstream = await fetch("https://app-bo4w33bsdqm9-api-e94GZ5j0ljja-gateway.appmiaoda.com/text2audio", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -295,7 +295,7 @@ serve(async (req: Request): Promise<Response> => {
     vol: String(vol),
   });
 
-  const upstream = await fetch("https://app-bm0s7wqmrksh-api-e94GZ5j0ljja-gateway.appmiaoda.com/text2audio", {
+  const upstream = await fetch("https://app-bo4w33bsdqm9-api-e94GZ5j0ljja-gateway.appmiaoda.com/text2audio", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -374,7 +374,7 @@ Deno.serve(async (req) => {
 
   const auth = `Bearer ${Deno.env.get("INTEGRATIONS_API_KEY")}`;
 
-  return fetch("https://app-bm0s7wqmrksh-api-e94GZ5j0ljja-gateway.appmiaoda.com/text2audio", {
+  return fetch("https://app-bo4w33bsdqm9-api-e94GZ5j0ljja-gateway.appmiaoda.com/text2audio", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",

@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `afe98a5e-125b-4104-adfc-3f57e2d42da1` |
 | API ID | `api-rLobR3D3dbg9` |
-| Endpoint | `GET https://app-bm0s7wqmrksh-api-rLobR3D3dbg9-gateway.appmiaoda.com/traffic/v1/road` |
+| Endpoint | `GET https://app-bo4w33bsdqm9-api-rLobR3D3dbg9-gateway.appmiaoda.com/traffic/v1/road` |
 | Auth | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | `application/json`（GET 请求，参数通过 Query String 传递） |
-| third_part_domain | `app-bm0s7wqmrksh-api-rLobR3D3dbg9-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-rLobR3D3dbg9-gateway.appmiaoda.com` |
 
 ## 请求参数
 
@@ -59,7 +59,7 @@ async function queryRoadTraffic(
   if (city) params.set("city", city);
 
   const response = await fetch(
-    `https://app-bm0s7wqmrksh-api-rLobR3D3dbg9-gateway.appmiaoda.com/traffic/v1/road?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-rLobR3D3dbg9-gateway.appmiaoda.com/traffic/v1/road?${params.toString()}`,
     {
       method: "GET",
       headers: {
@@ -123,7 +123,7 @@ serve(async (req: Request): Promise<Response> => {
   if (city) params.set("city", city);
 
   const upstream = await fetch(
-    `https://app-bm0s7wqmrksh-api-rLobR3D3dbg9-gateway.appmiaoda.com/traffic/v1/road?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-rLobR3D3dbg9-gateway.appmiaoda.com/traffic/v1/road?${params.toString()}`,
     {
       method: "GET",
       headers: {

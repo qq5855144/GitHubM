@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `0cf63ee3-d579-4191-a267-fe7ec70a10d5` |
 | API ID | `api-oYA6ZGjReooa` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-oYA6ZGjReooa-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/get_request_result` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-oYA6ZGjReooa-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/get_request_result` |
 | Content-Type | `application/x-www-form-urlencoded` |
 | Auth 模式 | `platform_managed`（`traefik: true`） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
-| third_part_domain | `app-bm0s7wqmrksh-api-oYA6ZGjReooa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-oYA6ZGjReooa-gateway.appmiaoda.com` |
 | 计费 | **不计费**，按需轮询 |
 
 ---
@@ -77,7 +77,7 @@ async function queryDocConvert(taskId: string): Promise<{
   end_time?: string;
 }> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-oYA6ZGjReooa-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/get_request_result",
+    "https://app-bo4w33bsdqm9-api-oYA6ZGjReooa-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/get_request_result",
     {
       method: "POST",
       headers: {
@@ -159,7 +159,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-oYA6ZGjReooa-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/get_request_result",
+    "https://app-bo4w33bsdqm9-api-oYA6ZGjReooa-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/get_request_result",
     {
       method: "POST",
       headers: {

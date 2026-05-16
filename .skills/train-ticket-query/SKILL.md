@@ -10,9 +10,9 @@ license: MIT
 
 | 能力 | 接口 | 方法 | API ID |
 |------|------|------|--------|
-| 车次查询 | `POST https://app-bm0s7wqmrksh-api-DLEO73l7Vjwa-gateway.appmiaoda.com/train/line` | POST | `api-DLEO73l7Vjwa` |
-| 余票查询 | `POST https://app-bm0s7wqmrksh-api-DLEO73lBPZ2a-gateway.appmiaoda.com/train/ticket` | POST | `api-DLEO73lBPZ2a` |
-| 站站查询 | `POST https://app-bm0s7wqmrksh-api-V9PworyO6gEa-gateway.appmiaoda.com/train/station2s` | POST | `api-V9PworyO6gEa` |
+| 车次查询 | `POST https://app-bo4w33bsdqm9-api-DLEO73l7Vjwa-gateway.appmiaoda.com/train/line` | POST | `api-DLEO73l7Vjwa` |
+| 余票查询 | `POST https://app-bo4w33bsdqm9-api-DLEO73lBPZ2a-gateway.appmiaoda.com/train/ticket` | POST | `api-DLEO73lBPZ2a` |
+| 站站查询 | `POST https://app-bo4w33bsdqm9-api-V9PworyO6gEa-gateway.appmiaoda.com/train/station2s` | POST | `api-V9PworyO6gEa` |
 
 - **认证方式**：平台托管（`platform_managed`），密钥由平台注入
 - **响应格式**：JSON，`status=0` 表示成功
@@ -40,7 +40,7 @@ license: MIT
 const apiKey = process.env["INTEGRATIONS_API_KEY"]!; // 密钥由平台注入，不可硬编码
 
 // 所有接口均以 POST + query params 形式调用，Body 为空
-const response = await fetch("https://<api_id>@app-bm0s7wqmrksh-api-DLEO73l7Vjwa-gateway.appmiaoda.com<path>?<params>", {
+const response = await fetch("https://<api_id>@app-bo4w33bsdqm9-api-DLEO73l7Vjwa-gateway.appmiaoda.com<path>?<params>", {
   method: "POST",
   headers: {
     "Content-Type": "application/json;charset=UTF-8",

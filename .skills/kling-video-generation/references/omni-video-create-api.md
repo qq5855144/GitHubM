@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `339870a2-4a8b-4633-a8c5-fed34600f5bf` |
 | API ID | `api-oLpZb03wbNBa` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-oLpZb03wbNBa-gateway.appmiaoda.com/v1/videos/omni-video` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-oLpZb03wbNBa-gateway.appmiaoda.com/v1/videos/omni-video` |
 | Auth 模式 | `platform_managed`（`traefik: true`） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bm0s7wqmrksh-api-oLpZb03wbNBa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-oLpZb03wbNBa-gateway.appmiaoda.com` |
 
 ---
 
@@ -138,7 +138,7 @@ async function createOmniVideoTask(
    * @returns 任务 ID 及初始状态信息
    */
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-oLpZb03wbNBa-gateway.appmiaoda.com/v1/videos/omni-video",
+    "https://app-bo4w33bsdqm9-api-oLpZb03wbNBa-gateway.appmiaoda.com/v1/videos/omni-video",
     {
       method: "POST",
       headers: {
@@ -263,7 +263,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-oLpZb03wbNBa-gateway.appmiaoda.com/v1/videos/omni-video",
+    "https://app-bo4w33bsdqm9-api-oLpZb03wbNBa-gateway.appmiaoda.com/v1/videos/omni-video",
     {
       method: "POST",
       headers: {

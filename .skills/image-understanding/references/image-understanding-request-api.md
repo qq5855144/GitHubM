@@ -6,12 +6,12 @@
 |------|----|
 | Plugin ID | `b335d1cb-8d7e-44ab-b419-752d3d363680` |
 | API ID | `api-DYJwo27V85oa` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-DYJwo27V85oa-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/request` |
-| 生成期 URL（含 API ID） | `https://app-bm0s7wqmrksh-api-DYJwo27V85oa-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/request` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-DYJwo27V85oa-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/request` |
+| 生成期 URL（含 API ID） | `https://app-bo4w33bsdqm9-api-DYJwo27V85oa-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/request` |
 | Content-Type | `application/json` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | 认证模式 | `platform_managed` |
-| third_part_domain | `app-bm0s7wqmrksh-api-DYJwo27V85oa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-DYJwo27V85oa-gateway.appmiaoda.com` |
 | 计费 | 启用，原价 ¥10.40/千次，折扣价 ¥7.50/千次 |
 
 ---
@@ -79,7 +79,7 @@ async function submitImageUnderstanding(
   }
 
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-DYJwo27V85oa-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/request",
+    "https://app-bo4w33bsdqm9-api-DYJwo27V85oa-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/request",
     {
       method: "POST",
       headers: {
@@ -151,7 +151,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-DYJwo27V85oa-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/request",
+    "https://app-bo4w33bsdqm9-api-DYJwo27V85oa-gateway.appmiaoda.com/rest/2.0/image-classify/v1/image-understanding/request",
     {
       method: "POST",
       headers: {

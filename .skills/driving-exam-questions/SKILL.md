@@ -9,7 +9,7 @@ license: MIT
 查询驾驶员考试题库，覆盖科目一和科目四，支持按车型（A1/A2/A3/B1/B2/C1/C2/C3/D/E/F）、章节、排序方式进行筛选，提供分页功能。
 每道题目包含完整题目文本、四个选项（判断题选项为空）、正确答案及答案解析，可选带题目图片。
 
-- **Endpoint**: `POST https://app-bm0s7wqmrksh-api-o9wN0mk1DAPa-gateway.appmiaoda.com/driverexam/query`
+- **Endpoint**: `POST https://app-bo4w33bsdqm9-api-o9wN0mk1DAPa-gateway.appmiaoda.com/driverexam/query`
 - **认证**: platform_managed（密钥由平台注入）
 - **响应格式**: JSON
 
@@ -133,7 +133,7 @@ async function queryDrivingExamQuestions(
   if (chapter) params.set("chapter", chapter);
 
   const response = await fetch(
-    `https://app-bm0s7wqmrksh-api-o9wN0mk1DAPa-gateway.appmiaoda.com/driverexam/query?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-o9wN0mk1DAPa-gateway.appmiaoda.com/driverexam/query?${params.toString()}`,
     {
       method: "POST",
       headers: {
@@ -215,7 +215,7 @@ serve(async (req: Request): Promise<Response> => {
   if (chapter) params.set("chapter", chapter);
 
   const upstream = await fetch(
-    `https://app-bm0s7wqmrksh-api-o9wN0mk1DAPa-gateway.appmiaoda.com/driverexam/query?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-o9wN0mk1DAPa-gateway.appmiaoda.com/driverexam/query?${params.toString()}`,
     {
       method: "POST",
       headers: {

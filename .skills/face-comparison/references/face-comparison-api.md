@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `7aa1d315-3501-43e0-bb77-f00497304e4a` |
 | API ID | `api-5YrZz81oerkY` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-5YrZz81oerkY-gateway.appmiaoda.com/rest/2.0/face/v3/match` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-5YrZz81oerkY-gateway.appmiaoda.com/rest/2.0/face/v3/match` |
 | Auth 模式 | `platform_managed`（密钥由平台注入） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${apiKey}` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bm0s7wqmrksh-api-5YrZz81oerkY-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-5YrZz81oerkY-gateway.appmiaoda.com` |
 | 计费 | 启用，原价 ¥0.20/次，折扣价 ¥0.15/次 |
 
 ---
@@ -87,7 +87,7 @@ interface FaceMatchResult {
  * @returns 相似度分数和人脸 token 列表
  */
 async function callFaceMatch(face1: FaceImage, face2: FaceImage): Promise<FaceMatchResult> {
-  const response = await fetch("https://app-bm0s7wqmrksh-api-5YrZz81oerkY-gateway.appmiaoda.com/rest/2.0/face/v3/match", {
+  const response = await fetch("https://app-bo4w33bsdqm9-api-5YrZz81oerkY-gateway.appmiaoda.com/rest/2.0/face/v3/match", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -191,7 +191,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-5YrZz81oerkY-gateway.appmiaoda.com/rest/2.0/face/v3/match",
+    "https://app-bo4w33bsdqm9-api-5YrZz81oerkY-gateway.appmiaoda.com/rest/2.0/face/v3/match",
     {
       method: "POST",
       headers: {

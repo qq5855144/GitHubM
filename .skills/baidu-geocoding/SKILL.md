@@ -10,8 +10,8 @@ license: MIT
 
 | 接口 | 方向 | Endpoint | Method |
 |------|------|----------|--------|
-| 地理编码 | 地址 → 坐标 | `GET https://app-bm0s7wqmrksh-api-GaDwZ0j3erOY-gateway.appmiaoda.com/geocoding/v3/` | GET |
-| 逆地理编码 | 坐标 → 地址 | `GET https://app-bm0s7wqmrksh-api-baBwZEjbe1X9-gateway.appmiaoda.com/reverse_geocoding/v3` | GET |
+| 地理编码 | 地址 → 坐标 | `GET https://app-bo4w33bsdqm9-api-GaDwZ0j3erOY-gateway.appmiaoda.com/geocoding/v3/` | GET |
+| 逆地理编码 | 坐标 → 地址 | `GET https://app-bo4w33bsdqm9-api-baBwZEjbe1X9-gateway.appmiaoda.com/reverse_geocoding/v3` | GET |
 
 - **认证模式**: `platform_managed`（`traefik: true`），密钥由平台注入，无需用户配置
 - **响应格式**: JSON
@@ -41,7 +41,7 @@ const params = new URLSearchParams({
   output: "json",
 });
 const response = await fetch(
-  `https://app-bm0s7wqmrksh-api-GaDwZ0j3erOY-gateway.appmiaoda.com/geocoding/v3/?${params}`,
+  `https://app-bo4w33bsdqm9-api-GaDwZ0j3erOY-gateway.appmiaoda.com/geocoding/v3/?${params}`,
   {
     method: "GET",
     headers: {

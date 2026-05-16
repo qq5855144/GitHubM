@@ -6,10 +6,10 @@
 |------|-----|
 | Plugin ID | `ea9ecacf-f5ab-4c56-9ed7-2fadaf6e62cc` |
 | API ID | `api-wLNdo2j5e6ga` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-wLNdo2j5e6ga-gateway.appmiaoda.com/stock/hs/rank` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-wLNdo2j5e6ga-gateway.appmiaoda.com/stock/hs/rank` |
 | Auth | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | `application/x-www-form-urlencoded` |
-| Third-party domain | `app-bm0s7wqmrksh-api-wLNdo2j5e6ga-gateway.appmiaoda.com` |
+| Third-party domain | `app-bo4w33bsdqm9-api-wLNdo2j5e6ga-gateway.appmiaoda.com` |
 | 计费 | 启用，折扣价 ¥0.13/次，原价 ¥0.20/次 |
 
 ---
@@ -95,7 +95,7 @@ async function fetchStockRank(
   pageSize = "10"
 ): Promise<StockRankData> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-wLNdo2j5e6ga-gateway.appmiaoda.com/stock/hs/rank",
+    "https://app-bo4w33bsdqm9-api-wLNdo2j5e6ga-gateway.appmiaoda.com/stock/hs/rank",
     {
       method: "POST",
       headers: {
@@ -164,7 +164,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-wLNdo2j5e6ga-gateway.appmiaoda.com/stock/hs/rank",
+    "https://app-bo4w33bsdqm9-api-wLNdo2j5e6ga-gateway.appmiaoda.com/stock/hs/rank",
     {
       method: "POST",
       headers: {

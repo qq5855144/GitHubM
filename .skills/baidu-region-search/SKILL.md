@@ -10,7 +10,7 @@ license: MIT
 
 | 属性 | 值 |
 |------|---|
-| Endpoint | `GET https://app-bm0s7wqmrksh-api-DYJwn2VZXvEa-gateway.appmiaoda.com/api_region_search/v1/` |
+| Endpoint | `GET https://app-bo4w33bsdqm9-api-DYJwn2VZXvEa-gateway.appmiaoda.com/api_region_search/v1/` |
 | 认证模式 | platform_managed（密钥由平台注入，读取 `INTEGRATIONS_API_KEY`） |
 | 响应格式 | JSON |
 | 计费 | 原价 ¥1.20 / 千次，折扣价 ¥0.75 / 千次 |
@@ -83,7 +83,7 @@ async function queryAdminRegion(
   }
 
   const response = await fetch(
-    `https://app-bm0s7wqmrksh-api-DYJwn2VZXvEa-gateway.appmiaoda.com/api_region_search/v1/?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-DYJwn2VZXvEa-gateway.appmiaoda.com/api_region_search/v1/?${params.toString()}`,
     {
       method: "GET",
       headers: {
@@ -171,7 +171,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    `https://app-bm0s7wqmrksh-api-DYJwn2VZXvEa-gateway.appmiaoda.com/api_region_search/v1/?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-DYJwn2VZXvEa-gateway.appmiaoda.com/api_region_search/v1/?${params.toString()}`,
     {
       method: "GET",
       headers: {

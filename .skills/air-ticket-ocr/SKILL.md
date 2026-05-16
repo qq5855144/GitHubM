@@ -8,7 +8,7 @@ license: MIT
 
 对飞机行程单进行结构化 OCR 识别，支持单张行程单上的多航班信息提取。返回最多 24 个字段，包括乘客姓名、始发站/目的站、航班号、日期时间、票价、税费、电子客票号等。
 
-- **Endpoint**: `POST https://app-bm0s7wqmrksh-api-DLEO7Vjd8Qea-gateway.appmiaoda.com/rest/2.0/ocr/v1/air_ticket`
+- **Endpoint**: `POST https://app-bo4w33bsdqm9-api-DLEO7Vjd8Qea-gateway.appmiaoda.com/rest/2.0/ocr/v1/air_ticket`
 - **Content-Type**: `application/x-www-form-urlencoded`
 - **认证模式**: `platform_managed`（密钥由平台注入，无需用户配置）
 - Auth Header 为 `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`（注意不是标准的 `Authorization`）。

@@ -12,9 +12,9 @@ license: MIT
 
 | 步骤 | API | Endpoint |
 |------|-----|----------|
-| 1. 创建任务 | 图生视频 - 创建任务 | POST `https://app-bm0s7wqmrksh-api-DY8MN3QBydBa-gateway.appmiaoda.com/v1/videos/image2video` |
-| 2. 查询单个任务 | 图生视频 - 查询任务（单个） | GET `https://app-bm0s7wqmrksh-api-zYkZzgKook1L-gateway.appmiaoda.com/v1/videos/image2video/{id}` |
-| 3. 查询任务列表 | 图生视频 - 查询任务（列表） | GET `https://app-bm0s7wqmrksh-api-n9QVoDJ6oykL-gateway.appmiaoda.com/v1/videos/image2video` |
+| 1. 创建任务 | 图生视频 - 创建任务 | POST `https://app-bo4w33bsdqm9-api-DY8MN3QBydBa-gateway.appmiaoda.com/v1/videos/image2video` |
+| 2. 查询单个任务 | 图生视频 - 查询任务（单个） | GET `https://app-bo4w33bsdqm9-api-zYkZzgKook1L-gateway.appmiaoda.com/v1/videos/image2video/{id}` |
+| 3. 查询任务列表 | 图生视频 - 查询任务（列表） | GET `https://app-bo4w33bsdqm9-api-n9QVoDJ6oykL-gateway.appmiaoda.com/v1/videos/image2video` |
 
 **核心能力：**
 - 支持模型版本：kling-v2-6（及历史版本 kling-v1、kling-v1-5 等）

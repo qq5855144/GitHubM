@@ -6,10 +6,10 @@
 |------|-----|
 | Plugin ID | `d5c0b7d3-bc6a-4d3a-b8a2-e37246fac4df` |
 | API ID | `api-GaDwZekp8WzY` |
-| Endpoint | `GET https://app-bm0s7wqmrksh-api-GaDwZekp8WzY-gateway.appmiaoda.com/place/v3/detail` |
+| Endpoint | `GET https://app-bo4w33bsdqm9-api-GaDwZekp8WzY-gateway.appmiaoda.com/place/v3/detail` |
 | Auth | `X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>`（platform_managed） |
 | Content-Type | 无请求体（GET 参数通过 URL 查询串传递） |
-| Third-party domain | `app-bm0s7wqmrksh-api-GaDwZekp8WzY-gateway.appmiaoda.com` |
+| Third-party domain | `app-bo4w33bsdqm9-api-GaDwZekp8WzY-gateway.appmiaoda.com` |
 | 计费 | 按次计费，折扣价 ¥0.75 / 千次，原价 ¥1.20 / 千次 |
 
 ---
@@ -138,7 +138,7 @@ async function getPoiDetail(
   if (options.photoShow !== undefined) params.set("photo_show", String(options.photoShow));
 
   const response = await fetch(
-    `https://app-bm0s7wqmrksh-api-GaDwZekp8WzY-gateway.appmiaoda.com/place/v3/detail?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-GaDwZekp8WzY-gateway.appmiaoda.com/place/v3/detail?${params.toString()}`,
     {
       method: "GET",
       headers: {
@@ -222,7 +222,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    `https://app-bm0s7wqmrksh-api-GaDwZekp8WzY-gateway.appmiaoda.com/place/v3/detail?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-GaDwZekp8WzY-gateway.appmiaoda.com/place/v3/detail?${params.toString()}`,
     {
       method: "GET",
       headers: {

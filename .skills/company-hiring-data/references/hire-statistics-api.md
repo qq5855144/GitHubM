@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `179c86e6-24ab-4303-8530-f21c4437c23e` |
 | API ID | `api-zYkZzErqJg4L` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-zYkZzErqJg4L-gateway.appmiaoda.com/enterprise/hire-statistics` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-zYkZzErqJg4L-gateway.appmiaoda.com/enterprise/hire-statistics` |
 | Auth | `platform_managed`，Header: `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/x-www-form-urlencoded` |
-| third_part_domain | `app-bm0s7wqmrksh-api-zYkZzErqJg4L-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-zYkZzErqJg4L-gateway.appmiaoda.com` |
 
 ## 请求参数
 
@@ -129,7 +129,7 @@ interface HireStatisticsData {
  */
 async function fetchHireStatistics(keyword: string): Promise<HireStatisticsData> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-zYkZzErqJg4L-gateway.appmiaoda.com/enterprise/hire-statistics",
+    "https://app-bo4w33bsdqm9-api-zYkZzErqJg4L-gateway.appmiaoda.com/enterprise/hire-statistics",
     {
       method: "POST",
       headers: {
@@ -194,7 +194,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-zYkZzErqJg4L-gateway.appmiaoda.com/enterprise/hire-statistics",
+    "https://app-bo4w33bsdqm9-api-zYkZzErqJg4L-gateway.appmiaoda.com/enterprise/hire-statistics",
     {
       method: "POST",
       headers: {

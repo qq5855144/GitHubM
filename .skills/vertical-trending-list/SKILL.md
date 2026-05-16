@@ -8,7 +8,7 @@ license: MIT
 
 调用百度千帆垂类热榜查询接口，根据指定的垂类类型、媒体平台和时间范围，返回热门内容条目列表（包含标题、热度值、点赞量、浏览量、内容链接等）。
 
-- **Endpoint**：`POST https://app-bm0s7wqmrksh-api-ra5EZDjVyjVa-gateway.appmiaoda.com/v2/tools/trending_lists/vertical`
+- **Endpoint**：`POST https://app-bo4w33bsdqm9-api-ra5EZDjVyjVa-gateway.appmiaoda.com/v2/tools/trending_lists/vertical`
 - **Auth 模式**：`platform_managed`，密钥由平台通过 `INTEGRATIONS_API_KEY` 注入
 - **核心参数**：
   - `type`（string，必填）：垂类类型，可选 `美食` / `美妆` / `汽车`
@@ -37,7 +37,7 @@ license: MIT
 const apiKey = process.env["INTEGRATIONS_API_KEY"]!;
 
 const response = await fetch(
-  "https://app-bm0s7wqmrksh-api-ra5EZDjVyjVa-gateway.appmiaoda.com/v2/tools/trending_lists/vertical",
+  "https://app-bo4w33bsdqm9-api-ra5EZDjVyjVa-gateway.appmiaoda.com/v2/tools/trending_lists/vertical",
   {
     method: "POST",
     headers: {

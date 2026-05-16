@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `6386ef84-de65-46f3-b77a-dee7078966a6` |
 | API ID | `api-Xa6JZxjyqZna` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-Xa6JZxjyqZna-gateway.appmiaoda.com/rest/2.0/ocr/v1/train_ticket` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-Xa6JZxjyqZna-gateway.appmiaoda.com/rest/2.0/ocr/v1/train_ticket` |
 | Content-Type | `application/x-www-form-urlencoded` |
 | Auth Header | `X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>` |
 | 认证模式 | `platform_managed` |
-| Third-party Domain | `app-bm0s7wqmrksh-api-Xa6JZxjyqZna-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bo4w33bsdqm9-api-Xa6JZxjyqZna-gateway.appmiaoda.com` |
 | 流式响应 | 否 |
 
 ---
@@ -128,7 +128,7 @@ async function recognizeTrainTicket(params: TrainTicketParams): Promise<TrainTic
   if (params.ofd_file_num) formData.append("ofd_file_num", params.ofd_file_num);
 
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-Xa6JZxjyqZna-gateway.appmiaoda.com/rest/2.0/ocr/v1/train_ticket",
+    "https://app-bo4w33bsdqm9-api-Xa6JZxjyqZna-gateway.appmiaoda.com/rest/2.0/ocr/v1/train_ticket",
     {
       method: "POST",
       headers: {
@@ -226,7 +226,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-Xa6JZxjyqZna-gateway.appmiaoda.com/rest/2.0/ocr/v1/train_ticket",
+    "https://app-bo4w33bsdqm9-api-Xa6JZxjyqZna-gateway.appmiaoda.com/rest/2.0/ocr/v1/train_ticket",
     {
       method: "POST",
       headers: {

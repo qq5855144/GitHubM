@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `faf0f771-1a33-47a4-a111-c128e647a25e` |
 | API ID | `api-GaDwZ0j38X6Y` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-GaDwZ0j38X6Y-gateway.appmiaoda.com/rest/2.0/face/v3/faceset/user/get` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-GaDwZ0j38X6Y-gateway.appmiaoda.com/rest/2.0/face/v3/faceset/user/get` |
 | Auth 模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bm0s7wqmrksh-api-GaDwZ0j38X6Y-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-GaDwZ0j38X6Y-gateway.appmiaoda.com` |
 | 计费 | 否 |
 
 ## 请求参数表
@@ -56,7 +56,7 @@ async function getFaceUser(userId: string): Promise<{
   user_list: Array<{ user_info: string; group_id: string }>;
 }> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-GaDwZ0j38X6Y-gateway.appmiaoda.com/rest/2.0/face/v3/faceset/user/get",
+    "https://app-bo4w33bsdqm9-api-GaDwZ0j38X6Y-gateway.appmiaoda.com/rest/2.0/face/v3/faceset/user/get",
     {
       method: "POST",
       headers: {
@@ -108,7 +108,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-GaDwZ0j38X6Y-gateway.appmiaoda.com/rest/2.0/face/v3/faceset/user/get",
+    "https://app-bo4w33bsdqm9-api-GaDwZ0j38X6Y-gateway.appmiaoda.com/rest/2.0/face/v3/faceset/user/get",
     {
       method: "POST",
       headers: {

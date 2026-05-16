@@ -10,8 +10,8 @@ license: MIT
 
 | 接口 | 方法 | Endpoint |
 |------|------|----------|
-| 城市限行查询 | POST | `https://app-bm0s7wqmrksh-api-pLVzAxRQyMWL-gateway.appmiaoda.com/vehiclelimit/query` |
-| 获取支持限行查询的城市列表 | POST | `https://app-bm0s7wqmrksh-api-DYJwnJVBwb4a-gateway.appmiaoda.com/vehiclelimit/city` |
+| 城市限行查询 | POST | `https://app-bo4w33bsdqm9-api-pLVzAxRQyMWL-gateway.appmiaoda.com/vehiclelimit/query` |
+| 获取支持限行查询的城市列表 | POST | `https://app-bo4w33bsdqm9-api-DYJwnJVBwb4a-gateway.appmiaoda.com/vehiclelimit/city` |
 
 **认证模式：** `platform_managed`（密钥由平台注入，读取 `INTEGRATIONS_API_KEY` 环境变量）
 - Auth Header 为 `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`（注意不是标准的 `Authorization`）。

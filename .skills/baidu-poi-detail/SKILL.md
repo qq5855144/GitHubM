@@ -10,9 +10,9 @@ license: MIT
 
 | 接口 | 作用 | Endpoint |
 |------|------|----------|
-| **行政区划区域检索** | 在指定行政区划（省/市/区县）内按关键词检索 POI | `GET https://app-bm0s7wqmrksh-api-ra5EZvmRrG4a-gateway.appmiaoda.com/place/v3/region` |
-| **圆形区域检索** | 以经纬度为圆心、指定半径范围内检索周边 POI | `GET https://app-bm0s7wqmrksh-api-DLEO7eMnzMwa-gateway.appmiaoda.com/place/v3/around` |
-| **地点详情检索** | 根据 POI uid 获取详细信息（评分/营业时间/价格等） | `GET https://app-bm0s7wqmrksh-api-GaDwZekp8WzY-gateway.appmiaoda.com/place/v3/detail` |
+| **行政区划区域检索** | 在指定行政区划（省/市/区县）内按关键词检索 POI | `GET https://app-bo4w33bsdqm9-api-ra5EZvmRrG4a-gateway.appmiaoda.com/place/v3/region` |
+| **圆形区域检索** | 以经纬度为圆心、指定半径范围内检索周边 POI | `GET https://app-bo4w33bsdqm9-api-DLEO7eMnzMwa-gateway.appmiaoda.com/place/v3/around` |
+| **地点详情检索** | 根据 POI uid 获取详细信息（评分/营业时间/价格等） | `GET https://app-bo4w33bsdqm9-api-GaDwZekp8WzY-gateway.appmiaoda.com/place/v3/detail` |
 
 **认证方式**：platform_managed，密钥由平台注入（`INTEGRATIONS_API_KEY`），请求头统一使用 `X-Gateway-Authorization: Bearer <key>`。
 

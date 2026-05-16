@@ -8,7 +8,7 @@ license: MIT
 
 通过身份证号和姓名进行二要素实名认证，验证两者是否匹配，并返回用户性别、生日、身份证注册地等信息。后台配备多冗余渠道，可通过系统监控自动切换，保障服务高可用性与高成功率。
 
-- **Endpoint**：`GET https://app-bm0s7wqmrksh-api-oLpZ74noWOMa-gateway.appmiaoda.com/idcard`
+- **Endpoint**：`GET https://app-bo4w33bsdqm9-api-oLpZ74noWOMa-gateway.appmiaoda.com/idcard`
 - **认证方式**：platform_managed（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`）
 - **核心参数**：`idcard`（身份证号）、`name`（姓名）
 - **响应格式**：JSON，业务结果在 `showapi_res_body` 中，`code=0` 表示匹配
@@ -66,7 +66,7 @@ async function verifyIdCardTwoFactor(
 }> {
   const params = new URLSearchParams({ idcard, name });
   const response = await fetch(
-    `https://app-bm0s7wqmrksh-api-oLpZ74noWOMa-gateway.appmiaoda.com/idcard?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-oLpZ74noWOMa-gateway.appmiaoda.com/idcard?${params.toString()}`,
     {
       method: "GET",
       headers: {
@@ -140,7 +140,7 @@ serve(async (req: Request): Promise<Response> => {
   // --- 调用上游接口（注意：姓名需 URL 编码）---
   const params = new URLSearchParams({ idcard, name });
   const upstream = await fetch(
-    `https://app-bm0s7wqmrksh-api-oLpZ74noWOMa-gateway.appmiaoda.com/idcard?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-oLpZ74noWOMa-gateway.appmiaoda.com/idcard?${params.toString()}`,
     {
       method: "GET",
       headers: {

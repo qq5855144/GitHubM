@@ -13,8 +13,8 @@ license: MIT
 
 | 维度 | 说明 |
 |------|------|
-| 提交接口 | `POST https://app-bm0s7wqmrksh-api-rY7JZ6jqrneL-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/request` |
-| 查询接口 | `POST https://app-bm0s7wqmrksh-api-oYA6ZGjReooa-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/get_request_result` |
+| 提交接口 | `POST https://app-bo4w33bsdqm9-api-rY7JZ6jqrneL-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/request` |
+| 查询接口 | `POST https://app-bo4w33bsdqm9-api-oYA6ZGjReooa-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/get_request_result` |
 | Content-Type | `application/x-www-form-urlencoded` |
 | 认证模式 | `platform_managed`（`traefik: true`） |
 | 输入格式 | 图片 base64（jpg/jpeg/png/bmp，≤4M）、图片 URL，或 PDF base64（≤10M） |
@@ -57,7 +57,7 @@ async function submitDocConvert(
   if (pdfFileNum) params.pdf_file_num = pdfFileNum;
 
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-rY7JZ6jqrneL-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/request",
+    "https://app-bo4w33bsdqm9-api-rY7JZ6jqrneL-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/request",
     {
       method: "POST",
       headers: {
@@ -84,7 +84,7 @@ async function queryDocConvert(taskId: string): Promise<{
   result_data?: { word: string; excel: string };
 }> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-oYA6ZGjReooa-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/get_request_result",
+    "https://app-bo4w33bsdqm9-api-oYA6ZGjReooa-gateway.appmiaoda.com/rest/2.0/ocr/v1/doc_convert/get_request_result",
     {
       method: "POST",
       headers: {

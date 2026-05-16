@@ -8,7 +8,7 @@ license: MIT
 
 调用企业三要素验证接口，传入企业名称、统一社会信用代码和法人姓名，校验三要素是否与工商信息一致，并返回具体不一致项。
 
-- **Endpoint**: `GET https://app-bm0s7wqmrksh-api-Aa2PZnjE80BL-gateway.appmiaoda.com/company_three/get`
+- **Endpoint**: `GET https://app-bo4w33bsdqm9-api-Aa2PZnjE80BL-gateway.appmiaoda.com/company_three/get`
 - **认证方式**: platform_managed（密钥由平台注入，读取 `INTEGRATIONS_API_KEY`）
 - **Content-Type**: `application/json;charset=UTF-8`
 - **响应格式**: JSON
@@ -95,7 +95,7 @@ async function verifyCompanyThreeFactors(
 ): Promise<CompanyThreeFactorResult> {
   const params = new URLSearchParams({ companyName, creditNo, legalPerson });
   const response = await fetch(
-    `https://app-bm0s7wqmrksh-api-Aa2PZnjE80BL-gateway.appmiaoda.com/company_three/get?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-Aa2PZnjE80BL-gateway.appmiaoda.com/company_three/get?${params.toString()}`,
     {
       method: "GET",
       headers: {
@@ -171,7 +171,7 @@ serve(async (req: Request): Promise<Response> => {
   // --- 调用上游接口 ---
   const params = new URLSearchParams({ companyName, creditNo, legalPerson });
   const upstream = await fetch(
-    `https://app-bm0s7wqmrksh-api-Aa2PZnjE80BL-gateway.appmiaoda.com/company_three/get?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-Aa2PZnjE80BL-gateway.appmiaoda.com/company_three/get?${params.toString()}`,
     {
       method: "GET",
       headers: {
@@ -294,4 +294,4 @@ async function verifyCompanyThreeFactors(
 - **必填参数**：`companyName`、`creditNo`、`legalPerson` 三个参数均为必填，任一缺失将返回 400 入参错误。
 - **Plugin ID**: `a7c30985-2084-4205-9dbd-9d84238e0b3f`
 - **API ID**: `api-Aa2PZnjE80BL`
-- **third_part_domain**: `app-bm0s7wqmrksh-api-Aa2PZnjE80BL-gateway.appmiaoda.com`
+- **third_part_domain**: `app-bo4w33bsdqm9-api-Aa2PZnjE80BL-gateway.appmiaoda.com`

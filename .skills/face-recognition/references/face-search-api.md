@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `faf0f771-1a33-47a4-a111-c128e647a25e` |
 | API ID | `api-e94GZ5j0PwVa` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-e94GZ5j0PwVa-gateway.appmiaoda.com/rest/2.0/face/v3/search` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-e94GZ5j0PwVa-gateway.appmiaoda.com/rest/2.0/face/v3/search` |
 | Auth 模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>` |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bm0s7wqmrksh-api-e94GZ5j0PwVa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-e94GZ5j0PwVa-gateway.appmiaoda.com` |
 | 计费 | 是，原价 ¥0.20/次，折扣价 ¥0.15/次 |
 
 ## 请求参数表
@@ -87,7 +87,7 @@ async function searchFace(
   if (options?.matchThreshold !== undefined) body.match_threshold = options.matchThreshold;
 
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-e94GZ5j0PwVa-gateway.appmiaoda.com/rest/2.0/face/v3/search",
+    "https://app-bo4w33bsdqm9-api-e94GZ5j0PwVa-gateway.appmiaoda.com/rest/2.0/face/v3/search",
     {
       method: "POST",
       headers: {
@@ -160,7 +160,7 @@ serve(async (req: Request): Promise<Response> => {
   if (match_threshold !== undefined) requestBody.match_threshold = match_threshold;
 
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-e94GZ5j0PwVa-gateway.appmiaoda.com/rest/2.0/face/v3/search",
+    "https://app-bo4w33bsdqm9-api-e94GZ5j0PwVa-gateway.appmiaoda.com/rest/2.0/face/v3/search",
     {
       method: "POST",
       headers: {

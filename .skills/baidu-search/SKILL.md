@@ -6,10 +6,10 @@ license: MIT
 
 ## 能力概述
 
-百度千帆 AI 搜索接口，通过 POST 请求向 `https://app-bm0s7wqmrksh-api-rY7JZ6jqr6dL-gateway.appmiaoda.com/v2/ai_search/chat/completions`
+百度千帆 AI 搜索接口，通过 POST 请求向 `https://app-bo4w33bsdqm9-api-rY7JZ6jqr6dL-gateway.appmiaoda.com/v2/ai_search/chat/completions`
 发送对话消息，实时检索全网内容，返回结构化的引用来源列表（网页 / 视频）。
 
-**Endpoint：** `POST https://app-bm0s7wqmrksh-api-rY7JZ6jqr6dL-gateway.appmiaoda.com/v2/ai_search/chat/completions`
+**Endpoint：** `POST https://app-bo4w33bsdqm9-api-rY7JZ6jqr6dL-gateway.appmiaoda.com/v2/ai_search/chat/completions`
 
 **核心参数：**
 

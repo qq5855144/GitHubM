@@ -10,8 +10,8 @@ license: MIT
 
 | 接口 | Endpoint | 返回内容 |
 |------|----------|---------|
-| 招聘概况查询 | `POST https://app-bm0s7wqmrksh-api-Aa2PZ2MejdoL-gateway.appmiaoda.com/enterprise/hire-overview` | 职位关键词、职位类型、城市分布、招聘来源、职位级别、平均薪资、职位数量等概况 |
-| 招聘数据统计 | `POST https://app-bm0s7wqmrksh-api-zYkZzErqJg4L-gateway.appmiaoda.com/enterprise/hire-statistics` | 平均薪资、学历分布、主要省份、招聘职位、薪资区间、工作年限分布、招聘数量时间序列等详细统计 |
+| 招聘概况查询 | `POST https://app-bo4w33bsdqm9-api-Aa2PZ2MejdoL-gateway.appmiaoda.com/enterprise/hire-overview` | 职位关键词、职位类型、城市分布、招聘来源、职位级别、平均薪资、职位数量等概况 |
+| 招聘数据统计 | `POST https://app-bo4w33bsdqm9-api-zYkZzErqJg4L-gateway.appmiaoda.com/enterprise/hire-statistics` | 平均薪资、学历分布、主要省份、招聘职位、薪资区间、工作年限分布、招聘数量时间序列等详细统计 |
 
 认证模式：`platform_managed`（密钥由平台注入，读取 `INTEGRATIONS_API_KEY` 环境变量）。
 Auth Header 为 `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`（注意不是标准的 `Authorization`）。

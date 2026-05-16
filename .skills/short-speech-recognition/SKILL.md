@@ -10,7 +10,7 @@ license: MIT
 
 | 属性 | 值 |
 |------|-----|
-| Endpoint | `https://app-bm0s7wqmrksh-api-Aa2PZnjEw5NL-gateway.appmiaoda.com/server_api` |
+| Endpoint | `https://app-bo4w33bsdqm9-api-Aa2PZnjEw5NL-gateway.appmiaoda.com/server_api` |
 | Method | POST |
 | Content-Type | application/json |
 | Plugin ID | `4ce92d6c-eb93-4c59-be9c-7f265903e2c8` |

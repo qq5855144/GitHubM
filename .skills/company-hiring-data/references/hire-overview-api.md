@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `179c86e6-24ab-4303-8530-f21c4437c23e` |
 | API ID | `api-Aa2PZ2MejdoL` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-Aa2PZ2MejdoL-gateway.appmiaoda.com/enterprise/hire-overview` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-Aa2PZ2MejdoL-gateway.appmiaoda.com/enterprise/hire-overview` |
 | Auth | `platform_managed`，Header: `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/x-www-form-urlencoded` |
-| third_part_domain | `app-bm0s7wqmrksh-api-Aa2PZ2MejdoL-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-Aa2PZ2MejdoL-gateway.appmiaoda.com` |
 
 ## 请求参数
 
@@ -95,7 +95,7 @@ interface HireOverviewData {
  */
 async function fetchHireOverview(keyword: string): Promise<HireOverviewData> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-Aa2PZ2MejdoL-gateway.appmiaoda.com/enterprise/hire-overview",
+    "https://app-bo4w33bsdqm9-api-Aa2PZ2MejdoL-gateway.appmiaoda.com/enterprise/hire-overview",
     {
       method: "POST",
       headers: {
@@ -158,7 +158,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-Aa2PZ2MejdoL-gateway.appmiaoda.com/enterprise/hire-overview",
+    "https://app-bo4w33bsdqm9-api-Aa2PZ2MejdoL-gateway.appmiaoda.com/enterprise/hire-overview",
     {
       method: "POST",
       headers: {

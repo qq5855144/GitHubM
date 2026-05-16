@@ -6,11 +6,11 @@
 |------|-----|
 | Plugin ID | `ee3a6608-c49a-4361-b6fb-fdd5aa131cfa` |
 | API ID | `api-zYkZz8qoKp1L` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-zYkZz8qoKp1L-gateway.appmiaoda.com/rest/2.0/ocr/v1/online_taxi_itinerary` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-zYkZz8qoKp1L-gateway.appmiaoda.com/rest/2.0/ocr/v1/online_taxi_itinerary` |
 | Content-Type | `application/x-www-form-urlencoded` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
-| third_part_domain | `app-bm0s7wqmrksh-api-zYkZz8qoKp1L-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-zYkZz8qoKp1L-gateway.appmiaoda.com` |
 | 支持平台 | Web、MiniProgram |
 
 ---
@@ -134,7 +134,7 @@ async function recognizeOnlineTaxiItinerary(
   }
 
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-zYkZz8qoKp1L-gateway.appmiaoda.com/rest/2.0/ocr/v1/online_taxi_itinerary",
+    "https://app-bo4w33bsdqm9-api-zYkZz8qoKp1L-gateway.appmiaoda.com/rest/2.0/ocr/v1/online_taxi_itinerary",
     {
       method: "POST",
       headers: {
@@ -224,7 +224,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-zYkZz8qoKp1L-gateway.appmiaoda.com/rest/2.0/ocr/v1/online_taxi_itinerary",
+    "https://app-bo4w33bsdqm9-api-zYkZz8qoKp1L-gateway.appmiaoda.com/rest/2.0/ocr/v1/online_taxi_itinerary",
     {
       method: "POST",
       headers: {

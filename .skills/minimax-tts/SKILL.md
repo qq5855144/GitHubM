@@ -10,7 +10,7 @@ license: MIT
 
 | 项目 | 值 |
 |------|----|
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-DLEO7Bj0lORa-gateway.appmiaoda.com/v1/t2a_v2` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-DLEO7Bj0lORa-gateway.appmiaoda.com/v1/t2a_v2` |
 | 认证方式 | platform_managed（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | 响应格式 | JSON（`data.audio` 默认为 hex 编码音频；设置 `output_format: "url"` 可获取 CDN URL） |
 | 计费单价 | 原价 ¥3.60 / 次，优惠价 ¥2.50 / 次 |
@@ -40,7 +40,7 @@ async function callMinimaxTTS(
   model: string = "speech-02-turbo",
   outputFormat: "url" | "hex" = "url",
 ): Promise<{ audioUrl: string; audioLength: number; usageCharacters: number }> {
-  const response = await fetch("https://app-bm0s7wqmrksh-api-DLEO7Bj0lORa-gateway.appmiaoda.com/v1/t2a_v2", {
+  const response = await fetch("https://app-bo4w33bsdqm9-api-DLEO7Bj0lORa-gateway.appmiaoda.com/v1/t2a_v2", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

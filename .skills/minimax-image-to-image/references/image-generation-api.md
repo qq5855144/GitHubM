@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `0120169e-f7cd-4c6f-b79d-5e185d987aac` |
 | API ID | `api-6LeBzWJjy3QY` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-6LeBzWJjy3QY-gateway.appmiaoda.com/v1/image_generation` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-6LeBzWJjy3QY-gateway.appmiaoda.com/v1/image_generation` |
 | 认证方式 | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | `application/json` |
-| third_part_domain | `app-bm0s7wqmrksh-api-6LeBzWJjy3QY-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-6LeBzWJjy3QY-gateway.appmiaoda.com` |
 | stream | 否 |
 
 ---
@@ -118,7 +118,7 @@ interface ImageGenerationResult {
  */
 async function callImageGeneration(params: ImageGenerationParams): Promise<ImageGenerationResult> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-6LeBzWJjy3QY-gateway.appmiaoda.com/v1/image_generation",
+    "https://app-bo4w33bsdqm9-api-6LeBzWJjy3QY-gateway.appmiaoda.com/v1/image_generation",
     {
       method: "POST",
       headers: {
@@ -311,7 +311,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-6LeBzWJjy3QY-gateway.appmiaoda.com/v1/image_generation",
+    "https://app-bo4w33bsdqm9-api-6LeBzWJjy3QY-gateway.appmiaoda.com/v1/image_generation",
     {
       method: "POST",
       headers: {

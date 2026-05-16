@@ -10,7 +10,7 @@ license: MIT
 
 | 维度 | 说明 |
 |------|------|
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-k93RZBjPykEa-gateway.appmiaoda.com/v2/chat/completions` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-k93RZBjPykEa-gateway.appmiaoda.com/v2/chat/completions` |
 | 认证模式 | `platform_managed`（密钥由平台注入，无需用户配置） |
 | 流式协议 | SSE（Server-Sent Events），每块为 `data: {...}` 格式 |
 | 图片格式 | JPG / JPEG / PNG / BMP，单图不超过 10 MB |

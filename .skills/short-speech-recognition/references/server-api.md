@@ -6,11 +6,11 @@
 |------|-----|
 | Plugin ID | `4ce92d6c-eb93-4c59-be9c-7f265903e2c8` |
 | API ID | `api-Aa2PZnjEw5NL` |
-| Endpoint | `https://app-bm0s7wqmrksh-api-Aa2PZnjEw5NL-gateway.appmiaoda.com/server_api` |
-| 网关 URL（含 API ID 前缀） | `https://app-bm0s7wqmrksh-api-Aa2PZnjEw5NL-gateway.appmiaoda.com/server_api` |
+| Endpoint | `https://app-bo4w33bsdqm9-api-Aa2PZnjEw5NL-gateway.appmiaoda.com/server_api` |
+| 网关 URL（含 API ID 前缀） | `https://app-bo4w33bsdqm9-api-Aa2PZnjEw5NL-gateway.appmiaoda.com/server_api` |
 | Method | POST |
 | Content-Type | application/json |
-| third_part_domain | `app-bm0s7wqmrksh-api-Aa2PZnjEw5NL-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-Aa2PZnjEw5NL-gateway.appmiaoda.com` |
 | 认证模式 | platform_managed |
 | Auth Header | `X-Gateway-Authorization: Bearer ${apiKey}` |
 | 密钥来源 | `Deno.env.get("INTEGRATIONS_API_KEY")!` |
@@ -86,7 +86,7 @@ async function callShortSpeechRecognition(
   rate: 16000 | 8000 = 16000,
   cuid: string = "miaoda-agent-cuid"
 ): Promise<SpeechRecognitionResult> {
-  const response = await fetch("https://app-bm0s7wqmrksh-api-Aa2PZnjEw5NL-gateway.appmiaoda.com/server_api", {
+  const response = await fetch("https://app-bo4w33bsdqm9-api-Aa2PZnjEw5NL-gateway.appmiaoda.com/server_api", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -174,7 +174,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   // --- 调用上游 API ---
-  const upstream = await fetch("https://app-bm0s7wqmrksh-api-Aa2PZnjEw5NL-gateway.appmiaoda.com/server_api", {
+  const upstream = await fetch("https://app-bo4w33bsdqm9-api-Aa2PZnjEw5NL-gateway.appmiaoda.com/server_api", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

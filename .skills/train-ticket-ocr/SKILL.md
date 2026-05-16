@@ -10,7 +10,7 @@ license: MIT
 
 | 项目 | 值 |
 |------|----|
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-Xa6JZxjyqZna-gateway.appmiaoda.com/rest/2.0/ocr/v1/train_ticket` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-Xa6JZxjyqZna-gateway.appmiaoda.com/rest/2.0/ocr/v1/train_ticket` |
 | Content-Type | `application/x-www-form-urlencoded` |
 | 认证模式 | `platform_managed`（密钥由平台注入） |
 | 响应格式 | JSON — `words_result` 对象含所有识别字段 |

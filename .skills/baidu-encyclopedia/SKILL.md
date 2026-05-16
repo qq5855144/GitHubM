@@ -10,7 +10,7 @@ license: MIT
 
 | 项目 | 值 |
 |------|----|
-| Endpoint | `GET https://app-bm0s7wqmrksh-api-wLNdo2j5eQWa-gateway.appmiaoda.com/v2/baike/lemma/get_content` |
+| Endpoint | `GET https://app-bo4w33bsdqm9-api-wLNdo2j5eQWa-gateway.appmiaoda.com/v2/baike/lemma/get_content` |
 | 认证模式 | `platform_managed`（密钥由平台注入，无需用户配置） |
 | 响应格式 | JSON |
 | 计费 | 0.50 元 / 次（原价 0.60 元） |
@@ -40,7 +40,7 @@ const apiKey = process.env["INTEGRATIONS_API_KEY"]!;
 async function getBaikeLemma(searchType: "lemmaTitle" | "lemmaId", searchKey: string) {
   const params = new URLSearchParams({ search_type: searchType, search_key: searchKey });
   const response = await fetch(
-    `https://app-bm0s7wqmrksh-api-wLNdo2j5eQWa-gateway.appmiaoda.com/v2/baike/lemma/get_content?${params}`,
+    `https://app-bo4w33bsdqm9-api-wLNdo2j5eQWa-gateway.appmiaoda.com/v2/baike/lemma/get_content?${params}`,
     {
       method: "GET",
       headers: {

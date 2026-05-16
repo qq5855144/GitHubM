@@ -6,11 +6,11 @@
 |------|-----|
 | Plugin ID | `9bb163d6-0d46-4fff-ba5e-83aab73e00de` |
 | API ID | `api-o9wN0AExZQ8a` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-o9wN0AExZQ8a-gateway.appmiaoda.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-o9wN0AExZQ8a-gateway.appmiaoda.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent` |
 | Content-Type | `application/json` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
-| 第三方域名 | `app-bm0s7wqmrksh-api-o9wN0AExZQ8a-gateway.appmiaoda.com` |
+| 第三方域名 | `app-bo4w33bsdqm9-api-o9wN0AExZQ8a-gateway.appmiaoda.com` |
 | 流式响应 | 否 |
 | 计费 | 按调用次数计费，原价 `0.00` |
 
@@ -164,7 +164,7 @@ async function callGeminiImageEdit(
   }
 
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-o9wN0AExZQ8a-gateway.appmiaoda.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
+    "https://app-bo4w33bsdqm9-api-o9wN0AExZQ8a-gateway.appmiaoda.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
     {
       method: "POST",
       headers: {
@@ -307,7 +307,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-o9wN0AExZQ8a-gateway.appmiaoda.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
+    "https://app-bo4w33bsdqm9-api-o9wN0AExZQ8a-gateway.appmiaoda.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
     {
       method: "POST",
       headers: {

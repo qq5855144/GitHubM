@@ -8,7 +8,7 @@ license: MIT
 
 百度翻译通用版，支持中文、英语、日语、韩语、法语、德语、西班牙语、俄语等 200+ 语言互译，100+ 语种自动检测。
 
-- **Endpoint**: `POST https://app-bm0s7wqmrksh-api-e94GZ5j0PWpa-gateway.appmiaoda.com/rpc/2.0/mt/texttrans/v1`
+- **Endpoint**: `POST https://app-bo4w33bsdqm9-api-e94GZ5j0PWpa-gateway.appmiaoda.com/rpc/2.0/mt/texttrans/v1`
 - **认证方式**: platform_managed（密钥由平台注入，无需用户提供）
 - **Content-Type**: `application/json;charset=utf-8`
 - **计费**: ¥0.13 / 次（原价 ¥0.20 / 次）
@@ -87,7 +87,7 @@ async function translateText(
   trans_result: Array<{ src: string; dst: string }>;
 }> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-e94GZ5j0PWpa-gateway.appmiaoda.com/rpc/2.0/mt/texttrans/v1",
+    "https://app-bo4w33bsdqm9-api-e94GZ5j0PWpa-gateway.appmiaoda.com/rpc/2.0/mt/texttrans/v1",
     {
       method: "POST",
       headers: {
@@ -158,7 +158,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-e94GZ5j0PWpa-gateway.appmiaoda.com/rpc/2.0/mt/texttrans/v1",
+    "https://app-bo4w33bsdqm9-api-e94GZ5j0PWpa-gateway.appmiaoda.com/rpc/2.0/mt/texttrans/v1",
     {
       method: "POST",
       headers: {

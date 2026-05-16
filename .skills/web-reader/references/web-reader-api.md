@@ -5,7 +5,7 @@
 | 字段 | 值 |
 |------|----|
 | API ID | `api-ELbWqODdAgNY` |
-| Endpoint | `GET https://app-bm0s7wqmrksh-api-ELbWqODdAgNY-gateway.appmiaoda.com/{url}` |
+| Endpoint | `GET https://app-bo4w33bsdqm9-api-ELbWqODdAgNY-gateway.appmiaoda.com/{url}` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | 响应格式 | `text/plain`（默认 Markdown）或 `text/event-stream`（SSE 流式） |
@@ -124,7 +124,7 @@ async function fetchWebPage(
 ): Promise<string> {
   const encodedUrl = encodeURIComponent(targetUrl);
   const endpoint =
-    `https://app-bm0s7wqmrksh-api-ELbWqODdAgNY-gateway.appmiaoda.com/${encodedUrl}`;
+    `https://app-bo4w33bsdqm9-api-ELbWqODdAgNY-gateway.appmiaoda.com/${encodedUrl}`;
 
   const headers: Record<string, string> = {
     "X-Gateway-Authorization": `Bearer ${apiKey}`,
@@ -172,7 +172,7 @@ async function fetchWebPageSSE(
 ): Promise<string> {
   const encodedUrl = encodeURIComponent(targetUrl);
   const endpoint =
-    `https://app-bm0s7wqmrksh-api-ELbWqODdAgNY-gateway.appmiaoda.com/${encodedUrl}`;
+    `https://app-bo4w33bsdqm9-api-ELbWqODdAgNY-gateway.appmiaoda.com/${encodedUrl}`;
 
   const response = await fetch(endpoint, {
     method: "GET",

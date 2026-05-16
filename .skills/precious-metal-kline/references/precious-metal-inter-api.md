@@ -8,7 +8,7 @@
 | 认证方式 | `platform_managed`（`INTEGRATIONS_API_KEY`） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${apiKey}` |
 | Content-Type | `application/x-www-form-urlencoded` |
-| Third-part Domain | `app-bm0s7wqmrksh-api-2Y00VV8Rkb2Y-gateway.appmiaoda.com` |
+| Third-part Domain | `app-bo4w33bsdqm9-api-2Y00VV8Rkb2Y-gateway.appmiaoda.com` |
 | 计费单价 | 折扣价 ¥0.06 / 次（原价 ¥0.10 / 次） |
 
 ---
@@ -18,7 +18,7 @@
 | 字段 | 值 |
 |------|----|
 | API ID | `api-NLZ133Rnwr29` |
-| 端点 | `POST https://app-bm0s7wqmrksh-api-NLZ133Rnwr29-gateway.appmiaoda.com/precious-metal/inter/price` |
+| 端点 | `POST https://app-bo4w33bsdqm9-api-NLZ133Rnwr29-gateway.appmiaoda.com/precious-metal/inter/price` |
 
 ### 请求参数
 
@@ -71,7 +71,7 @@ const apiKey = process.env["INTEGRATIONS_API_KEY"]!;
 
 async function getInterPrice(symbol: string): Promise<unknown> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-NLZ133Rnwr29-gateway.appmiaoda.com/precious-metal/inter/price",
+    "https://app-bo4w33bsdqm9-api-NLZ133Rnwr29-gateway.appmiaoda.com/precious-metal/inter/price",
     {
       method: "POST",
       headers: {
@@ -127,7 +127,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-NLZ133Rnwr29-gateway.appmiaoda.com/precious-metal/inter/price",
+    "https://app-bo4w33bsdqm9-api-NLZ133Rnwr29-gateway.appmiaoda.com/precious-metal/inter/price",
     {
       method: "POST",
       headers: {
@@ -184,7 +184,7 @@ const price = await getInterPrice("XAU");
 | 字段 | 值 |
 |------|----|
 | API ID | `api-2Y00VV8Rkb2Y` |
-| 端点 | `POST https://app-bm0s7wqmrksh-api-2Y00VV8Rkb2Y-gateway.appmiaoda.com/precious-metal/inter/kline` |
+| 端点 | `POST https://app-bo4w33bsdqm9-api-2Y00VV8Rkb2Y-gateway.appmiaoda.com/precious-metal/inter/kline` |
 
 ### 请求参数
 
@@ -243,7 +243,7 @@ async function getInterKline(
   if (limit) params.limit = limit;
 
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-2Y00VV8Rkb2Y-gateway.appmiaoda.com/precious-metal/inter/kline",
+    "https://app-bo4w33bsdqm9-api-2Y00VV8Rkb2Y-gateway.appmiaoda.com/precious-metal/inter/kline",
     {
       method: "POST",
       headers: {
@@ -315,7 +315,7 @@ serve(async (req: Request): Promise<Response> => {
   if (limit) params.limit = limit;
 
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-2Y00VV8Rkb2Y-gateway.appmiaoda.com/precious-metal/inter/kline",
+    "https://app-bo4w33bsdqm9-api-2Y00VV8Rkb2Y-gateway.appmiaoda.com/precious-metal/inter/kline",
     {
       method: "POST",
       headers: {
@@ -372,7 +372,7 @@ const klineData = await getInterKline("XAU", "5", "5");
 | 字段 | 值 |
 |------|----|
 | API ID | `api-nYWNRRkexgKL` |
-| 端点 | `POST https://app-bm0s7wqmrksh-api-nYWNRRkexgKL-gateway.appmiaoda.com/precious-metal/inter/contract` |
+| 端点 | `POST https://app-bo4w33bsdqm9-api-nYWNRRkexgKL-gateway.appmiaoda.com/precious-metal/inter/contract` |
 
 ### 请求参数
 
@@ -405,7 +405,7 @@ const apiKey = process.env["INTEGRATIONS_API_KEY"]!;
 
 async function getInterContract(symbol: string): Promise<unknown> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-nYWNRRkexgKL-gateway.appmiaoda.com/precious-metal/inter/contract",
+    "https://app-bo4w33bsdqm9-api-nYWNRRkexgKL-gateway.appmiaoda.com/precious-metal/inter/contract",
     {
       method: "POST",
       headers: {
@@ -461,7 +461,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-nYWNRRkexgKL-gateway.appmiaoda.com/precious-metal/inter/contract",
+    "https://app-bo4w33bsdqm9-api-nYWNRRkexgKL-gateway.appmiaoda.com/precious-metal/inter/contract",
     {
       method: "POST",
       headers: {

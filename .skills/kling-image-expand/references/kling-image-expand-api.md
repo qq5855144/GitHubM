@@ -8,7 +8,7 @@
 | Plugin 标题 | 图片扩展 (可灵) |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
-| third_part_domain | `app-bm0s7wqmrksh-api-Q9KWnzwVQMk9-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-Q9KWnzwVQMk9-gateway.appmiaoda.com` |
 | 计费 | 原价 ¥12.00 / 折扣价 ¥8.00（`enable_billing: false` 当前未计费） |
 
 ---
@@ -18,7 +18,7 @@
 | 项目 | 值 |
 |------|-----|
 | API ID | `api-Q9KWnzwVQMk9` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-Q9KWnzwVQMk9-gateway.appmiaoda.com/v1/images/editing/expand` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-Q9KWnzwVQMk9-gateway.appmiaoda.com/v1/images/editing/expand` |
 | Content-Type | `application/json` |
 
 ### 请求参数
@@ -56,7 +56,7 @@
 | 项目 | 值 |
 |------|-----|
 | API ID | `api-rLobR6vwZJJ9` |
-| Endpoint | `GET https://app-bm0s7wqmrksh-api-rLobR6vwZJJ9-gateway.appmiaoda.com/v1/images/editing/expand/{task_id}` |
+| Endpoint | `GET https://app-bo4w33bsdqm9-api-rLobR6vwZJJ9-gateway.appmiaoda.com/v1/images/editing/expand/{task_id}` |
 | Content-Type | `application/json` |
 
 ### 请求参数
@@ -91,7 +91,7 @@
 | 项目 | 值 |
 |------|-----|
 | API ID | `api-AalZkPVdZX8L` |
-| Endpoint | `GET https://app-bm0s7wqmrksh-api-AalZkPVdZX8L-gateway.appmiaoda.com/v1/images/editing/expand` |
+| Endpoint | `GET https://app-bo4w33bsdqm9-api-AalZkPVdZX8L-gateway.appmiaoda.com/v1/images/editing/expand` |
 | Content-Type | `application/json` |
 
 ### 请求参数
@@ -214,7 +214,7 @@ async function createExpandTask(
   }
 
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-Q9KWnzwVQMk9-gateway.appmiaoda.com/v1/images/editing/expand",
+    "https://app-bo4w33bsdqm9-api-Q9KWnzwVQMk9-gateway.appmiaoda.com/v1/images/editing/expand",
     {
       method: "POST",
       headers: {
@@ -243,7 +243,7 @@ async function createExpandTask(
  */
 async function queryExpandTask(taskId: string): Promise<TaskDetail> {
   const response = await fetch(
-    `https://app-bm0s7wqmrksh-api-rLobR6vwZJJ9-gateway.appmiaoda.com/v1/images/editing/expand/${encodeURIComponent(taskId)}`,
+    `https://app-bo4w33bsdqm9-api-rLobR6vwZJJ9-gateway.appmiaoda.com/v1/images/editing/expand/${encodeURIComponent(taskId)}`,
     {
       method: "GET",
       headers: {
@@ -273,7 +273,7 @@ async function queryExpandTask(taskId: string): Promise<TaskDetail> {
  */
 async function listExpandTasks(pageNum = 1, pageSize = 30): Promise<TaskDetail[]> {
   const url = new URL(
-    "https://app-bm0s7wqmrksh-api-AalZkPVdZX8L-gateway.appmiaoda.com/v1/images/editing/expand",
+    "https://app-bo4w33bsdqm9-api-AalZkPVdZX8L-gateway.appmiaoda.com/v1/images/editing/expand",
   );
   url.searchParams.set("pageNum", String(pageNum));
   url.searchParams.set("pageSize", String(pageSize));
@@ -465,7 +465,7 @@ async function pollTask(taskId: string, apiKey: string): Promise<TaskDetail> {
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
 
     const res = await fetch(
-      `https://app-bm0s7wqmrksh-api-rLobR6vwZJJ9-gateway.appmiaoda.com/v1/images/editing/expand/${encodeURIComponent(taskId)}`,
+      `https://app-bo4w33bsdqm9-api-rLobR6vwZJJ9-gateway.appmiaoda.com/v1/images/editing/expand/${encodeURIComponent(taskId)}`,
       {
         method: "GET",
         headers: {
@@ -555,7 +555,7 @@ serve(async (req: Request): Promise<Response> => {
     if (watermark_info !== undefined) requestBody.watermark_info = watermark_info;
 
     const createRes = await fetch(
-      "https://app-bm0s7wqmrksh-api-Q9KWnzwVQMk9-gateway.appmiaoda.com/v1/images/editing/expand",
+      "https://app-bo4w33bsdqm9-api-Q9KWnzwVQMk9-gateway.appmiaoda.com/v1/images/editing/expand",
       {
         method: "POST",
         headers: {

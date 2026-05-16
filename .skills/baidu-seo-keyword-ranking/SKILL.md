@@ -8,7 +8,7 @@ license: MIT
 
 查询指定域名在百度PC搜索中的关键词排名情况，返回关键词列表及对应排名、预估流量、PC指数、收录量、目录、标题等SEO核心指标，支持分页查询和目录筛选。
 
-- **Endpoint**: `POST https://app-bm0s7wqmrksh-api-DLEO4zmpN5ja-gateway.appmiaoda.com/seo/baidu/pc/keyword`
+- **Endpoint**: `POST https://app-bo4w33bsdqm9-api-DLEO4zmpN5ja-gateway.appmiaoda.com/seo/baidu/pc/keyword`
 - **Content-Type**: `application/x-www-form-urlencoded`
 - **认证模式**: `platform_managed`（密钥由平台注入）
 - **响应格式**: JSON
@@ -124,7 +124,7 @@ async function queryBaiduPcKeywordRanking(
   if (page) params.page = page;
 
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-DLEO4zmpN5ja-gateway.appmiaoda.com/seo/baidu/pc/keyword",
+    "https://app-bo4w33bsdqm9-api-DLEO4zmpN5ja-gateway.appmiaoda.com/seo/baidu/pc/keyword",
     {
       method: "POST",
       headers: {
@@ -197,7 +197,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游接口 ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-DLEO4zmpN5ja-gateway.appmiaoda.com/seo/baidu/pc/keyword",
+    "https://app-bo4w33bsdqm9-api-DLEO4zmpN5ja-gateway.appmiaoda.com/seo/baidu/pc/keyword",
     {
       method: "POST",
       headers: {

@@ -6,10 +6,10 @@
 |------|-----|
 | Plugin ID | `ea9ecacf-f5ab-4c56-9ed7-2fadaf6e62cc` |
 | API ID | `api-qYGWoqjEKyzY` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-qYGWoqjEKyzY-gateway.appmiaoda.com/stock/a/stop` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-qYGWoqjEKyzY-gateway.appmiaoda.com/stock/a/stop` |
 | Auth | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | `application/x-www-form-urlencoded` |
-| Third-party domain | `app-bm0s7wqmrksh-api-qYGWoqjEKyzY-gateway.appmiaoda.com` |
+| Third-party domain | `app-bo4w33bsdqm9-api-qYGWoqjEKyzY-gateway.appmiaoda.com` |
 | 计费 | 启用，折扣价 ¥0.13/次，原价 ¥0.20/次 |
 
 ---
@@ -74,7 +74,7 @@ interface StopItem {
  */
 async function fetchAStopList(): Promise<StopItem[]> {
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-qYGWoqjEKyzY-gateway.appmiaoda.com/stock/a/stop",
+    "https://app-bo4w33bsdqm9-api-qYGWoqjEKyzY-gateway.appmiaoda.com/stock/a/stop",
     {
       method: "POST",
       headers: {
@@ -121,7 +121,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-qYGWoqjEKyzY-gateway.appmiaoda.com/stock/a/stop",
+    "https://app-bo4w33bsdqm9-api-qYGWoqjEKyzY-gateway.appmiaoda.com/stock/a/stop",
     {
       method: "POST",
       headers: {

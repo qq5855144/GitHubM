@@ -6,12 +6,12 @@
 |------|-----|
 | Plugin ID | `4d0e6422-381e-44f2-b2ce-7d9c3168582d` |
 | API ID | `api-zYm4zKQoePjL` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-zYm4zKQoePjL-gateway.appmiaoda.com/rest/2.0/image-classify/v2/advanced_general` |
-| 生成期 Endpoint（含 API ID 前缀） | `POST https://app-bm0s7wqmrksh-api-zYm4zKQoePjL-gateway.appmiaoda.com/rest/2.0/image-classify/v2/advanced_general` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-zYm4zKQoePjL-gateway.appmiaoda.com/rest/2.0/image-classify/v2/advanced_general` |
+| 生成期 Endpoint（含 API ID 前缀） | `POST https://app-bo4w33bsdqm9-api-zYm4zKQoePjL-gateway.appmiaoda.com/rest/2.0/image-classify/v2/advanced_general` |
 | Auth 模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/x-www-form-urlencoded` |
-| third_part_domain | `app-bm0s7wqmrksh-api-zYm4zKQoePjL-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-zYm4zKQoePjL-gateway.appmiaoda.com` |
 | 流式响应 | 否 |
 
 ---
@@ -105,7 +105,7 @@ async function recognizeObjectsAndScenes(
   }
 
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-zYm4zKQoePjL-gateway.appmiaoda.com/rest/2.0/image-classify/v2/advanced_general",
+    "https://app-bo4w33bsdqm9-api-zYm4zKQoePjL-gateway.appmiaoda.com/rest/2.0/image-classify/v2/advanced_general",
     {
       method: "POST",
       headers: {
@@ -198,7 +198,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-zYm4zKQoePjL-gateway.appmiaoda.com/rest/2.0/image-classify/v2/advanced_general",
+    "https://app-bo4w33bsdqm9-api-zYm4zKQoePjL-gateway.appmiaoda.com/rest/2.0/image-classify/v2/advanced_general",
     {
       method: "POST",
       headers: {

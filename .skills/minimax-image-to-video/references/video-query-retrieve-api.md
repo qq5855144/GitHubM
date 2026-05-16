@@ -7,11 +7,11 @@
 | Plugin ID | `ad629bb9-46ea-41c1-8eb0-7acfc3e37381` |
 | API ID（查询状态） | `api-eLMlPNkelVj9` |
 | API ID（视频下载） | `api-rLyOyznAK2Ba` |
-| Endpoint（查询状态） | `GET https://app-bm0s7wqmrksh-api-eLMlPNkelVj9-gateway.appmiaoda.com/v1/query/video_generation` |
-| Endpoint（视频下载） | `GET https://app-bm0s7wqmrksh-api-rLyOyznAK2Ba-gateway.appmiaoda.com/v1/files/retrieve` |
+| Endpoint（查询状态） | `GET https://app-bo4w33bsdqm9-api-eLMlPNkelVj9-gateway.appmiaoda.com/v1/query/video_generation` |
+| Endpoint（视频下载） | `GET https://app-bo4w33bsdqm9-api-rLyOyznAK2Ba-gateway.appmiaoda.com/v1/files/retrieve` |
 | Auth | `platform_managed`，`X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>` |
 | Content-Type | N/A（GET 请求，参数放 URL）|
-| third_part_domain | `app-bm0s7wqmrksh-api-eLMlPNkelVj9-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-eLMlPNkelVj9-gateway.appmiaoda.com` |
 | 计费 | 查询状态：不计费；视频下载：不计费 |
 
 ---
@@ -214,7 +214,7 @@ async function queryVideoStatus(taskId: string): Promise<{
   videoWidth?: number;
   videoHeight?: number;
 }> {
-  const url = new URL("https://app-bm0s7wqmrksh-api-eLMlPNkelVj9-gateway.appmiaoda.com/v1/query/video_generation");
+  const url = new URL("https://app-bo4w33bsdqm9-api-eLMlPNkelVj9-gateway.appmiaoda.com/v1/query/video_generation");
   url.searchParams.set("task_id", taskId);
 
   const response = await fetch(url.toString(), {
@@ -244,7 +244,7 @@ async function retrieveVideoFile(fileId: string): Promise<{
   filename: string;
   bytes: number;
 }> {
-  const url = new URL("https://app-bm0s7wqmrksh-api-rLyOyznAK2Ba-gateway.appmiaoda.com/v1/files/retrieve");
+  const url = new URL("https://app-bo4w33bsdqm9-api-rLyOyznAK2Ba-gateway.appmiaoda.com/v1/files/retrieve");
   url.searchParams.set("file_id", fileId);
 
   const response = await fetch(url.toString(), {
@@ -302,7 +302,7 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const upstreamUrl = new URL(
-    "https://app-bm0s7wqmrksh-api-eLMlPNkelVj9-gateway.appmiaoda.com/v1/query/video_generation"
+    "https://app-bo4w33bsdqm9-api-eLMlPNkelVj9-gateway.appmiaoda.com/v1/query/video_generation"
   );
   upstreamUrl.searchParams.set("task_id", taskId);
 
@@ -413,7 +413,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // Step 1: 获取临时下载链接
   const upstreamUrl = new URL(
-    "https://app-bm0s7wqmrksh-api-rLyOyznAK2Ba-gateway.appmiaoda.com/v1/files/retrieve"
+    "https://app-bo4w33bsdqm9-api-rLyOyznAK2Ba-gateway.appmiaoda.com/v1/files/retrieve"
   );
   upstreamUrl.searchParams.set("file_id", fileId);
 

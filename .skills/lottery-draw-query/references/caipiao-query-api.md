@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `126915de-23d7-454c-accf-b88797feb9e5` |
 | API ID | `api-baBw2m51JXz9` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-baBw2m51JXz9-gateway.appmiaoda.com/caipiao/query` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-baBw2m51JXz9-gateway.appmiaoda.com/caipiao/query` |
 | Auth | `platform_managed`，`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| Third-party Domain | `app-bm0s7wqmrksh-api-baBw2m51JXz9-gateway.appmiaoda.com` |
+| Third-party Domain | `app-bo4w33bsdqm9-api-baBw2m51JXz9-gateway.appmiaoda.com` |
 
 ## 请求参数
 
@@ -115,7 +115,7 @@ async function queryCaipiaoResult(
   if (issueno) params.set("issueno", issueno);
 
   const url =
-    `https://app-bm0s7wqmrksh-api-baBw2m51JXz9-gateway.appmiaoda.com/caipiao/query?${params.toString()}`;
+    `https://app-bo4w33bsdqm9-api-baBw2m51JXz9-gateway.appmiaoda.com/caipiao/query?${params.toString()}`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -178,7 +178,7 @@ serve(async (req: Request): Promise<Response> => {
   if (issueno) params.set("issueno", issueno);
 
   const upstream = await fetch(
-    `https://app-bm0s7wqmrksh-api-baBw2m51JXz9-gateway.appmiaoda.com/caipiao/query?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-baBw2m51JXz9-gateway.appmiaoda.com/caipiao/query?${params.toString()}`,
     {
       method: "POST",
       headers: {

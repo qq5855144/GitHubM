@@ -13,7 +13,7 @@ license: MIT
 
 | 项目 | 值 |
 |------|-----|
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-DLEO7vB8pQba-gateway.appmiaoda.com/v1/image_generation` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-DLEO7vB8pQba-gateway.appmiaoda.com/v1/image_generation` |
 | 认证模式 | `platform_managed`（密钥由平台注入，无需用户配置） |
 | Content-Type | `application/json` |
 | 支持平台 | Web、MiniProgram |

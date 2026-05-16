@@ -10,8 +10,8 @@ license: MIT
 
 | 接口 | 方法 | Endpoint | 核心功能 |
 |------|------|----------|----------|
-| 国内天气查询 | GET | `https://app-bm0s7wqmrksh-api-oLpZbd8ed8wa-gateway.appmiaoda.com/weather/v1/` | 按行政区划代码查询实时天气 + 未来7天预报 |
-| 国内经纬度天气查询 | GET | `https://app-bm0s7wqmrksh-api-GYX1bnRz2Pxa-gateway.appmiaoda.com/weather/v1/` | 按经纬度查询实时天气 + 未来7天预报 + 24小时逐小时预报 |
+| 国内天气查询 | GET | `https://app-bo4w33bsdqm9-api-oLpZbd8ed8wa-gateway.appmiaoda.com/weather/v1/` | 按行政区划代码查询实时天气 + 未来7天预报 |
+| 国内经纬度天气查询 | GET | `https://app-bo4w33bsdqm9-api-GYX1bnRz2Pxa-gateway.appmiaoda.com/weather/v1/` | 按经纬度查询实时天气 + 未来7天预报 + 24小时逐小时预报 |
 
 **定位方式**：
 
@@ -40,7 +40,7 @@ license: MIT
 const apiKey = process.env["INTEGRATIONS_API_KEY"]!;
 
 async function getWeatherByDistrict(districtId: string, dataType = "all"): Promise<unknown> {
-  const url = new URL("https://app-bm0s7wqmrksh-api-oLpZbd8ed8wa-gateway.appmiaoda.com/weather/v1/");
+  const url = new URL("https://app-bo4w33bsdqm9-api-oLpZbd8ed8wa-gateway.appmiaoda.com/weather/v1/");
   url.searchParams.set("district_id", districtId);
   url.searchParams.set("data_type", dataType);
 
@@ -83,7 +83,7 @@ async function getWeatherByDistrict(districtId: string, dataType = "all"): Promi
 ```typescript
 const apiKey = Deno.env.get("INTEGRATIONS_API_KEY")!;
 
-const url = new URL("https://app-bm0s7wqmrksh-api-oLpZbd8ed8wa-gateway.appmiaoda.com/weather/v1/");
+const url = new URL("https://app-bo4w33bsdqm9-api-oLpZbd8ed8wa-gateway.appmiaoda.com/weather/v1/");
 url.searchParams.set("district_id", "110100"); // 北京市
 url.searchParams.set("data_type", "all"); // 返回实时天气 + 7 天预报
 

@@ -10,9 +10,9 @@ license: MIT
 
 | 接口 | 方法 | Endpoint | 核心功能 |
 |------|------|----------|----------|
-| 天气预报API | GET | `https://app-bm0s7wqmrksh-api-Aa2PZnjEVgyL-gateway.appmiaoda.com/lundear/weather1d` | 今日实时天气 + 当天预报 |
-| 未来7日天气预报API | GET | `https://app-bm0s7wqmrksh-api-rY7JZ6jqrV6L-gateway.appmiaoda.com/lundear/weather7d` | 未来7天逐日天气预报 |
-| 未来8-15日天气预报API | GET | `https://app-bm0s7wqmrksh-api-oYA6ZGjReVpa-gateway.appmiaoda.com/lundear/weather15d` | 未来第8天到第15天天气预报 |
+| 天气预报API | GET | `https://app-bo4w33bsdqm9-api-Aa2PZnjEVgyL-gateway.appmiaoda.com/lundear/weather1d` | 今日实时天气 + 当天预报 |
+| 未来7日天气预报API | GET | `https://app-bo4w33bsdqm9-api-rY7JZ6jqrV6L-gateway.appmiaoda.com/lundear/weather7d` | 未来7天逐日天气预报 |
+| 未来8-15日天气预报API | GET | `https://app-bo4w33bsdqm9-api-oYA6ZGjReVpa-gateway.appmiaoda.com/lundear/weather15d` | 未来第8天到第15天天气预报 |
 
 **定位方式（四选一）**：`areaCode`（地区代码）、`areaCn`（城市级中文名称，如"广州"、"杭州"，不能传省份名如"广东"）、`ip`（IP地址）、`lng + lat`（经纬度）。
 
@@ -37,7 +37,7 @@ license: MIT
 const apiKey = process.env["INTEGRATIONS_API_KEY"]!;
 
 async function getWeather1d(areaCn: string): Promise<unknown> {
-  const url = new URL("https://app-bm0s7wqmrksh-api-Aa2PZnjEVgyL-gateway.appmiaoda.com/lundear/weather1d");
+  const url = new URL("https://app-bo4w33bsdqm9-api-Aa2PZnjEVgyL-gateway.appmiaoda.com/lundear/weather1d");
   url.searchParams.set("areaCn", areaCn);
 
   const response = await fetch(url.toString(), {

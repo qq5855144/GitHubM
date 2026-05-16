@@ -6,11 +6,11 @@
 |------|----|
 | Plugin ID | `dd5f588a-c7bb-4ca1-984e-6d91565eadd1` |
 | API ID | `api-baBwZEjbe1X9` |
-| Endpoint | `GET https://app-bm0s7wqmrksh-api-baBwZEjbe1X9-gateway.appmiaoda.com/reverse_geocoding/v3` |
+| Endpoint | `GET https://app-bo4w33bsdqm9-api-baBwZEjbe1X9-gateway.appmiaoda.com/reverse_geocoding/v3` |
 | 认证模式 | `platform_managed`（`traefik: true`） |
 | Auth Header | `X-Gateway-Authorization: Bearer <INTEGRATIONS_API_KEY>` |
 | Content-Type | `application/x-www-form-urlencoded`（GET 请求参数附在 URL 上） |
-| third_part_domain | `app-bm0s7wqmrksh-api-baBwZEjbe1X9-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-baBwZEjbe1X9-gateway.appmiaoda.com` |
 | 计费 | 免费（`enable_billing: false`，`original_price: "0"`），但会统计调用次数 |
 
 ---
@@ -141,7 +141,7 @@ async function reverseGeocode(
   });
 
   const response = await fetch(
-    `https://app-bm0s7wqmrksh-api-baBwZEjbe1X9-gateway.appmiaoda.com/reverse_geocoding/v3?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-baBwZEjbe1X9-gateway.appmiaoda.com/reverse_geocoding/v3?${params.toString()}`,
     {
       method: "GET",
       headers: {
@@ -220,7 +220,7 @@ serve(async (req: Request): Promise<Response> => {
   if (extensionsRoad) params.set("extensions_road", extensionsRoad);
 
   const upstream = await fetch(
-    `https://app-bm0s7wqmrksh-api-baBwZEjbe1X9-gateway.appmiaoda.com/reverse_geocoding/v3?${params.toString()}`,
+    `https://app-bo4w33bsdqm9-api-baBwZEjbe1X9-gateway.appmiaoda.com/reverse_geocoding/v3?${params.toString()}`,
     {
       method: "GET",
       headers: {

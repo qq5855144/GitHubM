@@ -8,7 +8,7 @@ license: MIT
 
 基于百度地图 IP 定位接口，通过用户的 IPv4 地址获取对应的地理位置信息，包括省份、城市、区县、街道及经纬度坐标。如果请求中不提供 IP 地址，则自动定位发起请求的 IP 地址。支持百度墨卡托坐标、百度经纬度坐标（bd09ll）、国测局 02 坐标（gcj02）三种坐标系。
 
-- **Endpoint**：`GET https://app-bm0s7wqmrksh-api-79jK62Ze2pQL-gateway.appmiaoda.com/location/ip`
+- **Endpoint**：`GET https://app-bo4w33bsdqm9-api-79jK62Ze2pQL-gateway.appmiaoda.com/location/ip`
 - **认证模式**：`platform_managed`（密钥由平台注入，取自 `INTEGRATIONS_API_KEY`）
 - **响应格式**：JSON
 - **Plugin ID**：`3ab7447f-1695-46f5-a2b8-d4eb6ddecd37`
@@ -76,7 +76,7 @@ async function callIpLocation(
   if (ip) params.set("ip", ip);
   if (coor) params.set("coor", coor);
 
-  const url = `https://app-bm0s7wqmrksh-api-79jK62Ze2pQL-gateway.appmiaoda.com/location/ip${
+  const url = `https://app-bo4w33bsdqm9-api-79jK62Ze2pQL-gateway.appmiaoda.com/location/ip${
     params.toString() ? "?" + params.toString() : ""
   }`;
 
@@ -139,7 +139,7 @@ serve(async (req: Request): Promise<Response> => {
   const params = new URLSearchParams();
   if (ip) params.set("ip", ip);
   if (coor) params.set("coor", coor);
-  const upstreamUrl = `https://app-bm0s7wqmrksh-api-79jK62Ze2pQL-gateway.appmiaoda.com/location/ip${
+  const upstreamUrl = `https://app-bo4w33bsdqm9-api-79jK62Ze2pQL-gateway.appmiaoda.com/location/ip${
     params.toString() ? "?" + params.toString() : ""
   }`;
 

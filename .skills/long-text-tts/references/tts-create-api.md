@@ -6,12 +6,12 @@
 |------|----|
 | Plugin ID | `6c2d8399-c9ba-40d4-9f5f-96dfc9b71a68` |
 | API ID | `api-nYWNozBb8X3L` |
-| Endpoint | `POST https://app-bm0s7wqmrksh-api-nYWNozBb8X3L-gateway.appmiaoda.com/rpc/2.0/tts/v1/create` |
-| 生成期 URL | `https://app-bm0s7wqmrksh-api-nYWNozBb8X3L-gateway.appmiaoda.com/rpc/2.0/tts/v1/create` |
+| Endpoint | `POST https://app-bo4w33bsdqm9-api-nYWNozBb8X3L-gateway.appmiaoda.com/rpc/2.0/tts/v1/create` |
+| 生成期 URL | `https://app-bo4w33bsdqm9-api-nYWNozBb8X3L-gateway.appmiaoda.com/rpc/2.0/tts/v1/create` |
 | Auth 模式 | `platform_managed`（traefik: true） |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| Third-party domain | `app-bm0s7wqmrksh-api-nYWNozBb8X3L-gateway.appmiaoda.com` |
+| Third-party domain | `app-bo4w33bsdqm9-api-nYWNozBb8X3L-gateway.appmiaoda.com` |
 | 计费 | 启用（原价 ¥13.5/千次，折扣价 ¥11.25/千次） |
 
 ---
@@ -80,7 +80,7 @@ async function createTTSTask(
   if (options?.break !== undefined) body.break = options.break;
 
   const response = await fetch(
-    "https://app-bm0s7wqmrksh-api-nYWNozBb8X3L-gateway.appmiaoda.com/rpc/2.0/tts/v1/create",
+    "https://app-bo4w33bsdqm9-api-nYWNozBb8X3L-gateway.appmiaoda.com/rpc/2.0/tts/v1/create",
     {
       method: "POST",
       headers: {
@@ -166,7 +166,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const upstream = await fetch(
-    "https://app-bm0s7wqmrksh-api-nYWNozBb8X3L-gateway.appmiaoda.com/rpc/2.0/tts/v1/create",
+    "https://app-bo4w33bsdqm9-api-nYWNozBb8X3L-gateway.appmiaoda.com/rpc/2.0/tts/v1/create",
     {
       method: "POST",
       headers: {

@@ -6,7 +6,7 @@ license: MIT
 
 ## 能力概述
 
-本 Skill 封装百度 AI 人脸识别平台（`app-bm0s7wqmrksh-api-l9nZz8ro7Bl9-gateway.appmiaoda.com`）的五个核心接口，通过 API Gateway 统一鉴权（platform_managed）对外暴露。
+本 Skill 封装百度 AI 人脸识别平台（`app-bo4w33bsdqm9-api-l9nZz8ro7Bl9-gateway.appmiaoda.com`）的五个核心接口，通过 API Gateway 统一鉴权（platform_managed）对外暴露。
 
 | 接口 | Endpoint | Method | 是否计费 |
 |------|----------|--------|---------|

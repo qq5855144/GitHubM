@@ -6,10 +6,10 @@
 |------|----|
 | Plugin ID | `17196c7a-fca2-41ec-85f3-1e303e1a3ee1` |
 | API ID | `api-VaOw5V2Pbqoa` |
-| Endpoint | `GET https://app-bm0s7wqmrksh-api-VaOw5V2Pbqoa-gateway.appmiaoda.com/v1/files/retrieve` |
+| Endpoint | `GET https://app-bo4w33bsdqm9-api-VaOw5V2Pbqoa-gateway.appmiaoda.com/v1/files/retrieve` |
 | Auth | `platform_managed`（`X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}`） |
 | Content-Type | 无请求体 |
-| third_part_domain | `app-bm0s7wqmrksh-api-VaOw5V2Pbqoa-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-VaOw5V2Pbqoa-gateway.appmiaoda.com` |
 | 计费 | 否（`enable_billing: false`） |
 
 ---
@@ -104,7 +104,7 @@ interface RetrieveFileResponse {
  */
 async function retrieveVideoFile(fileId: string): Promise<FileObject> {
   const response = await fetch(
-    `https://app-bm0s7wqmrksh-api-VaOw5V2Pbqoa-gateway.appmiaoda.com/v1/files/retrieve?file_id=${encodeURIComponent(fileId)}`,
+    `https://app-bo4w33bsdqm9-api-VaOw5V2Pbqoa-gateway.appmiaoda.com/v1/files/retrieve?file_id=${encodeURIComponent(fileId)}`,
     {
       method: "GET",
       headers: {
@@ -166,7 +166,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const upstream = await fetch(
-    `https://app-bm0s7wqmrksh-api-VaOw5V2Pbqoa-gateway.appmiaoda.com/v1/files/retrieve?file_id=${encodeURIComponent(fileId)}`,
+    `https://app-bo4w33bsdqm9-api-VaOw5V2Pbqoa-gateway.appmiaoda.com/v1/files/retrieve?file_id=${encodeURIComponent(fileId)}`,
     {
       method: "GET",
       headers: {

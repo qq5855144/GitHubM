@@ -6,12 +6,12 @@
 |------|----|
 | Plugin ID | `44da466e-06ce-4108-9d8d-cb377240179c` |
 | API ID | `api-79jKP8yo70AL` |
-| Endpoint | `https://app-bm0s7wqmrksh-api-79jKP8yo70AL-gateway.appmiaoda.com/enterprise/patent/list` |
+| Endpoint | `https://app-bo4w33bsdqm9-api-79jKP8yo70AL-gateway.appmiaoda.com/enterprise/patent/list` |
 | HTTP Method | POST |
 | Content-Type | `application/json;charset=UTF-8` |
 | Auth 模式 | platform_managed |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
-| third_part_domain | `app-bm0s7wqmrksh-api-79jKP8yo70AL-gateway.appmiaoda.com` |
+| third_part_domain | `app-bo4w33bsdqm9-api-79jKP8yo70AL-gateway.appmiaoda.com` |
 | 计费 | 启用，折后价 ¥4.00 / 原价 ¥4.80（每次调用计费） |
 
 ---
@@ -110,7 +110,7 @@ async function fetchPatentList(
   pageSize = "10",
 ): Promise<PatentListResponse> {
   const url = new URL(
-    "https://app-bm0s7wqmrksh-api-79jKP8yo70AL-gateway.appmiaoda.com/enterprise/patent/list",
+    "https://app-bo4w33bsdqm9-api-79jKP8yo70AL-gateway.appmiaoda.com/enterprise/patent/list",
   );
   url.searchParams.set("keyword", keyword);
   url.searchParams.set("pageNo", pageNo);
@@ -176,7 +176,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // --- 调用上游 API ---
   const url = new URL(
-    "https://app-bm0s7wqmrksh-api-79jKP8yo70AL-gateway.appmiaoda.com/enterprise/patent/list",
+    "https://app-bo4w33bsdqm9-api-79jKP8yo70AL-gateway.appmiaoda.com/enterprise/patent/list",
   );
   url.searchParams.set("keyword", keyword);
   url.searchParams.set("pageNo", pageNo);

@@ -4516,19 +4516,25 @@ async function dbUpdateStep(
  * slice(-60) 截断可能导致：
  * 1. 开头保留的第一条是 tool 消息（前面的 assistant 被截掉）
  * 2. 末尾保留的最后一条是 assistant(tool_calls)（后面的 tool 被截掉）
- * 这两种情况都会触发 LLM API 的 HTTP 400 错误。
+ * 3. 中间截断导致 summary(user) 后面紧跟 tool 消息
+ * 这三种情况都会触发 LLM API 的 HTTP 400 错误。
  */
 function sanitizeToolCallMessages(msgs: Message[]): Message[] {
   if (msgs.length === 0) return [];
   const result = [...msgs];
 
-  // 1. 从开头移除：没有对应 assistant(tool_calls) 的孤立 tool 消息
-  while (result.length > 0) {
-    const first = result[0];
-    if (first.role === "tool" && first.tool_call_id) {
-      result.shift();
-    } else {
-      break;
+  // 1. 扫描整个数组：移除前面没有 assistant(tool_calls) 的孤立 tool 消息
+  for (let i = result.length - 1; i >= 0; i--) {
+    const msg = result[i];
+    if (msg.role === "tool" && msg.tool_call_id) {
+      const prev = result[i - 1];
+      const hasPrevAssistantWithCall =
+        prev &&
+        prev.role === "assistant" &&
+        prev.tool_calls?.some((tc) => tc.id === msg.tool_call_id);
+      if (!hasPrevAssistantWithCall) {
+        result.splice(i, 1);
+      }
     }
   }
 
@@ -4536,7 +4542,14 @@ function sanitizeToolCallMessages(msgs: Message[]): Message[] {
   while (result.length > 0) {
     const last = result[result.length - 1];
     if (last.role === "assistant" && last.tool_calls && last.tool_calls.length > 0) {
-      result.pop();
+      const allReplied = last.tool_calls.every((tc) =>
+        result.some((m) => m.role === "tool" && m.tool_call_id === tc.id)
+      );
+      if (!allReplied) {
+        result.pop();
+      } else {
+        break;
+      }
     } else {
       break;
     }
@@ -4807,7 +4820,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
-    const fullMessages: Message[] = [{ role: "system", content: buildSystemPrompt(targetBranch, isAutoMode, modelConfig.type, modelConfig) }, ...messages];
+    let fullMessages: Message[] = [{ role: "system", content: buildSystemPrompt(targetBranch, isAutoMode, modelConfig.type, modelConfig) }, ...messages];
     console.log(`[main] model=${modelConfig.type} hasApiKey=${!!modelConfig.api_key} owner=${owner} repo=${repo} resume=${isResuming} autoMode=${isAutoMode}`);
     // 检查前端传来的历史消息：如果已有带 reasoning_content 的 assistant 消息，
     // 后续所有 assistant 消息也必须携带该字段（DeepSeek-R1 API 强制要求）
@@ -5411,6 +5424,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
             `任务仍在继续，请根据最近上下文继续执行剩余步骤。`,
         };
         fullMessages.splice(0, fullMessages.length, system, ...head, summary, ...tail);
+        // ⚠️ 截断后必须清理不完整的 tool_calls 对，否则会出现 summary(user)→tool 的非法序列
+        fullMessages = sanitizeToolCallMessages(fullMessages);
         console.log(`[ctx-compress] 压缩后 messages=${fullMessages.length}，省略了 ${mid.length} 条中间消息`);
       }
 

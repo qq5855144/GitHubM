@@ -615,6 +615,31 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       }, required: ["filename", "description"] },
     },
   },
+  // ── 工具自我改进 ──────────────────────────────────────────────────────────
+  {
+    type: "function", function: {
+      name: "report_tool_issue",
+      description: "当你发现某个工具存在缺陷、限制或可改进之处时调用此工具上报问题。例如：工具返回的信息不够完整、参数设计不合理、缺少某个功能、错误处理不当等。不要等任务结束才报告，发现即上报。",
+      parameters: { type: "object", properties: {
+        tool_name:   { type: "string", description: "有问题的工具名称（如 patch_file、read_file、get_job_logs）" },
+        issue:       { type: "string", description: "具体问题描述：工具在什么情况下出现了什么问题，影响是什么" },
+        severity:    { type: "string", description: "严重程度：low（轻微，有替代方案）| medium（影响效率）| high（导致任务失败）" },
+        context:     { type: "string", description: "触发问题时的上下文：正在执行什么任务、调用参数是什么、得到了什么意外结果" },
+      }, required: ["tool_name", "issue", "severity"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "propose_tool_fix",
+      description: "在 report_tool_issue 之后，如果你知道如何修复这个工具问题，用此工具提交具体的代码改进方案。提供修改前和修改后的代码片段，帮助开发者快速应用改进。",
+      parameters: { type: "object", properties: {
+        tool_name:    { type: "string", description: "要改进的工具名称" },
+        explanation:  { type: "string", description: "改进方案的说明：改了什么、为什么这样改、预期效果" },
+        code_before:  { type: "string", description: "当前有问题的代码片段（函数体或关键逻辑，越精确越好）" },
+        code_after:   { type: "string", description: "改进后的代码片段（与 code_before 对应的修改版本）" },
+      }, required: ["tool_name", "explanation"] },
+    },
+  },
 ];
 
 function buildLLMRequest(cfg: ModelConfig, platformKey: string): {
@@ -3173,6 +3198,10 @@ ${branchNote}
 3. 复杂任务（多文件修改、新功能开发、重构）先提方案，等用户确认后再执行。
 4. 不确定意图时可以礼貌询问，而不是盲目执行。
 
+## 工具自我改进
+执行过程中遇到工具缺陷或限制时（信息不完整、参数不够用、无法处理某种场景），调用 report_tool_issue 上报。
+有具体修复方案时继续调用 propose_tool_fix 提交改进代码。上报不会中断任务。
+
 ## 新功能/重构请求必须走的四阶段流程
 **阶段 1**：先用工具探索项目（file_tree → batch_read 关键文件 → grep_in_repo 定位相关代码）
 **阶段 2**：输出方案（格式见下方），等用户确认
@@ -3208,6 +3237,15 @@ ${branchNote}
 2. **步骤标记**：切换到新步骤时输出 STEP:步骤ID（仅切换步骤时，不是每次工具调用都要输出）。
 3. **自主执行**：禁止询问用户是否继续，禁止提前结束，工具报错时分析原因后继续。
 4. **任务完成**：全部步骤完成后，在回复最开头输出 TASK_DONE，然后给一句简洁的完成总结。
+
+## 工具自我改进（重要）
+在执行过程中，如果你发现某个工具存在以下情况，**立即**调用 report_tool_issue 上报：
+- 工具返回的信息不完整或格式不便解析
+- 工具缺少某个必要参数（如分页、过滤条件）
+- 工具无法处理某种场景导致任务失败或绕行
+- 错误信息不够详细，难以定位问题
+上报后，如果你能想到具体修复方案，继续调用 propose_tool_fix 提交代码改进。
+**上报不会中断任务**，发现即报，然后继续执行。
 
 ## 开发需求分析工作流（新功能/重构必须遵循）
 触发条件：用户说"想新增"、"帮我实现"、"重构"等涉及新功能或较大改动时：
@@ -4818,6 +4856,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       submit_pr_review: "PR 代码审查",
       get_latest_release: "获取最新 Release", get_merged_prs_since: "获取已合并 PR",
       get_run_artifacts: "查询构建产物",
+      // 工具自我改进
+      report_tool_issue: "上报工具问题", propose_tool_fix: "提交改进方案",
     };
     // 每批最多 20 轮工具调用；最多自动续跑 3 批，总上限 60 轮
     const MAX_ROUNDS_PER_BATCH = 20;
@@ -5117,6 +5157,90 @@ Deno.serve(async (req: Request): Promise<Response> => {
         // 结束本次流式（前端收到 file_request 后会引导用户上传，并开启新一轮对话）
         batchDone = true;
         break;
+      }
+
+      // ── report_tool_issue：虚拟工具，AI 上报工具问题 ─────────────────────
+      if (toolCall.tool === "report_tool_issue") {
+        const toolName   = String(toolCall.tool_name || "unknown");
+        const issue      = String(toolCall.issue || "");
+        const severity   = String(toolCall.severity || "medium");
+        const context    = String(toolCall.context || `repo: ${owner}/${repo}`);
+        let savedId: string | null = null;
+
+        if (sb) {
+          try {
+            const { data } = await sb.from("tool_improvement_proposals").insert({
+              tool_name: toolName, issue, severity, context,
+              submitted_by: `${modelConfig.type}@${owner}/${repo}`,
+              status: "pending",
+            }).select("id").maybeSingle();
+            savedId = data?.id ?? null;
+          } catch (e) { console.error("[report_tool_issue] db error", (e as Error).message); }
+        }
+
+        // 通知前端刷新工具改进面板
+        await sendTyped({ type: "tool_issue_reported", tool_name: toolName, severity, proposal_id: savedId });
+
+        const ack = `✅ 已上报工具问题（${toolName} · ${severity}）${savedId ? `，提案 ID: ${savedId.slice(0, 8)}` : ""}`;
+        if (fcToolCall) {
+          fullMessages.push({ role: "assistant", content: "", tool_calls: [{ id: fcToolCall.id, type: "function", function: { name: fcToolCall.name, arguments: JSON.stringify(fcToolCall.arguments) } }] });
+          fullMessages.push({ role: "tool", content: ack, tool_call_id: fcToolCall.id });
+        } else {
+          fullMessages.push({ role: "assistant", content: rawText, ...(reasoningContentEverSeen ? { reasoning_content: lastReasoningContent ?? "" } : {}) });
+          fullMessages.push({ role: "user", content: ack });
+        }
+        continue; // 继续执行任务，不中断
+      }
+
+      // ── propose_tool_fix：虚拟工具，AI 提交代码改进方案 ──────────────────
+      if (toolCall.tool === "propose_tool_fix") {
+        const toolName    = String(toolCall.tool_name || "unknown");
+        const explanation = String(toolCall.explanation || "");
+        const codeBefore  = String(toolCall.code_before || "");
+        const codeAfter   = String(toolCall.code_after || "");
+        let savedId: string | null = null;
+
+        if (sb) {
+          try {
+            // 尝试更新同一工具最近一条 pending 提案；若无则新建
+            const { data: existing } = await sb
+              .from("tool_improvement_proposals")
+              .select("id")
+              .eq("tool_name", toolName)
+              .eq("status", "pending")
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (existing?.id) {
+              await sb.from("tool_improvement_proposals").update({
+                explanation, code_before: codeBefore || null, code_after: codeAfter || null,
+              }).eq("id", existing.id);
+              savedId = existing.id;
+            } else {
+              const { data } = await sb.from("tool_improvement_proposals").insert({
+                tool_name: toolName, issue: explanation, explanation,
+                code_before: codeBefore || null, code_after: codeAfter || null,
+                severity: "medium", context: `repo: ${owner}/${repo}`,
+                submitted_by: `${modelConfig.type}@${owner}/${repo}`,
+                status: "pending",
+              }).select("id").maybeSingle();
+              savedId = data?.id ?? null;
+            }
+          } catch (e) { console.error("[propose_tool_fix] db error", (e as Error).message); }
+        }
+
+        await sendTyped({ type: "tool_fix_proposed", tool_name: toolName, proposal_id: savedId });
+
+        const ack = `✅ 已保存改进方案（${toolName}）${savedId ? `，提案 ID: ${savedId.slice(0, 8)}` : ""}`;
+        if (fcToolCall) {
+          fullMessages.push({ role: "assistant", content: "", tool_calls: [{ id: fcToolCall.id, type: "function", function: { name: fcToolCall.name, arguments: JSON.stringify(fcToolCall.arguments) } }] });
+          fullMessages.push({ role: "tool", content: ack, tool_call_id: fcToolCall.id });
+        } else {
+          fullMessages.push({ role: "assistant", content: rawText, ...(reasoningContentEverSeen ? { reasoning_content: lastReasoningContent ?? "" } : {}) });
+          fullMessages.push({ role: "user", content: ack });
+        }
+        continue; // 继续执行任务
       }
 
       await sendTyped({ 

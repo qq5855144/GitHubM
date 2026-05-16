@@ -29,6 +29,7 @@ import { ToolHistoryPanel } from '@/components/ai/ToolHistoryPanel';
 import { TaskPlanPanel, type StepStatus } from '@/components/ai/TaskPlanPanel';
 import WorkflowHistoryPanel from '@/components/ai/WorkflowHistoryPanel';
 import InlineActivityPanel from '@/components/ai/InlineActivityPanel';
+import ToolWorkshopPanel from '@/components/ai/ToolWorkshopPanel';
 // ── 共享工具层 ────────────────────────────────────────────────────────────────
 import {
   getModelDef, loadModelConfig, saveModelConfig,
@@ -63,12 +64,16 @@ export default function AiAssistantPage() {
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus>>({});
   const [stepRetryCounts, setStepRetryCounts] = useState<Record<string, number>>({});
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
-  // 侧边面板 Tab：'tools' | 'plan' | 'history'
-  const [sidePanelTab, setSidePanelTab] = useState<'tools' | 'plan' | 'history'>('plan');
+  // 侧边面板 Tab：'tools' | 'plan' | 'history' | 'workshop'
+  const [sidePanelTab, setSidePanelTab] = useState<'tools' | 'plan' | 'history' | 'workshop'>('plan');
   // 任务历史 Tab 自动刷新触发（切换到该 tab 时递增）
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
   // 任务历史可恢复数量（WorkflowHistoryPanel 上报，用于 Tab 角标）
   const [interruptedWorkflowCount, setInterruptedWorkflowCount] = useState(0);
+  // 工具改进提案数（ToolWorkshopPanel 上报，用于 Tab 角标）
+  const [pendingProposalCount, setPendingProposalCount] = useState(0);
+  // 工具改进面板刷新触发（AI 上报新问题时递增）
+  const [workshopRefreshTrigger, setWorkshopRefreshTrigger] = useState(0);
   // 超时/停止后的恢复提示信息
   const [pendingResumeInfo, setPendingResumeInfo] = useState<{ workflowId?: string; taskSummary: string } | null>(null);
   // 当前会话 ID（用于持久化）
@@ -712,6 +717,14 @@ export default function AiAssistantPage() {
               const req: FileRequest = { id: chunk.id, filename: chunk.filename, description: chunk.description, mime_types: chunk.mime_types, fulfilled: false };
               return { ...m, fileRequests: [...(m.fileRequests ?? []), req] };
             }));
+            break;
+          }
+          case 'tool_issue_reported':
+          case 'tool_fix_proposed': {
+            // AI 上报了工具问题/改进方案 → 刷新工具改进面板
+            setWorkshopRefreshTrigger(v => v + 1);
+            // 切换侧边栏 badge 提示
+            setPendingProposalCount(v => v + 1);
             break;
           }
           case 'timeout': {
@@ -1804,6 +1817,29 @@ export default function AiAssistantPage() {
                     <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-primary rounded-t" />
                   )}
                 </button>
+                <button
+                  onClick={() => {
+                    setSidePanelTab('workshop');
+                    setPendingProposalCount(0);
+                  }}
+                  className={cn(
+                    'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-medium transition-colors relative',
+                    sidePanelTab === 'workshop'
+                      ? 'text-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                  改进
+                  {pendingProposalCount > 0 && sidePanelTab !== 'workshop' && (
+                    <span className="text-[9px] font-mono bg-primary/15 text-primary px-1 rounded">
+                      {pendingProposalCount}
+                    </span>
+                  )}
+                  {sidePanelTab === 'workshop' && (
+                    <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-primary rounded-t" />
+                  )}
+                </button>
                 {/* 关闭按钮（手机端更大触控区） */}
                 <button
                   onClick={() => setShowToolHistory(false)}
@@ -1837,6 +1873,11 @@ export default function AiAssistantPage() {
                       // 聚焦输入框
                       setTimeout(() => textareaRef.current?.focus(), 100);
                     }}
+                  />
+                ) : sidePanelTab === 'workshop' ? (
+                  <ToolWorkshopPanel
+                    refreshTrigger={workshopRefreshTrigger}
+                    onProposalCount={setPendingProposalCount}
                   />
                 ) : (
                   <ToolHistoryPanel items={toolHistory} />

@@ -721,12 +721,17 @@ interface GithubContext {
 
 async function githubRequest(ctx: GithubContext, apiPath: string, options: RequestInit = {}) {
   const isWrite = options.method && options.method !== "GET";
-  // GET 请求强制绕过 GitHub CDN 60s 缓存；写请求不加，避免干扰
+  // GET 请求：在 URL 追加 _t=时间戳，彻底绕过 GitHub CDN 60s 强制缓存
+  // 同时设置 no-cache 头双重保障；写请求不做处理，避免干扰
+  let finalPath = apiPath;
+  if (!isWrite) {
+    finalPath += apiPath.includes("?") ? `&_t=${Date.now()}` : `?_t=${Date.now()}`;
+  }
   const cacheHeaders: Record<string, string> = isWrite ? {} : {
     "Cache-Control": "no-cache, no-store",
     "Pragma": "no-cache",
   };
-  const res = await fetch(`https://api.github.com${apiPath}`, {
+  const res = await fetch(`https://api.github.com${finalPath}`, {
     ...options,
     headers: {
       Authorization: `Bearer ${ctx.token}`,
@@ -942,11 +947,8 @@ async function fetchFileContent(
   filePath: string,
   ref?: string,
 ): Promise<{ content: string; sha: string; size: number; totalLines: number } | string> {
-  // _t 时间戳参数用于绕过 GitHub CDN 60s 缓存，确保每次都拿到最新的 SHA
-  const cacheBust = `_t=${Date.now()}`;
-  const refQuery = ref
-    ? `?ref=${encodeURIComponent(ref)}&${cacheBust}`
-    : `?${cacheBust}`;
+  // refQuery 只负责指定 ref，时间戳缓存破坏由 githubRequest 统一注入
+  const refQuery = ref ? `?ref=${encodeURIComponent(ref)}` : "";
   const data = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/contents/${filePath}${refQuery}`);
   if (Array.isArray(data)) return `"${filePath}" 是目录，请用 file_tree 列出其内容。`;
   if (!data.sha) return `无法读取文件 "${filePath}"：缺少 blob SHA。`;
@@ -1406,18 +1408,18 @@ async function writeFile(
   try {
     let sha: string | undefined;
     try {
-      // 时间戳缓存破坏：确保拿到的是真实 SHA，而非 CDN 缓存的旧值
-      const existing = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/contents/${filePath}?_t=${Date.now()}`);
+      // 时间戳缓存破坏由 githubRequest 统一处理，此处直接获取
+      const existing = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/contents/${filePath}`);
       sha = existing.sha;
     } catch { /* 新文件 */ }
     return await _writeOnce(sha);
   } catch (e) {
     const errMsg = (e as Error).message ?? String(e);
-    // 409 SHA 冲突：自动用最新 SHA 重试一次（应对 CDN 缓存返回旧 SHA 的场景）
+    // 409 SHA 冲突：自动用最新 SHA 重试一次（CDN 缓存问题兜底）
     if (errMsg.includes("409") || errMsg.includes("conflict") || errMsg.includes("sha")) {
       try {
         console.warn(`[write_file] SHA 冲突，自动重新获取最新 SHA 并重试：${filePath}`);
-        const latest = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/contents/${filePath}?_t=${Date.now()}`);
+        const latest = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/contents/${filePath}`);
         return await _writeOnce(latest.sha as string);
       } catch (retryErr) {
         return diagnose4xx(retryErr, "write_file（自动重试）");

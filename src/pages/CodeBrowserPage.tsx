@@ -1128,6 +1128,39 @@ export default function CodeBrowserPage() {
           ))}
         </div>
 
+        {/* 移动端：分支切换按钮 */}
+        {branches.length > 0 && currentBranch && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="md:hidden h-7 px-2 text-xs gap-1 border-border text-foreground hover:bg-secondary shrink-0 max-w-[110px]"
+                title="切换分支"
+              >
+                <GitBranch className="w-3 h-3 text-muted-foreground shrink-0" />
+                <span className="truncate font-mono">{currentBranch}</span>
+                <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52 max-h-64 overflow-y-auto">
+              {branches.map((b) => (
+                <DropdownMenuItem
+                  key={b.name}
+                  onClick={() => setCurrentBranch(b.name)}
+                  className={`font-mono text-xs gap-2 ${b.name === currentBranch ? 'text-primary font-semibold' : ''}`}
+                >
+                  <GitBranch className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate flex-1">{b.name}</span>
+                  {b.name === currentBranch && (
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-primary" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
         {/* 桌面端：当前分支显示（只读，切换在文件树里） */}
         {currentBranch && (
           <Badge variant="outline" className="border-border text-muted-foreground hidden md:flex items-center gap-1 h-6 text-xs shrink-0">
@@ -1186,14 +1219,7 @@ export default function CodeBrowserPage() {
         <Sheet open={treeOpen} onOpenChange={setTreeOpen}>
           <SheetContent side="left" className="w-72 p-0 flex flex-col bg-sidebar">
             <SheetHeader className="px-3 py-2 border-b border-border">
-              <div className="flex items-center justify-between gap-2">
-                <SheetTitle className="text-sm font-medium text-foreground">{repo} 文件树</SheetTitle>
-                {currentBranch && (
-                  <Badge variant="outline" className="border-border text-muted-foreground flex items-center gap-1 h-5 text-xs shrink-0 font-mono">
-                    <GitBranch className="w-3 h-3" />{currentBranch}
-                  </Badge>
-                )}
-              </div>
+              <SheetTitle className="text-sm font-medium text-foreground">{repo} 文件树</SheetTitle>
             </SheetHeader>
             <div className="flex-1 min-h-0 overflow-hidden">
               <FileTree
@@ -1201,6 +1227,7 @@ export default function CodeBrowserPage() {
                 repo={repo!}
                 branch={currentBranch}
                 branches={branches}
+                onBranchChange={(b) => { setCurrentBranch(b); setTreeOpen(false); }}
                 activePath={filePath || undefined}
                 refreshKey={treeRefreshKey}
                 onFileClick={(item) => { navigate(`/repos/${owner}/${repo}/code/${item.path}`); setTreeOpen(false); }}

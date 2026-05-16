@@ -48,6 +48,7 @@ import {
   type GitHubArtifact,
   type GitHubReleaseAsset,
 } from '@/services/github';
+import { supabase } from '@/db/supabase';
 import { toast } from 'sonner';
 
 function formatBytes(bytes: number): string {
@@ -238,23 +239,75 @@ function ReleaseItem({
   );
 }
 
-/** Actions Artifact 下载按钮（archive_download_url 需要携带 Authorization header） */
-function ArtifactDownloadButton({ art }: { art: GitHubArtifact }) {
+/** Actions Artifact 下载按钮
+ *
+ * archive_download_url 必须携带 Authorization 才能拿到 GitHub 302 重定向的临时预签名 URL。
+ * 浏览器无法在 window.open 中携带 Authorization，直接打开会得到 401。
+ *
+ * 方案：通过 Edge Function（服务端）携带 token 获取 302 Location（预签名 URL），
+ *       返回给前端后再用 window.open 打开——预签名 URL 不需要 Authorization。
+ */
+function ArtifactDownloadButton({ art, owner, repo }: { art: GitHubArtifact; owner: string; repo: string }) {
   const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    const token = getToken();
+    if (!token) {
+      toast.error('请先登录后再下载');
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      // Android WebView：原生层直接携带 token 下载
+      const bridge = (window as unknown as {
+        AndroidBridge?: { downloadFile?: (u: string, f: string, t: string) => void }
+      }).AndroidBridge;
+      if (bridge?.downloadFile) {
+        bridge.downloadFile(art.archive_download_url, `${art.name}.zip`, token);
+        toast.success(`开始下载 ${art.name}.zip`);
+        return;
+      }
+
+      // 浏览器：通过 Edge Function 服务端获取预签名 URL，再 window.open 打开
+      const { data, error } = await supabase.functions.invoke<{ url?: string; error?: string }>(
+        'get-artifact-url',
+        { body: { owner, repo, artifact_id: art.id, token } },
+      );
+
+      if (error) {
+        const msg = await (error as { context?: { text?: () => Promise<string> } }).context?.text?.() ?? error.message;
+        toast.error(`下载失败：${msg}`);
+        return;
+      }
+      if (data?.error) {
+        toast.error(`下载失败：${data.error}`);
+        return;
+      }
+      if (!data?.url) {
+        toast.error('获取下载链接失败，请稍后重试');
+        return;
+      }
+
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+      toast.success(`已打开 ${art.name}.zip 的下载链接`);
+    } catch (err) {
+      toast.error(`下载失败：${err instanceof Error ? err.message : '未知错误'}`);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <Button
       variant="outline"
       size="sm"
       className="h-8 text-xs"
       disabled={downloading}
-      onClick={async () => {
-        setDownloading(true);
-        await downloadWithAuth(art.archive_download_url, `${art.name}.zip`);
-        setDownloading(false);
-      }}
+      onClick={handleDownload}
     >
       {downloading
-        ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />下载中</>
+        ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />获取中</>
         : <><Download className="w-3.5 h-3.5 mr-1.5" />下载</>
       }
     </Button>
@@ -456,7 +509,7 @@ export default function ArtifactsPage() {
                     </div>
                     <div className="flex gap-1 shrink-0">
                       {!art.expired && (
-                        <ArtifactDownloadButton art={art} />
+                        <ArtifactDownloadButton art={art} owner={owner ?? ''} repo={repo ?? ''} />
                       )}
                       <Button
                         variant="ghost"

@@ -1186,7 +1186,14 @@ export default function CodeBrowserPage() {
         <Sheet open={treeOpen} onOpenChange={setTreeOpen}>
           <SheetContent side="left" className="w-72 p-0 flex flex-col bg-sidebar">
             <SheetHeader className="px-3 py-2 border-b border-border">
-              <SheetTitle className="text-sm font-medium text-foreground">{repo} 文件树</SheetTitle>
+              <div className="flex items-center justify-between gap-2">
+                <SheetTitle className="text-sm font-medium text-foreground">{repo} 文件树</SheetTitle>
+                {currentBranch && (
+                  <Badge variant="outline" className="border-border text-muted-foreground flex items-center gap-1 h-5 text-xs shrink-0 font-mono">
+                    <GitBranch className="w-3 h-3" />{currentBranch}
+                  </Badge>
+                )}
+              </div>
             </SheetHeader>
             <div className="flex-1 min-h-0 overflow-hidden">
               <FileTree
@@ -1194,7 +1201,6 @@ export default function CodeBrowserPage() {
                 repo={repo!}
                 branch={currentBranch}
                 branches={branches}
-                onBranchChange={(b) => { setCurrentBranch(b); setTreeOpen(false); }}
                 activePath={filePath || undefined}
                 refreshKey={treeRefreshKey}
                 onFileClick={(item) => { navigate(`/repos/${owner}/${repo}/code/${item.path}`); setTreeOpen(false); }}

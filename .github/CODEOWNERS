@@ -1,0 +1,24 @@
+# CODEOWNERS
+# 定义代码审查负责人。GitHub 在创建 PR 时自动向相关负责人发起审查请求。
+# 文档：https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# ── 全局默认（所有文件） ────────────────────────────────────────────
+* @qq5855144
+
+# ── CI/CD 配置（最高权限，变更需谨慎） ─────────────────────────────
+/.github/workflows/ @qq5855144
+
+# ── Android 原生代码 ────────────────────────────────────────────────
+/android/ @qq5855144
+
+# ── Supabase Edge Functions ─────────────────────────────────────────
+/supabase/ @qq5855144
+
+# ── 前端核心服务层 ──────────────────────────────────────────────────
+/src/services/ @qq5855144
+
+# ── 类型定义 ────────────────────────────────────────────────────────
+/src/types/ @qq5855144
+
+# ── 路由配置 ────────────────────────────────────────────────────────
+/src/routes.tsx @qq5855144

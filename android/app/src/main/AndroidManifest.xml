@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ── 网络（GitHub API 请求） ────────────────────────────────── -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- ── 相机（拍照上传到 GitHub，按需申请） ───────────────────── -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- ── 写存储（仅 API 26–28 下载时需要，API 29+ 由 DownloadManager 自动处理） -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <!--
+      ❌ 不声明 READ_EXTERNAL_STORAGE / READ_MEDIA_IMAGES 等：
+         文件上传使用系统文件选择器（ACTION_GET_CONTENT），由 DocumentsUI 代理读取，
+         应用无需存储读权限；下载到 Downloads 目录 API 29+ 也无需存储权限。
+         精准最小权限，减少用户授权摩擦。
+    -->
+
+    <!-- ── 查询其他 App（文件选择器 / 打开下载文件） ─────────────── -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="content" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.GitHubManager"
+        android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="false">
+        <!--
+          requestLegacyExternalStorage 在 API 30+ 无效，已移除。
+          下载文件使用 DownloadManager 写入 Downloads 目录，API 29+ 无需此标志。
+        -->
+
+        <!-- ── 主 Activity ──────────────────────────────────────── -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|uiMode"
+            android:windowSoftInputMode="adjustPan">
+            <!--
+              adjustPan：Android 15 强制边到边后，adjustResize 不再可靠，
+              改用 adjustPan 保持键盘弹出时 WebView 平移而非重排布局。
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ── FileProvider：为相机拍照提供安全的 content:// URI ── -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>
+

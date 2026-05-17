@@ -26,6 +26,7 @@ import CreateBranchDialog from '@/components/ai/CreateBranchDialog';
 import HistoryPanel from '@/components/ai/HistoryPanel';
 import FileBrowserPanel from '@/components/ai/FileBrowserPanel';
 import { ToolHistoryPanel } from '@/components/ai/ToolHistoryPanel';
+import { RunHistoryPanel } from '@/components/ai/RunHistoryPanel';
 import { TaskPlanPanel, type StepStatus } from '@/components/ai/TaskPlanPanel';
 import WorkflowHistoryPanel from '@/components/ai/WorkflowHistoryPanel';
 import InlineActivityPanel from '@/components/ai/InlineActivityPanel';
@@ -37,7 +38,7 @@ import {
   getModelDef, loadModelConfig, saveModelConfig,
   parseChunk, parseTypedChunk, renderMarkdown, ThinkingBlock, QUICK_PROMPTS, ModelAvatar,
 } from '@/components/ai/aiUtils';
-import { upsertSession, insertMessages } from '@/components/ai/aiSupabase';
+import { upsertSession, insertMessages, insertToolExecutionLogs, upsertWorkflowSnapshot, fetchLatestSnapshot } from '@/components/ai/aiSupabase';
 import type { Message, ModelConfig, ChatSession, ChatSessionMessage, ToolHistoryItem, TaskPlanStep, InlineStep, InlineTool, Attachment, FileRequest, StreamMetrics } from '@/components/ai/aiTypes';
 import { appendUsageRecord } from '@/components/ai/usageStats';
 
@@ -106,7 +107,7 @@ export default function AiAssistantPage() {
   const [stepRetryCounts, setStepRetryCounts] = useState<Record<string, number>>({});
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
   // 侧边面板 Tab：'tools' | 'plan' | 'history' | 'workshop'
-  const [sidePanelTab, setSidePanelTab] = useState<'tools' | 'plan' | 'history' | 'workshop'>('plan');
+  const [sidePanelTab, setSidePanelTab] = useState<'tools' | 'plan' | 'history' | 'workshop' | 'runlog'>('plan');
   // 任务历史 Tab 自动刷新触发（切换到该 tab 时递增）
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
   // 任务历史可恢复数量（WorkflowHistoryPanel 上报，用于 Tab 角标）
@@ -157,6 +158,16 @@ export default function AiAssistantPage() {
   const [isNetworkInterrupted, setIsNetworkInterrupted] = useState(false);
   /** 当前流式对应的 AI 消息 id，重连时用于定位消息 */
   const streamingAiMsgIdRef = useRef<string | null>(null);
+
+  // ── 持久化辅助 refs（避免闭包读到 stale state）────────────────────────────
+  /** 镜像 sessionId state，供 onComplete 闭包读取最新值 */
+  const sessionIdRef = useRef<string | null>(null);
+  /** 当前轮次幂等键，handleSend 写入，onComplete 消费 */
+  const currentTurnIdRef = useRef<string>('');
+  /** 镜像 toolHistory state，供 onComplete 闭包读取最新快照 */
+  const toolHistoryRef = useRef<ToolHistoryItem[]>([]);
+  /** 镜像 messages state，供 onComplete 闭包读取最新快照 */
+  const messagesRef = useRef<Message[]>([]);
 
   // ── sessionStorage 持久化：state 变化时同步保存，切换页面不丢失对话 ────────
   useEffect(() => {
@@ -257,6 +268,25 @@ export default function AiAssistantPage() {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── 持久化辅助：同步 state → ref，确保闭包始终读到最新值 ─────────────────────
+  useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
+  useEffect(() => { toolHistoryRef.current = toolHistory; }, [toolHistory]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+  // ── 断点恢复：会话加载时获取最新 workflow 快照，还原 toolHistory ─────────────
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    fetchLatestSnapshot(sessionId).then(snapshot => {
+      if (cancelled || !snapshot) return;
+      // 仅在 toolHistory 为空时还原（避免覆盖当前正在进行的任务）
+      setToolHistory(prev => prev.length === 0 ? snapshot.toolHistory : prev);
+    });
+    return () => { cancelled = true; };
+  // 仅在 sessionId 首次出现时触发一次
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   // 加载分支列表
   const loadBranches = useCallback(async (repo: GitHubRepo) => {
@@ -465,6 +495,11 @@ export default function AiAssistantPage() {
     const userText = (text ?? input).trim();
     if (!userText || isStreaming || !selectedRepo || !token) return;
 
+    // 用户发送新消息时重置重连计数
+    reconnectAttemptsRef.current = 0;
+    toast.dismiss('reconnect-backoff');
+    toast.dismiss('reconnect-max-retry');
+
     // 附件内容注入到消息文本
     const pendingAttachments = isRegen ? [] : [...attachments];
     const attachmentText = formatAttachmentsForMessage(pendingAttachments);
@@ -516,6 +551,8 @@ export default function AiAssistantPage() {
     // ── 记录请求参数，供断连后重连使用 ─────────────────────────────────────────
     // 幂等键：同一轮对话的重连请求复用相同 turn_id，后端可据此做写操作去重
     const idempotencyKey = `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    // 记录本轮 turnId，onComplete 持久化时使用
+    currentTurnIdRef.current = idempotencyKey;
     const reqBody: Record<string, unknown> = {
       messages: history,
       github_token: token,
@@ -899,6 +936,9 @@ export default function AiAssistantPage() {
         networkInterruptedRef.current = false;
         setIsNetworkInterrupted(false);
         streamingAiMsgIdRef.current = null;
+        // 流式成功完成 → 重置重连计数
+        reconnectAttemptsRef.current = 0;
+        toast.dismiss('reconnect-backoff');
         // 关闭所有仍在 streaming 的 AI 气泡；thinking 气泡同时标记 thinkingDone，确保转圈消失
         setMessages(prev => prev.map(m => {
           if (m.role !== 'assistant' || !m.streaming) return m;
@@ -914,6 +954,17 @@ export default function AiAssistantPage() {
           : [{ role: 'user', content: userText }, { role: 'assistant', content: assistantContent }];
         await persistMessages(newMsgs, selectedRepo, selectedBranch);
         pendingMsgsRef.current = [];
+        // ── 持久化工具日志 + workflow 快照 ────────────────────────────────────
+        const sid = sessionIdRef.current;
+        const tid = currentTurnIdRef.current;
+        if (sid && tid) {
+          const finalToolHistory = toolHistoryRef.current;
+          const finalMessages = messagesRef.current;
+          await Promise.all([
+            insertToolExecutionLogs(sid, tid, finalToolHistory),
+            upsertWorkflowSnapshot(sid, tid, finalMessages, finalToolHistory),
+          ]);
+        }
       },
       onError: (err) => {
         // 同样先 flush 所有 pending mutations，再写入错误状态
@@ -1039,12 +1090,26 @@ export default function AiAssistantPage() {
         networkInterruptedRef.current = false;
         setIsNetworkInterrupted(false);
         streamingAiMsgIdRef.current = null;
+        // 重连流式成功 → 重置计数
+        reconnectAttemptsRef.current = 0;
+        toast.dismiss('reconnect-backoff');
         setMessages(prev => prev.map(m => m.id === aiMsg.id ? { ...m, streaming: false } : m));
         setIsStreaming(false);
         await persistMessages(
           [{ role: 'user', content: userText + ' [重连续跑]' }, { role: 'assistant', content: accumulated }],
           selectedRepo, selectedBranch,
         );
+        // ── 持久化工具日志 + workflow 快照（重连完成） ─────────────────────────
+        const sid = sessionIdRef.current;
+        const tid = currentTurnIdRef.current;
+        if (sid && tid) {
+          const finalToolHistory = toolHistoryRef.current;
+          const finalMessages = messagesRef.current;
+          await Promise.all([
+            insertToolExecutionLogs(sid, tid, finalToolHistory),
+            upsertWorkflowSnapshot(sid, tid, finalMessages, finalToolHistory),
+          ]);
+        }
       },
       onError: (err) => {
         cancelAndFlush();
@@ -1057,10 +1122,22 @@ export default function AiAssistantPage() {
     });
   }, [isStreaming, selectedRepo, token, modelConfig, selectedBranch, persistMessages]);
 
-  // ── 写操作守卫：有写操作时不静默重连，改为弹 toast 让用户决策 ─────────────────
+  // ── 指数退避重连：重试计数 + 写操作守卫 ──────────────────────────────────────
+  /** 当前无写操作重试次数（0 = 还未尝试） */
+  const reconnectAttemptsRef = useRef(0);
+  const MAX_RECONNECT_ATTEMPTS = 5;
+
+  /** 计算下一次重连延迟（ms）：min(1500×2^n, 30000) + jitter(0~500ms) */
+  const calcReconnectDelay = (attempt: number): number => {
+    const base = Math.min(1500 * Math.pow(2, attempt), 30_000);
+    const jitter = Math.random() * 500;
+    return base + jitter;
+  };
+
   const triggerReconnectOrWarn = useCallback(() => {
     const hasWrite = toolHistory.some(t => WRITE_TOOLS.has(t.tool ?? ''));
     if (hasWrite) {
+      // 有写操作：不自动重连，让用户手动确认
       toast.warning('检测到本轮含写操作，自动重连可能导致重复执行。请确认后手动重连。', {
         id: 'write-op-reconnect',
         duration: 0,
@@ -1068,13 +1145,40 @@ export default function AiAssistantPage() {
           label: '确认重连',
           onClick: () => {
             toast.dismiss('write-op-reconnect');
+            reconnectAttemptsRef.current = 0;
             handleReconnect();
           },
         },
       });
-    } else {
-      setTimeout(() => handleReconnect(), 1500);
+      return;
     }
+    // 无写操作：指数退避自动重连
+    const attempt = reconnectAttemptsRef.current;
+    if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+      toast.error(
+        `已重试 ${MAX_RECONNECT_ATTEMPTS} 次，连接仍然失败。请检查网络后手动重连。`,
+        {
+          id: 'reconnect-max-retry',
+          duration: 0,
+          action: {
+            label: '手动重连',
+            onClick: () => {
+              toast.dismiss('reconnect-max-retry');
+              reconnectAttemptsRef.current = 0;
+              handleReconnect();
+            },
+          },
+        },
+      );
+      return;
+    }
+    const delay = calcReconnectDelay(attempt);
+    reconnectAttemptsRef.current = attempt + 1;
+    toast.info(
+      `网络中断，${Math.round(delay / 1000)} 秒后自动重连（第 ${attempt + 1}/${MAX_RECONNECT_ATTEMPTS} 次）…`,
+      { id: 'reconnect-backoff', duration: delay - 200 },
+    );
+    setTimeout(() => handleReconnect(), delay);
   }, [toolHistory, handleReconnect]);
 
   const handleStop = () => {
@@ -1980,6 +2084,21 @@ export default function AiAssistantPage() {
                   )}
                 </button>
                 <button
+                  onClick={() => setSidePanelTab('runlog')}
+                  className={cn(
+                    'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-medium transition-colors relative',
+                    sidePanelTab === 'runlog'
+                      ? 'text-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <History className="w-3.5 h-3.5 shrink-0" />
+                  执行日志
+                  {sidePanelTab === 'runlog' && (
+                    <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-primary rounded-t" />
+                  )}
+                </button>
+                <button
                   onClick={() => {
                     setSidePanelTab('history');
                     setHistoryRefreshTrigger(v => v + 1);
@@ -2057,6 +2176,16 @@ export default function AiAssistantPage() {
                       handleSend(`继续上次未完成的任务：${taskSummary}`, false, workflowId);
                       // 聚焦输入框
                       setTimeout(() => textareaRef.current?.focus(), 100);
+                    }}
+                  />
+                ) : sidePanelTab === 'runlog' ? (
+                  <RunHistoryPanel
+                    sessionId={sessionId}
+                    isStreaming={isStreaming}
+                    onRestore={(restored) => {
+                      setToolHistory(restored);
+                      if (restored.length > 0) setShowToolHistory(true);
+                      toast.success(`已从快照恢复 ${restored.length} 条工具记录`);
                     }}
                   />
                 ) : sidePanelTab === 'workshop' ? (

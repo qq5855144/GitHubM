@@ -4376,22 +4376,22 @@ ${branchNote}
 > 核心原则：**先建立全局认知，再精准读取目标，不要逐段盲读整个文件**
 
 **新工具（优先使用）**：
-- `get_code_outline` — 提取代码骨架（函数/类/接口列表 + 起止行号），不返回代码体，极低上下文消耗
-- `read_function` — 按函数/类名称直接读取完整体，免去两步操作（grep行号 → read_file）
-- `grep_in_file` with `context_lines` — 搜索时同时返回前后 N 行上下文，一步拿到足够背景
+- \`get_code_outline\` — 提取代码骨架（函数/类/接口列表 + 起止行号），不返回代码体，极低上下文消耗
+- \`read_function\` — 按函数/类名称直接读取完整体，免去两步操作（grep行号 → read_file）
+- \`grep_in_file\` with \`context_lines\` — 搜索时同时返回前后 N 行上下文，一步拿到足够背景
 
 **推荐工作流（文件 > 500 行时强烈建议）**：
-```
+\`\`\`
 步骤1：get_code_outline  →  建立文件全局结构（函数列表+行号）
 步骤2：read_function     →  精准读取目标函数完整体（直接按名称）
 步骤3：patch_file / batch_patch  →  按已知行号修改
-```
+\`\`\`
 
 **示例**：
-- 查看文件结构：`{"tool":"get_code_outline","path":"src/services/github.ts"}`
-- 精准读取函数：`{"tool":"read_function","path":"src/App.tsx","function_name":"AppContent"}`
-- 同名函数取第2个：`{"tool":"read_function","path":"src/utils.ts","function_name":"format","occurrence":"2"}`
-- 搜索+上下文：`{"tool":"grep_in_file","path":"src/main.ts","pattern":"fetchData","context_lines":"5"}`
+- 查看文件结构：\`{"tool":"get_code_outline","path":"src/services/github.ts"}\`
+- 精准读取函数：\`{"tool":"read_function","path":"src/App.tsx","function_name":"AppContent"}\`
+- 同名函数取第2个：\`{"tool":"read_function","path":"src/utils.ts","function_name":"format","occurrence":"2"}\`
+- 搜索+上下文：\`{"tool":"grep_in_file","path":"src/main.ts","pattern":"fetchData","context_lines":"5"}\`
 
 **何时仍用 read_file 逐段读取**：
 - 需要理解函数之间的流程串联（多个函数如何协作）
@@ -4399,12 +4399,12 @@ ${branchNote}
 - 文件 ≤ 5000 行且需要全量代码上下文时，直接 read_file（不带行范围）一次返回完整内容
 
 **read_file 自动全文模式（优先使用）**：
-- 文件 ≤ 5000 行时，直接调用 `{"tool":"read_file","path":"src/App.tsx"}`（不带行范围），系统自动一次性返回完整内容
+- 文件 ≤ 5000 行时，直接调用 \`{"tool":"read_file","path":"src/App.tsx"}\`（不带行范围），系统自动一次性返回完整内容
 - 文件 > 5000 行时，系统返回第一段并附带**所有后续段落的调用列表**，必须逐段执行完毕
 
 **标准流程（文件 > 5000 行时）**：
-1. 先调用 `get_code_outline` 建立骨架（推荐替代 get_file_info）
-2. 用 `read_function` 精准读取目标函数，无需分段
+1. 先调用 \`get_code_outline\` 建立骨架（推荐替代 get_file_info）
+2. 用 \`read_function\` 精准读取目标函数，无需分段
 3. 确实需要跨函数全文时，再按 500 行步进分段 read_file
 
 **大文件（>1MB）特别说明**：
@@ -4424,7 +4424,7 @@ ${branchNote}
 **写入大内容时（代码超过 200 行）必须分批修改，不得一次性 write_file**：
 1. 先用 get_code_outline 或 get_file_info 确认目标文件总行数
 2. 将要写入的内容拆分为多段，每段不超过 200 行
-3. **必须使用 batch_patch 一次性提交所有段落**，格式：`[{"start_line":N1,"end_line":M1,"content":"段落1"},{"start_line":N2,"end_line":M2,"content":"段落2"},...]`
+3. **必须使用 batch_patch 一次性提交所有段落**，格式：\`[{"start_line":N1,"end_line":M1,"content":"段落1"},{"start_line":N2,"end_line":M2,"content":"段落2"},...]\`
    - batch_patch 内部按倒序处理各段，不存在行号偏移问题
    - ❌ 严禁分多次调用 patch_file：每次 patch 会改变文件行数，导致后续调用行号偏移，产生重复或错误内容
 4. batch_patch 返回「各处修改 diff 快照」，**必须核查每处快照**：

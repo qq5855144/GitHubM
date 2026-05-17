@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notifications / 通知：铃铛图标 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 铃铛主体 -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M18,8 C18,6.4087 17.3679,4.88258 16.2426,3.75736 C15.1174,2.63214 13.5913,2 12,2 C10.4087,2 8.88258,2.63214 7.75736,3.75736 C6.63214,4.88258 6,6.4087 6,8 C6,15 3,17 3,17 L21,17 C21,17 18,15 18,8 Z" />
+    <!-- 铃铛底部小弧 -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M13.73,21 C13.5542,21.3031 13.3019,21.5547 12.9982,21.7295 C12.6946,21.9044 12.3504,21.9965 12,21.9965 C11.6496,21.9965 11.3054,21.9044 11.0018,21.7295 C10.6982,21.5547 10.4458,21.3031 10.27,21" />
+</vector>

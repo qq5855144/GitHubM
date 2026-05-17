@@ -1182,7 +1182,7 @@ export default function CodeBrowserPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="md:hidden h-7 px-2 text-xs gap-1 border-border text-foreground hover:bg-secondary shrink-0 max-w-[110px]"
+                className="md:hidden h-7 px-2 text-xs gap-1 border-border hover:bg-secondary shrink-0 max-w-[110px]"
                 title="切换分支"
               >
                 <GitBranch className="w-3 h-3 text-muted-foreground shrink-0" />

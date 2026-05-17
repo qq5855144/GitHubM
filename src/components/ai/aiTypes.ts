@@ -135,7 +135,19 @@ export interface TaskPlanStep {
   desc: string;
 }
 
-export type SSEChunk =
+/**
+ * SSE 事件信封（标准协议 v2）。
+ * 后端为每条事件注入 stream_id / turn_id / seq / timestamp，
+ * 前端用 seq 去重、idle timeout 检测，用 stream_id 校验归属。
+ */
+export interface SSEEnvelope {
+  stream_id?: string;
+  turn_id?: string;
+  seq?: number;
+  timestamp?: number;
+}
+
+export type SSEChunk = SSEEnvelope & (
   | { type: 'content'; content: string }
   | { type: 'think_start' }
   | { type: 'think_chunk'; content: string }
@@ -153,7 +165,10 @@ export type SSEChunk =
   | { type: 'timeout'; workflow_id?: string }
   | { type: 'usage'; prompt_tokens: number; completion_tokens: number; total_tokens: number; model: string; providerType: string }
   | { type: 'tool_issue_reported'; tool_name: string; severity: string; proposal_id: string | null }
-  | { type: 'tool_fix_proposed'; tool_name: string; proposal_id: string | null };
+  | { type: 'tool_fix_proposed'; tool_name: string; proposal_id: string | null }
+  | { type: 'done'; total_seq?: number }
+  | { type: 'error'; code: string; message: string }
+);
 
 // ── 模型配置 ────────────────────────────────────────────────────────────────────
 
@@ -167,4 +182,26 @@ export interface ModelConfig {
    * 用户可在模型设置中调整，复杂任务建议设 5~10 分钟
    */
   timeoutMs?: number;
+}
+
+// ── 流式统计指标 ────────────────────────────────────────────────────────────────
+
+/** 每次流式对话的性能指标，用于监控和调试 */
+export interface StreamMetrics {
+  /** Time To First Token（ms） */
+  ttft?: number;
+  /** 流速（tokens/s 近似，按字符估算） */
+  throughput?: number;
+  /** 流开始时间戳（ms） */
+  startedAt: number;
+  /** 首 token 时间戳（ms） */
+  firstTokenAt?: number;
+  /** 流结束时间戳（ms） */
+  finishedAt?: number;
+  /** 中断原因 */
+  interruptReason?: 'user_stop' | 'network_error' | 'idle_timeout' | 'server_error' | 'completed';
+  /** 收到的总 seq 数 */
+  totalSeq?: number;
+  /** stream_id */
+  streamId?: string;
 }

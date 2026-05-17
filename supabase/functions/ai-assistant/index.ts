@@ -5338,26 +5338,56 @@ async function dbFinishWorkflow(
 
 // ── SSE 流输出 ───────────────────────────────────────────────────────────────
 
-function createSSEStream() {
+/**
+ * 创建标准化 SSE 流。
+ *
+ * 每条事件格式：
+ * {
+ *   "stream_id": "s_<uuid>",   // 当前流的唯一标识（整个请求共享）
+ *   "turn_id":   "t_<uuid>",   // 当前对话轮次 ID（前端传入 idempotency_key 复用）
+ *   "seq":       <number>,     // 单调递增序列号（前端用于去重/乱序检测）
+ *   "timestamp": <epoch_ms>,   // 服务端发出时间
+ *   "type":      "<event>",    // 事件类型
+ *   ...payload                 // 事件专有字段
+ * }
+ */
+function createSSEStream(streamId: string, turnId: string) {
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
-  
+  let seq = 0;
+
   const sendRaw = (data: string) => writer.write(encoder.encode(`data: ${data}\n\n`));
-  
-  /** 发送结构化事件（新版） */
-  const sendTyped = (payload: unknown) => sendRaw(JSON.stringify(payload));
 
-  /** 发送纯内容 Chunk（兼容旧版前端） */
-  const sendChunk = (content: string) => 
-    sendTyped({ type: "content", content });
-
-  const sendDone = async () => { 
-    await sendRaw("[DONE]"); 
-    await writer.close(); 
+  /** 发送结构化事件（标准协议，含 seq/stream_id/turn_id/timestamp） */
+  const sendTyped = (payload: Record<string, unknown>) => {
+    const envelope = {
+      stream_id: streamId,
+      turn_id: turnId,
+      seq: seq++,
+      timestamp: Date.now(),
+      ...payload,
+    };
+    return sendRaw(JSON.stringify(envelope));
   };
 
-  return { readable, sendTyped, sendChunk, sendDone };
+  /** 发送纯内容 Chunk */
+  const sendChunk = (content: string) =>
+    sendTyped({ type: "content", content });
+
+  /** 正常完成：发送 done 事件后关闭流 */
+  const sendDone = async () => {
+    await sendTyped({ type: "done", total_seq: seq });
+    await writer.close();
+  };
+
+  /** 错误完成：发送 error 事件后关闭流 */
+  const sendError = async (code: string, message: string) => {
+    try { await sendTyped({ type: "error", code, message }); } catch { /* ignore */ }
+    try { await writer.close(); } catch { /* ignore */ }
+  };
+
+  return { readable, sendTyped, sendChunk, sendDone, sendError };
 }
 
 /**
@@ -5455,6 +5485,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   let userId = "anonymous";
   let resumeWorkflowId: string | undefined; // 断点恢复：传入 workflow id
   let isAutoMode = false; // 自主模式开关（前端 auto_mode 字段）
+  let idempotencyKey: string | undefined; // 幂等键：防止重复执行写操作
 
   try {
     const body = await req.json();
@@ -5466,6 +5497,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (body.model_config) modelConfig = body.model_config;
     if (body.user_id) userId = body.user_id;
     if (body.resume_workflow_id) resumeWorkflowId = body.resume_workflow_id;
+    if (body.idempotency_key) idempotencyKey = body.idempotency_key;
     // 读取自主模式标志：断点恢复时强制保持自主模式（恢复的任务必然是复杂任务）
     isAutoMode = !!body.auto_mode || !!resumeWorkflowId;
     // ── 模型路由：temperature 自适应 ────────────────────────────────────────
@@ -5503,7 +5535,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   const ctx: GithubContext = { token: githubToken, owner, repo };
-  const { readable, sendTyped, sendChunk, sendDone } = createSSEStream();
+
+  // 生成本次流的唯一标识：stream_id 每次新请求生成；turn_id 复用幂等键（有则用，无则新建）
+  const streamId = `s_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+  const turnId = idempotencyKey ?? `t_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+
+  const { readable, sendTyped, sendChunk, sendDone, sendError } = createSSEStream(streamId, turnId);
 
   // 客户端中断信号：用户点"停止"时 req.signal 触发 abort
   const abortSig = req.signal;
@@ -6216,7 +6253,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       // @ts-ignore: heartbeatTimer is defined in outer scope
       if (typeof heartbeatTimer !== 'undefined') clearInterval(heartbeatTimer);
       try { await streamAnswer(`❌ 内部错误：${(fatalErr as Error).message}`, sendChunk); } catch { /* ignore */ }
-      try { await sendDone(); } catch { /* ignore */ }
+      try { await sendError("INTERNAL_ERROR", (fatalErr as Error).message); } catch { /* ignore */ }
     }
   })();
 

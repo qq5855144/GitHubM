@@ -1,4 +1,4 @@
-// AI 助手页面 v7 - 超时可配置 + 后台断连自动重连 + 原生 fetch SSE
+// AI 助手页面 v8 - SSE 协议 v2：seq/stream_id/turn_id、idle timeout、TTFT 埋点
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getRepoBranches } from '@/services/github';
@@ -29,6 +29,7 @@ import { ToolHistoryPanel } from '@/components/ai/ToolHistoryPanel';
 import { TaskPlanPanel, type StepStatus } from '@/components/ai/TaskPlanPanel';
 import WorkflowHistoryPanel from '@/components/ai/WorkflowHistoryPanel';
 import InlineActivityPanel from '@/components/ai/InlineActivityPanel';
+import StreamMetricsBar from '@/components/ai/StreamMetricsBar';
 import ToolWorkshopPanel from '@/components/ai/ToolWorkshopPanel';
 // ── 共享工具层 ────────────────────────────────────────────────────────────────
 import {
@@ -36,7 +37,7 @@ import {
   parseChunk, parseTypedChunk, renderMarkdown, ThinkingBlock, QUICK_PROMPTS, ModelAvatar,
 } from '@/components/ai/aiUtils';
 import { upsertSession, insertMessages } from '@/components/ai/aiSupabase';
-import type { Message, ModelConfig, ChatSession, ChatSessionMessage, ToolHistoryItem, TaskPlanStep, InlineStep, InlineTool, Attachment, FileRequest } from '@/components/ai/aiTypes';
+import type { Message, ModelConfig, ChatSession, ChatSessionMessage, ToolHistoryItem, TaskPlanStep, InlineStep, InlineTool, Attachment, FileRequest, StreamMetrics } from '@/components/ai/aiTypes';
 import { appendUsageRecord } from '@/components/ai/usageStats';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -126,6 +127,8 @@ export default function AiAssistantPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
 
+  // ── 流式统计指标（最近一次对话）────────────────────────────────────────────
+  const [streamMetrics, setStreamMetrics] = useState<Partial<StreamMetrics> | null>(null);
   // ── 断连重连：记录最后一次请求参数，供后台切回时恢复 ─────────────────────────
   /** 上次发送的请求 body（不含 signal），网络中断时用于重连 */
   const lastRequestBodyRef = useRef<Record<string, unknown> | null>(null);
@@ -489,9 +492,13 @@ export default function AiAssistantPage() {
       setStepStatuses({});
       setStepRetryCounts({});
       setCurrentStepId(null);
+      // 清空上一轮流指标
+      setStreamMetrics(null);
     }
 
     // ── 记录请求参数，供断连后重连使用 ─────────────────────────────────────────
+    // 幂等键：同一轮对话的重连请求复用相同 turn_id，后端可据此做写操作去重
+    const idempotencyKey = `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     const reqBody: Record<string, unknown> = {
       messages: history,
       github_token: token,
@@ -501,6 +508,7 @@ export default function AiAssistantPage() {
       model_config: modelConfig,
       user_id: user?.login || 'anonymous',
       auto_mode: autoMode,  // 自主执行模式标志，传递给 Edge Function
+      idempotency_key: idempotencyKey,
     };
     // 断点恢复：传入 resume_workflow_id 时，Edge Function 将从历史快照继续
     if (resumeWorkflowId) reqBody.resume_workflow_id = resumeWorkflowId;
@@ -585,6 +593,34 @@ export default function AiAssistantPage() {
       requestBody: reqBody,
       supabaseAnonKey: SUPABASE_ANON_KEY,
       timeoutMs: modelConfig.timeoutMs ?? 300_000,
+      // idle timeout：45 秒无任何 SSE 事件则视为假死，自动触发重连
+      idleTimeoutMs: 45_000,
+      onIdle: () => {
+        // idle 触发：等同网络中断，走现有重连逻辑
+        networkInterruptedRef.current = true;
+        setIsNetworkInterrupted(true);
+        cancelAndFlush();
+        setMessages(prev => prev.map(m => {
+          if (m.role !== 'assistant' || !m.streaming) return m;
+          return m.bubbleType === 'thinking'
+            ? { ...m, streaming: false, thinkingDone: true }
+            : { ...m, streaming: false };
+        }));
+        setIsStreaming(false);
+        if (!document.hidden && !abortRef.current?.signal.aborted) {
+          setTimeout(() => handleReconnect(), 1500);
+        }
+      },
+      onMetrics: (metrics) => {
+        // 收到首 token 或流结束时更新指标
+        setStreamMetrics(prev => ({ ...prev, ...metrics }));
+        if (metrics.ttft !== undefined) {
+          console.debug(`[SSE] TTFT=${metrics.ttft}ms stream_id=${metrics.streamId}`);
+        }
+        if (metrics.interruptReason === 'completed') {
+          console.debug(`[SSE] 流结束 TTFT=${metrics.ttft}ms 流速≈${metrics.throughput}chars/s seqs=${metrics.totalSeq}`);
+        }
+      },
       onData: (data) => {
         const chunk = parseTypedChunk(data);
         if (!chunk) return;
@@ -814,6 +850,23 @@ export default function AiAssistantPage() {
             );
             break;
           }
+          case 'done': {
+            // 服务端标准完成事件：记录 totalSeq（onComplete 随后触发，双重保障）
+            console.debug(`[SSE] done event received totalSeq=${chunk.total_seq}`);
+            break;
+          }
+          case 'error': {
+            // 服务端主动报错：在当前气泡内显示错误信息
+            const errTarget = answerMsgId ?? currentStepBubbleId ?? initMsgId;
+            queueMsg(prev => prev.map(m =>
+              m.id === errTarget
+                ? { ...m, content: `❌ ${chunk.message}（${chunk.code}）`, streaming: false }
+                : (m.role === 'assistant' && m.streaming
+                    ? (m.bubbleType === 'thinking' ? { ...m, streaming: false, thinkingDone: true } : { ...m, streaming: false })
+                    : m)
+            ));
+            break;
+          }
         }
       },
       onComplete: async () => {
@@ -938,6 +991,15 @@ export default function AiAssistantPage() {
       requestBody: newReqBody,
       supabaseAnonKey: SUPABASE_ANON_KEY,
       timeoutMs: modelConfig.timeoutMs ?? 300_000,
+      idleTimeoutMs: 45_000,
+      onIdle: () => {
+        // 重连时再次 idle：停止，不再继续递归重连
+        cancelAndFlush();
+        setMessages(prev => prev.map(m =>
+          m.id === aiMsg.id ? { ...m, content: '⚠️ 重连后仍无响应，请手动重试。', streaming: false } : m
+        ));
+        setIsStreaming(false);
+      },
       signal: abortRef.current.signal,
       onData: (data) => {
         const chunk = parseTypedChunk(data);
@@ -1549,6 +1611,10 @@ export default function AiAssistantPage() {
                 );
               })}
               <div ref={bottomRef} />
+              {/* 流式指标条：每次 AI 回答完成后在消息列表底部显示 TTFT/流速等信息 */}
+              {!isStreaming && streamMetrics?.interruptReason === 'completed' && (
+                <StreamMetricsBar metrics={streamMetrics} className="mx-3 mb-1" />
+              )}
             </div>
           </div>
 

@@ -38,7 +38,7 @@ import {
   getModelDef, loadModelConfig, saveModelConfig,
   parseChunk, parseTypedChunk, renderMarkdown, ThinkingBlock, QUICK_PROMPTS, ModelAvatar,
 } from '@/components/ai/aiUtils';
-import { upsertSession, insertMessages, insertToolExecutionLogs, upsertWorkflowSnapshot, fetchLatestSnapshot } from '@/components/ai/aiSupabase';
+import { upsertSession, insertMessages, insertToolExecutionLogs, upsertWorkflowSnapshot, fetchLatestSnapshot, type PersistMessageInput } from '@/components/ai/aiSupabase';
 import type { Message, ModelConfig, ChatSession, ChatSessionMessage, ToolHistoryItem, TaskPlanStep, InlineStep, InlineTool, Attachment, FileRequest, StreamMetrics } from '@/components/ai/aiTypes';
 import { appendUsageRecord } from '@/components/ai/usageStats';
 
@@ -69,6 +69,17 @@ interface PersistedAiSession {
   messages: Message[];
 }
 
+interface ConversationMemorySummary {
+  id: string;
+  content: string;
+  coveredMessageIds: string[];
+  generatedAt: string;
+}
+
+const MEMORY_SUMMARY_TRIGGER_COUNT = 24;
+const MEMORY_SUMMARY_WINDOW_SIZE = 16;
+const MEMORY_SUMMARY_KEEP_RECENT = 8;
+
 function loadPersistedSession(): PersistedAiSession | null {
   try {
     const raw = sessionStorage.getItem(AI_SESSION_KEY);
@@ -78,6 +89,72 @@ function loadPersistedSession(): PersistedAiSession | null {
     if (parsed.step !== 'chat' || !parsed.selectedRepo?.full_name) return null;
     return parsed;
   } catch { return null; }
+}
+
+function isVisibleConversationMessage(message: Message): boolean {
+  return message.messageType !== 'memory_summary';
+}
+
+function toPersistMessage(message: Message): PersistMessageInput {
+  return {
+    role: message.role,
+    content: message.content,
+    messageType: message.messageType ?? 'plain',
+    meta: message.meta,
+  };
+}
+
+function createConversationMemorySummary(messages: Message[]): ConversationMemorySummary | null {
+  const visibleMessages = messages.filter(m => !m.streaming && isVisibleConversationMessage(m) && m.id !== 'welcome');
+  if (visibleMessages.length < MEMORY_SUMMARY_TRIGGER_COUNT) return null;
+
+  const recentMessages = visibleMessages.slice(-MEMORY_SUMMARY_KEEP_RECENT);
+  const recentIds = new Set(recentMessages.map(m => m.id));
+  const existingSummaryIds = new Set(
+    messages
+      .filter(m => m.messageType === 'memory_summary')
+      .flatMap(m => Array.isArray(m.meta?.coveredMessageIds) ? (m.meta?.coveredMessageIds as string[]) : []),
+  );
+
+  const candidates = visibleMessages.filter(m => !recentIds.has(m.id) && !existingSummaryIds.has(m.id));
+  if (candidates.length < MEMORY_SUMMARY_WINDOW_SIZE) return null;
+
+  const window = candidates.slice(-MEMORY_SUMMARY_WINDOW_SIZE);
+  const chunks = window.map((m, index) => {
+    const role = m.role === 'user' ? '用户' : '助手';
+    const text = m.content.replace(/\s+/g, ' ').trim();
+    const shortened = text.length > 180 ? `${text.slice(0, 180)}…` : text;
+    return `${index + 1}. ${role}：${shortened}`;
+  });
+
+  const summaryText = [
+    '【历史记忆摘要】',
+    '以下是更早对话中的关键上下文，请在后续回答中视为已知事实：',
+    ...chunks,
+  ].join('\n');
+
+  return {
+    id: `mem-${Date.now()}`,
+    content: summaryText,
+    coveredMessageIds: window.map(m => m.id),
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+function buildModelHistory(messages: Message[], latestUserText?: string): Array<{ role: 'user' | 'assistant'; content: string }> {
+  const normalized = messages
+    .filter(m => m.id !== 'welcome')
+    .filter(m => !m.streaming)
+    .map(m => ({ role: m.role, content: m.content }));
+
+  if (!latestUserText) return normalized;
+  if (normalized.length === 0) return [{ role: 'user', content: latestUserText }];
+
+  const last = normalized[normalized.length - 1];
+  if (last.role === 'user') {
+    return [...normalized.slice(0, -1), { role: 'user', content: latestUserText }];
+  }
+  return [...normalized, { role: 'user', content: latestUserText }];
 }
 
 // 模块级缓存，避免多次解析
@@ -120,8 +197,9 @@ export default function AiAssistantPage() {
   const [pendingResumeInfo, setPendingResumeInfo] = useState<{ workflowId?: string; taskSummary: string } | null>(null);
   // 当前会话 ID（用于持久化）
   const [sessionId, setSessionId] = useState<string | null>(_initialSession?.sessionId ?? null);
+  const [memorySummary, setMemorySummary] = useState<ConversationMemorySummary | null>(null);
   // 待持久化消息队列（本轮对话新增的）
-  const pendingMsgsRef = useRef<Array<{ role: string; content: string }>>([]);
+  const pendingMsgsRef = useRef<PersistMessageInput[]>([]);
   // 分支相关
   const [branches, setBranches] = useState<string[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
@@ -288,6 +366,21 @@ export default function AiAssistantPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
+  useEffect(() => {
+    const summaries = messages.filter(m => m.messageType === 'memory_summary');
+    const latest = summaries.length > 0 ? summaries[summaries.length - 1] : null;
+    if (!latest) {
+      setMemorySummary(null);
+      return;
+    }
+    setMemorySummary({
+      id: latest.id,
+      content: latest.content,
+      coveredMessageIds: Array.isArray(latest.meta?.coveredMessageIds) ? latest.meta.coveredMessageIds as string[] : [],
+      generatedAt: typeof latest.meta?.generatedAt === 'string' ? latest.meta.generatedAt : '',
+    });
+  }, [messages]);
+
   // 加载分支列表
   const loadBranches = useCallback(async (repo: GitHubRepo) => {
     setBranchesLoading(true);
@@ -371,8 +464,11 @@ export default function AiAssistantPage() {
       id: m.id,
       role: m.role as 'user' | 'assistant',
       content: m.content,
+      messageType: m.message_type ?? 'plain',
+      meta: m.meta_json ? JSON.parse(m.meta_json) as Record<string, unknown> : undefined,
     }));
-    setMessages(converted.length > 0 ? converted : [{
+    const visibleMessages = converted.filter(isVisibleConversationMessage);
+    setMessages(visibleMessages.length > 0 ? converted : [{
       id: 'welcome',
       role: 'assistant',
       content: `已加载历史对话：**${session.repo_full_name}** 分支 \`${session.branch}\``,
@@ -406,7 +502,7 @@ export default function AiAssistantPage() {
 
   // 持久化：确保 session 存在，批量保存消息
   const persistMessages = useCallback(async (
-    newMsgs: Array<{ role: string; content: string }>,
+    newMsgs: PersistMessageInput[],
     repo: GitHubRepo,
     branch: string,
   ) => {
@@ -433,6 +529,28 @@ export default function AiAssistantPage() {
     }
     await insertMessages(sid, newMsgs);
   }, [sessionId, user?.login, modelConfig.type, modelConfig.model]);
+
+  useEffect(() => {
+    if (!selectedRepo || !sessionId) return;
+    const nextSummary = createConversationMemorySummary(messages);
+    if (!nextSummary) return;
+    if (memorySummary && nextSummary.coveredMessageIds.every(id => memorySummary.coveredMessageIds.includes(id))) return;
+
+    const summaryMessage: Message = {
+      id: nextSummary.id,
+      role: 'assistant',
+      content: nextSummary.content,
+      messageType: 'memory_summary',
+      meta: {
+        coveredMessageIds: nextSummary.coveredMessageIds,
+        generatedAt: nextSummary.generatedAt,
+      },
+    };
+
+    setMessages(prev => [...prev, summaryMessage]);
+    setMemorySummary(nextSummary);
+    void persistMessages([toPersistMessage(summaryMessage)], selectedRepo, selectedBranch);
+  }, [messages, memorySummary, persistMessages, selectedBranch, selectedRepo, sessionId]);
 
   // 重新生成
   const handleRegenerate = useCallback(async () => {
@@ -526,10 +644,9 @@ export default function AiAssistantPage() {
 
     const baseHistory = messages.filter(m => m.id !== 'welcome');
     // history 用 fullUserText（含附件内容）替换最后一条用户消息，确保 AI 看到完整内容
-    const historyUserMsg = { role: 'user' as const, content: fullUserText };
-    const history = [...(isRegen ? baseHistory : [...baseHistory, historyUserMsg])].map(m => ({
-      role: m.role, content: m.content,
-    }));
+    const historyUserMsg: Message = { id: `history-user-${Date.now()}`, role: 'user', content: fullUserText };
+    const historySource = isRegen ? baseHistory : [...baseHistory, historyUserMsg];
+    const history = buildModelHistory(historySource, fullUserText);
 
     abortRef.current = new AbortController();
     let accumulated = '';
@@ -949,7 +1066,7 @@ export default function AiAssistantPage() {
         // 持久化：只保存最终回答文本（answerMsgId 对应的气泡内容）
         // accumulated 为空时（纯工具任务无最终文字）用占位符替代，确保消息记录完整
         const assistantContent = accumulated.trim() || '（任务已执行完成）';
-        const newMsgs = isRegen
+        const newMsgs: PersistMessageInput[] = isRegen
           ? [{ role: 'assistant', content: assistantContent }]
           : [{ role: 'user', content: userText }, { role: 'assistant', content: assistantContent }];
         await persistMessages(newMsgs, selectedRepo, selectedBranch);
@@ -1640,7 +1757,9 @@ export default function AiAssistantPage() {
 
                 // ── AI answer 气泡 / 普通单气泡 ──────────────────────────────
                 const msg = group.msg;
-                const isLastAi = msg.id === messages.filter(m => m.role === 'assistant' && m.bubbleType !== 'step').at(-1)?.id;
+                const assistantMessages = messages.filter(m => m.role === 'assistant' && m.bubbleType !== 'step');
+                const lastAssistantMessage = assistantMessages.length > 0 ? assistantMessages[assistantMessages.length - 1] : undefined;
+                const isLastAi = msg.id === lastAssistantMessage?.id;
                 return (
                   <div key={msg.id} className={cn('flex gap-2.5 flex-row', marginClass)}>
                     <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5">

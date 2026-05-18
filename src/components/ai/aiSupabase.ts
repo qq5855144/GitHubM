@@ -3,6 +3,13 @@ import { supabase } from '@/db/supabase';
 import type { ChatSession, ChatSessionMessage, ToolHistoryItem } from './aiTypes';
 import type { Message } from './aiTypes';
 
+export interface PersistMessageInput {
+  role: string;
+  content: string;
+  messageType?: 'plain' | 'memory_summary';
+  meta?: Record<string, unknown>;
+}
+
 // ── 会话操作 ────────────────────────────────────────────────────────────────────
 
 /** 新建或更新会话标题 */
@@ -21,9 +28,15 @@ export async function upsertSession(
 /** 批量插入对话消息 */
 export async function insertMessages(
   sessionId: string,
-  msgs: Array<{ role: string; content: string }>
+  msgs: PersistMessageInput[]
 ): Promise<void> {
-  const rows = msgs.map(m => ({ session_id: sessionId, role: m.role, content: m.content }));
+  const rows = msgs.map(m => ({
+    session_id: sessionId,
+    role: m.role,
+    content: m.content,
+    message_type: m.messageType ?? 'plain',
+    meta_json: m.meta ? JSON.stringify(m.meta) : null,
+  }));
   const { error } = await supabase.from('ai_chat_messages').insert(rows);
   if (error) console.error('保存消息失败', error);
 }
@@ -44,7 +57,7 @@ export async function fetchSessions(login: string): Promise<ChatSession[]> {
 export async function fetchSessionMessages(sessionId: string): Promise<ChatSessionMessage[]> {
   const { data, error } = await supabase
     .from('ai_chat_messages')
-    .select('*')
+    .select('id, session_id, role, content, created_at, message_type, meta_json')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: true });
   if (error) return [];

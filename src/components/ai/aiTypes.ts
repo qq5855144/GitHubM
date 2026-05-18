@@ -23,6 +23,8 @@ export interface ChatSessionMessage {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  message_type?: 'plain' | 'memory_summary';
+  meta_json?: string | null;
 }
 
 // ── 消息类型 ────────────────────────────────────────────────────────────────────
@@ -74,6 +76,10 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   streaming?: boolean;
+  /** 持久化消息类型：plain=普通消息，memory_summary=压缩记忆 */
+  messageType?: 'plain' | 'memory_summary';
+  /** 额外元信息（如摘要覆盖范围、来源 turn 等） */
+  meta?: Record<string, unknown>;
   // ── 新增字段 ────────────────────────────────────────────────────────────────
   /** 思考过程内容 */
   thinkingContent?: string;

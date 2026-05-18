@@ -14,11 +14,13 @@ CREATE TABLE ai_chat_sessions (
 
 -- AI 对话历史：消息表
 CREATE TABLE ai_chat_messages (
-  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id  uuid NOT NULL REFERENCES ai_chat_sessions(id) ON DELETE CASCADE,
-  role        text NOT NULL CHECK (role IN ('user','assistant')),
-  content     text NOT NULL,
-  created_at  timestamptz NOT NULL DEFAULT now()
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id    uuid NOT NULL REFERENCES ai_chat_sessions(id) ON DELETE CASCADE,
+  role          text NOT NULL CHECK (role IN ('user','assistant')),
+  content       text NOT NULL,
+  message_type  text NOT NULL DEFAULT 'plain' CHECK (message_type IN ('plain', 'memory_summary')),
+  meta_json     text,
+  created_at    timestamptz NOT NULL DEFAULT now()
 );
 
 -- 索引：按会话查消息、按用户+仓库查会话

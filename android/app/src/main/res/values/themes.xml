@@ -29,16 +29,26 @@
         紧凑规格：10sp，图标与文字间距更小，整体高度更紧凑。
         选中与未选中使用相同字号，靠颜色区分；选中加粗增强层次感。
     -->
-    <style name="BottomNavTextActive">
+    <!--
+      兼容性修复：
+      - 继承 TextAppearance.Material3.LabelSmall，确保 Material3 BottomNavigationView
+        在所有 API 级别和 OEM ROM 上都能正确初始化 label 布局
+      - 移除 android:fontFamily="sans-serif-medium"：该值在小米 MIUI / OPPO ColorOS /
+        魅族 Flyme 等 ROM 上字体映射缺失，Typeface 加载失败后 Material 库静默捕获异常，
+        标签文字完全不渲染；改用 android:textStyle="bold" 实现加粗，通用兼容
+      - 移除 android:fontFamily="sans-serif"：已是系统默认，在部分 OEM 自定义字体
+        替换流程中反而干扰正常渲染
+      - 移除 android:letterSpacing：在某些 OEM 设备低版本渲染路径上触发异常，
+        导致整个 TextAppearance 回退、标签消失
+    -->
+    <style name="BottomNavTextActive" parent="TextAppearance.Material3.LabelSmall">
         <item name="android:textSize">10sp</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:letterSpacing">0.01</item>
+        <item name="android:textStyle">bold</item>
     </style>
 
-    <style name="BottomNavTextInactive">
+    <style name="BottomNavTextInactive" parent="TextAppearance.Material3.LabelSmall">
         <item name="android:textSize">10sp</item>
-        <item name="android:fontFamily">sans-serif</item>
-        <item name="android:letterSpacing">0.01</item>
+        <item name="android:textStyle">normal</item>
     </style>
 
     <!--

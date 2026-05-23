@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider 路径配置：
+  供相机拍照临时文件、下载缓存文件、应用内部文件生成安全 content:// URI，
+  避免直接暴露 file:// URI（Android 7+ 以上强制要求）。
+-->
+<paths>
+    <!-- 应用私有文件目录：/data/data/<pkg>/files/ -->
+    <files-path
+        name="files"
+        path="." />
+
+    <!-- 应用私有缓存目录：/data/data/<pkg>/cache/（相机拍照临时文件） -->
+    <cache-path
+        name="cache"
+        path="." />
+
+    <!-- 应用外部私有文件目录：/sdcard/Android/data/<pkg>/files/ -->
+    <external-files-path
+        name="external_files"
+        path="." />
+
+    <!-- 应用外部私有缓存目录：/sdcard/Android/data/<pkg>/cache/ -->
+    <external-cache-path
+        name="external_cache"
+        path="." />
+
+    <!-- 公共下载目录：/sdcard/Download/（分享已下载文件给其他 App） -->
+    <external-path
+        name="external_downloads"
+        path="Download/" />
+</paths>

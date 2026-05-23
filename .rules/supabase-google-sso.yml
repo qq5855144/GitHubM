@@ -1,0 +1,20 @@
+id: supabase-google-sso
+language: Tsx
+files:
+  - src/**/*.tsx
+rule:
+  pattern: |
+    $AUTH.signInWithOAuth({ provider: 'google', $$$ })
+message: |
+  Replace `signInWithOAuth` with `signInWithSSO` for Google authentication (Supabase).
+
+  Refactor to:
+  ```typescript
+  const { data, error } = await supabase.auth.signInWithSSO({
+    domain: 'miaoda-gg.com',
+    options: { redirectTo: window.location.origin },
+  });
+  if (data?.url) window.open(data.url, '_self');
+  ```
+  Ensure `window.open` uses `_self` target.
+severity: warning

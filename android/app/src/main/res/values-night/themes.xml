@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 21–30 深色模式主题（values-night 不带 -v31 限定符，覆盖 Android 10–11 深色主题）。
+  Android 12+（API 31）设备使用 values-night-v31/themes.xml。
+  windowBackground 和 colorPrimary 与深色颜色资源对齐，保证冷启动无闪白/闪紫。
+-->
+<resources>
+    <style name="Theme.GitHubManager" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- 冷启动窗口背景：深色背景，消除白屏闪烁 -->
+        <item name="android:windowBackground">@color/splash_bg_solid</item>
+        <!-- API 28+ 刘海屏延伸；低版本忽略 -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <!-- 深色主题 Material3 主色：更亮的紫色，深底上对比度更好 -->
+        <item name="colorPrimary">#8B4CF8</item>
+        <item name="colorPrimaryVariant">#7C3AED</item>
+        <item name="colorOnPrimary">#ffffff</item>
+        <!-- M3 Active Indicator 填充色（深色模式）：深紫 -->
+        <item name="colorSecondaryContainer">#3D2B6B</item>
+        <item name="colorOnSecondaryContainer">#D4BBFF</item>
+    </style>
+</resources>

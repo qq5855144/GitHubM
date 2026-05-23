@@ -3,7 +3,7 @@
 This file is used to test the resolve_git_conflict tool.
 
 ## Section A
-Feature branch says: Hello from FEATURE!
+Base branch says: Hello from BASE!
 
 ## Section B
 Some shared content here.

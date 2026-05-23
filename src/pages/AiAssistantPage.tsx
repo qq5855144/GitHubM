@@ -852,30 +852,60 @@ export default function AiAssistantPage() {
             currentThinking = '';
             break;
           }
-          case 'tool_start': {
+          case 'tool_queued': {
             queueTool(prev => [...prev, {
               id: chunk.id, tool: chunk.tool,
               label: chunk.label, hint: chunk.hint,
-              status: 'running', startedAt: Date.now(),
+              status: 'queued', startedAt: Date.now(),
             }]);
             if (window.innerWidth >= 768) setShowToolHistory(true);
-            // 每个工具调用创建独立气泡
             const toolMsgId = `tool-${chunk.id}-${Date.now()}`;
             toolBubbleMap.set(chunk.id, toolMsgId);
-            const toolMsg: Message = {
+            queueMsg(prev => [...prev, {
               id: toolMsgId, role: 'assistant', content: '',
               streaming: true, bubbleType: 'tool',
               toolCallId: chunk.id, toolName: chunk.tool,
               toolLabel: chunk.label, toolHint: chunk.hint,
-              toolStatus: 'running',
-            };
-            queueMsg(prev => [...prev, toolMsg]);
+              toolStatus: 'queued',
+            }]);
+            break;
+          }
+          case 'tool_start': {
+            // 后端可能直接发 tool_start，或者先发 queued 再发 start
+            const existing = toolBubbleMap.get(chunk.id);
+            if (existing) {
+              // 从 queued 转为 running
+              queueTool(prev => prev.map(t => t.id === chunk.id ? { ...t, status: 'running' } : t));
+              queueMsg(prev => prev.map(m => m.id === existing ? { ...m, toolStatus: 'running' } : m));
+            } else {
+              queueTool(prev => [...prev, {
+                id: chunk.id, tool: chunk.tool,
+                label: chunk.label, hint: chunk.hint,
+                status: 'running', startedAt: Date.now(),
+              }]);
+              if (window.innerWidth >= 768) setShowToolHistory(true);
+              const toolMsgId = `tool-${chunk.id}-${Date.now()}`;
+              toolBubbleMap.set(chunk.id, toolMsgId);
+              queueMsg(prev => [...prev, {
+                id: toolMsgId, role: 'assistant', content: '',
+                streaming: true, bubbleType: 'tool',
+                toolCallId: chunk.id, toolName: chunk.tool,
+                toolLabel: chunk.label, toolHint: chunk.hint,
+                toolStatus: 'running',
+              }]);
+            }
             break;
           }
           case 'tool_end': {
             const { id: toolId, status: toolStatus, result: toolResult, elapsedMs } = chunk;
+            let finalStatus: any = toolStatus;
+            if (toolStatus === 'fail' && toolResult) {
+              if (toolResult.includes('【安全风控】') || toolResult.includes('【熔断拦截】')) {
+                finalStatus = 'blocked';
+              }
+            }
             queueTool(prev => prev.map(item => item.id === toolId
-              ? { ...item, status: toolStatus, result: toolResult, elapsedMs }
+              ? { ...item, status: finalStatus, result: toolResult, elapsedMs }
               : item
             ));
             // 更新对应工具气泡
@@ -883,7 +913,7 @@ export default function AiAssistantPage() {
             if (endMsgId) {
               queueMsg(prev => prev.map(m =>
                 m.id === endMsgId
-                  ? { ...m, streaming: false, toolStatus, toolElapsedMs: elapsedMs, toolResult }
+                  ? { ...m, streaming: false, toolStatus: finalStatus, toolElapsedMs: elapsedMs, toolResult }
                   : m
               ));
             }

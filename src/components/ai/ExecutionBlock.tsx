@@ -32,6 +32,8 @@ function BubbleIcon({ type, className }: { type: Message['bubbleType']; classNam
 function ToolRow({ msg }: { msg: Message }) {
   const [expanded, setExpanded] = useState(false);
   const isRunning = msg.toolStatus === 'running';
+  const isQueued = msg.toolStatus === 'queued';
+  const isBlocked = msg.toolStatus === 'blocked';
   const isFail = msg.toolStatus === 'fail';
   const isSuccess = msg.toolStatus === 'success';
   const result = msg.toolResult ?? '';
@@ -47,20 +49,24 @@ function ToolRow({ msg }: { msg: Message }) {
           disabled={!canExpand}
           className={cn(
             'flex items-center gap-2 w-full text-left rounded-lg px-3 py-1.5 border text-xs transition-colors',
-            isRunning
+            (isRunning || isQueued)
               ? 'bg-muted/30 border-border/40'
-              : isFail
-                ? 'bg-destructive/5 border-destructive/20'
-                : 'bg-muted/20 border-border/30 hover:bg-muted/40',
-            canExpand && !isRunning ? 'cursor-pointer' : 'cursor-default',
+              : isBlocked
+                ? 'bg-yellow-500/5 border-yellow-500/20'
+                : isFail
+                  ? 'bg-destructive/5 border-destructive/20'
+                  : 'bg-muted/20 border-border/30 hover:bg-muted/40',
+            canExpand && !isRunning && !isQueued ? 'cursor-pointer' : 'cursor-default',
           )}
         >
           {isRunning && <Loader2 className="w-3 h-3 text-primary animate-spin shrink-0" />}
+          {isQueued && <div className="w-2 h-2 rounded-full bg-orange-500/80 animate-pulse shrink-0" />}
           {isSuccess && <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />}
-          {isFail && <XCircle className="w-3 h-3 text-destructive shrink-0" />}
+          {isBlocked && <XCircle className="w-3 h-3 text-yellow-600 shrink-0" />}
+          {(isFail && !isBlocked) && <XCircle className="w-3 h-3 text-destructive shrink-0" />}
           <span className={cn(
             'font-medium truncate flex-1',
-            isRunning ? 'text-foreground/80' : isFail ? 'text-destructive' : 'text-foreground/70',
+            (isRunning || isQueued) ? 'text-foreground/80' : isBlocked ? 'text-yellow-700 dark:text-yellow-500' : isFail ? 'text-destructive' : 'text-foreground/70',
           )}>
             {msg.toolLabel || msg.toolName || '工具调用'}
           </span>

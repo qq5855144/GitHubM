@@ -288,6 +288,18 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     type: "function", function: {
+      name: "resolve_git_conflict",
+      description: "【高阶组合工具】自动解决指定文件的 Git 合并冲突，通过提取双方分支内容并按策略覆盖 HEAD 分支，解决 PR 无法合并的问题",
+      parameters: { type: "object", properties: {
+        path: { type: "string", description: "发生冲突的文件路径" },
+        strategy: { type: "string", description: "解决策略：'ours' (保留目标分支/源分支)、'theirs' (采用 base 分支内容)" },
+        base_branch: { type: "string", description: "PR 的目标分支 (base branch)" },
+        head_branch: { type: "string", description: "PR 的来源分支 (head branch/当前修改分支)" },
+      }, required: ["path", "strategy", "base_branch", "head_branch"] },
+    },
+  },
+  {
+    type: "function", function: {
       name: "merge_pull_request",
       description: "合并 Pull Request",
       parameters: { type: "object", properties: {
@@ -6180,17 +6192,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
         continue; // 继续执行任务
       }
 
-      await sendTyped({ 
-        type: "tool_start", 
-        id: toolCallId, 
-        tool: toolCall.tool, 
-        label, 
-        hint 
-      });
-
       const startTime = Date.now();
       let toolResult = "";
       let isCached = false;
+      const toolName = String(toolCall.tool);
+      const cacheKey = `${toolName}:${JSON.stringify(toolCall)}`;
+      
       const readOnlyTools = new Set([
         "list_files", "read_file", "get_file_info", "search_code",
         "grep_in_repo", "file_tree", "grep_in_file", "batch_read",
@@ -6202,14 +6209,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
         "list_actions_variables", "get_run_artifacts", "list_releases",
         "get_latest_release", "get_merged_prs_since", "request_file"
       ]);
-      const toolName = String(toolCall.tool);
-      const cacheKey = `${toolName}:${JSON.stringify(toolCall)}`;
+      
       const writeOpTools = new Set([
         "patch_file", "write_file", "delete_file", "batch_patch",
-        "create_branch", "create_pr", "merge_pull_request", "add_comment",
+        "create_branch", "create_pr", "resolve_git_conflict", "merge_pull_request", "add_comment",
         "update_issue", "close_issue", "create_issue"
       ]);
       const isWriteOp = writeOpTools.has(toolName);
+
+      // 发送 UI 状态，写操作如果被并发锁挡住会暂时展示“排队中”
+      await sendTyped({ 
+        type: isWriteOp ? "tool_queued" : "tool_start", 
+        id: toolCallId, 
+        tool: toolCall.tool, 
+        label, 
+        hint 
+      });
 
       try { 
         // 工具执行前先发一次心跳，执行过程中 GitHub API 也可能耗时数秒
@@ -6231,8 +6246,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
           // 【网关策略 3】写操作工具状态机入队及并发控制
           if (isWriteOp) {
             writeTaskQueue.enqueue(toolCallId, toolName);
-            writeTaskQueue.updateState(toolCallId, "running");
             await writeOpSemaphore.acquire(); // 写锁防冲突
+            writeTaskQueue.updateState(toolCallId, "running");
+            // 获取到锁后，通知前端状态转为运行中
+            await sendTyped({ type: "tool_start", id: toolCallId, tool: toolCall.tool, label, hint });
           }
 
           try {

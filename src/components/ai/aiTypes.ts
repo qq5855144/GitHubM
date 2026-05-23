@@ -35,7 +35,7 @@ export interface InlineTool {
   tool: string;
   label: string;
   hint: string;
-  status: 'running' | 'success' | 'fail';
+  status: 'queued' | 'running' | 'success' | 'fail' | 'blocked';
   elapsedMs?: number;
   result?: string;
 }
@@ -115,7 +115,7 @@ export interface Message {
   /** 工具提示（bubbleType==='tool'） */
   toolHint?: string;
   /** 工具调用状态（bubbleType==='tool'） */
-  toolStatus?: 'running' | 'success' | 'fail';
+  toolStatus?: 'queued' | 'running' | 'success' | 'fail' | 'blocked';
   /** 工具耗时 ms（bubbleType==='tool'） */
   toolElapsedMs?: number;
   /** 工具返回结果摘要（bubbleType==='tool'，可折叠） */
@@ -127,7 +127,7 @@ export interface ToolHistoryItem {
   tool: string;
   label: string;
   hint: string;
-  status: 'running' | 'success' | 'fail';
+  status: 'queued' | 'running' | 'success' | 'fail' | 'blocked';
   startedAt: number;
   elapsedMs?: number;
   result?: string;
@@ -158,6 +158,7 @@ export type SSEChunk = SSEEnvelope & (
   | { type: 'think_start' }
   | { type: 'think_chunk'; content: string }
   | { type: 'think_end' }
+  | { type: 'tool_queued'; id: string; tool: string; label: string; hint: string }
   | { type: 'tool_start'; id: string; tool: string; label: string; hint: string }
   | { type: 'tool_end'; id: string; status: 'success' | 'fail'; result?: string; elapsedMs: number }
   | { type: 'plan'; steps: TaskPlanStep[] }

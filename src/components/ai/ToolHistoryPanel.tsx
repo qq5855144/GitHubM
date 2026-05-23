@@ -65,11 +65,17 @@ export function ToolHistoryPanel({ items }: ToolHistoryPanelProps) {
               <div className={cn(
                 "absolute left-0 top-1 w-6 h-6 rounded-full border bg-background flex items-center justify-center z-10",
                 item.status === 'running' && "border-primary text-primary animate-pulse",
+                item.status === 'queued' && "border-orange-500/50 text-orange-500 bg-orange-500/5 animate-pulse",
+                item.status === 'blocked' && "border-yellow-500/50 text-yellow-500 bg-yellow-500/5",
                 item.status === 'success' && "border-green-500/50 text-green-500 bg-green-500/5",
                 item.status === 'fail' && "border-red-500/50 text-red-500 bg-red-500/5"
               )}>
                 {item.status === 'running' ? (
                   <Play className="w-3 h-3 fill-current" />
+                ) : item.status === 'queued' ? (
+                  <div className="w-1.5 h-1.5 rounded-full bg-current" />
+                ) : item.status === 'blocked' ? (
+                  <XCircle className="w-3.5 h-3.5 opacity-70" />
                 ) : item.status === 'success' ? (
                   <CheckCircle2 className="w-3.5 h-3.5" />
                 ) : (

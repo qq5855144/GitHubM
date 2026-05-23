@@ -5194,17 +5194,18 @@ async function dbCreateWorkflow(
 
     // 批量插入步骤
     const stepRows = steps.map((s, i) => ({
-      workflow_id: data.id,
+      workflow_id: (data as any).id,
       step_id: s.id,
       seq: i,
       title: s.title,
       description: s.desc,
       status: "pending",
     }));
+    // @ts-ignore
     const { error: sErr } = await sb.from("task_workflow_steps").insert(stepRows);
     if (sErr) console.error("[db] insertSteps error", sErr.message);
 
-    return data.id as string;
+    return (data as any).id as string;
   } catch (e) { console.error("[db] createWorkflow exception", (e as Error).message); return null; }
 }
 
@@ -5218,6 +5219,7 @@ async function dbUpdateStep(
   try {
     await sb
       .from("task_workflow_steps")
+      // @ts-ignore
       .update(patch)
       .eq("workflow_id", workflowId)
       .eq("step_id", stepId);
@@ -5307,11 +5309,11 @@ async function dbLoadSnapshot(
       .maybeSingle();
     if (error || !data) return null;
     // ⚠️ 加载后再次清理：旧快照可能包含不完整的 tool_calls 对
-    const rawMessages = (data.messages_snapshot as Message[]) ?? [];
+    const rawMessages = ((data as any).messages_snapshot as Message[]) ?? [];
     return {
       messages: sanitizeToolCallMessages(rawMessages),
-      lastStepId: (data.last_step_id as string) ?? null,
-      taskSummary: (data.task_summary as string) ?? "",
+      lastStepId: ((data as any).last_step_id as string) ?? null,
+      taskSummary: ((data as any).task_summary as string) ?? "",
     };
   } catch (e) { console.error("[db] loadSnapshot exception", (e as Error).message); return null; }
 }
@@ -5332,6 +5334,7 @@ async function dbFinishWorkflow(
     const status = fail > 0 ? "partial_fail" : "done";
     await sb
       .from("task_workflows")
+      // @ts-ignore
       .update({ status, done_steps: done, fail_steps: fail, finished_at: new Date().toISOString(), interrupted: false })
       .eq("id", workflowId);
   } catch (e) { console.error("[db] finishWorkflow exception", (e as Error).message); }
@@ -5570,6 +5573,71 @@ class WriteTaskQueue {
   }
 }
 const writeTaskQueue = new WriteTaskQueue();
+
+
+/**
+ * 安全审核引擎：对传入的写操作参数进行高危动作拦截
+ */
+class SecurityPolicyEngine {
+  // 禁止删除的核心系统文件
+  private static protectedFiles = new Set(["package.json", "tsconfig.json", "supabase/functions/ai-assistant/index.ts"]);
+  
+  // 禁止直接往这些受保护分支写入代码（迫使用 PR）
+  private static protectedBranches = new Set(["main", "master", "production"]);
+
+  static validate(toolName: string, callParams: Record<string, unknown>, targetBranch?: string): void {
+    const p = (k: string) => String(callParams[k] || "");
+    const opBranch = p("branch") || targetBranch || "";
+    
+    // 拦截高危文件删除
+    if (toolName === "delete_file" && this.protectedFiles.has(p("path"))) {
+      throw new Error(`【安全风控】禁止直接删除核心配置文件：${p("path")}`);
+    }
+
+    // 拦截受保护分支的直接修改
+    const writeTools = new Set(["write_file", "patch_file", "batch_patch"]);
+    if (writeTools.has(toolName) && this.protectedBranches.has(opBranch)) {
+      throw new Error(`【安全风控】禁止直接向受保护分支 "${opBranch}" 写入代码。请先调用 create_branch 切换到新分支，完成后提交 PR。`);
+    }
+  }
+}
+
+/**
+ * 可观测性日志打点
+ */
+class MetricsLogger {
+  static log(payload: {
+    tool: string;
+    status: "success" | "fail";
+    elapsedMs: number;
+    cached: boolean;
+    errorMsg?: string;
+  }) {
+    // 生产环境中可通过 ELK 或 Supabase 日志进行分析
+    console.log("[METRICS_AUDIT]", JSON.stringify({
+      timestamp: new Date().toISOString(),
+      ...payload
+    }));
+  }
+}
+
+/**
+ * 统一结果协议封箱
+ */
+function normalizeResultProtocol(result: string, isError: boolean): string {
+  try {
+    // 如果已经是规范 JSON 则不重复包装
+    JSON.parse(result);
+    return result;
+  } catch {
+    return JSON.stringify({
+      status: isError ? "error" : "success",
+      summary: isError ? "工具执行遭遇异常" : "工具执行完成",
+      structured_data: isError ? null : result,
+      error_message: isError ? result : null
+    });
+  }
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -6152,12 +6220,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
           throw new Error(`【熔断拦截】工具 "${toolName}" 近期连续失败过多，为防止风险已自动熔断冷却。请暂缓或尝试其他方案。`);
         }
         
+        // 【网关策略 2】安全风控检查
+        SecurityPolicyEngine.validate(toolName, toolCall, targetBranch);
+
         if (readOnlyTools.has(toolName) && requestCache.has(cacheKey)) {
           toolResult = requestCache.get(cacheKey)!;
           isCached = true;
           console.log(`[Cache Hit] ${toolName} -> ${cacheKey}`);
         } else {
-          // 【网关策略 2】写操作工具状态机入队及并发控制
+          // 【网关策略 3】写操作工具状态机入队及并发控制
           if (isWriteOp) {
             writeTaskQueue.enqueue(toolCallId, toolName);
             writeTaskQueue.updateState(toolCallId, "running");
@@ -6193,7 +6264,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
       const toolStatus = toolFailed ? "fail" : "success";
 
-      // 【网关策略】更新熔断器状态，并流转异步任务状态机
+      // 【网关策略 4】更新熔断器状态，并流转异步任务状态机
       if (toolFailed) {
         globalCircuitBreaker.recordFailure(toolName);
         if (isWriteOp) writeTaskQueue.updateState(toolCallId, "failed", { error: toolResult });
@@ -6201,14 +6272,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
         globalCircuitBreaker.recordSuccess(toolName);
         if (isWriteOp) writeTaskQueue.updateState(toolCallId, "completed", { result: toolResult });
       }
+
+      // 【网关策略 5】可观测性打点
+      MetricsLogger.log({
+        tool: toolName,
+        status: toolStatus,
+        elapsedMs,
+        cached: isCached,
+        errorMsg: toolFailed ? toolResult.slice(0, 200) : undefined
+      });
+
+      // 【网关策略 6】协议封箱：对传回给大模型的内容使用统一协议，便于它稳定解析
+      const toolProtocolOutput = normalizeResultProtocol(toolResult, toolFailed);
       
       await sendTyped({ 
         type: "tool_end", 
         id: toolCallId, 
         status: toolStatus, 
-        result: toolResult.slice(0, 1000),
+        result: toolProtocolOutput.slice(0, 2000), // 扩大前端展示与内存截断上限
         elapsedMs 
       });
+      
+      // 注意：覆盖 toolResult，让下游插入历史记录时存的是协议规范后的内容
+      toolResult = toolProtocolOutput;
+
 
       // ── 步骤失败智能重试（最多 2 次 LLM 驱动修正，而非盲目重跑） ──────────────
       // 原旧逻辑：失败 → 等 1s/2s → 用完全相同的参数再调用一次（对参数错误/路径错误无效）

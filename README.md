@@ -2,7 +2,6 @@
   <img src="https://api.iconify.design/fe:github.svg?color=%237c3aed" alt="GitHubM" width="80" />
 </p>
 <h1 align="center">GitHubM</h1>
-
 <p align="center">
   <strong>全功能 GitHub 管理面板 + AI 开发助手</strong> — 现代化 Web 应用 & Android 客户端
 </p>

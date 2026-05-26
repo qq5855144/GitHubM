@@ -186,10 +186,12 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
           tabSize: 2,
         }),
         EditorView.theme({
-          '&': { fontSize: `${fontSize}px` },
+          '&': { fontSize: `${fontSize}px`, height: '100%', width: '100%' },
+          '.cm-scroller': { overflow: 'auto' },
           '.cm-content': {
             fontFamily: "ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', Menlo, Monaco, Consolas, monospace",
             lineHeight: '1.6',
+            minHeight: '100%',
           },
           '.cm-gutters': {
             fontFamily: "ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', Menlo, Monaco, Consolas, monospace",
@@ -231,8 +233,9 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
     }, []);
 
     return (
-      <div ref={containerRef} className="w-full h-full bg-background overflow-hidden touch-none md:touch-auto">
+      <div ref={containerRef} className="w-full h-full bg-background overflow-hidden">
         <CodeMirror
+          className="h-full w-full [&>div.cm-theme]:h-full"
           value={value}
           height="100%"
           theme="none"

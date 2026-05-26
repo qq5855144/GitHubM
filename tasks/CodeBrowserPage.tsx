@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import FileTree from '@/components/code/FileTree';
 import { CodeEditor } from '@/components/code/CodeEditor';
+import type { editor } from 'monaco-editor';
 import {
   ChevronRight,
   ArrowLeft,
@@ -248,15 +249,7 @@ export default function CodeBrowserPage() {
   const [editorFontSize, setEditorFontSize] = useState(14);   // px，范围 10-22
 
   // 编辑器搜索
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchMatchIndex, setSearchMatchIndex] = useState(0);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const highlightRef = useRef<HTMLPreElement>(null);       // 高亮覆盖层
-  const lineNumRef = useRef<HTMLDivElement>(null);         // 行号滚动容器
-  const scrollContainerRef = useRef<HTMLDivElement>(null); // 编辑区滚动容器（普通 div，非 textarea，避免 iOS 唤起输入法）
-  const skipNavClickRef = useRef(false);                   // 防止 pointerdown 与 click 双触发
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
   // 表单字段
   const [editContent, setEditContent] = useState('');
@@ -297,9 +290,6 @@ export default function CodeBrowserPage() {
     setActionMode(null);
     setEditContent('');
     setCommitMsg('');
-    setShowSearch(false);
-    setSearchQuery('');
-    setSearchMatchIndex(0);
     try {
       const data = await getRepoContents(owner, repo, filePath, currentBranch);
       if (Array.isArray(data)) {
@@ -378,9 +368,6 @@ export default function CodeBrowserPage() {
     setMoveTo('');
     setDeleteProgress(null);
     setEditorFullscreen(false);
-    setShowSearch(false);
-    setSearchQuery('');
-    setSearchMatchIndex(0);
     if (returnToParent && filePath) {
       const parentParts = filePath.split('/').slice(0, -1);
       // replace: true 将当前文件路由条目替换为父目录，而非新增入栈，
@@ -741,116 +728,10 @@ export default function CodeBrowserPage() {
   const fsIsLarge = fsLineCount > 500;
 
   // 用 useMemo 稳定匹配结果，避免每次渲染产生新数组导致 useCallback 失效
-  const fsSearchMatches = useMemo<Array<{ start: number; end: number }>>(() => {
-    if (!editorFullscreen || !searchQuery.trim()) return [];
-    const lower = editContent.toLowerCase();
-    const q = searchQuery.toLowerCase();
-    const matches: Array<{ start: number; end: number }> = [];
-    let pos = 0;
-    while (pos < lower.length) {
-      const idx = lower.indexOf(q, pos);
-      if (idx === -1) break;
-      matches.push({ start: idx, end: idx + q.length });
-      // 非重叠匹配：跳过整个关键词长度，防止重叠导致高亮节点越界串位
-      pos = idx + q.length;
-    }
-    return matches;
-  }, [editorFullscreen, searchQuery, editContent]);
-
-  const fsMatchCount = fsSearchMatches.length;
-  const fsSafeIndex = fsMatchCount > 0 ? ((searchMatchIndex % fsMatchCount) + fsMatchCount) % fsMatchCount : 0;
-
-  // 构建高亮 JSX 节点（用于 pre 覆盖层）
-  const fsHighlightNodes = useMemo(() => {
-    if (fsSearchMatches.length === 0) {
-      // 无搜索时直接渲染透明文本（保持布局一致）
-      return <span>{editContent}</span>;
-    }
-    const nodes: React.ReactNode[] = [];
-    let last = 0;
-    fsSearchMatches.forEach((match, i) => {
-      if (last < match.start) nodes.push(<span key={`t${i}`}>{editContent.slice(last, match.start)}</span>);
-      const isCurrent = i === fsSafeIndex;
-      nodes.push(
-        <mark
-          key={`m${i}`}
-          style={{
-            backgroundColor: isCurrent ? 'hsl(var(--primary) / 0.55)' : 'rgba(253,224,71,0.45)',
-            color: 'inherit',
-            borderRadius: '2px',
-            outline: isCurrent ? '1px solid hsl(var(--primary))' : 'none',
-          }}
-        >
-          {editContent.slice(match.start, match.end)}
-        </mark>
-      );
-      last = match.end;
-    });
-    if (last < editContent.length) nodes.push(<span key="tail">{editContent.slice(last)}</span>);
-    // 必须在末尾补一个零宽字符，防止 pre 比 textarea 矮一行
-    nodes.push('\u200b');
-    return <>{nodes}</>;
-  }, [fsSearchMatches, fsSafeIndex, editContent]);
-
-  // 滚动同步：滚动容器 div → 行号列（不涉及 textarea，避免 iOS 唤起输入法）
-  const fsSyncScroll = useCallback(() => {
-    if (!scrollContainerRef.current || !lineNumRef.current) return;
-    lineNumRef.current.scrollTop = scrollContainerRef.current.scrollTop;
-  }, []);
-
-  const fsJumpToMatch = useCallback((idx: number, matches: Array<{ start: number; end: number }>) => {
-    if (!scrollContainerRef.current || !highlightRef.current || matches.length === 0) return;
-    const safeIdx = ((idx % matches.length) + matches.length) % matches.length;
-    // requestAnimationFrame：等 React 用新 fsSafeIndex 重渲染完 mark 元素后再读取位置
-    requestAnimationFrame(() => {
-      if (!scrollContainerRef.current || !highlightRef.current) return;
-      const marks = highlightRef.current.querySelectorAll('mark');
-      const targetMark = marks[safeIdx] as HTMLElement | undefined;
-      if (targetMark) {
-        const markTop = targetMark.offsetTop;
-        const viewHeight = scrollContainerRef.current.clientHeight;
-        // 滚动普通 div，绝不触碰 textarea.scrollTop，彻底消除 iOS 唤起输入法
-        scrollContainerRef.current.scrollTop = Math.max(0, markTop - viewHeight / 2);
-        fsSyncScroll();
-      }
-    });
-  }, [fsSyncScroll]);
-
-  const fsHandleSearchNext = useCallback(() => {
-    if (fsMatchCount === 0) return;
-    const next = (fsSafeIndex + 1) % fsMatchCount;
-    setSearchMatchIndex(next);
-    fsJumpToMatch(next, fsSearchMatches);
-  }, [fsMatchCount, fsSafeIndex, fsSearchMatches, fsJumpToMatch]);
-
-  const fsHandleSearchPrev = useCallback(() => {
-    if (fsMatchCount === 0) return;
-    const prev = (fsSafeIndex - 1 + fsMatchCount) % fsMatchCount;
-    setSearchMatchIndex(prev);
-    fsJumpToMatch(prev, fsSearchMatches);
-  }, [fsMatchCount, fsSafeIndex, fsSearchMatches, fsJumpToMatch]);
-
-  const fsHandleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') { e.shiftKey ? fsHandleSearchPrev() : fsHandleSearchNext(); }
-    if (e.key === 'Escape') {
-      setShowSearch(false);
-      setSearchQuery('');
-      textareaRef.current?.focus();
-    }
-  }, [fsHandleSearchNext, fsHandleSearchPrev]);
-
-  const fsHandleEditorKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-      e.preventDefault();
-      setShowSearch(true);
-      setTimeout(() => searchInputRef.current?.focus(), 50);
-    }
-  }, []);
-
-  // 编辑器打开时聚焦 textarea
+  // 编辑器打开时聚焦
   useEffect(() => {
     if (actionMode === 'edit') {
-      const timer = setTimeout(() => textareaRef.current?.focus(), 80);
+      const timer = setTimeout(() => editorRef.current?.focus(), 80);
       return () => clearTimeout(timer);
     }
   }, [actionMode]);
@@ -911,15 +792,10 @@ export default function CodeBrowserPage() {
               <div className="w-px h-4 bg-border shrink-0 mx-0.5" />
               {/* 搜索 */}
               <Button
-                variant={showSearch ? 'secondary' : 'ghost'}
+                variant='ghost'
                 size="icon"
                 className="w-8 h-8 text-muted-foreground hover:bg-secondary"
-                onClick={() => {
-                  const next = !showSearch;
-                  setShowSearch(next);
-                  if (next) setTimeout(() => searchInputRef.current?.focus(), 50);
-                  else { setSearchQuery(''); textareaRef.current?.focus(); }
-                }}
+                onClick={() => { editorRef.current?.getAction('actions.find')?.run(); }}
                 title="搜索 (Ctrl+F)"
               >
                 <Search className="w-4 h-4" />
@@ -962,142 +838,18 @@ export default function CodeBrowserPage() {
             </div>
           </div>
 
-          {/* ── 搜索栏（可展开） ── */}
-          {showSearch && (
-            <div className="flex items-center gap-2 px-4 h-11 shrink-0 border-b border-border bg-secondary/40">
-              <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setSearchMatchIndex(0); }}
-                onKeyDown={fsHandleSearchKeyDown}
-                placeholder="搜索代码... (Enter 下一个 · Shift+Enter 上一个)"
-                className="flex-1 min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none border-none font-mono"
-              />
-              <span className="text-xs text-muted-foreground shrink-0 min-w-[4rem] text-right">
-                {searchQuery.trim() ? (fsMatchCount === 0 ? '无匹配' : `${fsSafeIndex + 1} / ${fsMatchCount}`) : ''}
-              </span>
-              {/*
-                上/下跳转按钮：用 onPointerDown（鼠标+触摸均在焦点变更之前触发）+
-                e.preventDefault() 阻止焦点转移，彻底消除 iOS 唤起输入法。
-                onClick 仅作 lint 合规保留，用 skipNavClickRef 去重防止双触发。
-                键盘（Space/Enter）只触发 click，skipNavClickRef 为 false，照常执行。
-              */}
-              <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary shrink-0"
-                onPointerDown={(e) => { e.preventDefault(); skipNavClickRef.current = true; fsHandleSearchPrev(); }}
-                onClick={() => { if (skipNavClickRef.current) { skipNavClickRef.current = false; return; } fsHandleSearchPrev(); }}
-                disabled={fsMatchCount === 0} title="上一个 (Shift+Enter)">
-                <ChevronUp className="w-3.5 h-3.5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary shrink-0"
-                onPointerDown={(e) => { e.preventDefault(); skipNavClickRef.current = true; fsHandleSearchNext(); }}
-                onClick={() => { if (skipNavClickRef.current) { skipNavClickRef.current = false; return; } fsHandleSearchNext(); }}
-                disabled={fsMatchCount === 0} title="下一个 (Enter)">
-                <ChevronDown className="w-3.5 h-3.5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary shrink-0"
-                onClick={() => { setShowSearch(false); setSearchQuery(''); textareaRef.current?.focus(); }}
-                title="关闭搜索 (Esc)">
-                <X className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          )}
+          
 
-          {/* ── 代码编辑区（中间）：pre 高亮层 + textarea 透明覆盖层 ── */}
+          {/* ── 代码编辑区 ── */}
           <div className="flex-1 min-h-0 flex overflow-hidden">
-            {/* 行号列（与 textarea 同步滚动） */}
-            {!fsIsLarge && (
-              <div
-                ref={lineNumRef}
-                className="w-12 shrink-0 overflow-hidden bg-secondary/40 border-r border-border select-none"
-                aria-hidden="true"
-              >
-                <div style={{ padding: '1rem 0.25rem 1rem 0' }}>
-                  {editContent.split('\n').map((_, i) => (
-                    <div
-                      key={i}
-                      className="text-right text-muted-foreground/50 font-mono"
-                      style={{ fontSize: `${editorFontSize}px`, lineHeight: '1.625' }}
-                    >
-                      {i + 1}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 编辑区容器 */}
-            <div className="relative flex-1 min-h-0 overflow-hidden bg-background">
-              {/*
-                架构：scrollContainerRef(div) > sizing-div > pre(高亮,普通流) + textarea(绝对覆盖,overflow:hidden)
-                滚动由普通 div 承担，textarea 完全不参与滚动。
-                设置 div.scrollTop 不会触发 iOS Safari 唤起输入法。
-              */}
-              <div
-                ref={scrollContainerRef}
-                onScroll={fsSyncScroll}
-                style={{
-                  position: 'absolute', inset: 0,
-                  overflowY: 'scroll', overflowX: 'hidden',
-                }}
-              >
-                {/* 内容尺寸容器：由 pre 的自然高度决定，textarea 绝对覆盖 */}
-                <div style={{ position: 'relative' }}>
-                  {/* 高亮层：正常文档流，自动高度，撑起滚动内容区 */}
-                  <pre
-                    ref={highlightRef}
-                    aria-hidden="true"
-                    style={{
-                      margin: 0, padding: '1rem',
-                      pointerEvents: 'none',
-                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                      fontSize: `${editorFontSize}px`,
-                      lineHeight: '1.625',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-all',
-                      color: 'hsl(var(--foreground))',
-                      boxSizing: 'border-box',
-                      // 无 overflow，正常流自动高度
-                    }}
-                  >
-                    {fsHighlightNodes}
-                  </pre>
-
-                  {/*
-                    编辑层：绝对覆盖 pre，overflow:hidden（不独立滚动）。
-                    浏览器光标超出可视区时会滚动最近的可滚动祖先（即 scrollContainerRef div），
-                    不会触碰 textarea 本身的滚动 API，彻底消除 iOS 唤起输入法问题。
-                  */}
-                  <textarea
-                    ref={textareaRef}
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
-                    onKeyDown={fsHandleEditorKeyDown}
-                    spellCheck={false}
-                    style={{
-                      position: 'absolute', inset: 0,
-                      width: '100%', height: '100%',
-                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                      fontSize: `${editorFontSize}px`,
-                      lineHeight: '1.625',
-                      padding: '1rem',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-all',
-                      resize: 'none',
-                      border: 'none', outline: 'none', borderRadius: 0,
-                      background: 'transparent',
-                      color: 'transparent',
-                      caretColor: 'hsl(var(--foreground))',
-                      boxSizing: 'border-box',
-                      overflow: 'hidden', // 不独立滚动！
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
+            <CodeEditor
+              value={editContent}
+              onChange={setEditContent}
+              fileName={currentFile?.name || ''}
+              fontSize={editorFontSize}
+              onMount={(editor) => { editorRef.current = editor; }}
+            />
           </div>
-
           {/* ── 底栏 ── */}
           <div className="flex items-center gap-3 px-4 h-14 shrink-0 border-t border-border bg-card/95 backdrop-blur-sm">
             <div className="flex-1 min-w-0">
@@ -1333,9 +1085,9 @@ export default function CodeBrowserPage() {
                   </Button>
                   <div className="w-px h-4 bg-border shrink-0 mx-0.5" />
                   {/* 搜索 */}
-                  <Button variant={showSearch ? 'secondary' : 'ghost'} size="icon"
+                  <Button variant='ghost' size="icon"
                     className="w-7 h-7 text-muted-foreground hover:bg-secondary"
-                    onClick={() => { const next = !showSearch; setShowSearch(next); if (next) setTimeout(() => searchInputRef.current?.focus(), 50); else { setSearchQuery(''); textareaRef.current?.focus(); } }}
+                    onClick={() => { editorRef.current?.getAction('actions.find')?.run(); }}
                     title="搜索 (Ctrl+F)">
                     <Search className="w-3.5 h-3.5" />
                   </Button>
@@ -1358,37 +1110,7 @@ export default function CodeBrowserPage() {
                 </div>
               </div>
 
-              {/* 搜索栏 */}
-              {showSearch && (
-                <div className="flex items-center gap-2 px-3 h-10 shrink-0 border-b border-border bg-secondary/40">
-                  <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <input ref={searchInputRef} type="text" value={searchQuery}
-                    onChange={(e) => { setSearchQuery(e.target.value); setSearchMatchIndex(0); }}
-                    onKeyDown={fsHandleSearchKeyDown}
-                    placeholder="搜索代码... (Enter 下一个)"
-                    className="flex-1 min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none border-none font-mono" />
-                  <span className="text-xs text-muted-foreground shrink-0 min-w-[4rem] text-right">
-                    {searchQuery.trim() ? (fsMatchCount === 0 ? '无匹配' : `${fsSafeIndex + 1} / ${fsMatchCount}`) : ''}
-                  </span>
-                  <Button variant="ghost" size="icon" className="w-6 h-6 text-muted-foreground hover:bg-secondary shrink-0"
-                    onPointerDown={(e) => { e.preventDefault(); skipNavClickRef.current = true; fsHandleSearchPrev(); }}
-                    onClick={() => { if (skipNavClickRef.current) { skipNavClickRef.current = false; return; } fsHandleSearchPrev(); }}
-                    disabled={fsMatchCount === 0} title="上一个">
-                    <ChevronUp className="w-3 h-3" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="w-6 h-6 text-muted-foreground hover:bg-secondary shrink-0"
-                    onPointerDown={(e) => { e.preventDefault(); skipNavClickRef.current = true; fsHandleSearchNext(); }}
-                    onClick={() => { if (skipNavClickRef.current) { skipNavClickRef.current = false; return; } fsHandleSearchNext(); }}
-                    disabled={fsMatchCount === 0} title="下一个">
-                    <ChevronDown className="w-3 h-3" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="w-6 h-6 text-muted-foreground hover:bg-secondary shrink-0"
-                    onClick={() => { setShowSearch(false); setSearchQuery(''); textareaRef.current?.focus(); }}
-                    title="关闭搜索 (Esc)">
-                    <X className="w-3 h-3" />
-                  </Button>
-                </div>
-              )}
+              
 
               {/* 代码编辑区 */}
               <div className="flex-1 min-h-0 flex overflow-hidden">
@@ -1397,6 +1119,7 @@ export default function CodeBrowserPage() {
                   onChange={setEditContent}
                   fileName={currentFile?.name || ''}
                   fontSize={editorFontSize}
+                  onMount={(editor) => { editorRef.current = editor; }}
                 />
               </div>
 

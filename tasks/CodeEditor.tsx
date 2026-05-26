@@ -2,17 +2,19 @@ import { useMemo } from 'react';
 import Editor, { loader } from '@monaco-editor/react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { monaco } from '@/lib/monaco';
+import type { editor } from 'monaco-editor';
 
 // 强制 @monaco-editor/react 使用本地的 monaco 实例，不从 CDN 下载
 loader.config({ monaco: monaco as any });
 
 interface CodeEditorProps {
   value: string;
-  onChange: (value: string) => void;
+  onChange?: (value: string) => void;
   fileName?: string;
   readOnly?: boolean;
   fontSize?: number;
   autoFocus?: boolean;
+  onMount?: (editor: editor.IStandaloneCodeEditor) => void;
 }
 
 // 扩展名到 Monaco language 映射
@@ -68,6 +70,8 @@ export function CodeEditor({
   fileName = '',
   readOnly = false,
   fontSize = 14,
+  autoFocus = false,
+  onMount,
 }: CodeEditorProps) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -79,7 +83,13 @@ export function CodeEditor({
         value={value}
         language={language}
         theme={isDark ? 'vs-dark' : 'light'}
-        onChange={(v) => onChange(v ?? '')}
+        onChange={(v) => onChange && onChange(v ?? '')}
+        onMount={(editor) => {
+          if (onMount) onMount(editor);
+          if (autoFocus) {
+            editor.focus();
+          }
+        }}
         options={{
           readOnly,
           fontSize,

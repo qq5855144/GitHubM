@@ -1059,44 +1059,48 @@ export default function CodeBrowserPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-0.5 shrink-0">
-                  {/* 缩小字号 */}
-                  <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
-                    onClick={() => setEditorFontSize(s => Math.max(10, s - 1))} disabled={editorFontSize <= 10}
-                    title={`缩小字号 (${editorFontSize}px)`}>
-                    <ZoomOut className="w-3.5 h-3.5" />
-                  </Button>
-                  <span className="text-xs text-muted-foreground w-7 text-center tabular-nums">{editorFontSize}</span>
-                  <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
-                    onClick={() => setEditorFontSize(s => Math.min(22, s + 1))} disabled={editorFontSize >= 22}
-                    title={`放大字号 (${editorFontSize}px)`}>
-                    <ZoomIn className="w-3.5 h-3.5" />
-                  </Button>
-                  <div className="w-px h-4 bg-border shrink-0 mx-0.5" />
-                  {/* 搜索 */}
                   <Button variant='ghost' size="icon"
                     className="w-7 h-7 text-muted-foreground hover:bg-secondary"
                     onClick={() => { editorRef.current?.getAction('actions.find')?.run(); }}
                     title="搜索 (Ctrl+F)">
                     <Search className="w-3.5 h-3.5" />
                   </Button>
-                  <Button variant='ghost' size="icon"
-                    className="w-7 h-7 text-muted-foreground hover:bg-secondary"
-                    onClick={() => { editorRef.current?.getAction('editor.action.quickCommand')?.run(); }}
-                    title="命令面板 (F1)">
-                    <TerminalSquare className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
-                    onClick={() => { copyToClipboard(editContent); toast.success('代码已复制'); }}
-                    title="复制内容">
-                    <Copy className="w-3.5 h-3.5" />
-                  </Button>
-                  {currentFile?.download_url && (
-                    <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
-                      title="下载文件"
-                      onClick={async () => { try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); } catch { toast.error('下载失败'); } }}>
-                      <Download className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary">
+                        <MoreHorizontal className="w-3.5 h-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <div className="flex items-center justify-between px-2 py-1.5">
+                        <span className="text-xs text-muted-foreground">字号</span>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="w-6 h-6 hover:bg-secondary"
+                            onClick={(e) => { e.preventDefault(); setEditorFontSize(s => Math.max(10, s - 1)); }} disabled={editorFontSize <= 10}>
+                            <ZoomOut className="w-3 h-3" />
+                          </Button>
+                          <span className="text-xs w-5 text-center tabular-nums">{editorFontSize}</span>
+                          <Button variant="ghost" size="icon" className="w-6 h-6 hover:bg-secondary"
+                            onClick={(e) => { e.preventDefault(); setEditorFontSize(s => Math.min(22, s + 1)); }} disabled={editorFontSize >= 22}>
+                            <ZoomIn className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => { editorRef.current?.getAction('editor.action.quickCommand')?.run(); }}>
+                        <TerminalSquare className="w-3.5 h-3.5 mr-2" />命令面板
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => { copyToClipboard(editContent); toast.success('代码已复制'); }}>
+                        <Copy className="w-3.5 h-3.5 mr-2" />复制内容
+                      </DropdownMenuItem>
+                      {currentFile?.download_url && (
+                        <DropdownMenuItem onClick={async () => { try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); } catch { toast.error('下载失败'); } }}>
+                          <Download className="w-3.5 h-3.5 mr-2" />下载文件
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <div className="w-px h-4 bg-border shrink-0 mx-0.5" />
                   <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
                     onClick={() => closeAction(true)} title="关闭编辑器">
                     <X className="w-3.5 h-3.5" />

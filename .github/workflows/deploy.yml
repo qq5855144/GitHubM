@@ -72,7 +72,15 @@ jobs:
           cache: pnpm       # pnpm store 缓存；首次约 40s，缓存命中后约 8s
 
       - name: 安装依赖
-        run: pnpm install
+        run: |
+          pnpm install > install.log 2>&1 || {
+            cat install.log
+            BODY=$(cat install.log | tail -n 50 | jq -Rs .)
+            curl -s -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" \
+            -d "{\"title\":\"pnpm install failed\",\"body\":${BODY}}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues"
+            exit 1
+          }
 
       - name: 构建 Web 应用（注入版本号）
         run: |

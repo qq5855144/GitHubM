@@ -68,7 +68,7 @@ jobs:
       - name: 设置 Node.js（含 pnpm 依赖缓存）
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm       # pnpm store 缓存；首次约 40s，缓存命中后约 8s
 
       - name: 安装依赖

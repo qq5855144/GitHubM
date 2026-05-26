@@ -46,6 +46,9 @@ import {
   Undo2,
   Redo2,
   Menu,
+  BookOpen,
+  WrapText,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -1018,38 +1021,35 @@ export default function CodeBrowserPage() {
               {!isReadingMode && (
                 <div className="flex flex-col">
                   {/* 移动端工具栏 */}
-                  <div className="flex md:hidden items-center justify-between px-2 h-12 bg-[#2d2d2d] text-white shrink-0">
-                    <Button variant="ghost" size="icon" className="w-10 h-10 text-white hover:bg-white/10" onClick={() => closeAction(true)}>
-                      <Menu className="w-5 h-5" />
+                  <div className="flex md:hidden items-center justify-between px-2 h-12 bg-[#2d2d2d] text-white shrink-0 border-b border-white/10">
+                    <Button variant="ghost" size="icon" className="w-10 h-10 text-white hover:bg-white/10" onClick={() => closeAction(true)} title="返回">
+                      <ArrowLeft className="w-5 h-5" />
                     </Button>
-                    <div className="flex items-center gap-0.5">
-                      <Button variant="ghost" size="icon" className="w-10 h-10 text-white hover:bg-white/10" onClick={() => editorRef.current?.trigger('keyboard', 'undo', null)}>
-                        <Undo2 className="w-5 h-5" />
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => editorRef.current?.trigger('keyboard', 'undo', null)} title="撤销">
+                        <Undo2 className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="w-10 h-10 text-white hover:bg-white/10" onClick={() => editorRef.current?.trigger('keyboard', 'redo', null)}>
-                        <Redo2 className="w-5 h-5" />
+                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => editorRef.current?.trigger('keyboard', 'redo', null)} title="重做">
+                        <Redo2 className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="w-10 h-10 text-white hover:bg-white/10" onClick={() => handleSaveEdit()}>
-                        <Save className="w-5 h-5" />
+                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => setShowSearchPanel(true)} title="搜索/替换">
+                        <Search className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="w-10 h-10 text-white hover:bg-white/10" onClick={() => setIsReadingMode(!isReadingMode)}>
-                        <Pencil className="w-5 h-5" />
+                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => setIsReadingMode(true)} title="阅读模式">
+                        <BookOpen className="w-4 h-4" />
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="w-10 h-10 text-white hover:bg-white/10">
-                            <MoreHorizontal className="w-5 h-5" />
+                          <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" title="更多">
+                            <MoreHorizontal className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56 bg-[#2d2d2d] text-white border-white/10">
-                          <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => setShowSearchPanel(true)}>
-                            <Search className="w-4 h-4 mr-2" />搜索
-                          </DropdownMenuItem>
+                        <DropdownMenuContent align="end" className="w-56 bg-[#2d2d2d] text-white border-white/10" onCloseAutoFocus={(e) => e.preventDefault()}>
                           <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => { 
                              setTimeout(() => {
                                editorRef.current?.focus(); 
                                editorRef.current?.trigger('keyboard', 'editor.action.quickCommand', null); 
-                             }, 50);
+                             }, 150);
                           }}>
                             <TerminalSquare className="w-4 h-4 mr-2" />命令面板
                           </DropdownMenuItem>
@@ -1071,6 +1071,14 @@ export default function CodeBrowserPage() {
                               </Button>
                             </div>
                           </div>
+                          <DropdownMenuSeparator className="bg-white/10" />
+                          <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => { setWordWrap(w => w === 'on' ? 'off' : 'on'); }}>
+                            <WrapText className="w-4 h-4 mr-2" />
+                            {wordWrap === 'on' ? '取消自动换行' : '自动换行'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => { editorRef.current?.getAction('editor.action.commentLine')?.run(); }}>
+                            <MessageSquare className="w-4 h-4 mr-2" />行注释
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-white/10" />
                           <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => { copyToClipboard(editContent); toast.success('代码已复制'); }}>
                             <Copy className="w-4 h-4 mr-2" />复制内容
@@ -1144,7 +1152,7 @@ export default function CodeBrowserPage() {
                           <MoreHorizontal className="w-3.5 h-3.5" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuContent align="end" className="w-48" onCloseAutoFocus={(e) => e.preventDefault()}>
                         <div className="flex items-center justify-between px-2 py-1.5">
                           <span className="text-xs text-muted-foreground">字号</span>
                           <div className="flex items-center gap-1">
@@ -1170,7 +1178,7 @@ export default function CodeBrowserPage() {
                           setTimeout(() => {
                             editorRef.current?.focus(); 
                             editorRef.current?.trigger('keyboard', 'editor.action.quickCommand', null); 
-                          }, 50);
+                          }, 150);
                         }}>
                           <TerminalSquare className="w-3.5 h-3.5 mr-2" />命令面板
                         </DropdownMenuItem>
@@ -1204,6 +1212,7 @@ export default function CodeBrowserPage() {
                   fontSize={editorFontSize}
                   wordWrap={wordWrap}
                   onSyntaxError={setSyntaxErrors}
+                  onFontSizeChange={setEditorFontSize}
                   onMount={(editor) => { editorRef.current = editor; }}
                   onSearch={() => setShowSearchPanel(true)}
                   onCursorChange={setCursorPosition}

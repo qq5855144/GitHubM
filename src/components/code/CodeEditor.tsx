@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useRef } from 'react';
 import Editor, { loader } from '@monaco-editor/react';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { editor } from 'monaco-editor';
@@ -29,6 +29,7 @@ interface CodeEditorProps {
   onSearch?: () => void;
   onCursorChange?: (position: string) => void;
   onSyntaxError?: (errors: { line: number; column: number; message: string }[]) => void;
+  onFontSizeChange?: (newSize: number) => void;
   wordWrap?: 'on' | 'off';
 }
 
@@ -65,12 +66,14 @@ export function CodeEditor({
   onSearch,
   onCursorChange,
   onSyntaxError,
+  onFontSizeChange,
   wordWrap = 'off',
 }: CodeEditorProps) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const language = useMemo(() => getLanguage(fileName), [fileName]);
   const [isMobile, setIsMobile] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -81,8 +84,65 @@ export function CodeEditor({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // 移动端双指捏合缩放字号逻辑
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !onFontSizeChange) return;
+
+    let initialDistance: number | null = null;
+    let initialFontSize = fontSize;
+
+    const getDistance = (touches: TouchList) => {
+      if (touches.length < 2) return 0;
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        initialDistance = getDistance(e.touches);
+        initialFontSize = fontSize;
+        // 不阻止默认行为，以免影响其他触摸，但我们可以依赖 touchmove
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && initialDistance !== null) {
+        e.preventDefault(); // 阻止浏览器默认缩放
+        const currentDistance = getDistance(e.touches);
+        const scale = currentDistance / initialDistance;
+        // 放大或缩小字号，敏感度可调
+        let newSize = Math.round(initialFontSize * scale);
+        // 限制字号在 10 到 30 之间
+        newSize = Math.max(10, Math.min(30, newSize));
+        if (newSize !== fontSize) {
+          onFontSizeChange(newSize);
+        }
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        initialDistance = null;
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+    container.addEventListener('touchcancel', handleTouchEnd);
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [fontSize, onFontSizeChange]);
+
   return (
-    <div className="w-full h-full bg-background overflow-hidden">
+    <div ref={containerRef} className="w-full h-full bg-background overflow-hidden touch-none md:touch-auto">
       <Editor
         value={value}
         language={language}
@@ -122,7 +182,7 @@ export function CodeEditor({
         }}
         options={{
           readOnly,
-          fontSize: isMobile ? 12 : fontSize,
+          fontSize: fontSize,
           fontFamily: "ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', Menlo, Monaco, Consolas, monospace",
           lineNumbers: isMobile ? 'off' : 'on',
           lineNumbersMinChars: isMobile ? 0 : 3,
@@ -142,7 +202,7 @@ export function CodeEditor({
             indentation: !isMobile, // 移动端隐藏缩进线使视图更干净
           },
           padding: { top: 12, bottom: 12 },
-          contextmenu: true,
+          contextmenu: !isMobile, // 移动端禁用默认右键菜单，以便长按可以进行原生文本选择
           quickSuggestions: true,
           suggestOnTriggerCharacters: true,
           wordBasedSuggestions: 'currentDocument',

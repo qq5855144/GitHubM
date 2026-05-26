@@ -69,6 +69,7 @@ jobs:
               [ -z "${!key}" ] && export "$key=$val"
             done < .env
           fi
+          export NODE_OPTIONS="--max_old_space_size=6144"
           pnpm exec vite build
           # 验证关键产物
           test -f dist/index.html  || (echo "❌ dist/index.html 不存在" && exit 1)

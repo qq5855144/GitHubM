@@ -92,6 +92,7 @@ jobs:
               fi
             done < .env
           fi
+          export NODE_OPTIONS="--max_old_space_size=6144"
           pnpm exec vite build
 
       - name: 上传 Web 构建产物（供后续 Job 使用）

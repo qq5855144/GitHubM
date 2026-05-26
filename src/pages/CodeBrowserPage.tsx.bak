@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import FileTree from '@/components/code/FileTree';
-import { CodeEditor } from '@/components/code/CodeEditor';
 import {
   ChevronRight,
   ArrowLeft,
@@ -1004,14 +1003,98 @@ export default function CodeBrowserPage() {
             </div>
           )}
 
-          {/* ── 代码编辑区 ── */}
+          {/* ── 代码编辑区（中间）：pre 高亮层 + textarea 透明覆盖层 ── */}
           <div className="flex-1 min-h-0 flex overflow-hidden">
-            <CodeEditor
-              value={editContent}
-              onChange={setEditContent}
-              fileName={currentFile?.name || ''}
-              fontSize={editorFontSize}
-            />
+            {/* 行号列（与 textarea 同步滚动） */}
+            {!fsIsLarge && (
+              <div
+                ref={lineNumRef}
+                className="w-12 shrink-0 overflow-hidden bg-secondary/40 border-r border-border select-none"
+                aria-hidden="true"
+              >
+                <div style={{ padding: '1rem 0.25rem 1rem 0' }}>
+                  {editContent.split('\n').map((_, i) => (
+                    <div
+                      key={i}
+                      className="text-right text-muted-foreground/50 font-mono"
+                      style={{ fontSize: `${editorFontSize}px`, lineHeight: '1.625' }}
+                    >
+                      {i + 1}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 编辑区容器 */}
+            <div className="relative flex-1 min-h-0 overflow-hidden bg-background">
+              {/*
+                架构：scrollContainerRef(div) > sizing-div > pre(高亮,普通流) + textarea(绝对覆盖,overflow:hidden)
+                滚动由普通 div 承担，textarea 完全不参与滚动。
+                设置 div.scrollTop 不会触发 iOS Safari 唤起输入法。
+              */}
+              <div
+                ref={scrollContainerRef}
+                onScroll={fsSyncScroll}
+                style={{
+                  position: 'absolute', inset: 0,
+                  overflowY: 'scroll', overflowX: 'hidden',
+                }}
+              >
+                {/* 内容尺寸容器：由 pre 的自然高度决定，textarea 绝对覆盖 */}
+                <div style={{ position: 'relative' }}>
+                  {/* 高亮层：正常文档流，自动高度，撑起滚动内容区 */}
+                  <pre
+                    ref={highlightRef}
+                    aria-hidden="true"
+                    style={{
+                      margin: 0, padding: '1rem',
+                      pointerEvents: 'none',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      fontSize: `${editorFontSize}px`,
+                      lineHeight: '1.625',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-all',
+                      color: 'hsl(var(--foreground))',
+                      boxSizing: 'border-box',
+                      // 无 overflow，正常流自动高度
+                    }}
+                  >
+                    {fsHighlightNodes}
+                  </pre>
+
+                  {/*
+                    编辑层：绝对覆盖 pre，overflow:hidden（不独立滚动）。
+                    浏览器光标超出可视区时会滚动最近的可滚动祖先（即 scrollContainerRef div），
+                    不会触碰 textarea 本身的滚动 API，彻底消除 iOS 唤起输入法问题。
+                  */}
+                  <textarea
+                    ref={textareaRef}
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    onKeyDown={fsHandleEditorKeyDown}
+                    spellCheck={false}
+                    style={{
+                      position: 'absolute', inset: 0,
+                      width: '100%', height: '100%',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      fontSize: `${editorFontSize}px`,
+                      lineHeight: '1.625',
+                      padding: '1rem',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-all',
+                      resize: 'none',
+                      border: 'none', outline: 'none', borderRadius: 0,
+                      background: 'transparent',
+                      color: 'transparent',
+                      caretColor: 'hsl(var(--foreground))',
+                      boxSizing: 'border-box',
+                      overflow: 'hidden', // 不独立滚动！
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* ── 底栏 ── */}
@@ -1308,12 +1391,55 @@ export default function CodeBrowserPage() {
 
               {/* 代码编辑区 */}
               <div className="flex-1 min-h-0 flex overflow-hidden">
-                <CodeEditor
-                  value={editContent}
-                  onChange={setEditContent}
-                  fileName={currentFile?.name || ''}
-                  fontSize={editorFontSize}
-                />
+                {/* 行号 */}
+                {!fsIsLarge && (
+                  <div ref={lineNumRef}
+                    className="w-10 shrink-0 overflow-hidden bg-secondary/40 border-r border-border select-none"
+                    aria-hidden="true">
+                    <div style={{ padding: '0.75rem 0.25rem 0.75rem 0' }}>
+                      {editContent.split('\n').map((_, i) => (
+                        <div key={i} className="text-right text-muted-foreground/50 font-mono"
+                          style={{ fontSize: `${editorFontSize}px`, lineHeight: '1.625' }}>
+                          {i + 1}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* 编辑区容器 */}
+                <div className="relative flex-1 min-h-0 overflow-hidden bg-background">
+                  <div ref={scrollContainerRef} onScroll={fsSyncScroll}
+                    style={{ position: 'absolute', inset: 0, overflowY: 'scroll', overflowX: 'hidden' }}>
+                    <div style={{ position: 'relative' }}>
+                      <pre ref={highlightRef} aria-hidden="true"
+                        style={{
+                          margin: 0, padding: '0.75rem 1rem',
+                          pointerEvents: 'none',
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                          fontSize: `${editorFontSize}px`, lineHeight: '1.625',
+                          whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                          color: 'hsl(var(--foreground))', boxSizing: 'border-box',
+                        }}>
+                        {fsHighlightNodes}
+                      </pre>
+                      <textarea ref={textareaRef} value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        onKeyDown={fsHandleEditorKeyDown}
+                        spellCheck={false}
+                        style={{
+                          position: 'absolute', inset: 0, width: '100%', height: '100%',
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                          fontSize: `${editorFontSize}px`, lineHeight: '1.625',
+                          padding: '0.75rem 1rem',
+                          whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                          resize: 'none', border: 'none', outline: 'none', borderRadius: 0,
+                          background: 'transparent', color: 'transparent',
+                          caretColor: 'hsl(var(--foreground))',
+                          boxSizing: 'border-box', overflow: 'hidden',
+                        }} />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* 底栏：提交 */}

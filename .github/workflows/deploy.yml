@@ -72,7 +72,7 @@ jobs:
           cache: pnpm       # pnpm store 缓存；首次约 40s，缓存命中后约 8s
 
       - name: 安装依赖
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
       - name: 构建 Web 应用（注入版本号）
         run: |

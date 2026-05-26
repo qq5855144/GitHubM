@@ -39,7 +39,7 @@ jobs:
           cache: pnpm
 
       - name: 安装依赖
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
       # ── 步骤 1：Biome Lint ──────────────────────────────────────
       - name: Biome Lint

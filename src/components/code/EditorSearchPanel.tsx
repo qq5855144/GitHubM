@@ -16,6 +16,7 @@ interface EditorSearchPanelProps {
   visible: boolean;
   onClose: () => void;
   readOnly?: boolean;
+  content: string;
 }
 
 function escapeRegex(str: string): string {
@@ -60,7 +61,7 @@ function findMatches(
   }
 }
 
-export function EditorSearchPanel({ view: editor, visible, onClose, readOnly }: EditorSearchPanelProps) {
+export function EditorSearchPanel({ view: editor, visible, onClose, readOnly, content }: EditorSearchPanelProps) {
   const [searchText, setSearchText] = useState('');
   const [replaceText, setReplaceText] = useState('');
   const [showReplace, setShowReplace] = useState(false);
@@ -73,7 +74,6 @@ export function EditorSearchPanel({ view: editor, visible, onClose, readOnly }: 
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const lastDocRef = useRef<string>('');
 
   // 关闭时清空搜索
   useEffect(() => {
@@ -89,16 +89,13 @@ export function EditorSearchPanel({ view: editor, visible, onClose, readOnly }: 
   const performSearch = useCallback(() => {
     if (!editor) return;
 
-    const text = editor.state.doc.toString();
-    lastDocRef.current = text;
-
     if (!searchText) {
       editor.dispatch({ effects: searchMatchesEffect.of({ matches: [], activeIndex: -1 }) });
       setMatches([]);
       return;
     }
 
-    const newMatches = findMatches(text, searchText, useRegex, matchCase, wholeWord);
+    const newMatches = findMatches(content, searchText, useRegex, matchCase, wholeWord);
     setMatches(newMatches);
 
     const activeIdx = currentIndex >= newMatches.length ? 0 : currentIndex;
@@ -109,7 +106,7 @@ export function EditorSearchPanel({ view: editor, visible, onClose, readOnly }: 
     editor.dispatch({
       effects: searchMatchesEffect.of({ matches: newMatches, activeIndex: activeIdx }),
     });
-  }, [editor, searchText, useRegex, matchCase, wholeWord, currentIndex]);
+  }, [editor, content, searchText, useRegex, matchCase, wholeWord, currentIndex]);
 
   // 搜索参数变化时重新搜索
   useEffect(() => {
@@ -151,21 +148,6 @@ export function EditorSearchPanel({ view: editor, visible, onClose, readOnly }: 
     editor.dispatch({
       changes: { from: match.from, to: match.to, insert: replaceText },
     });
-
-    // 替换后重新搜索
-    setTimeout(() => {
-      const text = editor.state.doc.toString();
-      const newMatches = findMatches(text, searchText, useRegex, matchCase, wholeWord);
-      setMatches(newMatches);
-      const newIdx = Math.min(currentIndex, Math.max(0, newMatches.length - 1));
-      setCurrentIndex(newIdx);
-      editor.dispatch({
-        effects: searchMatchesEffect.of({ matches: newMatches, activeIndex: newIdx }),
-      });
-      if (newMatches.length > 0) {
-        revealMatch(newIdx);
-      }
-    }, 0);
   };
 
   const handleReplaceAll = () => {
@@ -176,46 +158,19 @@ export function EditorSearchPanel({ view: editor, visible, onClose, readOnly }: 
     editor.dispatch({
       changes: sorted.map((m) => ({ from: m.from, to: m.to, insert: replaceText })),
     });
-
-    setTimeout(() => {
-      const text = editor.state.doc.toString();
-      const newMatches = findMatches(text, searchText, useRegex, matchCase, wholeWord);
-      setMatches(newMatches);
-      setCurrentIndex(0);
-      editor.dispatch({
-        effects: searchMatchesEffect.of({ matches: newMatches, activeIndex: 0 }),
-      });
-    }, 0);
   };
 
   // 文档变化时自动重新搜索
   useEffect(() => {
     if (!editor || !visible) return;
-
-    const handleUpdate = () => {
-      const text = editor.state.doc.toString();
-      if (text !== lastDocRef.current) {
-        lastDocRef.current = text;
-        const newMatches = findMatches(text, searchText, useRegex, matchCase, wholeWord);
-        setMatches(newMatches);
-        const newIdx = Math.min(currentIndex, Math.max(0, newMatches.length - 1));
-        setCurrentIndex(newIdx);
-        editor.dispatch({
-          effects: searchMatchesEffect.of({ matches: newMatches, activeIndex: newIdx }),
-        });
-      }
-    };
-
-    // 使用 requestAnimationFrame 轮询检测文档变化（轻量级）
-    let rafId: number;
-    const poll = () => {
-      handleUpdate();
-      rafId = requestAnimationFrame(poll);
-    };
-    rafId = requestAnimationFrame(poll);
-
-    return () => cancelAnimationFrame(rafId);
-  }, [editor, visible, searchText, useRegex, matchCase, wholeWord, currentIndex]);
+    
+    // 使用节流避免频繁搜索导致卡顿
+    const timer = setTimeout(() => {
+      performSearch();
+    }, 300);
+    
+    return () => clearTimeout(timer);
+  }, [content, visible]);
 
   if (!visible) return null;
 

@@ -137,13 +137,6 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
         return Math.sqrt(dx * dx + dy * dy);
       };
 
-      const handleTouchStart = (e: TouchEvent) => {
-        if (e.touches.length === 2) {
-          initialDistance = getDistance(e.touches);
-          initialFontSize = fontSize;
-        }
-      };
-
       const handleTouchMove = (e: TouchEvent) => {
         if (e.touches.length === 2 && initialDistance !== null) {
           e.preventDefault();
@@ -157,14 +150,24 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
         }
       };
 
+      const handleTouchStart = (e: TouchEvent) => {
+        if (e.touches.length === 2) {
+          initialDistance = getDistance(e.touches);
+          initialFontSize = fontSize;
+          // 仅在双指触摸时动态添加阻止默认行为的 touchmove 监听器，
+          // 避免单指操作（滚动、文本选择）被非 passive 监听器拖慢导致卡顿
+          container.addEventListener('touchmove', handleTouchMove, { passive: false });
+        }
+      };
+
       const handleTouchEnd = (e: TouchEvent) => {
         if (e.touches.length < 2) {
           initialDistance = null;
+          container.removeEventListener('touchmove', handleTouchMove);
         }
       };
 
       container.addEventListener('touchstart', handleTouchStart, { passive: true });
-      container.addEventListener('touchmove', handleTouchMove, { passive: false });
       container.addEventListener('touchend', handleTouchEnd);
       container.addEventListener('touchcancel', handleTouchEnd);
 
@@ -224,11 +227,32 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
       if (onMount) onMount();
     }, [onMount]);
 
+    const throttleTimer = useRef<NodeJS.Timeout | null>(null);
+    const lastCursorRef = useRef<string>('');
+
+    useEffect(() => {
+      return () => {
+        if (throttleTimer.current) {
+          clearTimeout(throttleTimer.current);
+        }
+      };
+    }, []);
+
     const handleUpdate = useCallback((update: ViewUpdate) => {
       if (update.selectionSet && onCursorChangeRef.current) {
         const { head } = update.state.selection.main;
         const line = update.state.doc.lineAt(head);
-        onCursorChangeRef.current(`${line.number}:${head - line.from + 1}`);
+        const newPos = `${line.number}:${head - line.from + 1}`;
+        
+        if (newPos !== lastCursorRef.current) {
+          lastCursorRef.current = newPos;
+          if (!throttleTimer.current) {
+            throttleTimer.current = setTimeout(() => {
+              onCursorChangeRef.current?.(lastCursorRef.current);
+              throttleTimer.current = null;
+            }, 100);
+          }
+        }
       }
     }, []);
 

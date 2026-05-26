@@ -1189,6 +1189,7 @@ export default function CodeBrowserPage() {
                   </div>
                 ) : (
                   <CodeEditor
+                    key={currentFile?.path || currentFile?.name || 'editor'}
                     ref={editorRef}
                     value={editContent}
                     onChange={setEditContent}
@@ -1203,6 +1204,7 @@ export default function CodeBrowserPage() {
                 
                 <EditorSearchPanel 
                   view={editorRef.current?.getView() ?? null} 
+                  content={editContent}
                   visible={showSearchPanel} 
                   onClose={() => setShowSearchPanel(false)}
                   readOnly={isReadingMode}

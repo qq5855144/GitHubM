@@ -1,4 +1,4 @@
-define("vs/nls.messages.ko.js",(function(){"use strict";/*!-----------------------------------------------------------
+define("vs/nls.messages.ko",(function(){"use strict";/*!-----------------------------------------------------------
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Version: 0.55.1(516f350bdaf7a82f6731bd128a9ec86a6e5fa47d)
  * Released under the MIT license

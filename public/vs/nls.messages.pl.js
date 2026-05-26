@@ -1,4 +1,4 @@
-define("vs/nls.messages.pl.js",["./_commonjsHelpers-CT9FvmAN"],(function(i){"use strict";var a={};/*!-----------------------------------------------------------
+define("vs/nls.messages.pl",["./_commonjsHelpers-CT9FvmAN"],(function(i){"use strict";var a={};/*!-----------------------------------------------------------
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Version: 0.55.1(516f350bdaf7a82f6731bd128a9ec86a6e5fa47d)
  * Released under the MIT license

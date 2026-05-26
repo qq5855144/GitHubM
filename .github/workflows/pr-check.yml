@@ -30,7 +30,7 @@ jobs:
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       - name: 设置 Node.js（含 pnpm 缓存）
         uses: actions/setup-node@v4

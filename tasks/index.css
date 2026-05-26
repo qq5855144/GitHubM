@@ -1,0 +1,400 @@
+/* stylelint-disable */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* GitHub 管理器设计系统 - 紫色专业主题 */
+
+@layer base {
+
+
+  /* 浅色模式（默认/跟随系统时若系统为浅色） */
+  :root {
+    --radius: 0.5rem;
+
+    /* 背景层 */
+    --background: 250 30% 98%;        /* #F9F8FD 浅紫白 */
+    --foreground: 240 15% 12%;        /* #1A1A2E 深蓝黑 */
+
+    /* 卡片/面板 */
+    --card: 0 0% 100%;                /* 纯白卡片 */
+    --card-foreground: 240 15% 12%;
+
+    /* 弹出层 */
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 15% 12%;
+
+    /* 主色 - 紫罗兰 #7c3aed */
+    --primary: 263 70% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    /* 次要色 */
+    --secondary: 250 20% 93%;         /* 浅紫灰 */
+    --secondary-foreground: 240 15% 20%;
+
+    /* 静音色 */
+    --muted: 250 20% 93%;
+    --muted-foreground: 240 8% 50%;   /* 中灰 ≥4.5:1 */
+
+    /* 强调色 - 亮紫蓝 */
+    --accent: 258 88% 66%;            /* #8B5CF6 */
+    --accent-foreground: 0 0% 100%;
+
+    /* 危险色 */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* 边框/输入 */
+    --border: 250 15% 87%;
+    --input: 250 15% 87%;
+    --ring: 263 70% 58%;
+
+    /* 图表 */
+    --chart-1: 263 70% 58%;           /* 紫 */
+    --chart-2: 196 80% 48%;           /* 青 */
+    --chart-3: 27 90% 56%;            /* 橙 */
+    --chart-4: 142 65% 42%;           /* 绿 */
+    --chart-5: 0 72% 51%;             /* 红 */
+
+    /* 侧边栏 - 浅色模式使用浅紫白背景 */
+    --sidebar: 258 35% 97%;
+    --sidebar-background: 258 35% 97%;
+    --sidebar-foreground: 258 35% 18%;
+    --sidebar-primary: 263 70% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 258 30% 91%;
+    --sidebar-accent-foreground: 258 35% 16%;
+    --sidebar-border: 258 20% 87%;
+    --sidebar-ring: 263 70% 58%;
+
+    /* 状态色 */
+    --success: 142 65% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 35 91% 55%;
+    --warning-foreground: 0 0% 100%;
+    --info: 196 80% 48%;
+    --info-foreground: 0 0% 100%;
+
+    /* 代码 */
+    --code-bg: 250 25% 95%;
+    --code-border: 250 15% 87%;
+  }
+
+  /* 深色模式 */
+  .dark {
+    --radius: 0.5rem;
+
+    /* 背景层 */
+    --background: 240 14% 8%;         /* #0D0D16 极深紫黑 */
+    --foreground: 240 20% 92%;        /* #E8E8F0 浅蓝白 */
+
+    /* 卡片/面板 */
+    --card: 240 12% 12%;              /* #181821 */
+    --card-foreground: 240 20% 92%;
+
+    /* 弹出层 */
+    --popover: 240 12% 15%;           /* #1D1D2B */
+    --popover-foreground: 240 20% 92%;
+
+    /* 主色 - 紫罗兰（深色稍亮） */
+    --primary: 263 72% 62%;           /* #8B4CF8 */
+    --primary-foreground: 0 0% 100%;
+
+    /* 次要色 */
+    --secondary: 240 12% 18%;         /* #252535 */
+    --secondary-foreground: 240 20% 88%;
+
+    /* 静音色 */
+    --muted: 240 10% 18%;
+    --muted-foreground: 240 10% 62%;  /* #9292A8 ≥4.5:1 */
+
+    /* 强调色 */
+    --accent: 258 88% 70%;            /* #9B77F9 */
+    --accent-foreground: 0 0% 100%;
+
+    /* 危险色 */
+    --destructive: 0 72% 56%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* 边框/输入 */
+    --border: 240 10% 24%;            /* #343448 */
+    --input: 240 10% 22%;
+    --ring: 263 72% 62%;
+
+    /* 图表 */
+    --chart-1: 263 72% 62%;
+    --chart-2: 196 80% 55%;
+    --chart-3: 27 90% 62%;
+    --chart-4: 142 65% 48%;
+    --chart-5: 0 72% 56%;
+
+    /* 侧边栏 - 更深紫黑 */
+    --sidebar: 240 14% 6%;
+    --sidebar-background: 240 14% 6%;
+    --sidebar-foreground: 240 20% 88%;
+    --sidebar-primary: 263 72% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 12% 14%;
+    --sidebar-accent-foreground: 240 20% 92%;
+    --sidebar-border: 240 10% 16%;
+    --sidebar-ring: 263 72% 62%;
+
+    /* 状态色 */
+    --success: 142 65% 48%;
+    --success-foreground: 0 0% 100%;
+    --warning: 35 91% 58%;
+    --warning-foreground: 0 0% 100%;
+    --info: 196 80% 55%;
+    --info-foreground: 0 0% 100%;
+
+    /* 代码 */
+    --code-bg: 240 14% 8%;
+    --code-border: 240 10% 24%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+
+  /* 消除浏览器默认黄色 outline（Firefox 等系统主题有时呈黄色） */
+  *:focus {
+    outline: none;
+  }
+  /*
+   * 键盘导航焦点环：仅对非交互原生元素（如自定义可聚焦 div 等）应用全局规则。
+   * Button / [role="button"] / a / input / textarea / select 均由 shadcn 组件
+   * 自身的 focus-visible Tailwind 类管理，此处统一排除，避免 outline + ring
+   * 双重叠加产生多重边框线。
+   */
+  *:focus-visible:not(button):not([role="button"]):not(a):not(input):not(textarea):not(select) {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+  /* 消除 Android WebView 点击高亮（蓝/灰色半透明遮罩） */
+  button, [role="button"], a, input, select, textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* 按钮点击后不保留焦点环（shadcn ring 只在键盘导航时由 :focus-visible 触发）*/
+  button:focus-visible, [role="button"]:focus-visible {
+    outline: none;
+  }
+
+  /*
+   * 消除 Chrome/Safari 自动填充黄色背景 & 边框。
+   * 用大 inset box-shadow 覆盖浏览器注入的黄色背景，
+   * 同时将文字颜色重置为设计系统 foreground。
+   */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus,
+  select:-webkit-autofill,
+  select:-webkit-autofill:hover,
+  select:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px hsl(var(--secondary)) inset !important;
+    -webkit-text-fill-color: hsl(var(--foreground)) !important;
+    caret-color: hsl(var(--foreground));
+    border-color: hsl(var(--border)) !important;
+    transition: background-color 9999s ease 9999s;
+  }
+
+  html {
+    /* 深色模式为默认（初始） */
+    @apply dark;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+}
+
+@layer utilities {
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+  }
+
+  /* GitHub Markdown 渲染样式 */
+  .markdown-body {
+    color: hsl(var(--foreground));
+    line-height: 1.6;
+  }
+
+  .markdown-body h1,
+  .markdown-body h2,
+  .markdown-body h3,
+  .markdown-body h4,
+  .markdown-body h5,
+  .markdown-body h6 {
+    color: hsl(var(--foreground));
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    line-height: 1.3;
+  }
+
+  .markdown-body h1 { font-size: 1.5rem; border-bottom: 1px solid hsl(var(--border)); padding-bottom: 0.5rem; }
+  .markdown-body h2 { font-size: 1.25rem; border-bottom: 1px solid hsl(var(--border)); padding-bottom: 0.4rem; }
+  .markdown-body h3 { font-size: 1.1rem; }
+
+  .markdown-body p {
+    margin-bottom: 1rem;
+  }
+
+  .markdown-body a {
+    color: hsl(var(--accent));
+    text-decoration: none;
+  }
+
+  .markdown-body a:hover {
+    text-decoration: underline;
+  }
+
+  .markdown-body code {
+    background: hsl(var(--secondary));
+    border: 1px solid hsl(var(--border));
+    border-radius: 4px;
+    padding: 0.2em 0.4em;
+    font-size: 0.85em;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+
+  .markdown-body pre {
+    background: hsl(var(--secondary));
+    border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+  }
+
+  .markdown-body pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.875rem;
+  }
+
+  .markdown-body ul, .markdown-body ol {
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .markdown-body li {
+    margin-bottom: 0.25rem;
+  }
+
+  .markdown-body blockquote {
+    border-left: 4px solid hsl(var(--border));
+    padding-left: 1rem;
+    color: hsl(var(--muted-foreground));
+    margin: 1rem 0;
+  }
+
+  .markdown-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+  }
+
+  .markdown-body th, .markdown-body td {
+    border: 1px solid hsl(var(--border));
+    padding: 0.5rem 1rem;
+    text-align: left;
+  }
+
+  .markdown-body th {
+    background: hsl(var(--secondary));
+    font-weight: 600;
+  }
+
+  .markdown-body tr:nth-child(even) {
+    background: hsl(var(--secondary) / 0.5);
+  }
+
+  .markdown-body img {
+    max-width: 100%;
+    border-radius: 4px;
+  }
+
+  .markdown-body hr {
+    border: none;
+    border-top: 1px solid hsl(var(--border));
+    margin: 1.5rem 0;
+  }
+}
+
+/*
+ * 主题切换过渡动画
+ * 仅当 <html> 带有 theme-transitioning class 时生效（由 ThemeContext.triggerThemeTransition 管理），
+ * 避免页面初始加载时触发不必要的颜色闪烁过渡。
+ */
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease,
+    fill 0.3s ease,
+    stroke 0.3s ease,
+    box-shadow 0.3s ease !important;
+}
+/* 针对 Monaco Editor 的移动端样式适配 */
+@media (max-width: 768px) {
+  /* 增大原生的搜索框 */
+  .monaco-editor .find-widget {
+    width: 90% !important;
+    max-width: 320px !important;
+    right: 5% !important;
+    top: 10px !important;
+    transform: none !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    padding: 8px !important;
+  }
+  
+  /* 增大输入框和按钮 */
+  .monaco-editor .find-widget .monaco-inputbox {
+    min-height: 28px !important;
+    font-size: 14px !important;
+  }
+  
+  .monaco-editor .find-widget .button {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  
+  /* 增大上下文菜单，适配手指点击 */
+  .monaco-menu .monaco-action-bar.vertical .action-item {
+    padding: 8px 0 !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+  .monaco-menu .monaco-action-bar.vertical .action-label {
+    font-size: 14px !important;
+    line-height: 24px !important;
+  }
+}

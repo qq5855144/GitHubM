@@ -39,6 +39,7 @@ import {
   PanelLeftClose,
   MoreHorizontal,
   GitBranch,
+  TerminalSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -800,6 +801,16 @@ export default function CodeBrowserPage() {
               >
                 <Search className="w-4 h-4" />
               </Button>
+              {/* 命令面板 (移动端特别有用) */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-8 h-8 text-muted-foreground hover:bg-secondary"
+                onClick={() => { editorRef.current?.getAction('editor.action.quickCommand')?.run(); }}
+                title="命令面板 (F1)"
+              >
+                <TerminalSquare className="w-4 h-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -1090,6 +1101,12 @@ export default function CodeBrowserPage() {
                     onClick={() => { editorRef.current?.getAction('actions.find')?.run(); }}
                     title="搜索 (Ctrl+F)">
                     <Search className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button variant='ghost' size="icon"
+                    className="w-7 h-7 text-muted-foreground hover:bg-secondary"
+                    onClick={() => { editorRef.current?.getAction('editor.action.quickCommand')?.run(); }}
+                    title="命令面板 (F1)">
+                    <TerminalSquare className="w-3.5 h-3.5" />
                   </Button>
                   <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
                     onClick={() => { copyToClipboard(editContent); toast.success('代码已复制'); }}

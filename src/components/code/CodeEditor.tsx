@@ -3,10 +3,10 @@ import Editor, { loader } from '@monaco-editor/react';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { editor } from 'monaco-editor';
 
-// 配置 Monaco 从国内镜像加载，并设置中文包
+// 配置 Monaco 从本地 /vs 目录加载（极大提升加载速度），并配置原生中文包
 loader.config({
   paths: {
-    vs: 'https://registry.npmmirror.com/monaco-editor/0.55.1/files/min/vs'
+    vs: '/vs'
   },
   'vs/nls': {
     availableLanguages: {

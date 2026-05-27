@@ -1859,6 +1859,7 @@ export default function CodeBrowserPage() {
       </Dialog>
       </div>
       </div>
+      </div>
       
       {/* 桌面端 Status Bar */}
       <div className="hidden md:flex items-center justify-between px-3 h-6 border-t border-border bg-[#007acc] text-white text-[10px] shrink-0 font-mono z-20">
@@ -1873,7 +1874,6 @@ export default function CodeBrowserPage() {
           <span className="cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors">Spaces: 2</span>
         </div>
       </div>
-    </div>
     </div>
   );
 }

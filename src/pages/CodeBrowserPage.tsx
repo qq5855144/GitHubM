@@ -1121,6 +1121,12 @@ export default function CodeBrowserPage() {
                       <Search className="w-3.5 h-3.5" />
                     </Button>
                     <Button variant='ghost' size="icon"
+                      className={`w-7 h-7 hover:bg-secondary hidden md:flex ${wordWrap === 'on' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
+                      onClick={() => setWordWrap(w => w === 'on' ? 'off' : 'on')}
+                      title={wordWrap === 'on' ? '取消自动换行' : '自动换行'}>
+                      <WrapText className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant='ghost' size="icon"
                       className="w-7 h-7 text-muted-foreground hover:bg-secondary hidden md:flex"
                       onClick={() => setEditorFullscreen(!editorFullscreen)}
                       title={editorFullscreen ? "退出全屏" : "全屏模式"}>

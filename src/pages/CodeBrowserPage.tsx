@@ -268,7 +268,16 @@ export default function CodeBrowserPage() {
 
   // 编辑器搜索面板状态
   const [showSearchPanel, setShowSearchPanel] = useState(false);
-  const [cursorPosition, setCursorPosition] = useState('1:1');
+  
+  // 使用 ref 和 DOM 直接更新避免渲染卡顿
+  const cursorPositionRef = useRef('1:1');
+  const handleCursorChange = useCallback((pos: string) => {
+    cursorPositionRef.current = pos;
+    document.querySelectorAll('.editor-cursor-pos').forEach(el => {
+      el.textContent = pos;
+    });
+  }, []);
+
   const [wordWrap, setWordWrap] = useState<'on' | 'off'>(
     window.innerWidth < 768 ? 'on' : 'off'
   );
@@ -1022,7 +1031,7 @@ export default function CodeBrowserPage() {
               {!isReadingMode && (
                 <div className="flex flex-col">
                   {/* 移动端工具栏 */}
-                  <div className="flex md:hidden items-center justify-between px-2 h-12 bg-[#2d2d2d] text-white shrink-0 border-b border-white/10">
+                  <div className="flex md:hidden items-center justify-between px-2 h-12 bg-[#2d2d2d] text-white shrink-0 border-b border-white/10 select-none">
                     <Button variant="ghost" size="icon" className="w-10 h-10 text-white hover:bg-white/10" onClick={() => closeAction(true)} title="返回">
                       <ArrowLeft className="w-5 h-5" />
                     </Button>
@@ -1084,13 +1093,13 @@ export default function CodeBrowserPage() {
                       <span className="truncate text-white">{editContent !== currentFile?.content ? '*' : ''}{currentFile?.name}</span>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span>{cursorPosition}</span>
+                      <span className="editor-cursor-pos">{cursorPositionRef.current}</span>
                       <span>UTF-8</span>
                     </div>
                   </div>
 
                   {/* 桌面端工具栏 */}
-                  <div className="hidden md:flex items-center gap-2 px-3 h-11 shrink-0 border-b border-border bg-card/95">
+                  <div className="hidden md:flex items-center gap-2 px-3 h-11 shrink-0 border-b border-border bg-card/95 select-none">
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
                     <FileItemIcon filename={currentFile?.name ?? ''} isDir={false} size="w-4 h-4" />
                     <span className="text-sm font-mono text-foreground truncate">{currentFile?.name}</span>
@@ -1204,7 +1213,7 @@ export default function CodeBrowserPage() {
                     wordWrap={wordWrap}
                     onFontSizeChange={setEditorFontSize}
                     onSearch={() => setShowSearchPanel(true)}
-                    onCursorChange={setCursorPosition}
+                    onCursorChange={handleCursorChange}
                   />
                 )}
                 
@@ -1253,7 +1262,7 @@ export default function CodeBrowserPage() {
 
               {/* 底栏：提交 */}
               {!isReadingMode && (
-                <div className="flex flex-col shrink-0 border-t border-border bg-card/95">
+                <div className="flex flex-col shrink-0 border-t border-border bg-card/95 select-none">
                   {syntaxErrors.length > 0 && (
                     <div className="px-3 py-1.5 bg-destructive/10 border-b border-destructive/20 text-xs text-destructive max-h-24 overflow-y-auto">
                       <div className="font-semibold mb-1 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />发现 {syntaxErrors.length} 个语法错误：</div>
@@ -1868,13 +1877,13 @@ export default function CodeBrowserPage() {
       </div>
       
       {/* 桌面端 Status Bar */}
-      <div className="hidden md:flex items-center justify-between px-3 h-6 border-t border-border bg-[#007acc] text-white text-[10px] shrink-0 font-mono z-20">
+      <div className="hidden md:flex items-center justify-between px-3 h-6 border-t border-border bg-[#007acc] text-white text-[10px] shrink-0 font-mono z-20 select-none">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1 cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors"><GitBranch className="w-3 h-3"/> {currentBranch}</span>
           {syntaxErrors.length > 0 && <span className="flex items-center gap-1 cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors"><AlertCircle className="w-3 h-3"/> {syntaxErrors.length}</span>}
         </div>
         <div className="flex items-center gap-4">
-          {actionMode === 'edit' && <span className="cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors">{cursorPosition}</span>}
+          {actionMode === 'edit' && <span className="cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors editor-cursor-pos">{cursorPositionRef.current}</span>}
           <span className="cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors">UTF-8</span>
           <span className="cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors">TypeScript React</span>
           <span className="cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors">Spaces: 2</span>

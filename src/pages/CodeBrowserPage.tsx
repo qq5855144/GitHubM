@@ -889,7 +889,7 @@ export default function CodeBrowserPage() {
           
           {/* 桌面端固定侧边树 */}
           {treeVisible && (
-            <aside className="hidden md:flex flex-col w-64 shrink-0 border-r border-border bg-sidebar overflow-hidden flex-1">
+            <aside className="hidden md:flex flex-col w-64 shrink-0 border-r border-border bg-sidebar overflow-hidden">
               <div className="h-10 px-4 flex items-center justify-between border-b border-border shrink-0">
                 <span className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">资源管理器</span>
                 <Button variant="ghost" size="icon" className="w-6 h-6 text-muted-foreground hover:bg-secondary" onClick={() => setTreeVisible(false)} title="收起侧边栏">

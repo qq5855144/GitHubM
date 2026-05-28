@@ -784,7 +784,7 @@ function buildLLMRequest(cfg: ModelConfig, platformKey: string): {
       };
     default: // wenxin（platform managed）
       return {
-        url: "https://app-bgc5z86utjwh-api-zYkZz8qovQ1L-gateway.appmiaoda.com/v2/chat/completions",
+        url: "https://app-bo4w33bsdqm9-api-zYkZz8qovQ1L-gateway.appmiaoda.com/v2/chat/completions",
         headers: { "X-Gateway-Authorization": `Bearer ${platformKey}` },
         // 文心：enable_thinking=false + 不限制输出长度
         bodyExtra: { enable_thinking: false, max_tokens: 8192, ...tempExtra },

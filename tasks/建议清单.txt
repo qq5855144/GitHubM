@@ -1,0 +1,523 @@
+问题 1：前端“重连”不是严格意义上的流恢复，只是重新发起一次请求
+现状
+在 AiAssistantPage.tsx 的 handleReconnect() 里，逻辑是：
+
+取上一次请求的 messages
+在末尾再插入一条用户消息：
+“上一次连接因网络中断，请从中断处继续完成任务...”
+
+再重新发一次 sendStreamRequest
+这本质上不是 resume stream，而是：
+
+“重新请求模型 + 依赖模型自己理解上下文继续”
+
+问题
+这会导致：
+
+重复输出
+
+模型可能从上个回答中间重新说一遍
+工具调用可能重复执行
+步骤状态错乱
+
+前端现有的 step/tool 气泡是当前会话内存态
+重连后后端重新推理，不一定和之前的 stepId、toolId 对齐
+幂等性差
+
+如果断线发生在写文件、建分支、发 PR 之前/之后边界，很可能二次重复操作
+优化方案
+方案 A：引入真正的“流会话 ID / cursor”
+服务端每次流式响应分配：
+
+stream_id
+event_seq
+每个 SSE 事件都带：
+
+Copy{
+  "type": "content",
+  "stream_id": "xxx",
+  "seq": 104,
+  "content": "..."
+}
+前端记录最后消费到的 seq，断线重连时请求：
+
+Copy{
+  "resume_stream_id": "xxx",
+  "after_seq": 104
+}
+服务端要么：
+
+从缓存事件队列里继续补发
+要么明确返回“不可恢复，请走 workflow resume”
+这是最标准的做法。
+
+方案 B：把“流恢复”和“任务恢复”分层
+当前项目把“网络中断恢复”和“workflow 恢复”混在一起了。建议拆成两层：
+
+短时中断（30~120 秒内）
+
+恢复 SSE 流事件
+不重新调用模型
+长时中断 / 服务端上下文已丢失
+
+才使用 resume_workflow_id
+从任务快照继续
+这样用户体验会好很多。
+
+问题 2：SSE 协议不够完整，缺少结束标记、序号、幂等信息
+现状
+前端 sendStreamRequest() 是按 SSE data 读 chunk，依赖连接结束触发 onComplete()。
+
+风险
+如果后端：
+
+提前断开
+代理层截断
+网络抖动
+某些 chunk 丢失
+前端很难判断：
+
+这是正常完成？
+还是异常中断？
+content 是否完整？
+最终 answer 是否已结束？
+影响
+容易出现：
+
+最后一段答案丢失
+工具状态停留在 running
+thinking 未关闭
+UI 展示为“完成”，其实内容没完
+优化方案
+建议补齐协议字段：
+
+最少应加
+1）显式完成事件
+后端最后发送：
+
+Copy{ "type": "done" }
+前端收到 done 才认为业务完成，而不是只靠 HTTP EOF。
+
+2）显式错误事件
+比如：
+
+Copy{ "type": "error", "message": "..." }
+这样服务端业务错误不会只能靠断连接表现。
+
+3）每类事件带唯一 id / seq
+比如：
+
+Copy{ "type": "tool_start", "id": "...", "seq": 12 }
+{ "type": "tool_end", "id": "...", "seq": 13 }
+前端可做去重、防重放、断线恢复。
+
+4）tool/step 事件带 parent 关系
+例如：
+
+step_id
+tool_id
+parent_step_id
+这样 UI 更容易稳定映射。
+
+问题 3：前端对流式内容的状态管理过于集中，AiAssistantPage.tsx 过重
+现状
+AiAssistantPage.tsx 太大了，里面同时负责：
+
+输入框
+会话持久化
+SSE
+工具历史
+步骤状态
+流式消息增量
+断连重连
+文件上传
+超时恢复
+各种气泡更新
+问题
+这会带来几个典型问题：
+
+流式逻辑难维护
+边界条件容易互相污染
+某类事件修改时很容易影响别的事件
+很难单元测试
+特别是：
+
+answerMsgId
+currentStepBubbleId
+thinkingBubbleId
+toolBubbleMap
+planStepsLocal
+localCurrentStepId
+这些都是闭包局部变量，逻辑复杂且分散。
+
+优化方案
+建议抽象一个统一的流式 reducer：
+
+建议结构
+1）建立 useAiStreamController()
+专门负责：
+
+发起请求
+解析 chunk
+统一 dispatch event
+处理中断/恢复
+2）建立 streamReducer
+例如：
+
+Copytype StreamState = {
+  messages: Message[]
+  currentStreamId?: string
+  status: 'idle' | 'streaming' | 'interrupted' | 'done' | 'error'
+  steps: ...
+  tools: ...
+}
+事件统一走：
+
+Copydispatch({ type: 'CONTENT_APPEND', payload })
+dispatch({ type: 'STEP_START', payload })
+dispatch({ type: 'TOOL_END', payload })
+dispatch({ type: 'STREAM_DONE' })
+这样好处：
+
+状态变化可预测
+更容易测试
+重连时可直接恢复 reducer state
+不需要页面里维护那么多临时 ref/局部变量
+
+问题 4：内容流、思考流、工具流、步骤流是“并列追加”，但缺少统一时序控制
+现状
+当前逻辑里：
+
+content 更新答案气泡
+think_chunk 更新 thinking 气泡
+tool_start/end 更新工具气泡
+step_start/end 更新步骤气泡
+这在正常情况下没问题，但如果事件顺序稍乱，可能出现：
+
+content 先于 plan
+tool_start 在 step_start 前
+step_end 晚于 answer
+think_end 漏发
+问题
+前端假设事件顺序比较理想，但真实生产环境里：
+
+代理缓冲
+模型输出抖动
+后端异步工具执行
+跨 provider 格式转换
+都可能导致轻微乱序。
+
+优化方案
+方案 A：后端统一事件时序
+服务端强约束输出顺序：
+
+plan
+step_start
+tool_start
+tool_end
+step_end
+content
+done
+如果允许交错，至少也要带 seq。
+
+方案 B：前端建立事件缓冲器
+对于依赖前置事件的 chunk：
+
+如果 tool_start 收到时其 parent_step_id 对应 step 尚未创建
+临时放入 pending queue
+等 step 到来后再渲染
+这样 UI 更稳。
+
+问题 5：流式体验仍偏“事件驱动”，而不是“文本生成驱动”，导致回答观感可能跳跃
+现状
+它虽然有 content 流，但大量 UI 焦点放在：
+
+step
+tool
+think
+最终回答气泡可能是后置出现的。
+
+问题
+对于普通用户来说，最重要的是：
+
+“AI 有没有持续在回答我”
+
+如果长时间都只看到：
+
+任务规划
+调工具
+思考中
+但正文回答迟迟不出现，会让人感觉“卡住了”。
+
+尤其代码助手场景里，用户更希望：
+
+一边执行
+一边看到中间结论
+优化方案
+建议改成“双通道输出”
+通道 1：状态流
+thinking
+step
+tool
+通道 2：叙述流
+assistant narration
+当前发现
+下一步计划
+最终结论逐步生成
+例如后端在重要节点推送：
+
+Copy{ "type": "narration", "content": "我先检查仓库结构..." }
+{ "type": "narration", "content": "我发现问题集中在流式状态同步..." }
+前端把 narration 流合并到 answer 气泡中，用户就不会觉得长时间没响应。
+
+问题 6：sendStreamRequest 只对“建立连接”设超时，读取阶段无 idle timeout，可能假死
+现状
+sse.ts 中写得很明确：
+
+连接前超时
+一旦响应建立，读取阶段不设超时
+优点
+避免长任务被误杀。
+
+但问题是
+如果服务端/网络出现“连接未断但不再发数据”的情况，前端会一直挂着，表现为：
+
+执行中 badge 一直转
+没有新 token
+用户不知道是否死掉
+优化方案
+建议增加 idle timeout：
+
+建议机制
+连接建立后记录 lastChunkAt
+每次收到任何 chunk 更新该时间
+若超过如 30s / 60s 没有任何 chunk：
+前端提示“暂时无响应，正在尝试重连”
+或自动触发 heartbeat 检查/重连
+如果后端已经支持 heartbeat，那就应该前端真正利用起来。
+
+当前 aiTypes.ts 里有：
+
+Copy| { type: 'heartbeat' }
+但在 AiAssistantPage.tsx 中对 heartbeat 几乎没处理。
+
+这是明显浪费协议能力
+
+问题 7：heartbeat 事件没有真正用于连接保活与健康检测
+现状
+类型里有 heartbeat，但前端 switch 中没实质处理。
+
+影响
+无法做到：
+
+区分“模型很慢”和“连接已假死”
+做实时保活显示
+做 idle timeout 重置
+优化方案
+收到 heartbeat 时应至少做三件事：
+
+更新 lastChunkAt
+更新 UI 状态为“仍在执行”
+若当前用户长时间没看到正文，可显示弱提示：
+“正在处理复杂任务，请稍候”
+同时服务端应固定发送 heartbeat，比如每 10~15 秒一个。
+
+问题 8：断网自动重连策略较粗糙，可能导致重复提交
+现状
+在 onError 中如果是网络中断，会：
+
+标记 interrupted
+如果页面可见，1.5 秒后自动 handleReconnect()
+风险
+这对于只读问答还好，但对于写操作型 Agent 风险很大：
+
+重复 patch_file
+重复 write_file
+重复 create_branch
+重复 create_pr
+重复 trigger_workflow
+优化方案
+方案 A：区分“读型任务”和“写型任务”
+如果当前任务涉及写操作：
+
+不自动 silent reconnect
+改为提示用户确认恢复
+方案 B：后端工具调用加幂等键
+每一轮 agent 执行生成：
+
+task_id
+tool_call_id
+idempotency_key
+写操作工具请求带上该 key，后端记录：
+
+相同 key 已执行过，则直接返回之前结果
+避免二次落库/二次提交
+这对 GitHub 类工具特别重要。
+
+
+问题 9：消息持久化只保存最终 answer，丢失流过程上下文
+现状
+onComplete 时只持久化：
+
+用户消息
+assistant 最终文本
+工具过程、step、thinking 都不保存。
+
+问题
+这会导致：
+
+历史记录可追溯性差
+无法恢复“过程态”
+断点恢复信息不足
+用户回看时只见结果，不知执行链路
+优化方案
+最好至少保存三层数据
+1）chat_message
+最终问答
+
+2）chat_event
+流事件日志
+
+think_start/end
+plan
+step_start/end
+tool_start/end
+timeout
+error
+3）workflow_snapshot
+可恢复任务快照
+
+current step
+completed tools
+pending tools
+last seq
+这样历史面板才能真正显示：
+
+当时执行到了哪一步
+为什么失败
+从哪里恢复
+问题 10：工具和步骤气泡过多时，主聊天区信息噪声偏高
+现状
+每个：
+
+step
+tool
+thinking
+都可能变成单独 bubble。
+
+问题
+一旦 Agent 比较活跃，聊天区会变成：
+
+thinking
+plan
+step
+tool
+tool
+tool
+answer
+结果就是“正文被埋”。
+
+优化方案
+更推荐“主次分离”
+主聊天区
+只保留：
+
+用户消息
+AI 叙述
+最终答案
+当前关键状态摘要
+侧边栏 / 折叠区
+显示：
+
+完整步骤链
+工具调用日志
+详细 tool result
+移动端
+默认合并为一个折叠“执行详情”卡片，而不是 N 个 bubble。
+
+也就是说：
+
+把聊天区从“日志流”改回“对话流”
+把日志放进辅助区
+这样流式体验会更自然。
+
+优先级 P1：拆出 useAiStreamController + reducer
+要做
+把 AiAssistantPage.tsx 的流逻辑抽离出去。
+
+收益
+代码可维护性大幅提高
+后续加功能不会越来越乱
+更利于测试
+优先级 P2：主聊天区弱化工具日志，强调回答流
+要做
+tool/step 默认折叠或收纳到侧栏
+聊天主区重点保留 narration + final answer
+收益
+用户感觉更像“对话”
+不会被一堆执行细节淹没
+优先级 P2：持久化事件日志和可恢复快照
+要做
+新增 event log / workflow snapshot 表
+
+收益
+历史可恢复
+可审计
+可调试
+可做重放
+四、一个更理想的流式架构建议
+如果要从产品/工程两方面一起优化，我建议未来架构做成这样：
+
+前端
+1. 会话层
+conversation
+turn
+message
+2. 流控制层
+stream controller
+reducer
+reconnect manager
+idle detector
+3. 展示层
+主回答区
+执行详情区
+历史恢复区
+后端
+1. 模型适配层
+统一各 provider 流式输出
+
+2. Agent 执行层
+planner
+executor
+tool runner
+checkpoint saver
+3. 事件总线层
+统一输出 SSE event：
+
+seq
+type
+payload
+timestamp
+4. 恢复层
+支持：
+
+stream resume
+workflow resume
+tool idempotency
+推荐的 SSE 事件格式
+例如：
+
+Copy{
+  "stream_id": "s_123",
+  "seq": 18,
+  "turn_id": "t_456",
+  "type": "tool_end",
+  "timestamp": 1710000000,
+  "payload": {
+    "tool_id": "tool_3",
+    "step_id": "step_2",
+    "status": "success",
+    "result": "..."
+  }
+}
+这样前端处理会非常稳。

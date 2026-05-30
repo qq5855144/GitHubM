@@ -1,0 +1,51 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+output
+*.local
+package-lock.json
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.sync
+history/*.json
+.vite_cache
+
+# ── Android ──────────────────────────────────────────────────────
+# 本地 SDK 路径（CI 由 workflow 自动生成，不应提交）
+android/local.properties
+# Web 构建产物（由 CI workflow 填充，不应提交到源码）
+android/app/src/main/assets/
+# Gradle 构建缓存与产物
+android/.gradle/
+android/build/
+android/app/build/
+# Kotlin/Java 编译缓存
+android/**/*.class
+
+# Android Release Keystore（切勿提交到 Git）
+android/release.keystore
+android/*.keystore
+android/*.jks
+
+# 平台内部上下文文件（含敏感 token 记录，不纳入版本控制）
+historical_context.txt
+.skills
+tasks

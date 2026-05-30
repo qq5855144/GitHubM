@@ -1,0 +1,77 @@
+# PR 合并前质量门卡
+# 触发条件：向 main / master 提交 Pull Request 时
+# 检查项：
+#   1. pnpm install（带 frozen-lockfile，确保依赖锁定）
+#   2. Biome lint（代码规范）
+#   3. TypeScript 类型检查（tsc --noEmit）
+#   4. 单元测试（vitest）
+#   5. 生产构建验证（确保 dist/ 产物正常生成）
+#
+# 所有检查必须全部通过，PR 才允许合并（需在仓库分支保护规则中勾选本工作流）
+name: PR Check
+
+on:
+  pull_request:
+    branches: [main, master]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  quality:
+    name: 代码质量检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: 设置 Node.js（含 pnpm 缓存）
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # ── 步骤 1：Biome Lint ──────────────────────────────────────
+      - name: Biome Lint
+        run: npx biome lint
+
+      # ── 步骤 2：TypeScript 类型检查 ─────────────────────────────
+      - name: TypeScript 类型检查
+        run: npx tsgo -p tsconfig.check.json
+
+      # ── 步骤 3：单元测试 ────────────────────────────────────────
+      - name: 单元测试
+        run: pnpm test
+        env:
+          # 测试不需要真实的 Supabase 连接
+          VITE_SUPABASE_URL: https://mock.supabase.co
+          VITE_SUPABASE_ANON_KEY: mock-anon-key
+
+      # ── 步骤 4：生产构建验证 ────────────────────────────────────
+      - name: 生产构建验证
+        run: |
+          # 注入占位环境变量，避免构建因缺少 .env 而失败
+          export VITE_APP_VERSION="pr-check"
+          if [ -f ".env" ]; then
+            while IFS= read -r line || [ -n "$line" ]; do
+              [[ -z "$line" || "$line" == \#* ]] && continue
+              key="${line%%=*}"; val="${line#*=}"
+              [ -z "${!key}" ] && export "$key=$val"
+            done < .env
+          fi
+          export NODE_OPTIONS="--max_old_space_size=6144"
+          pnpm exec vite build
+          # 验证关键产物
+          test -f dist/index.html  || (echo "❌ dist/index.html 不存在" && exit 1)
+          test -d dist/assets      || (echo "❌ dist/assets 目录不存在" && exit 1)
+          echo "✅ 构建产物验证通过"

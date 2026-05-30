@@ -31,6 +31,7 @@ import {
 } from '@/services/github';
 import type { GitHubRepo } from '@/types/types';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 type ForkSort = 'newest' | 'oldest' | 'stargazers' | 'watchers';
 
@@ -55,7 +56,7 @@ export default function RepoForksPage() {
       setHasMore(data.length === 30);
       setPage(p);
     } catch {
-      toast.error('加载 Fork 列表失败');
+      toast.error(i18n.t('加载 Fork 列表失败'));
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -75,8 +76,7 @@ export default function RepoForksPage() {
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
         <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate('/repos')}>
-          仓库
-        </button>
+          {i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button
           type="button"
@@ -92,11 +92,9 @@ export default function RepoForksPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <GitFork className="w-5 h-5 text-primary" />
-          Fork 列表
-          {!loading && (
+          {i18n.t('Fork 列表')}{!loading && (
             <Badge variant="outline" className="text-xs border-border text-muted-foreground font-normal">
-              {forks.length}{hasMore ? '+' : ''} 个
-            </Badge>
+              {forks.length}{hasMore ? '+' : ''} {i18n.t('个')}</Badge>
           )}
         </h1>
         <div className="flex items-center gap-2">
@@ -105,10 +103,10 @@ export default function RepoForksPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border">
-              <SelectItem value="newest">最新</SelectItem>
-              <SelectItem value="oldest">最早</SelectItem>
-              <SelectItem value="stargazers">Star 数</SelectItem>
-              <SelectItem value="watchers">Watch 数</SelectItem>
+              <SelectItem value="newest">{i18n.t('最新')}</SelectItem>
+              <SelectItem value="oldest">{i18n.t('最早')}</SelectItem>
+              <SelectItem value="stargazers">{i18n.t('Star 数')}</SelectItem>
+              <SelectItem value="watchers">{i18n.t('Watch 数')}</SelectItem>
             </SelectContent>
           </Select>
           <Button
@@ -141,10 +139,9 @@ export default function RepoForksPage() {
         ) : forks.length === 0 ? (
           <div className="py-16 text-center">
             <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-foreground font-medium">暂无 Fork</p>
+            <p className="text-foreground font-medium">{i18n.t('暂无 Fork')}</p>
             <p className="text-sm text-muted-foreground mt-1">
-              还没有人 Fork 这个仓库
-            </p>
+              {i18n.t('还没有人 Fork 这个仓库')}</p>
           </div>
         ) : (
           <div className="divide-y divide-border">
@@ -233,8 +230,8 @@ export default function RepoForksPage() {
           onClick={() => loadForks(page + 1, sort, true)}
         >
           {loadingMore
-            ? <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />加载中…</>
-            : '加载更多'}
+            ? <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />{i18n.t('加载中…')}</>
+            : i18n.t('加载更多')}
         </Button>
       )}
     </div>

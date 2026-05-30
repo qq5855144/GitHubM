@@ -22,6 +22,7 @@ import type {
   RepoSortField,
   SortDirection,
 } from '@/types/types';
+import i18n from "@/i18n";
 
 const BASE_URL = 'https://api.github.com';
 
@@ -1331,7 +1332,7 @@ export function formatRelativeTime(dateString: string): string {
   const months = Math.floor(days / 30);
   const years = Math.floor(days / 365);
 
-  if (seconds < 60) return '刚刚';
+  if (seconds < 60) return i18n.t('刚刚');
   if (minutes < 60) return `${minutes} 分钟前`;
   if (hours < 24) return `${hours} 小时前`;
   if (days < 30) return `${days} 天前`;

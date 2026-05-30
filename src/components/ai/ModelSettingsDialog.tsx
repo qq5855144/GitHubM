@@ -26,6 +26,7 @@ import type { ModelConfig } from './aiTypes';
 import { MODEL_DEFS, getModelDef, loadProviderKey, saveProviderKey } from './aiUtils';
 import type { ModelType } from './aiUtils';
 import { fetchModelsFromAPI } from './aiSupabase';
+import i18n from "@/i18n";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -77,7 +78,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
   };
 
   const handleTestConnection = async () => {
-    if (!draft.api_key?.trim()) { toast.error('请先填写 API Key'); return; }
+    if (!draft.api_key?.trim()) { toast.error(i18n.t('请先填写 API Key')); return; }
     setTestState('testing');
     setTestResult({});
     try {
@@ -101,17 +102,17 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
         setTestResult({ elapsedMs: data.elapsedMs });
       } else {
         setTestState('error');
-        setTestResult({ error: data.error || '连接失败' });
+        setTestResult({ error: data.error || i18n.t('连接失败') });
       }
     } catch (e) {
       setTestState('error');
-      setTestResult({ error: (e as Error).message || '网络请求失败' });
+      setTestResult({ error: (e as Error).message || i18n.t('网络请求失败') });
     }
   };
 
   const handleFetchModels = async () => {
-    if (!draft.api_key?.trim()) { toast.error('请先填写 API Key'); return; }
-    if (draft.type === 'custom' && !draft.endpoint?.trim()) { toast.error('请先填写接口地址'); return; }
+    if (!draft.api_key?.trim()) { toast.error(i18n.t('请先填写 API Key')); return; }
+    if (draft.type === 'custom' && !draft.endpoint?.trim()) { toast.error(i18n.t('请先填写接口地址')); return; }
     setFetchState('loading');
     setFetchError('');
     try {
@@ -122,7 +123,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
         SUPABASE_URL,
         SUPABASE_ANON_KEY,
       );
-      if (!models.length) throw new Error('未返回任何模型，请检查 API Key 或接口地址');
+      if (!models.length) throw new Error(i18n.t('未返回任何模型，请检查 API Key 或接口地址'));
       setFetchedModels(prev => ({ ...prev, [draft.type]: models }));
       if (!draft.model || !models.find(m => m.id === draft.model)) {
         setDraft(prev => ({ ...prev, model: models[0].id }));
@@ -143,27 +144,27 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
   })();
 
   const handleSave = () => {
-    if (def.needKey && !draft.api_key?.trim()) { toast.error('请填写 API Key'); return; }
-    if (def.needEndpoint && !draft.endpoint?.trim()) { toast.error('请填写接口地址'); return; }
+    if (def.needKey && !draft.api_key?.trim()) { toast.error(i18n.t('请填写 API Key')); return; }
+    if (def.needEndpoint && !draft.endpoint?.trim()) { toast.error(i18n.t('请填写接口地址')); return; }
     // 同步保存到独立 key 仓库
     if (draft.api_key && draft.type !== 'wenxin') {
       saveProviderKey(draft.type, draft.api_key);
     }
     onSave(draft);
     onClose();
-    toast.success('模型配置已保存');
+    toast.success(i18n.t('模型配置已保存'));
   };
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-base">AI 模型配置</DialogTitle>
+          <DialogTitle className="text-base">{i18n.t('AI 模型配置')}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4 pt-1">
           {/* 平台选择 */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-sm font-normal">选择平台</Label>
+            <Label className="text-sm font-normal">{i18n.t('选择平台')}</Label>
             <Select value={draft.type} onValueChange={v => handleTypeChange(v as ModelType)}>
               <SelectTrigger className="px-3"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -185,7 +186,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
           {/* 自定义接口地址 */}
           {def.needEndpoint && (
             <div className="flex flex-col gap-1.5">
-              <Label className="text-sm font-normal">接口地址</Label>
+              <Label className="text-sm font-normal">{i18n.t('接口地址')}</Label>
               <Input
                 className="px-3"
                 placeholder="https://your-api.com/v1/chat/completions"
@@ -193,8 +194,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
                 onChange={e => setDraft(prev => ({ ...prev, endpoint: e.target.value }))}
               />
               <p className="text-xs text-muted-foreground">
-                兼容 OpenAI Chat Completions 格式（/v1/chat/completions）
-              </p>
+                {i18n.t('兼容 OpenAI Chat Completions 格式（/v1/chat/completions）')}</p>
             </div>
           )}
 
@@ -210,8 +210,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
                     rel="noopener noreferrer"
                     className="text-xs text-primary hover:underline"
                   >
-                    获取 Key →
-                  </a>
+                    {i18n.t('获取 Key →')}</a>
                 )}
               </div>
               <div className="flex gap-2">
@@ -249,7 +248,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
                   ) : (
                     <RefreshCw className="w-3.5 h-3.5" />
                   )}
-                  {fetchState === 'loading' ? '获取中…' : '获取模型'}
+                  {fetchState === 'loading' ? i18n.t('获取中…') : i18n.t('获取模型')}
                 </Button>
               </div>
 
@@ -261,12 +260,10 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
               )}
               {fetchState === 'success' && fetchedModels[draft.type]?.length > 0 && (
                 <p className="text-xs text-green-600 dark:text-green-400">
-                  ✓ 已获取 {fetchedModels[draft.type].length} 个可用模型
-                </p>
+                  {i18n.t('✓ 已获取')}{fetchedModels[draft.type].length} {i18n.t('个可用模型')}</p>
               )}
               <p className="text-xs text-muted-foreground">
-                Key 仅保存在本地，通过服务端安全转发，不会上传至第三方
-              </p>
+                {i18n.t('Key 仅保存在本地，通过服务端安全转发，不会上传至第三方')}</p>
               {/* 测试连接按钮（文心无需测试） */}
               {draft.type !== 'wenxin' && (
                 <div className="flex flex-col gap-1.5">
@@ -287,7 +284,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
                     ) : (
                       <Wifi className="w-3.5 h-3.5" />
                     )}
-                    {testState === 'testing' ? '测试中…' : testState === 'success' ? `连接成功 (${testResult.elapsedMs}ms)` : testState === 'error' ? '连接失败' : '测试连接'}
+                    {testState === 'testing' ? i18n.t('测试中…') : testState === 'success' ? `连接成功 (${testResult.elapsedMs}ms)` : testState === 'error' ? i18n.t('连接失败') : i18n.t('测试连接')}
                   </Button>
                   {testState === 'error' && testResult.error && (
                     <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
@@ -304,11 +301,10 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
           {availableModels.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-normal">选择模型</Label>
+                <Label className="text-sm font-normal">{i18n.t('选择模型')}</Label>
                 {fetchedModels[draft.type]?.length > 0 && (
                   <span className="text-[10px] text-muted-foreground">
-                    共 {fetchedModels[draft.type].length} 个模型
-                  </span>
+                    {i18n.t('共')}{fetchedModels[draft.type].length} {i18n.t('个模型')}</span>
                 )}
               </div>
               <Select
@@ -316,7 +312,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
                 onValueChange={v => setDraft(prev => ({ ...prev, model: v }))}
               >
                 <SelectTrigger className="px-3">
-                  <SelectValue placeholder="请选择模型" />
+                  <SelectValue placeholder={i18n.t('请选择模型')} />
                 </SelectTrigger>
                 <SelectContent className="max-h-48">
                   {availableModels.map(m => (
@@ -332,14 +328,14 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
           {/* custom 手动输入模型名 */}
           {draft.type === 'custom' && availableModels.length === 0 && (
             <div className="flex flex-col gap-1.5">
-              <Label className="text-sm font-normal">模型名称（可选）</Label>
+              <Label className="text-sm font-normal">{i18n.t('模型名称（可选）')}</Label>
               <Input
                 className="px-3"
-                placeholder="如：llama3, qwen-turbo, claude-3-5-sonnet"
+                placeholder={i18n.t('如：llama3, qwen-turbo, claude-3-5-sonnet')}
                 value={draft.model || ''}
                 onChange={e => setDraft(prev => ({ ...prev, model: e.target.value }))}
               />
-              <p className="text-xs text-muted-foreground">填入 API Key 后点击「获取模型」可自动拉取</p>
+              <p className="text-xs text-muted-foreground">{i18n.t('填入 API Key 后点击「获取模型」可自动拉取')}</p>
             </div>
           )}
 
@@ -348,8 +344,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
             <div className="flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-lg p-3">
               <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
               <p className="text-xs text-muted-foreground">
-                文心 ERNIE 4.5 由平台提供，无需配置密钥，直接免费使用。
-              </p>
+                {i18n.t('文心 ERNIE 4.5 由平台提供，无需配置密钥，直接免费使用。')}</p>
             </div>
           )}
 
@@ -358,8 +353,8 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
             <div className="flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-lg p-3">
               <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
               <div className="text-xs text-muted-foreground space-y-1">
-                <p>Google AI Studio 提供免费额度，注册即用。</p>
-                <p>Gemini 2.5 Flash 速度快且免费；2.5 Pro 代码能力最强，每日免费请求数有限制。</p>
+                <p>{i18n.t('Google AI Studio 提供免费额度，注册即用。')}</p>
+                <p>{i18n.t('Gemini 2.5 Flash 速度快且免费；2.5 Pro 代码能力最强，每日免费请求数有限制。')}</p>
               </div>
             </div>
           )}
@@ -369,8 +364,8 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
             <div className="flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-lg p-3">
               <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
               <div className="text-xs text-muted-foreground space-y-1">
-                <p>阿里云 DashScope 平台，新用户可获免费额度。</p>
-                <p>Qwen2.5 Coder 32B 是目前最强开源代码模型之一，中英双语表现出色。</p>
+                <p>{i18n.t('阿里云 DashScope 平台，新用户可获免费额度。')}</p>
+                <p>{i18n.t('Qwen2.5 Coder 32B 是目前最强开源代码模型之一，中英双语表现出色。')}</p>
               </div>
             </div>
           )}
@@ -379,7 +374,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-1.5">
               <Timer className="w-3.5 h-3.5 text-muted-foreground" />
-              <Label className="text-sm font-normal">请求超时时间</Label>
+              <Label className="text-sm font-normal">{i18n.t('请求超时时间')}</Label>
             </div>
             <Select
               value={String(draft.timeoutMs ?? 300000)}
@@ -387,20 +382,19 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
             >
               <SelectTrigger className="px-3"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="60000">1 分钟（简单对话）</SelectItem>
-                <SelectItem value="180000">3 分钟（普通任务）</SelectItem>
-                <SelectItem value="300000">5 分钟（推荐，复杂任务）</SelectItem>
-                <SelectItem value="600000">10 分钟（超长任务）</SelectItem>
+                <SelectItem value="60000">{i18n.t('1 分钟（简单对话）')}</SelectItem>
+                <SelectItem value="180000">{i18n.t('3 分钟（普通任务）')}</SelectItem>
+                <SelectItem value="300000">{i18n.t('5 分钟（推荐，复杂任务）')}</SelectItem>
+                <SelectItem value="600000">{i18n.t('10 分钟（超长任务）')}</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              AI 在此时间内未响应则报超时。复杂多步任务建议选 5~10 分钟。
-            </p>
+              {i18n.t('AI 在此时间内未响应则报超时。复杂多步任务建议选 5~10 分钟。')}</p>
           </div>
 
           <div className="flex gap-2 justify-end pt-1">
-            <Button variant="outline" onClick={onClose}>取消</Button>
-            <Button onClick={handleSave}>保存配置</Button>
+            <Button variant="outline" onClick={onClose}>{i18n.t('取消')}</Button>
+            <Button onClick={handleSave}>{i18n.t('保存配置')}</Button>
           </div>
         </div>
       </DialogContent>

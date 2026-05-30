@@ -65,6 +65,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { pageCache } from '@/lib/page-cache';
+import i18n from "@/i18n";
 
 export default function RepoDetailPage() {
   const { owner, repo: repoName } = useParams<{ owner: string; repo: string }>();
@@ -149,7 +150,7 @@ export default function RepoDetailPage() {
           });
         });
       } catch (err) {
-        toast.error('加载仓库信息失败');
+        toast.error(i18n.t('加载仓库信息失败'));
         console.error(err);
       } finally {
         setLoading(false);
@@ -172,7 +173,7 @@ export default function RepoDetailPage() {
           if (updated) pageCache.set(cacheKey, { repo: updated, languages, readme, commits, starred: false });
           return updated;
         });
-        toast.success('已取消收藏');
+        toast.success(i18n.t('已取消收藏'));
       } else {
         await starRepo(owner, repoName);
         setStarred(true);
@@ -181,10 +182,10 @@ export default function RepoDetailPage() {
           if (updated) pageCache.set(cacheKey, { repo: updated, languages, readme, commits, starred: true });
           return updated;
         });
-        toast.success('已收藏仓库');
+        toast.success(i18n.t('已收藏仓库'));
       }
     } catch {
-      toast.error('操作失败');
+      toast.error(i18n.t('操作失败'));
     } finally {
       setStarring(false);
     }
@@ -197,7 +198,7 @@ export default function RepoDetailPage() {
       const forked = await forkRepo(owner, repoName);
       toast.success(`Fork 成功！新仓库：${forked.full_name}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Fork 失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('Fork 失败'));
     } finally {
       setForking(false);
     }
@@ -206,15 +207,15 @@ export default function RepoDetailPage() {
   // 删除仓库
   const handleDeleteRepo = async () => {
     if (!owner || !repoName) return;
-    if (deleteConfirmName !== `${owner}/${repoName}`) { toast.error('仓库名称输入不正确'); return; }
+    if (deleteConfirmName !== `${owner}/${repoName}`) { toast.error(i18n.t('仓库名称输入不正确')); return; }
     setDeleting(true);
     try {
       await deleteRepo(owner, repoName);
       pageCache.delete(`repodetail:${owner}/${repoName}`);
       pageCache.invalidate('repos:'); // 使仓库列表缓存失效
-      toast.success('仓库已删除');
+      toast.success(i18n.t('仓库已删除'));
       navigate('/repos');
-    } catch (err) { toast.error(err instanceof Error ? err.message : '删除失败'); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('删除失败')); }
     finally { setDeleting(false); }
   };
 
@@ -230,10 +231,10 @@ export default function RepoDetailPage() {
       const cached = pageCache.get<{ repo: GitHubRepo; languages: Record<string, number>; readme: string; commits: GitHubCommit[]; starred: boolean }>(cacheKey);
       if (cached) pageCache.set(cacheKey, { ...cached, repo: updated });
       pageCache.invalidate('repos:');
-      toast.success('仓库信息已更新');
+      toast.success(i18n.t('仓库信息已更新'));
       setEditDialogOpen(false);
       if (editRepoName.trim() && editRepoName.trim() !== repoName) navigate(`/repos/${owner}/${editRepoName.trim()}`);
-    } catch (err) { toast.error(err instanceof Error ? err.message : '更新失败'); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('更新失败')); }
     finally { setUpdating(false); }
   };
 
@@ -267,14 +268,13 @@ export default function RepoDetailPage() {
     return (
       <div className="p-6 text-center">
         <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-3" />
-        <p className="text-foreground font-medium">仓库不存在或无权访问</p>
+        <p className="text-foreground font-medium">{i18n.t('仓库不存在或无权访问')}</p>
         <Button
           variant="outline"
           className="mt-4 border-border hover:bg-secondary"
           onClick={() => navigate('/repos')}
         >
-          返回仓库列表
-        </Button>
+          {i18n.t('返回仓库列表')}</Button>
       </div>
     );
   }
@@ -290,8 +290,7 @@ export default function RepoDetailPage() {
             className="hover:text-accent transition-colors"
             onClick={() => navigate('/repos')}
           >
-            仓库
-          </button>
+            {i18n.t('仓库')}</button>
           <ChevronRight className="w-3 h-3" />
           <span className="text-foreground truncate">{repo.full_name}</span>
         </div>
@@ -300,14 +299,14 @@ export default function RepoDetailPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-bold text-foreground text-balance">{repo.full_name}</h1>
               <Badge variant="outline" className="border-border text-muted-foreground text-xs">
-                {repo.private ? <><Lock className="w-3 h-3 mr-1" />私有</> : <><Globe className="w-3 h-3 mr-1" />公开</>}
+                {repo.private ? <><Lock className="w-3 h-3 mr-1" />{i18n.t('私有')}</> : <><Globe className="w-3 h-3 mr-1" />{i18n.t('公开')}</>}
               </Badge>
               {repo.archived && (
-                <Badge variant="outline" className="border-warning text-warning text-xs">已归档</Badge>
+                <Badge variant="outline" className="border-warning text-warning text-xs">{i18n.t('已归档')}</Badge>
               )}
               {/* 身份标识 */}
               {isOwner && (
-                <Badge className="bg-primary/15 text-primary border border-primary/30 text-xs">我的仓库</Badge>
+                <Badge className="bg-primary/15 text-primary border border-primary/30 text-xs">{i18n.t('我的仓库')}</Badge>
               )}
             </div>
             {repo.description && (
@@ -320,11 +319,11 @@ export default function RepoDetailPage() {
             <a href={repo.html_url} target="_blank" rel="noopener noreferrer">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground hover:bg-secondary" title="在 GitHub 中查看">
+                  <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground hover:bg-secondary" title={i18n.t('在 GitHub 中查看')}>
                     <ExternalLink className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent className="bg-popover border-border text-foreground text-xs">在 GitHub 中查看</TooltipContent>
+                <TooltipContent className="bg-popover border-border text-foreground text-xs">{i18n.t('在 GitHub 中查看')}</TooltipContent>
               </Tooltip>
             </a>
             {/* 仅自己的仓库显示编辑和删除 */}
@@ -336,7 +335,7 @@ export default function RepoDetailPage() {
                       <Settings className="w-4 h-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-popover border-border text-foreground text-xs">编辑仓库设置</TooltipContent>
+                  <TooltipContent className="bg-popover border-border text-foreground text-xs">{i18n.t('编辑仓库设置')}</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -344,7 +343,7 @@ export default function RepoDetailPage() {
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-popover border-border text-foreground text-xs">删除仓库</TooltipContent>
+                  <TooltipContent className="bg-popover border-border text-foreground text-xs">{i18n.t('删除仓库')}</TooltipContent>
                 </Tooltip>
               </>
             )}
@@ -365,7 +364,7 @@ export default function RepoDetailPage() {
               disabled={starring}
             >
               <Star className={`w-3.5 h-3.5 mr-1.5 ${starred ? 'fill-warning' : ''}`} />
-              {starred ? '已收藏' : '收藏'}
+              {starred ? i18n.t('已收藏') : i18n.t('收藏')}
               <button
                 type="button"
                 className="ml-1.5 text-xs text-muted-foreground hover:text-accent hover:underline"
@@ -382,7 +381,7 @@ export default function RepoDetailPage() {
               disabled={forking}
             >
               {forking
-                ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Fork 中</>
+                ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />{i18n.t('Fork 中')}</>
                 : <><GitFork className="w-3.5 h-3.5 mr-1.5" />Fork</>
               }
               <span className="ml-1.5 text-xs text-muted-foreground">{formatNumber(repo.forks_count)}</span>
@@ -399,8 +398,7 @@ export default function RepoDetailPage() {
               onClick={() => navigate(`/repos/${repo.full_name}/stargazers`)}
             >
               <Star className="w-3.5 h-3.5 mr-1.5 text-warning" />
-              收藏者
-              <span className="ml-1.5 text-xs text-muted-foreground">{formatNumber(repo.stargazers_count)}</span>
+              {i18n.t('收藏者')}<span className="ml-1.5 text-xs text-muted-foreground">{formatNumber(repo.stargazers_count)}</span>
             </Button>
             <Button
               variant="outline"
@@ -409,8 +407,7 @@ export default function RepoDetailPage() {
               onClick={() => navigate(`/repos/${repo.full_name}/forks`)}
             >
               <Network className="w-3.5 h-3.5 mr-1.5" />
-              查看 Forks
-              <span className="ml-1.5 text-xs text-muted-foreground">{formatNumber(repo.forks_count)}</span>
+              {i18n.t('查看 Forks')}<span className="ml-1.5 text-xs text-muted-foreground">{formatNumber(repo.forks_count)}</span>
             </Button>
           </>
         )}
@@ -426,19 +423,19 @@ export default function RepoDetailPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {([
           // ── 前列：高频入口（所有人可见）──
-          { label: '代码浏览',        icon: Code,           path: 'code',          count: null,                   ownerOnly: false },
-          { label: '产物下载',        icon: Package,        path: 'artifacts',     count: null,                   ownerOnly: false },
+          { label: i18n.t('代码浏览'),        icon: Code,           path: 'code',          count: null,                   ownerOnly: false },
+          { label: i18n.t('产物下载'),        icon: Package,        path: 'artifacts',     count: null,                   ownerOnly: false },
           // ── 前列：管理入口（仅 owner）──
-          { label: 'Pages 部署',      icon: Globe,          path: 'pages',         count: null,                   ownerOnly: true  },
+          { label: i18n.t('Pages 部署'),      icon: Globe,          path: 'pages',         count: null,                   ownerOnly: true  },
           // ── 核心协作功能（所有人可见）──
           { label: 'Issues',          icon: AlertCircle,    path: 'issues',        count: repo.open_issues_count, ownerOnly: false },
           { label: 'Pull Requests',   icon: GitPullRequest, path: 'pulls',         count: null,                   ownerOnly: false },
-          { label: '提交历史',        icon: Clock,          path: 'commits',       count: null,                   ownerOnly: false },
-          { label: isOwner ? '分支管理' : '分支浏览', icon: GitBranch, path: 'branches', count: null,             ownerOnly: false },
+          { label: i18n.t('提交历史'),        icon: Clock,          path: 'commits',       count: null,                   ownerOnly: false },
+          { label: isOwner ? i18n.t('分支管理') : i18n.t('分支浏览'), icon: GitBranch, path: 'branches', count: null,             ownerOnly: false },
           { label: 'Actions',         icon: Play,           path: 'actions',       count: null,                   ownerOnly: false },
           // ── 管理功能（仅 owner）──
-          { label: '协作者',          icon: Users,          path: 'collaborators', count: null,                   ownerOnly: true  },
-          { label: '上传文件',        icon: Upload,         path: 'upload',        count: null,                   ownerOnly: true  },
+          { label: i18n.t('协作者'),          icon: Users,          path: 'collaborators', count: null,                   ownerOnly: true  },
+          { label: i18n.t('上传文件'),        icon: Upload,         path: 'upload',        count: null,                   ownerOnly: true  },
           // ── 社区功能（所有人可见）──
           { label: 'Discussions',     icon: MessageCircle,  path: 'discussions',   count: null,                   ownerOnly: false },
           { label: 'Wiki',            icon: BookOpen,       path: 'wiki',          count: null,                   ownerOnly: false },
@@ -476,7 +473,7 @@ export default function RepoDetailPage() {
           >
             <div className="flex items-center gap-2">
               <Network className="w-4 h-4 text-muted-foreground group-hover:text-accent transition-colors shrink-0" />
-              <span className="text-sm text-foreground group-hover:text-accent transition-colors truncate">Fork 列表</span>
+              <span className="text-sm text-foreground group-hover:text-accent transition-colors truncate">{i18n.t('Fork 列表')}</span>
               <Badge variant="outline" className="ml-auto border-border text-muted-foreground text-xs shrink-0">
                 {formatNumber(repo.forks_count)}
               </Badge>
@@ -492,11 +489,9 @@ export default function RepoDetailPage() {
             README
           </TabsTrigger>
           <TabsTrigger value="commits" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground">
-            最近提交
-          </TabsTrigger>
+            {i18n.t('最近提交')}</TabsTrigger>
           <TabsTrigger value="stats" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground">
-            统计
-          </TabsTrigger>
+            {i18n.t('统计')}</TabsTrigger>
         </TabsList>
 
         {/* README */}
@@ -508,7 +503,7 @@ export default function RepoDetailPage() {
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   <Code className="w-10 h-10 mx-auto mb-3" />
-                  <p>暂无 README</p>
+                  <p>{i18n.t('暂无 README')}</p>
                 </div>
               )}
             </CardContent>
@@ -520,7 +515,7 @@ export default function RepoDetailPage() {
           <Card className="bg-card border-border">
             <CardContent className="p-0">
               {commits.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">暂无提交记录</div>
+                <div className="text-center py-8 text-muted-foreground">{i18n.t('暂无提交记录')}</div>
               ) : (
                 <div className="divide-y divide-border">
                   {commits.map((commit) => (
@@ -570,8 +565,7 @@ export default function RepoDetailPage() {
               className="border-border hover:bg-secondary"
               onClick={() => navigate(`/repos/${repo.full_name}/commits`)}
             >
-              查看全部提交
-              <ChevronRight className="w-4 h-4 ml-1" />
+              {i18n.t('查看全部提交')}<ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
         </TabsContent>
@@ -583,9 +577,9 @@ export default function RepoDetailPage() {
             <Card className="bg-card border-border">
               <CardContent className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4">
                 {[
-                  { label: '默认分支', value: repo.default_branch, icon: GitBranch },
-                  { label: '最近推送', value: formatRelativeTime(repo.pushed_at), icon: Clock },
-                  { label: '仓库大小', value: `${(repo.size / 1024).toFixed(1)} MB`, icon: Code },
+                  { label: i18n.t('默认分支'), value: repo.default_branch, icon: GitBranch },
+                  { label: i18n.t('最近推送'), value: formatRelativeTime(repo.pushed_at), icon: Clock },
+                  { label: i18n.t('仓库大小'), value: `${(repo.size / 1024).toFixed(1)} MB`, icon: Code },
                 ].map((stat) => {
                   const Icon = stat.icon;
                   return (
@@ -605,7 +599,7 @@ export default function RepoDetailPage() {
             {langEntries.length > 0 && (
               <Card className="bg-card border-border">
                 <CardContent className="p-4 space-y-3">
-                  <h3 className="text-sm font-medium text-foreground">编程语言</h3>
+                  <h3 className="text-sm font-medium text-foreground">{i18n.t('编程语言')}</h3>
                   <div className="flex h-2 rounded-full overflow-hidden gap-px">
                     {langEntries.map(([lang, bytes]) => (
                       <div
@@ -660,20 +654,18 @@ export default function RepoDetailPage() {
           <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
             <AlertDialogHeader>
               <AlertDialogTitle className="text-foreground flex items-center gap-2">
-                <Trash2 className="w-4 h-4 text-destructive" />删除仓库
-              </AlertDialogTitle>
+                <Trash2 className="w-4 h-4 text-destructive" />{i18n.t('删除仓库')}</AlertDialogTitle>
               <AlertDialogDescription className="text-muted-foreground">
-                此操作将永久删除仓库及其所有数据，不可撤销。
-              </AlertDialogDescription>
+                {i18n.t('此操作将永久删除仓库及其所有数据，不可撤销。')}</AlertDialogDescription>
             </AlertDialogHeader>
             <div className="px-1 py-2 space-y-1.5">
-              <Label className="text-sm font-normal text-foreground">请输入仓库完整名称以确认删除：</Label>
+              <Label className="text-sm font-normal text-foreground">{i18n.t('请输入仓库完整名称以确认删除：')}</Label>
               <Input value={deleteConfirmName} onChange={(e) => setDeleteConfirmName(e.target.value)} placeholder={`${owner}/${repoName}`} className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono" />
             </div>
             <AlertDialogFooter>
-              <AlertDialogCancel className="border-border hover:bg-secondary" onClick={() => setDeleteDialogOpen(false)}>取消</AlertDialogCancel>
+              <AlertDialogCancel className="border-border hover:bg-secondary" onClick={() => setDeleteDialogOpen(false)}>{i18n.t('取消')}</AlertDialogCancel>
               <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDeleteRepo} disabled={deleting || deleteConfirmName !== `${owner}/${repoName}`}>
-                {deleting ? "删除中..." : "确认删除"}
+                {deleting ? i18n.t('删除中...') : i18n.t('确认删除')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -686,31 +678,28 @@ export default function RepoDetailPage() {
           <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
             <DialogHeader>
               <DialogTitle className="text-foreground flex items-center gap-2">
-                <Settings className="w-4 h-4 text-primary" />仓库设置
-              </DialogTitle>
+                <Settings className="w-4 h-4 text-primary" />{i18n.t('仓库设置')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label className="text-sm font-normal text-foreground">仓库名称</Label>
+                <Label className="text-sm font-normal text-foreground">{i18n.t('仓库名称')}</Label>
                 <Input value={editRepoName} onChange={(e) => setEditRepoName(e.target.value)} placeholder={repoName} className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm font-normal text-foreground">仓库描述</Label>
-                <Textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} placeholder="简短描述这个仓库..." rows={3} className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none" />
+                <Label className="text-sm font-normal text-foreground">{i18n.t('仓库描述')}</Label>
+                <Textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} placeholder={i18n.t('简短描述这个仓库...')} rows={3} className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none" />
               </div>
               <div className="flex items-center gap-3">
                 <button type="button" className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors ${!editPrivate ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:bg-secondary"}`} onClick={() => setEditPrivate(false)}>
-                  <Globe className="w-3.5 h-3.5" />公开
-                </button>
+                  <Globe className="w-3.5 h-3.5" />{i18n.t('公开')}</button>
                 <button type="button" className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors ${editPrivate ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:bg-secondary"}`} onClick={() => setEditPrivate(true)}>
-                  <Lock className="w-3.5 h-3.5" />私有
-                </button>
+                  <Lock className="w-3.5 h-3.5" />{i18n.t('私有')}</button>
               </div>
             </div>
             <DialogFooter className="gap-2">
-              <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary" onClick={() => setEditDialogOpen(false)}>取消</Button>
+              <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary" onClick={() => setEditDialogOpen(false)}>{i18n.t('取消')}</Button>
               <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleUpdateRepo} disabled={updating}>
-                {updating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />保存中...</> : "保存更改"}
+                {updating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{i18n.t('保存中...')}</> : i18n.t('保存更改')}
               </Button>
             </DialogFooter>
           </DialogContent>

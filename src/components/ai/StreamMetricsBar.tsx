@@ -4,6 +4,7 @@ import React from 'react';
 import { Gauge, Timer, Hash, Wifi } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { StreamMetrics } from './aiTypes';
+import i18n from "@/i18n";
 
 interface StreamMetricsBarProps {
   metrics: Partial<StreamMetrics>;
@@ -25,27 +26,27 @@ const StreamMetricsBar = React.memo(function StreamMetricsBar({ metrics, classNa
   if (ttft !== undefined) {
     items.push({
       icon: Timer,
-      label: '首字节',
+      label: i18n.t('首字节'),
       value: ttft < 1000 ? fmt(ttft, 'ms') : `${(ttft / 1000).toFixed(1)}s`,
-      title: 'Time To First Token（从发送请求到收到第一个字符的延迟）',
+      title: i18n.t('Time To First Token（从发送请求到收到第一个字符的延迟）'),
     });
   }
 
   if (throughput !== undefined && throughput > 0) {
     items.push({
       icon: Gauge,
-      label: '流速',
+      label: i18n.t('流速'),
       value: fmt(throughput, ' c/s'),
-      title: '近似字符流速（字符/秒），反映模型输出速率',
+      title: i18n.t('近似字符流速（字符/秒），反映模型输出速率'),
     });
   }
 
   if (totalSeq !== undefined && totalSeq > 0) {
     items.push({
       icon: Hash,
-      label: '事件',
+      label: i18n.t('事件'),
       value: fmt(totalSeq, ''),
-      title: '本次流式对话收到的 SSE 事件总数（含 heartbeat）',
+      title: i18n.t('本次流式对话收到的 SSE 事件总数（含 heartbeat）'),
     });
   }
 
@@ -59,12 +60,12 @@ const StreamMetricsBar = React.memo(function StreamMetricsBar({ metrics, classNa
         className,
       )}
       role="status"
-      aria-label="流式响应指标"
+      aria-label={i18n.t('流式响应指标')}
     >
       {isError && (
         <div className="flex items-center gap-1 text-destructive">
           <Wifi className="w-3 h-3 shrink-0" />
-          <span className="text-[10px]">连接中断</span>
+          <span className="text-[10px]">{i18n.t('连接中断')}</span>
         </div>
       )}
       {items.map(({ icon: Icon, label, value, title }) => (

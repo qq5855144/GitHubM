@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet, SheetContent, SheetClose } from '@/components/ui/sheet';
 import type { ChatSession, ChatSessionMessage } from './aiTypes';
 import { fetchSessions, fetchSessionMessages, deleteSession } from './aiSupabase';
+import i18n from "@/i18n";
 
 // 虚拟行类型：区分 section 标题行 和 会话数据行
 type VirtualRow =
@@ -71,7 +72,7 @@ const HistoryPanel = memo(function HistoryPanel({
     setSessions(prev => prev.filter(s => s.id !== id));
     setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
     setDeleting(null);
-    toast.success('对话已删除');
+    toast.success(i18n.t('对话已删除'));
   };
 
   // ── 批量删除 ──────────────────────────────────────────────────────
@@ -139,24 +140,24 @@ const HistoryPanel = memo(function HistoryPanel({
         {/* ── 标题栏：图标+标题 | 条数 | 选择 | 关闭 ── */}
         <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border shrink-0">
           <MessageSquare className="w-4 h-4 text-primary shrink-0" />
-          <span className="font-semibold text-sm text-sidebar-foreground flex-1 min-w-0">历史对话</span>
+          <span className="font-semibold text-sm text-sidebar-foreground flex-1 min-w-0">{i18n.t('历史对话')}</span>
           {/* 条数 */}
-          <span className="text-xs text-muted-foreground shrink-0">{sessions.length} 条</span>
+          <span className="text-xs text-muted-foreground shrink-0">{sessions.length} {i18n.t('条')}</span>
           {/* 批量选择模式切换 */}
           {sessions.length > 0 && (
             <button
               onClick={() => { setSelectMode(v => !v); setSelected(new Set()); }}
               className="shrink-0 text-xs text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded"
-              title={selectMode ? '退出选择' : '批量选择'}
+              title={selectMode ? i18n.t('退出选择') : i18n.t('批量选择')}
             >
-              {selectMode ? '取消' : '选择'}
+              {selectMode ? i18n.t('取消') : i18n.t('选择')}
             </button>
           )}
           {/* 关闭按钮 */}
           <SheetClose asChild>
             <button
               className="shrink-0 w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-              title="关闭"
+              title={i18n.t('关闭')}
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -174,7 +175,7 @@ const HistoryPanel = memo(function HistoryPanel({
               {allSelected
                 ? <CheckSquare className="w-3.5 h-3.5 text-primary" />
                 : <Square className="w-3.5 h-3.5" />}
-              <span>{allSelected ? '取消全选' : '全选'}</span>
+              <span>{allSelected ? i18n.t('取消全选') : i18n.t('全选')}</span>
             </button>
             <span className="flex-1" />
             {someSelected && (
@@ -186,8 +187,7 @@ const HistoryPanel = memo(function HistoryPanel({
                 className="h-7 px-2.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 gap-1"
               >
                 <CheckCheck className="w-3 h-3" />
-                删除 {selected.size} 条
-              </Button>
+                {i18n.t('删除')}{selected.size} {i18n.t('条')}</Button>
             )}
           </div>
         )}
@@ -208,7 +208,7 @@ const HistoryPanel = memo(function HistoryPanel({
             /* 空状态 */
             <div className="flex flex-col items-center gap-3 p-8 text-center">
               <MessageSquare className="w-8 h-8 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">暂无历史对话</p>
+              <p className="text-sm text-muted-foreground">{i18n.t('暂无历史对话')}</p>
             </div>
           ) : (
             /* 虚拟滚动内容区 */

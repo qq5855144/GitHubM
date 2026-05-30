@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { fetchToolExecutionLogs, fetchLatestSnapshot } from '@/components/ai/aiSupabase';
 import type { ToolHistoryItem } from './aiTypes';
+import i18n from "@/i18n";
 
 // ── 类型 ─────────────────────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ function TurnGroupRow({ group, defaultOpen }: { group: TurnGroup; defaultOpen?: 
               <XCircle className="w-2.5 h-2.5 mr-0.5" />{group.errorCount}
             </Badge>
           )}
-          <span className="text-[10px] text-muted-foreground">{group.items.length} 步</span>
+          <span className="text-[10px] text-muted-foreground">{group.items.length} {i18n.t('步')}</span>
         </div>
       </button>
 
@@ -158,8 +159,7 @@ function TurnGroupRow({ group, defaultOpen }: { group: TurnGroup; defaultOpen?: 
                     <details className="mt-1 group/d">
                       <summary className="text-[10px] text-primary/70 hover:text-primary cursor-pointer list-none flex items-center gap-1 select-none">
                         <ChevronRight className="w-3 h-3 group-open/d:rotate-90 transition-transform" />
-                        查看结果
-                      </summary>
+                        {i18n.t('查看结果')}</summary>
                       <div className="mt-1 p-1.5 bg-muted/50 rounded border border-border/50 text-[10px] font-mono whitespace-pre-wrap break-all max-h-[120px] overflow-y-auto scrollbar-thin">
                         {item.result_json}
                       </div>
@@ -242,7 +242,7 @@ export function RunHistoryPanel({ sessionId, onRestore, isStreaming }: RunHistor
       <div className="p-3 border-b bg-muted/20 flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <History className="w-3.5 h-3.5 shrink-0" />
-          <h3 className="text-xs font-semibold uppercase tracking-wider truncate">执行历史</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider truncate">{i18n.t('执行历史')}</h3>
           {totalTools > 0 && (
             <span className="text-[10px] text-muted-foreground">({totalTools})</span>
           )}
@@ -254,7 +254,7 @@ export function RunHistoryPanel({ sessionId, onRestore, isStreaming }: RunHistor
             className="h-6 w-6"
             onClick={loadLogs}
             disabled={loading}
-            title="刷新"
+            title={i18n.t('刷新')}
           >
             <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
           </Button>
@@ -265,7 +265,7 @@ export function RunHistoryPanel({ sessionId, onRestore, isStreaming }: RunHistor
               className="h-6 w-6"
               onClick={handleRestore}
               disabled={restoring || isStreaming || !sessionId}
-              title="从最新快照恢复工具历史"
+              title={i18n.t('从最新快照恢复工具历史')}
             >
               <RotateCcw className={cn('w-3 h-3', restoring && 'animate-spin')} />
             </Button>
@@ -278,17 +278,14 @@ export function RunHistoryPanel({ sessionId, onRestore, isStreaming }: RunHistor
         <div className="px-3 py-2 border-b flex items-center gap-3 shrink-0 bg-muted/10">
           <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
             <Wrench className="w-3 h-3" />
-            {groups.length} 轮 · {totalTools} 次调用
-          </div>
+            {groups.length} {i18n.t('轮 ·')}{totalTools} {i18n.t('次调用')}</div>
           {totalSuccess > 0 && (
             <div className="flex items-center gap-1 text-[10px] text-green-600">
-              <CheckCircle2 className="w-3 h-3" />{totalSuccess} 成功
-            </div>
+              <CheckCircle2 className="w-3 h-3" />{totalSuccess} {i18n.t('成功')}</div>
           )}
           {totalError > 0 && (
             <div className="flex items-center gap-1 text-[10px] text-red-500">
-              <XCircle className="w-3 h-3" />{totalError} 失败
-            </div>
+              <XCircle className="w-3 h-3" />{totalError} {i18n.t('失败')}</div>
           )}
         </div>
       )}
@@ -300,21 +297,21 @@ export function RunHistoryPanel({ sessionId, onRestore, isStreaming }: RunHistor
             <div className="bg-muted/50 p-4 rounded-full mb-4">
               <History className="w-8 h-8 opacity-20" />
             </div>
-            <p className="text-sm">暂无历史记录</p>
-            <p className="text-[10px] mt-1 opacity-60">开始对话后将记录工具执行历史</p>
+            <p className="text-sm">{i18n.t('暂无历史记录')}</p>
+            <p className="text-[10px] mt-1 opacity-60">{i18n.t('开始对话后将记录工具执行历史')}</p>
           </div>
         ) : loading && groups.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-            <span className="text-xs">加载中...</span>
+            <span className="text-xs">{i18n.t('加载中...')}</span>
           </div>
         ) : groups.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8 text-center">
             <div className="bg-muted/50 p-4 rounded-full mb-4">
               <History className="w-8 h-8 opacity-20" />
             </div>
-            <p className="text-sm">本会话暂无执行记录</p>
-            <p className="text-[10px] mt-1 opacity-60">AI 完成工具任务后将自动保存</p>
+            <p className="text-sm">{i18n.t('本会话暂无执行记录')}</p>
+            <p className="text-[10px] mt-1 opacity-60">{i18n.t('AI 完成工具任务后将自动保存')}</p>
           </div>
         ) : (
           <div className="p-3 space-y-2">
@@ -334,7 +331,7 @@ export function RunHistoryPanel({ sessionId, onRestore, isStreaming }: RunHistor
         <div className="px-3 py-2 border-t bg-muted/10 flex items-center justify-between gap-2 shrink-0">
           {lastRefreshed && (
             <span className="text-[10px] text-muted-foreground">
-              更新于 {formatTime(lastRefreshed.toISOString())}
+              {i18n.t('更新于')}{formatTime(lastRefreshed.toISOString())}
             </span>
           )}
           <Button
@@ -345,8 +342,7 @@ export function RunHistoryPanel({ sessionId, onRestore, isStreaming }: RunHistor
             disabled={restoring || isStreaming || !sessionId}
           >
             <RotateCcw className={cn('w-3 h-3', restoring && 'animate-spin')} />
-            恢复工具历史
-          </Button>
+            {i18n.t('恢复工具历史')}</Button>
         </div>
       )}
     </div>

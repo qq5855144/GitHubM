@@ -3,6 +3,7 @@ import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import i18n from "@/i18n";
 
 interface Props {
   children: ReactNode;
@@ -25,7 +26,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     // 生产环境记录错误，方便排查
-    console.error('[ErrorBoundary] 捕获到渲染错误:', error, info.componentStack);
+    console.error(i18n.t('[ErrorBoundary] 捕获到渲染错误:'), error, info.componentStack);
   }
 
   handleReload = () => {
@@ -49,10 +50,9 @@ export class ErrorBoundary extends Component<Props, State> {
               <AlertTriangle className="w-8 h-8 text-destructive" />
             </div>
             <div className="space-y-2">
-              <h1 className="text-xl font-semibold text-foreground text-balance">页面出现了一个错误</h1>
+              <h1 className="text-xl font-semibold text-foreground text-balance">{i18n.t('页面出现了一个错误')}</h1>
               <p className="text-sm text-muted-foreground text-pretty">
-                应用遇到了意外错误。你可以尝试刷新页面或返回首页。
-              </p>
+                {i18n.t('应用遇到了意外错误。你可以尝试刷新页面或返回首页。')}</p>
               {this.state.error && (
                 <p className="text-xs font-mono text-muted-foreground/70 bg-muted rounded px-3 py-2 mt-2 text-left break-words">
                   {this.state.error.message}
@@ -66,12 +66,10 @@ export class ErrorBoundary extends Component<Props, State> {
                 onClick={this.handleGoHome}
               >
                 <Home className="w-4 h-4 mr-2" />
-                返回首页
-              </Button>
+                {i18n.t('返回首页')}</Button>
               <Button onClick={this.handleReload}>
                 <RefreshCw className="w-4 h-4 mr-2" />
-                刷新页面
-              </Button>
+                {i18n.t('刷新页面')}</Button>
             </div>
           </div>
         </div>

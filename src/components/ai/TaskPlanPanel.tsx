@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TaskPlanStep } from './aiTypes';
+import i18n from "@/i18n";
 
 export type StepStatus = 'pending' | 'running' | 'done' | 'error';
 
@@ -30,8 +31,8 @@ export function TaskPlanPanel({ steps, stepStatuses, stepRetryCounts, currentSte
         <div className="bg-muted/50 p-4 rounded-full mb-4">
           <ListChecks className="w-8 h-8 opacity-20" />
         </div>
-        <p className="text-sm">暂无任务计划</p>
-        <p className="text-[10px] mt-1 opacity-60">发送任务后 AI 将自动制定执行步骤</p>
+        <p className="text-sm">{i18n.t('暂无任务计划')}</p>
+        <p className="text-[10px] mt-1 opacity-60">{i18n.t('发送任务后 AI 将自动制定执行步骤')}</p>
       </div>
     );
   }
@@ -46,8 +47,7 @@ export function TaskPlanPanel({ steps, stepStatuses, stepRetryCounts, currentSte
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-xs font-semibold uppercase tracking-wider flex items-center gap-2">
             <ListChecks className="w-3.5 h-3.5" />
-            任务工作流
-          </h3>
+            {i18n.t('任务工作流')}</h3>
           <span className="text-[10px] text-muted-foreground font-mono">
             {doneCount}/{steps.length}
           </span>
@@ -109,17 +109,16 @@ export function TaskPlanPanel({ steps, stepStatuses, stepRetryCounts, currentSte
                     {/* 状态标签 */}
                     {status === 'running' && retryCount === 0 && (
                       <span className="ml-auto shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wide">
-                        执行中
-                      </span>
+                        {i18n.t('执行中')}</span>
                     )}
                     {status === 'running' && retryCount > 0 && (
                       <span className="ml-auto shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 uppercase tracking-wide">
-                        重试 {retryCount}/2
+                        {i18n.t('重试')}{retryCount}/2
                       </span>
                     )}
                     {status === 'error' && (
                       <span className="ml-auto shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-500 uppercase tracking-wide">
-                        失败{retryCount > 0 ? `(已重试${retryCount}次)` : ''}
+                        {i18n.t('失败')}{retryCount > 0 ? `(已重试${retryCount}次)` : ''}
                       </span>
                     )}
                   </div>

@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { Toggle } from '@/components/ui/toggle';
 import { searchMatchesEffect } from './codemirror-search';
+import i18n from "@/i18n";
 
 interface Match {
   from: number;
@@ -178,11 +179,11 @@ export function EditorSearchPanel({ view: editor, visible, onClose, readOnly, co
     <div className="absolute bottom-0 left-0 right-0 z-50 bg-card border-t border-border p-3 shadow-lg animate-in slide-in-from-bottom-2 duration-200">
       <div className="flex flex-col gap-3 max-w-2xl mx-auto w-full">
         <div className="flex justify-between items-center text-xs text-muted-foreground">
-          <span>搜索结果: {matches.length > 0 ? `${currentIndex + 1} / ${matches.length}` : (searchText ? '0' : '')}</span>
+          <span>{i18n.t('搜索结果:')}{matches.length > 0 ? `${currentIndex + 1} / ${matches.length}` : (searchText ? '0' : '')}</span>
           <div className="flex items-center gap-1">
-            <Toggle size="sm" pressed={matchCase} onPressedChange={setMatchCase} className="h-6 px-2 text-xs font-mono data-[state=on]:bg-secondary" title="区分大小写">Cc</Toggle>
-            <Toggle size="sm" pressed={wholeWord} onPressedChange={setWholeWord} className="h-6 px-2 text-xs font-mono data-[state=on]:bg-secondary" title="全字匹配">W</Toggle>
-            <Toggle size="sm" pressed={useRegex} onPressedChange={setUseRegex} className="h-6 px-2 text-xs font-mono data-[state=on]:bg-secondary" title="正则表达式">.*</Toggle>
+            <Toggle size="sm" pressed={matchCase} onPressedChange={setMatchCase} className="h-6 px-2 text-xs font-mono data-[state=on]:bg-secondary" title={i18n.t('区分大小写')}>Cc</Toggle>
+            <Toggle size="sm" pressed={wholeWord} onPressedChange={setWholeWord} className="h-6 px-2 text-xs font-mono data-[state=on]:bg-secondary" title={i18n.t('全字匹配')}>W</Toggle>
+            <Toggle size="sm" pressed={useRegex} onPressedChange={setUseRegex} className="h-6 px-2 text-xs font-mono data-[state=on]:bg-secondary" title={i18n.t('正则表达式')}>.*</Toggle>
           </div>
         </div>
 
@@ -197,7 +198,7 @@ export function EditorSearchPanel({ view: editor, visible, onClose, readOnly, co
                 else nextMatch();
               }
             }}
-            placeholder="查找"
+            placeholder={i18n.t('查找')}
             className="h-9 pr-8 bg-secondary/50 text-sm"
           />
           <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7 text-muted-foreground" onClick={() => setShowReplace(!showReplace)}>
@@ -215,7 +216,7 @@ export function EditorSearchPanel({ view: editor, visible, onClose, readOnly, co
                   handleReplace();
                 }
               }}
-              placeholder="替换"
+              placeholder={i18n.t('替换')}
               className="h-9 bg-secondary/50 text-sm"
             />
           </div>
@@ -224,19 +225,15 @@ export function EditorSearchPanel({ view: editor, visible, onClose, readOnly, co
         <div className="flex items-center justify-between gap-2 pt-1">
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" className="h-8 text-xs px-4 rounded-full" onClick={prevMatch} disabled={matches.length === 0}>
-              上个
-            </Button>
+              {i18n.t('上个')}</Button>
             <Button variant="secondary" size="sm" className="h-8 text-xs px-4 rounded-full" onClick={nextMatch} disabled={matches.length === 0}>
-              下个
-            </Button>
+              {i18n.t('下个')}</Button>
             {!readOnly && (
               <>
                 <Button variant="secondary" size="sm" className="h-8 text-xs px-4 rounded-full" onClick={handleReplace} disabled={matches.length === 0 || !showReplace}>
-                  替换
-                </Button>
+                  {i18n.t('替换')}</Button>
                 <Button variant="secondary" size="sm" className="h-8 text-xs px-4 rounded-full" onClick={handleReplaceAll} disabled={matches.length === 0 || !showReplace}>
-                  全部
-                </Button>
+                  {i18n.t('全部')}</Button>
               </>
             )}
           </div>

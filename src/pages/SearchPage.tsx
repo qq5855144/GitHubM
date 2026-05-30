@@ -51,6 +51,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn, copyToClipboard } from '@/lib/utils';
+import i18n from "@/i18n";
 
 // GitHub Search API 最多返回 1000 条结果
 const PER_PAGE = 20;
@@ -65,10 +66,10 @@ type SortOption  = 'best-match' | 'stars' | 'forks' | 'updated';
 interface SortConfig { value: SortOption; label: string; apiSort?: string; apiOrder?: string }
 
 const SORT_OPTIONS: SortConfig[] = [
-  { value: 'best-match', label: '最佳匹配' },
-  { value: 'stars',      label: 'Stars 最多',  apiSort: 'stars',   apiOrder: 'desc' },
-  { value: 'forks',      label: 'Forks 最多',  apiSort: 'forks',   apiOrder: 'desc' },
-  { value: 'updated',    label: '最近更新',     apiSort: 'updated', apiOrder: 'desc' },
+  { value: 'best-match', label: i18n.t('最佳匹配') },
+  { value: 'stars',      label: i18n.t('Stars 最多'),  apiSort: 'stars',   apiOrder: 'desc' },
+  { value: 'forks',      label: i18n.t('Forks 最多'),  apiSort: 'forks',   apiOrder: 'desc' },
+  { value: 'updated',    label: i18n.t('最近更新'),     apiSort: 'updated', apiOrder: 'desc' },
 ];
 
 // 每种排序方式对应的图标
@@ -110,20 +111,20 @@ function SearchRepoContextMenu({ repo, children }: { repo: GitHubRepo; children:
         await starRepo(repo.owner.login, repo.name);
         toast.success(`已为 ${repo.name} 加 Star ⭐`);
       }
-    } catch { toast.error('操作失败'); }
+    } catch { toast.error(i18n.t('操作失败')); }
   };
 
   const handleFork = async () => {
     try {
-      toast.info('正在 Fork 仓库...');
+      toast.info(i18n.t('正在 Fork 仓库...'));
       await forkRepo(repo.owner.login, repo.name);
-      toast.success('Fork 成功！');
-    } catch { toast.error('Fork 失败'); }
+      toast.success(i18n.t('Fork 成功！'));
+    } catch { toast.error(i18n.t('Fork 失败')); }
   };
 
   const handleCopyUrl = () => {
     copyToClipboard(repo.clone_url || repo.html_url);
-    toast.success('仓库地址已复制');
+    toast.success(i18n.t('仓库地址已复制'));
   };
 
   return (
@@ -132,35 +133,27 @@ function SearchRepoContextMenu({ repo, children }: { repo: GitHubRepo; children:
       <ContextMenuContent className="bg-popover border-border w-52">
         <ContextMenuItem className="text-foreground cursor-pointer text-sm"
           onClick={() => navigate(`/repos/${repo.full_name}`)}>
-          <BookOpen className="w-3.5 h-3.5 mr-2" />查看仓库详情
-        </ContextMenuItem>
+          <BookOpen className="w-3.5 h-3.5 mr-2" />{i18n.t('查看仓库详情')}</ContextMenuItem>
         <ContextMenuItem className="text-foreground cursor-pointer text-sm"
           onClick={() => navigate(`/repos/${repo.full_name}/code`)}>
-          <Code2 className="w-3.5 h-3.5 mr-2" />浏览代码
-        </ContextMenuItem>
+          <Code2 className="w-3.5 h-3.5 mr-2" />{i18n.t('浏览代码')}</ContextMenuItem>
         <ContextMenuItem className="text-foreground cursor-pointer text-sm"
           onClick={() => navigate(`/repos/${repo.full_name}/issues`)}>
-          <AlertCircle className="w-3.5 h-3.5 mr-2" />查看 Issues
-        </ContextMenuItem>
+          <AlertCircle className="w-3.5 h-3.5 mr-2" />{i18n.t('查看 Issues')}</ContextMenuItem>
         <ContextMenuItem className="text-foreground cursor-pointer text-sm"
           onClick={() => navigate(`/repos/${repo.full_name}/pulls`)}>
-          <GitPullRequest className="w-3.5 h-3.5 mr-2" />查看 Pull Requests
-        </ContextMenuItem>
+          <GitPullRequest className="w-3.5 h-3.5 mr-2" />{i18n.t('查看 Pull Requests')}</ContextMenuItem>
         <ContextMenuSeparator className="bg-border" />
         <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleToggleStar}>
-          <Star className="w-3.5 h-3.5 mr-2" />Star / 取消 Star
-        </ContextMenuItem>
+          <Star className="w-3.5 h-3.5 mr-2" />{i18n.t('Star / 取消 Star')}</ContextMenuItem>
         <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleFork}>
-          <GitFork className="w-3.5 h-3.5 mr-2" />Fork 仓库
-        </ContextMenuItem>
+          <GitFork className="w-3.5 h-3.5 mr-2" />{i18n.t('Fork 仓库')}</ContextMenuItem>
         <ContextMenuSeparator className="bg-border" />
         <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleCopyUrl}>
-          <Copy className="w-3.5 h-3.5 mr-2" />复制仓库地址
-        </ContextMenuItem>
+          <Copy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制仓库地址')}</ContextMenuItem>
         <ContextMenuItem className="text-foreground cursor-pointer text-sm" asChild>
           <a href={repo.html_url} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="w-3.5 h-3.5 mr-2" />在 GitHub 中打开
-          </a>
+            <ExternalLink className="w-3.5 h-3.5 mr-2" />{i18n.t('在 GitHub 中打开')}</a>
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
@@ -245,7 +238,7 @@ export default function SearchPage() {
       setSearchParams({ q: searchQuery, type, page: String(page) }, { replace: true });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
-      toast.error('搜索失败');
+      toast.error(i18n.t('搜索失败'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -331,13 +324,13 @@ export default function SearchPage() {
   const handleClearHistory = () => {
     clearHistory();
     setHistory([]);
-    toast.success('搜索历史已清除');
+    toast.success(i18n.t('搜索历史已清除'));
   };
 
   const TABS: Array<{ type: SearchType; label: string; icon: typeof BookOpen }> = [
-    { type: 'repositories', label: '仓库', icon: BookOpen },
+    { type: 'repositories', label: i18n.t('仓库'), icon: BookOpen },
     { type: 'issues', label: 'Issues & PRs', icon: AlertCircle },
-    { type: 'users', label: '用户', icon: Users },
+    { type: 'users', label: i18n.t('用户'), icon: Users },
   ];
 
   // 生成页码按钮列表（最多显示 7 个）
@@ -357,15 +350,12 @@ export default function SearchPage() {
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-xl font-bold text-foreground">全局搜索</h1>
+        <h1 className="text-xl font-bold text-foreground">{i18n.t('全局搜索')}</h1>
         {/* 快捷键提示 */}
         <span className="text-xs text-muted-foreground hidden md:flex items-center gap-1.5">
-          按
-          <kbd className="px-1.5 py-0.5 rounded border border-border bg-secondary text-xs font-mono">/</kbd>
-          或
-          <kbd className="px-1.5 py-0.5 rounded border border-border bg-secondary text-xs font-mono">Ctrl K</kbd>
-          唤起搜索
-        </span>
+          {i18n.t('按')}<kbd className="px-1.5 py-0.5 rounded border border-border bg-secondary text-xs font-mono">/</kbd>
+          {i18n.t('或')}<kbd className="px-1.5 py-0.5 rounded border border-border bg-secondary text-xs font-mono">Ctrl K</kbd>
+          {i18n.t('唤起搜索')}</span>
       </div>
 
       {/* 搜索框 */}
@@ -379,7 +369,7 @@ export default function SearchPage() {
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    title="点击选择排序方式"
+                    title={i18n.t('点击选择排序方式')}
                     className="absolute left-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded text-primary hover:bg-primary/10 transition-colors"
                   >
                     <SortIcon className="w-4 h-4" />
@@ -419,7 +409,7 @@ export default function SearchPage() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => setShowHistory(true)}
-            placeholder="搜索 GitHub…"
+            placeholder={i18n.t('搜索 GitHub…')}
             className="pl-9 bg-secondary border-border text-foreground placeholder:text-muted-foreground text-base"
           />
           {/* 搜索历史下拉 */}
@@ -430,15 +420,13 @@ export default function SearchPage() {
             >
               <div className="flex items-center justify-between px-3 py-2 border-b border-border">
                 <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-                  <Clock className="w-3 h-3" />搜索历史
-                </span>
+                  <Clock className="w-3 h-3" />{i18n.t('搜索历史')}</span>
                 <button
                   type="button"
                   onClick={handleClearHistory}
                   className="text-xs text-muted-foreground hover:text-destructive transition-colors"
                 >
-                  清除全部
-                </button>
+                  {i18n.t('清除全部')}</button>
               </div>
               <div className="max-h-48 overflow-y-auto">
                 {history.map((item, idx) => (
@@ -475,8 +463,7 @@ export default function SearchPage() {
           onClick={() => handleSearch(query, searchType, 1)}
           disabled={loading || !query.trim()}
         >
-          搜索
-        </Button>
+          {i18n.t('搜索')}</Button>
       </div>
 
       {/* 搜索类型选项卡 */}
@@ -506,11 +493,9 @@ export default function SearchPage() {
       {searched && !loading && (
         <div className="flex items-center justify-between flex-wrap gap-2">
           <p className="text-sm text-muted-foreground">
-            找到约 <span className="text-foreground font-medium">{formatNumber(totalCount)}</span> 个结果
-            {totalPages > 1 && (
+            {i18n.t('找到约')}<span className="text-foreground font-medium">{formatNumber(totalCount)}</span> {i18n.t('个结果')}{totalPages > 1 && (
               <span className="ml-2 text-muted-foreground">
-                · 第 <span className="text-foreground font-medium">{currentPage}</span> / {totalPages} 页
-              </span>
+                {i18n.t('· 第')}<span className="text-foreground font-medium">{currentPage}</span> / {totalPages} {i18n.t('页')}</span>
             )}
           </p>
         </div>
@@ -526,11 +511,11 @@ export default function SearchPage() {
       ) : !searched ? (
         <div className="py-20 text-center">
           <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-foreground font-medium">搜索 GitHub</p>
-          <p className="text-muted-foreground text-sm mt-1">输入关键词，按回车或点击搜索</p>
+          <p className="text-foreground font-medium">{i18n.t('搜索 GitHub')}</p>
+          <p className="text-muted-foreground text-sm mt-1">{i18n.t('输入关键词，按回车或点击搜索')}</p>
           <p className="text-muted-foreground text-xs mt-1">
-            快捷键：<kbd className="px-1 py-0.5 rounded border border-border bg-secondary font-mono">/</kbd>
-            {' '}或{' '}
+            {i18n.t('快捷键：')}<kbd className="px-1 py-0.5 rounded border border-border bg-secondary font-mono">/</kbd>
+            {' '}{i18n.t('或')}{' '}
             <kbd className="px-1 py-0.5 rounded border border-border bg-secondary font-mono">Ctrl K</kbd>
           </p>
         </div>
@@ -539,7 +524,7 @@ export default function SearchPage() {
           {/* 仓库结果 */}
           {searchType === 'repositories' && (
             repos.length === 0 ? (
-              <div className="py-12 text-center text-muted-foreground">无搜索结果</div>
+              <div className="py-12 text-center text-muted-foreground">{i18n.t('无搜索结果')}</div>
             ) : (
               repos.map((repo) => (
                 <SearchRepoContextMenu key={repo.id} repo={repo}>
@@ -585,7 +570,7 @@ export default function SearchPage() {
           {/* Issue 结果 */}
           {searchType === 'issues' && (
             issues.length === 0 ? (
-              <div className="py-12 text-center text-muted-foreground">无搜索结果</div>
+              <div className="py-12 text-center text-muted-foreground">{i18n.t('无搜索结果')}</div>
             ) : (
               issues.map((issue) => (
                 <div
@@ -612,7 +597,7 @@ export default function SearchPage() {
                       <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
                         <span>{issue.user.login}</span>
                         <span>{formatRelativeTime(issue.created_at)}</span>
-                        <span className="text-primary">{issue.state === 'open' ? '开放' : '已关闭'}</span>
+                        <span className="text-primary">{issue.state === 'open' ? i18n.t('开放') : i18n.t('已关闭')}</span>
                       </div>
                     </div>
                     {issue.labels.map((label) => (
@@ -638,7 +623,7 @@ export default function SearchPage() {
           {/* 用户结果 */}
           {searchType === 'users' && (
             users.length === 0 ? (
-              <div className="py-12 text-center text-muted-foreground">无搜索结果</div>
+              <div className="py-12 text-center text-muted-foreground">{i18n.t('无搜索结果')}</div>
             ) : (
               users.map((user) => (
                 <a
@@ -659,8 +644,8 @@ export default function SearchPage() {
                     </div>
                     {user.bio && <p className="text-xs text-muted-foreground mt-0.5 truncate">{user.bio}</p>}
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                      <span>{formatNumber(user.followers)} 关注者</span>
-                      <span>{user.public_repos} 个仓库</span>
+                      <span>{formatNumber(user.followers)} {i18n.t('关注者')}</span>
+                      <span>{user.public_repos} {i18n.t('个仓库')}</span>
                     </div>
                   </div>
                 </a>
@@ -682,8 +667,7 @@ export default function SearchPage() {
             disabled={currentPage === 1 || loading}
           >
             <ChevronLeft className="w-4 h-4 mr-1" />
-            上一页
-          </Button>
+            {i18n.t('上一页')}</Button>
 
           {/* 页码 */}
           <div className="flex items-center gap-1">
@@ -718,8 +702,7 @@ export default function SearchPage() {
             onClick={() => goToPage(currentPage + 1)}
             disabled={currentPage === totalPages || loading}
           >
-            下一页
-            <ChevronRight className="w-4 h-4 ml-1" />
+            {i18n.t('下一页')}<ChevronRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
       )}

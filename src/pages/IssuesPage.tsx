@@ -41,6 +41,7 @@ import {
 import type { GitHubIssue, GitHubLabel, IssueState, IssueSortField, SortDirection } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
+import i18n from "@/i18n";
 
 export default function IssuesPage() {
   const { owner, repo } = useParams<{ owner: string; repo: string }>();
@@ -93,7 +94,7 @@ export default function IssuesPage() {
       setHasNextPage(result.hasNextPage);
       setPage(pageNum);
     } catch (err) {
-      toast.error('加载 Issue 失败');
+      toast.error(i18n.t('加载 Issue 失败'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -110,7 +111,7 @@ export default function IssuesPage() {
   const handleCreateIssue = async () => {
     if (!owner || !repo) return;
     if (!newTitle.trim()) {
-      toast.error('请输入 Issue 标题');
+      toast.error(i18n.t('请输入 Issue 标题'));
       return;
     }
     setCreating(true);
@@ -119,14 +120,14 @@ export default function IssuesPage() {
         title: newTitle.trim(),
         body: newBody.trim() || undefined,
       });
-      toast.success('Issue 创建成功！');
+      toast.success(i18n.t('Issue 创建成功！'));
       setCreateDialogOpen(false);
       setNewTitle('');
       setNewBody('');
       pageCache.invalidate(`issues:${owner}/${repo}:`);
       loadIssues(1, false, true);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '创建失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('创建失败'));
     } finally {
       setCreating(false);
     }
@@ -136,7 +137,7 @@ export default function IssuesPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
@@ -150,29 +151,28 @@ export default function IssuesPage() {
           <DialogTrigger asChild>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
               <Plus className="w-4 h-4 mr-2" />
-              新建 Issue
-            </Button>
+              {i18n.t('新建 Issue')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
             <DialogHeader>
-              <DialogTitle className="text-foreground">创建 Issue</DialogTitle>
+              <DialogTitle className="text-foreground">{i18n.t('创建 Issue')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">标题 *</Label>
+                <Label className="text-sm font-normal text-foreground">{i18n.t('标题 *')}</Label>
                 <Input
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Issue 标题"
+                  placeholder={i18n.t('Issue 标题')}
                   className="bg-secondary border-border text-foreground placeholder:text-muted-foreground"
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">描述（支持 Markdown）</Label>
+                <Label className="text-sm font-normal text-foreground">{i18n.t('描述（支持 Markdown）')}</Label>
                 <Textarea
                   value={newBody}
                   onChange={(e) => setNewBody(e.target.value)}
-                  placeholder="详细描述问题..."
+                  placeholder={i18n.t('详细描述问题...')}
                   className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm"
                   rows={6}
                 />
@@ -183,14 +183,13 @@ export default function IssuesPage() {
                   className="flex-1 border-border hover:bg-secondary"
                   onClick={() => setCreateDialogOpen(false)}
                 >
-                  取消
-                </Button>
+                  {i18n.t('取消')}</Button>
                 <Button
                   className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                   onClick={handleCreateIssue}
                   disabled={creating || !newTitle.trim()}
                 >
-                  {creating ? '提交中...' : '提交 Issue'}
+                  {creating ? i18n.t('提交中...') : i18n.t('提交 Issue')}
                 </Button>
               </div>
             </div>
@@ -228,16 +227,14 @@ export default function IssuesPage() {
             onClick={() => setStateFilter('open')}
           >
             <AlertCircle className="w-4 h-4 text-primary" />
-            开放
-          </button>
+            {i18n.t('开放')}</button>
           <button
             type="button"
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${stateFilter === 'closed' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
             onClick={() => setStateFilter('closed')}
           >
             <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
-            已关闭
-          </button>
+            {i18n.t('已关闭')}</button>
         </div>
         <div className="flex gap-2 ml-auto">
           <Select value={sortField} onValueChange={(v) => setSortField(v as IssueSortField)}>
@@ -246,9 +243,9 @@ export default function IssuesPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border">
-              <SelectItem value="created" className="text-foreground">创建时间</SelectItem>
-              <SelectItem value="updated" className="text-foreground">更新时间</SelectItem>
-              <SelectItem value="comments" className="text-foreground">评论数</SelectItem>
+              <SelectItem value="created" className="text-foreground">{i18n.t('创建时间')}</SelectItem>
+              <SelectItem value="updated" className="text-foreground">{i18n.t('更新时间')}</SelectItem>
+              <SelectItem value="comments" className="text-foreground">{i18n.t('评论数')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -272,7 +269,7 @@ export default function IssuesPage() {
             ) : (
               <CheckCircle2 className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
             )}
-            <p className="text-foreground font-medium">暂无 {stateFilter === 'open' ? '开放' : '已关闭'} 的 Issue</p>
+            <p className="text-foreground font-medium">{i18n.t('暂无')}{stateFilter === 'open' ? i18n.t('开放') : i18n.t('已关闭')} {i18n.t('的 Issue')}</p>
           </div>
         ) : (
           <div className="divide-y divide-border">
@@ -311,8 +308,7 @@ export default function IssuesPage() {
                     </div>
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
                       <span className="text-xs text-muted-foreground">
-                        #{issue.number} · {formatRelativeTime(issue.created_at)} · 由 {issue.user.login} 创建
-                      </span>
+                        #{issue.number} · {formatRelativeTime(issue.created_at)} {i18n.t('· 由')}{issue.user.login} {i18n.t('创建')}</span>
                       {issue.assignees.length > 0 && (
                         <div className="flex items-center gap-1">
                           {issue.assignees.slice(0, 3).map((a) => (
@@ -345,8 +341,7 @@ export default function IssuesPage() {
             className="border-border hover:bg-secondary"
             onClick={() => loadIssues(page + 1, true)}
           >
-            加载更多
-          </Button>
+            {i18n.t('加载更多')}</Button>
         </div>
       )}
     </div>

@@ -1,3 +1,5 @@
+import i18n from "@/i18n";
+
 /**
  * AI 模型官方定价表
  * 单位：USD / 1M tokens（人民币按 1 USD = 7.2 CNY 换算）
@@ -52,7 +54,7 @@ const MODEL_PRICES: Record<string, ModelPrice> = {
     outputPer1M: 2.00 / 7.2,         // ¥2.00/M → ~$0.278/M
     currency: 'CNY',
     sourceUrl: SOURCES.deepseek,
-    note: '缓存命中输入 ¥0.02/M (~$0.003/M)；上下文 1M / 最大输出 384K',
+    note: i18n.t('缓存命中输入 ¥0.02/M (~$0.003/M)；上下文 1M / 最大输出 384K'),
   },
   // deepseek-v4-pro（对应旧 deepseek-reasoner，含思考模式，2026/07/24 前旧名兼容）
   //   当前 2.5 折优惠至 2026/05/31：缓存未命中输入 ¥3/M，输出 ¥6/M；原价 ¥12/¥24
@@ -69,21 +71,21 @@ const MODEL_PRICES: Record<string, ModelPrice> = {
     outputPer1M: 2.00 / 7.2,
     currency: 'CNY',
     sourceUrl: SOURCES.deepseek,
-    note: '已弃用旧名称（等价于 deepseek-v4-flash），建议升级',
+    note: i18n.t('已弃用旧名称（等价于 deepseek-v4-flash），建议升级'),
   },
   'deepseek-coder': {
     inputPer1M: 1.00 / 7.2,
     outputPer1M: 2.00 / 7.2,
     currency: 'CNY',
     sourceUrl: SOURCES.deepseek,
-    note: '按 deepseek-v4-flash 价格估算',
+    note: i18n.t('按 deepseek-v4-flash 价格估算'),
   },
   'deepseek-reasoner': {
     inputPer1M: 3.00 / 7.2,
     outputPer1M: 6.00 / 7.2,
     currency: 'CNY',
     sourceUrl: SOURCES.deepseek,
-    note: '已弃用旧名称（等价于 deepseek-v4-pro），建议升级',
+    note: i18n.t('已弃用旧名称（等价于 deepseek-v4-pro），建议升级'),
   },
 
   // ── Google Gemini ─────────────────────────────────────────────────────────
@@ -93,7 +95,7 @@ const MODEL_PRICES: Record<string, ModelPrice> = {
     inputPer1M: 0.15,
     outputPer1M: 0.60,
     sourceUrl: SOURCES.gemini,
-    note: '含免费额度（RPM 15）；思考输出按 $3.50/M 计',
+    note: i18n.t('含免费额度（RPM 15）；思考输出按 $3.50/M 计'),
     isFree: true,
   },
   'gemini-2.5-flash-preview-04-17': {
@@ -106,7 +108,7 @@ const MODEL_PRICES: Record<string, ModelPrice> = {
     inputPer1M: 1.25,
     outputPer1M: 10.00,
     sourceUrl: SOURCES.gemini,
-    note: '≤200K token 输入单价；>200K 为 $2.50/M',
+    note: i18n.t('≤200K token 输入单价；>200K 为 $2.50/M'),
     isFree: true,
   },
   'gemini-2.5-pro-preview-03-25': {
@@ -142,35 +144,35 @@ const MODEL_PRICES: Record<string, ModelPrice> = {
     outputPer1M: 6.00 / 7.2,       // ¥6.00/M → ~$0.833/M
     currency: 'CNY',
     sourceUrl: SOURCES.qwen,
-    note: '原价 ¥2.00/¥6.00 per 1M tokens，按 1 USD=7.2 CNY 换算',
+    note: i18n.t('原价 ¥2.00/¥6.00 per 1M tokens，按 1 USD=7.2 CNY 换算'),
   },
   'qwen2.5-coder-7b-instruct': {
     inputPer1M: 0.50 / 7.2,        // ¥0.50/M → ~$0.069/M
     outputPer1M: 2.00 / 7.2,       // ¥2.00/M → ~$0.278/M
     currency: 'CNY',
     sourceUrl: SOURCES.qwen,
-    note: '原价 ¥0.50/¥2.00 per 1M tokens',
+    note: i18n.t('原价 ¥0.50/¥2.00 per 1M tokens'),
   },
   'qwen-plus': {
     inputPer1M: 0.80 / 7.2,        // ¥0.80/M → ~$0.111/M
     outputPer1M: 2.00 / 7.2,       // ¥2.00/M → ~$0.278/M
     currency: 'CNY',
     sourceUrl: SOURCES.qwen,
-    note: '原价 ¥0.80/¥2.00 per 1M tokens',
+    note: i18n.t('原价 ¥0.80/¥2.00 per 1M tokens'),
   },
   'qwen-turbo': {
     inputPer1M: 0.30 / 7.2,        // ¥0.30/M → ~$0.042/M
     outputPer1M: 0.60 / 7.2,       // ¥0.60/M → ~$0.083/M
     currency: 'CNY',
     sourceUrl: SOURCES.qwen,
-    note: '原价 ¥0.30/¥0.60 per 1M tokens',
+    note: i18n.t('原价 ¥0.30/¥0.60 per 1M tokens'),
   },
   'qwen-max': {
     inputPer1M: 2.40 / 7.2,        // ¥2.40/M → ~$0.333/M
     outputPer1M: 9.60 / 7.2,       // ¥9.60/M → ~$1.333/M
     currency: 'CNY',
     sourceUrl: SOURCES.qwen,
-    note: '原价 ¥2.40/¥9.60 per 1M tokens',
+    note: i18n.t('原价 ¥2.40/¥9.60 per 1M tokens'),
   },
 
   // ── OpenAI ────────────────────────────────────────────────────────────────
@@ -225,7 +227,7 @@ const PROVIDER_FALLBACK: Record<string, ModelPrice> = {
     isEstimated: true,
     currency: 'CNY',
     sourceUrl: SOURCES.deepseek,
-    note: '未知模型，按 deepseek-v4-flash 估算',
+    note: i18n.t('未知模型，按 deepseek-v4-flash 估算'),
   },
   gemini: {
     inputPer1M: 0.10,
@@ -233,7 +235,7 @@ const PROVIDER_FALLBACK: Record<string, ModelPrice> = {
     isEstimated: true,
     isFree: true,
     sourceUrl: SOURCES.gemini,
-    note: '未知 Gemini 模型，按 gemini-2.0-flash 估算',
+    note: i18n.t('未知 Gemini 模型，按 gemini-2.0-flash 估算'),
   },
   qwen: {
     inputPer1M: 0.50 / 7.2,
@@ -241,27 +243,27 @@ const PROVIDER_FALLBACK: Record<string, ModelPrice> = {
     isEstimated: true,
     currency: 'CNY',
     sourceUrl: SOURCES.qwen,
-    note: '未知通义模型，按 qwen2.5-coder-7b 估算',
+    note: i18n.t('未知通义模型，按 qwen2.5-coder-7b 估算'),
   },
   openai: {
     inputPer1M: 0.15,
     outputPer1M: 0.60,
     isEstimated: true,
     sourceUrl: SOURCES.openai,
-    note: '未知 OpenAI 模型，按 gpt-4o-mini 估算',
+    note: i18n.t('未知 OpenAI 模型，按 gpt-4o-mini 估算'),
   },
   wenxin: {
     inputPer1M: 0,
     outputPer1M: 0,
     isFree: true,
     sourceUrl: SOURCES.wenxin,
-    note: '平台内置，免费使用',
+    note: i18n.t('平台内置，免费使用'),
   },
   custom: {
     inputPer1M: 0,
     outputPer1M: 0,
     isEstimated: true,
-    note: '自定义接口，无法自动估算费用',
+    note: i18n.t('自定义接口，无法自动估算费用'),
   },
 };
 
@@ -275,7 +277,7 @@ export function getModelPrice(providerType: string, model: string): ModelPrice {
   const fallback = PROVIDER_FALLBACK[providerType];
   if (fallback) return fallback;
   // 完全未知：按 $0 处理，标注估算
-  return { inputPer1M: 0, outputPer1M: 0, isEstimated: true, note: '未知平台，无法估算费用' };
+  return { inputPer1M: 0, outputPer1M: 0, isEstimated: true, note: i18n.t('未知平台，无法估算费用') };
 }
 
 /**

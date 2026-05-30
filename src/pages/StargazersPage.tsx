@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getRepoStargazers, formatNumber } from '@/services/github';
 import type { GitHubUser } from '@/types/types';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 export default function StargazersPage() {
   const { owner, repo: repoName } = useParams<{ owner: string; repo: string }>();
@@ -34,7 +35,7 @@ export default function StargazersPage() {
       setHasMore(data.length === PER_PAGE);
       setPage(p);
     } catch {
-      toast.error('加载收藏者列表失败');
+      toast.error(i18n.t('加载收藏者列表失败'));
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -48,8 +49,7 @@ export default function StargazersPage() {
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
         <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate('/repos')}>
-          仓库
-        </button>
+          {i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button
           type="button"
@@ -66,11 +66,9 @@ export default function StargazersPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <Star className="w-5 h-5 text-warning" />
-          收藏者列表
-          {!loading && (
+          {i18n.t('收藏者列表')}{!loading && (
             <Badge variant="outline" className="text-xs border-border text-muted-foreground font-normal">
-              {formatNumber(stargazers.length)}{hasMore ? '+' : ''} 人
-            </Badge>
+              {formatNumber(stargazers.length)}{hasMore ? '+' : ''} {i18n.t('人')}</Badge>
           )}
         </h1>
         <Button
@@ -101,8 +99,8 @@ export default function StargazersPage() {
         ) : stargazers.length === 0 ? (
           <div className="py-16 text-center">
             <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-foreground font-medium">暂无收藏者</p>
-            <p className="text-sm text-muted-foreground mt-1">还没有人收藏这个仓库</p>
+            <p className="text-foreground font-medium">{i18n.t('暂无收藏者')}</p>
+            <p className="text-sm text-muted-foreground mt-1">{i18n.t('还没有人收藏这个仓库')}</p>
           </div>
         ) : (
           <div className="divide-y divide-border">
@@ -146,8 +144,7 @@ export default function StargazersPage() {
                     className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <ExternalLink className="w-3 h-3" />
-                    主页
-                  </Button>
+                    {i18n.t('主页')}</Button>
                 </a>
               </div>
             ))}
@@ -164,8 +161,8 @@ export default function StargazersPage() {
           onClick={() => loadStargazers(page + 1, true)}
         >
           {loadingMore
-            ? <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />加载中…</>
-            : '加载更多'}
+            ? <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />{i18n.t('加载中…')}</>
+            : i18n.t('加载更多')}
         </Button>
       )}
     </div>

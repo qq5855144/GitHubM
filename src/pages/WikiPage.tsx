@@ -10,6 +10,7 @@ import {
   Globe,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import i18n from "@/i18n";
 
 export default function WikiPage() {
   const { owner, repo } = useParams<{ owner: string; repo: string }>();
@@ -21,7 +22,7 @@ export default function WikiPage() {
   return (
     <div className="p-4 md:p-6 space-y-4 h-full flex flex-col">
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap shrink-0">
-        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
@@ -31,13 +32,11 @@ export default function WikiPage() {
       <div className="flex items-center justify-between flex-wrap gap-3 shrink-0">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <BookOpen className="w-5 h-5 text-primary" />
-          Wiki 文档
-        </h1>
+          {i18n.t('Wiki 文档')}</h1>
         <a href={wikiUrl} target="_blank" rel="noopener noreferrer">
           <Button variant="ghost" size="sm" className="border border-border text-muted-foreground hover:bg-secondary h-9">
             <ExternalLink className="w-4 h-4 mr-2" />
-            在 GitHub 中编辑
-          </Button>
+            {i18n.t('在 GitHub 中编辑')}</Button>
         </a>
       </div>
 
@@ -45,22 +44,19 @@ export default function WikiPage() {
         {iframeError ? (
           <div className="flex-1 flex flex-col items-center justify-center py-16 px-6 text-center">
             <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-foreground font-semibold text-lg mb-2">无法嵌入 Wiki 页面</p>
+            <p className="text-foreground font-semibold text-lg mb-2">{i18n.t('无法嵌入 Wiki 页面')}</p>
             <p className="text-sm text-muted-foreground text-pretty max-w-md mx-auto mb-6">
-              GitHub Wiki 不允许在 iframe 中嵌入显示。请点击下方按钮前往 GitHub 网页端查看和编辑文档。
-            </p>
+              {i18n.t('GitHub Wiki 不允许在 iframe 中嵌入显示。请点击下方按钮前往 GitHub 网页端查看和编辑文档。')}</p>
             <div className="flex flex-col md:flex-row gap-3">
               <a href={wikiUrl} target="_blank" rel="noopener noreferrer">
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
                   <ExternalLink className="w-4 h-4 mr-2" />
-                  前往 GitHub Wiki
-                </Button>
+                  {i18n.t('前往 GitHub Wiki')}</Button>
               </a>
               <a href={`${wikiUrl}/_edit/Home`} target="_blank" rel="noopener noreferrer">
                 <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary">
                   <Globe className="w-4 h-4 mr-2" />
-                  创建/编辑首页
-                </Button>
+                  {i18n.t('创建/编辑首页')}</Button>
               </a>
             </div>
           </div>
@@ -93,13 +89,13 @@ export default function WikiPage() {
 
       {/* 快捷操作面板（始终可见） */}
       <div className="bg-card border border-border rounded-lg p-4 shrink-0">
-        <p className="text-sm font-semibold text-foreground mb-3">Wiki 快捷操作</p>
+        <p className="text-sm font-semibold text-foreground mb-3">{i18n.t('Wiki 快捷操作')}</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {[
-            { label: '查看 Wiki 首页', path: '' },
-            { label: '创建新页面', path: '/_new' },
-            { label: '页面列表', path: '/_pages' },
-            { label: '历史记录', path: '/Home/_history' },
+            { label: i18n.t('查看 Wiki 首页'), path: '' },
+            { label: i18n.t('创建新页面'), path: '/_new' },
+            { label: i18n.t('页面列表'), path: '/_pages' },
+            { label: i18n.t('历史记录'), path: '/Home/_history' },
           ].map(({ label, path }) => (
             <a key={path} href={`${wikiUrl}${path}`} target="_blank" rel="noopener noreferrer">
               <Button variant="ghost" size="sm" className="w-full border border-border text-muted-foreground hover:bg-secondary h-9 text-xs">

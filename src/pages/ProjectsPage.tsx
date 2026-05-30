@@ -47,6 +47,7 @@ import {
 } from '@/services/github';
 import type { GitHubProject, GitHubProjectColumn, GitHubProjectCard } from '@/types/types';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 function KanbanColumn({
   column,
@@ -81,7 +82,7 @@ function KanbanColumn({
       <div className="flex-1 p-2 space-y-2 min-h-20">
         {column.cards.map((card) => (
           <div key={card.id} className="bg-card border border-border rounded p-2.5 group hover:border-primary/50 transition-colors">
-            <p className="text-xs text-foreground leading-relaxed text-pretty">{card.note || '（关联 Issue/PR）'}</p>
+            <p className="text-xs text-foreground leading-relaxed text-pretty">{card.note || i18n.t('（关联 Issue/PR）')}</p>
             <p className="text-xs text-muted-foreground mt-1">{formatRelativeTime(card.updated_at)}</p>
           </div>
         ))}
@@ -92,13 +93,13 @@ function KanbanColumn({
             <Textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="输入卡片内容..."
+              placeholder={i18n.t('输入卡片内容...')}
               className="bg-card border-border text-foreground text-xs min-h-16 resize-none placeholder:text-muted-foreground"
               autoFocus
             />
             <div className="flex gap-1.5">
               <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 h-7 text-xs" onClick={handleAdd} disabled={adding || !note.trim()}>
-                {adding ? '添加中...' : '添加'}
+                {adding ? i18n.t('添加中...') : i18n.t('添加')}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-muted-foreground hover:bg-secondary text-xs" onClick={() => { setAddOpen(false); setNote(''); }}>
                 <X className="w-3 h-3" />
@@ -107,8 +108,7 @@ function KanbanColumn({
           </div>
         ) : (
           <Button variant="ghost" size="sm" className="w-full text-muted-foreground hover:bg-secondary h-7 text-xs justify-start" onClick={() => setAddOpen(true)}>
-            <Plus className="w-3 h-3 mr-1" />添加卡片
-          </Button>
+            <Plus className="w-3 h-3 mr-1" />{i18n.t('添加卡片')}</Button>
         )}
       </div>
     </div>
@@ -137,7 +137,7 @@ export default function ProjectsPage() {
     if (!owner || !repo) return;
     getRepoProjects(owner, repo)
       .then((data) => setProjects(Array.isArray(data) ? data : []))
-      .catch((err) => { toast.error('加载项目列表失败（可能需要启用 Projects 功能）'); console.error(err); })
+      .catch((err) => { toast.error(i18n.t('加载项目列表失败（可能需要启用 Projects 功能）')); console.error(err); })
       .finally(() => setLoading(false));
   }, [owner, repo]);
 
@@ -154,7 +154,7 @@ export default function ProjectsPage() {
       );
       setColumns(colsWithCards);
     } catch (err) {
-      toast.error('加载看板失败');
+      toast.error(i18n.t('加载看板失败'));
       console.error(err);
     } finally {
       setLoadingBoard(false);
@@ -167,11 +167,11 @@ export default function ProjectsPage() {
     try {
       const proj = await createProject(owner, repo, newName.trim(), newBody.trim() || undefined);
       setProjects((prev) => [proj, ...prev]);
-      toast.success('项目看板已创建');
+      toast.success(i18n.t('项目看板已创建'));
       setCreateOpen(false);
       setNewName(''); setNewBody('');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '创建失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('创建失败'));
     } finally {
       setCreating(false);
     }
@@ -184,10 +184,10 @@ export default function ProjectsPage() {
       await deleteProject(deleteTarget);
       setProjects((prev) => prev.filter((p) => p.id !== deleteTarget));
       if (selectedProject?.id === deleteTarget) { setSelectedProject(null); setColumns([]); }
-      toast.success('项目已删除');
+      toast.success(i18n.t('项目已删除'));
       setDeleteTarget(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('删除失败'));
     } finally {
       setDeleting(false);
     }
@@ -201,9 +201,9 @@ export default function ProjectsPage() {
       setColumns((prev) => [...prev, { ...col, cards: [] }]);
       setAddColName('');
       setAddColOpen(false);
-      toast.success('列已添加');
+      toast.success(i18n.t('列已添加'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '添加列失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('添加列失败'));
     } finally {
       setAddingCol(false);
     }
@@ -215,16 +215,16 @@ export default function ProjectsPage() {
       setColumns((prev) => prev.map((col) =>
         col.id === columnId ? { ...col, cards: [...col.cards, card] } : col
       ));
-      toast.success('卡片已添加');
+      toast.success(i18n.t('卡片已添加'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '添加卡片失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('添加卡片失败'));
     }
   };
 
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
@@ -234,28 +234,26 @@ export default function ProjectsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <LayoutDashboard className="w-5 h-5 text-primary" />
-          项目看板
-        </h1>
+          {i18n.t('项目看板')}</h1>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-              <Plus className="w-4 h-4 mr-2" />新建看板
-            </Button>
+              <Plus className="w-4 h-4 mr-2" />{i18n.t('新建看板')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-md bg-card border-border">
-            <DialogHeader><DialogTitle className="text-foreground">创建项目看板</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="text-foreground">{i18n.t('创建项目看板')}</DialogTitle></DialogHeader>
             <div className="space-y-3 py-2">
               <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">看板名称 *</Label>
-                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="项目名称..." className="bg-secondary border-border text-foreground placeholder:text-muted-foreground" />
+                <Label className="text-sm font-normal text-foreground">{i18n.t('看板名称 *')}</Label>
+                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={i18n.t('项目名称...')} className="bg-secondary border-border text-foreground placeholder:text-muted-foreground" />
               </div>
               <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">描述（可选）</Label>
-                <Textarea value={newBody} onChange={(e) => setNewBody(e.target.value)} placeholder="描述..." className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none min-h-16" />
+                <Label className="text-sm font-normal text-foreground">{i18n.t('描述（可选）')}</Label>
+                <Textarea value={newBody} onChange={(e) => setNewBody(e.target.value)} placeholder={i18n.t('描述...')} className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none min-h-16" />
               </div>
               <div className="flex gap-3 pt-1">
-                <Button variant="ghost" className="flex-1 border border-border text-muted-foreground hover:bg-secondary" onClick={() => setCreateOpen(false)}><X className="w-4 h-4 mr-2" />取消</Button>
-                <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleCreateProject} disabled={creating || !newName.trim()}><Save className="w-4 h-4 mr-2" />{creating ? '创建中...' : '创建'}</Button>
+                <Button variant="ghost" className="flex-1 border border-border text-muted-foreground hover:bg-secondary" onClick={() => setCreateOpen(false)}><X className="w-4 h-4 mr-2" />{i18n.t('取消')}</Button>
+                <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleCreateProject} disabled={creating || !newName.trim()}><Save className="w-4 h-4 mr-2" />{creating ? i18n.t('创建中...') : i18n.t('创建')}</Button>
               </div>
             </div>
           </DialogContent>
@@ -266,15 +264,14 @@ export default function ProjectsPage() {
         {/* 项目列表 */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border bg-secondary/30">
-            <p className="text-sm font-medium text-foreground">项目列表</p>
+            <p className="text-sm font-medium text-foreground">{i18n.t('项目列表')}</p>
           </div>
           {loading ? (
             <div className="p-3 space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 bg-muted" />)}</div>
           ) : projects.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground px-4">
               <AlertCircle className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-              暂无项目看板
-            </div>
+              {i18n.t('暂无项目看板')}</div>
           ) : (
             <div className="divide-y divide-border">
               {projects.map((proj) => (
@@ -283,7 +280,7 @@ export default function ProjectsPage() {
                     <p className={`text-sm font-medium truncate ${selectedProject?.id === proj.id ? 'text-primary' : 'text-foreground'}`}>{proj.name}</p>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <Badge variant="outline" className={`text-xs ${proj.state === 'open' ? 'border-success/40 text-success' : 'border-border text-muted-foreground'}`}>
-                        {proj.state === 'open' ? '进行中' : '已关闭'}
+                        {proj.state === 'open' ? i18n.t('进行中') : i18n.t('已关闭')}
                       </Badge>
                     </div>
                   </div>
@@ -292,7 +289,7 @@ export default function ProjectsPage() {
                     size="icon"
                     className="w-7 h-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
                     onClick={(e) => { e.stopPropagation(); setDeleteTarget(proj.id); }}
-                    title="删除"
+                    title={i18n.t('删除')}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
@@ -307,7 +304,7 @@ export default function ProjectsPage() {
           {!selectedProject ? (
             <div className="bg-card border border-border rounded-lg py-16 text-center">
               <LayoutDashboard className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-              <p className="text-foreground font-medium">选择一个项目看板</p>
+              <p className="text-foreground font-medium">{i18n.t('选择一个项目看板')}</p>
             </div>
           ) : loadingBoard ? (
             <div className="flex gap-3 overflow-x-auto pb-2">
@@ -318,7 +315,7 @@ export default function ProjectsPage() {
               <div className="flex items-center gap-2 mb-3">
                 <h2 className="text-base font-semibold text-foreground">{selectedProject.name}</h2>
                 <Badge variant="outline" className={`text-xs ${selectedProject.state === 'open' ? 'border-success/40 text-success' : 'border-border text-muted-foreground'}`}>
-                  {selectedProject.state === 'open' ? '进行中' : '已关闭'}
+                  {selectedProject.state === 'open' ? i18n.t('进行中') : i18n.t('已关闭')}
                 </Badge>
               </div>
               <div className="flex gap-3 overflow-x-auto pb-3">
@@ -332,13 +329,13 @@ export default function ProjectsPage() {
                       <Input
                         value={addColName}
                         onChange={(e) => setAddColName(e.target.value)}
-                        placeholder="列名称..."
+                        placeholder={i18n.t('列名称...')}
                         className="bg-card border-border text-foreground placeholder:text-muted-foreground text-sm"
                         autoFocus
                       />
                       <div className="flex gap-1.5">
                         <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 h-7 text-xs" onClick={handleAddColumn} disabled={addingCol || !addColName.trim()}>
-                          {addingCol ? '添加中...' : '添加列'}
+                          {addingCol ? i18n.t('添加中...') : i18n.t('添加列')}
                         </Button>
                         <Button size="sm" variant="ghost" className="h-7 text-muted-foreground hover:bg-secondary text-xs" onClick={() => { setAddColOpen(false); setAddColName(''); }}>
                           <X className="w-3 h-3" />
@@ -351,8 +348,7 @@ export default function ProjectsPage() {
                       className="w-full min-h-16 border-2 border-dashed border-border rounded-lg flex items-center justify-center gap-2 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
                       onClick={() => setAddColOpen(true)}
                     >
-                      <Plus className="w-4 h-4" />添加列
-                    </button>
+                      <Plus className="w-4 h-4" />{i18n.t('添加列')}</button>
                   )}
                 </div>
               </div>
@@ -364,12 +360,12 @@ export default function ProjectsPage() {
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">确认删除项目</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">此操作不可撤销，项目及所有卡片将被永久删除。</AlertDialogDescription>
+            <AlertDialogTitle className="text-foreground">{i18n.t('确认删除项目')}</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">{i18n.t('此操作不可撤销，项目及所有卡片将被永久删除。')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-secondary">取消</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDeleteProject} disabled={deleting}>{deleting ? '删除中...' : '确认删除'}</AlertDialogAction>
+            <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDeleteProject} disabled={deleting}>{deleting ? i18n.t('删除中...') : i18n.t('确认删除')}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

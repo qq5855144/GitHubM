@@ -34,6 +34,7 @@ import RepoForksPage from './pages/RepoForksPage';
 import StargazersPage from './pages/StargazersPage';
 import PrDiffPage from './pages/PrDiffPage';
 import AiAssistantPage from './pages/AiAssistantPage';
+import i18n from "@/i18n";
 
 export interface RouteConfig {
   name: string;
@@ -46,21 +47,21 @@ export interface RouteConfig {
 
 export const routes: RouteConfig[] = [
   // 公开路由
-  { name: '登录', path: '/login', element: <LoginPage />, public: true },
+  { name: i18n.t('登录'), path: '/login', element: <LoginPage />, public: true },
   // 受保护路由
-  { name: '首页', path: '/', element: <DashboardPage /> },
-  { name: '仓库列表', path: '/repos', element: <ReposPage /> },
-  { name: '仓库详情', path: '/repos/:owner/:repo', element: <RepoDetailPage /> },
+  { name: i18n.t('首页'), path: '/', element: <DashboardPage /> },
+  { name: i18n.t('仓库列表'), path: '/repos', element: <ReposPage /> },
+  { name: i18n.t('仓库详情'), path: '/repos/:owner/:repo', element: <RepoDetailPage /> },
   { name: 'Issues', path: '/repos/:owner/:repo/issues', element: <IssuesPage /> },
-  { name: 'Issue 详情', path: '/repos/:owner/:repo/issues/:number', element: <IssueDetailPage /> },
+  { name: i18n.t('Issue 详情'), path: '/repos/:owner/:repo/issues/:number', element: <IssueDetailPage /> },
   { name: 'Pull Requests', path: '/repos/:owner/:repo/pulls', element: <PullsPage /> },
-  { name: 'PR 详情', path: '/repos/:owner/:repo/pulls/:number', element: <PullDetailPage /> },
+  { name: i18n.t('PR 详情'), path: '/repos/:owner/:repo/pulls/:number', element: <PullDetailPage /> },
   { name: 'PR Diff', path: '/repos/:owner/:repo/pulls/:number/diff', element: <PrDiffPage /> },
-  { name: '代码浏览', path: '/repos/:owner/:repo/code/*', element: <CodeBrowserPage /> },
-  { name: '代码浏览根', path: '/repos/:owner/:repo/code', element: <CodeBrowserPage /> },
-  { name: '提交历史', path: '/repos/:owner/:repo/commits', element: <CommitsPage /> },
-  { name: '分支管理', path: '/repos/:owner/:repo/branches', element: <BranchesPage /> },
-  { name: '协作者', path: '/repos/:owner/:repo/collaborators', element: <CollaboratorsPage /> },
+  { name: i18n.t('代码浏览'), path: '/repos/:owner/:repo/code/*', element: <CodeBrowserPage /> },
+  { name: i18n.t('代码浏览根'), path: '/repos/:owner/:repo/code', element: <CodeBrowserPage /> },
+  { name: i18n.t('提交历史'), path: '/repos/:owner/:repo/commits', element: <CommitsPage /> },
+  { name: i18n.t('分支管理'), path: '/repos/:owner/:repo/branches', element: <BranchesPage /> },
+  { name: i18n.t('协作者'), path: '/repos/:owner/:repo/collaborators', element: <CollaboratorsPage /> },
   // 新增仓库子功能
   { name: 'Actions', path: '/repos/:owner/:repo/actions', element: <ActionsPage /> },
   { name: 'Packages', path: '/repos/:owner/:repo/packages', element: <PackagesPage /> },
@@ -68,22 +69,22 @@ export const routes: RouteConfig[] = [
   { name: 'Discussions', path: '/repos/:owner/:repo/discussions', element: <DiscussionsPage /> },
   { name: 'Wiki', path: '/repos/:owner/:repo/wiki', element: <WikiPage /> },
   // 全局功能
-  { name: '通知', path: '/notifications', element: <NotificationsPage /> },
-  { name: '搜索', path: '/search', element: <SearchPage /> },
-  { name: '活动', path: '/activity', element: <ActivityPage /> },
+  { name: i18n.t('通知'), path: '/notifications', element: <NotificationsPage /> },
+  { name: i18n.t('搜索'), path: '/search', element: <SearchPage /> },
+  { name: i18n.t('活动'), path: '/activity', element: <ActivityPage /> },
   { name: 'Gists', path: '/gists', element: <GistsPage /> },
-  { name: 'Gist 详情', path: '/gists/:gistId', element: <GistDetailPage /> },
-  { name: '关注列表', path: '/follow-list/:type', element: <FollowListPage /> },
-  { name: '我的收藏', path: '/starred', element: <StarredPage /> },
+  { name: i18n.t('Gist 详情'), path: '/gists/:gistId', element: <GistDetailPage /> },
+  { name: i18n.t('关注列表'), path: '/follow-list/:type', element: <FollowListPage /> },
+  { name: i18n.t('我的收藏'), path: '/starred', element: <StarredPage /> },
   { name: 'Packages', path: '/packages', element: <PackagesPage /> },
-  { name: '账号管理', path: '/accounts', element: <AccountsPage /> },
-  { name: '数据导出', path: '/export', element: <ExportPage /> },
-  { name: '批量上传', path: '/repos/:owner/:repo/upload', element: <UploadPage /> },
-  { name: 'Pages 部署', path: '/repos/:owner/:repo/pages', element: <PagesDeployPage /> },
-  { name: '仓库产物', path: '/repos/:owner/:repo/artifacts', element: <ArtifactsPage /> },
-  { name: '仓库 Forks', path: '/repos/:owner/:repo/forks', element: <RepoForksPage /> },
-  { name: '仓库收藏者', path: '/repos/:owner/:repo/stargazers', element: <StargazersPage /> },
-  { name: '设置', path: '/settings', element: <SettingsPage /> },
+  { name: i18n.t('账号管理'), path: '/accounts', element: <AccountsPage /> },
+  { name: i18n.t('数据导出'), path: '/export', element: <ExportPage /> },
+  { name: i18n.t('批量上传'), path: '/repos/:owner/:repo/upload', element: <UploadPage /> },
+  { name: i18n.t('Pages 部署'), path: '/repos/:owner/:repo/pages', element: <PagesDeployPage /> },
+  { name: i18n.t('仓库产物'), path: '/repos/:owner/:repo/artifacts', element: <ArtifactsPage /> },
+  { name: i18n.t('仓库 Forks'), path: '/repos/:owner/:repo/forks', element: <RepoForksPage /> },
+  { name: i18n.t('仓库收藏者'), path: '/repos/:owner/:repo/stargazers', element: <StargazersPage /> },
+  { name: i18n.t('设置'), path: '/settings', element: <SettingsPage /> },
   { name: 'GraphQL Playground', path: '/graphql-playground', element: <GraphQLPlaygroundPage /> },
-  { name: 'AI 助手', path: '/ai-assistant', element: <AiAssistantPage /> },
+  { name: i18n.t('AI 助手'), path: '/ai-assistant', element: <AiAssistantPage /> },
 ];

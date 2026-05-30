@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import i18n from "@/i18n";
 
 interface CreateBranchDialogProps {
   open: boolean;
@@ -47,8 +48,8 @@ const CreateBranchDialog = memo(function CreateBranchDialog({
 
   const handleCreate = async () => {
     const trimmed = name.trim().replace(/\s+/g, '-');
-    if (!trimmed) { toast.error('请填写分支名称'); return; }
-    if (branches.includes(trimmed)) { toast.error('该分支已存在'); return; }
+    if (!trimmed) { toast.error(i18n.t('请填写分支名称')); return; }
+    if (branches.includes(trimmed)) { toast.error(i18n.t('该分支已存在')); return; }
     setLoading(true);
     try {
       onCreated(trimmed, from);
@@ -64,12 +65,11 @@ const CreateBranchDialog = memo(function CreateBranchDialog({
         <DialogHeader>
           <DialogTitle className="text-base flex items-center gap-2">
             <GitBranch className="w-4 h-4 text-primary" />
-            新建分支
-          </DialogTitle>
+            {i18n.t('新建分支')}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4 pt-1">
           <div className="flex flex-col gap-1.5">
-            <Label className="text-sm font-normal">分支名称</Label>
+            <Label className="text-sm font-normal">{i18n.t('分支名称')}</Label>
             <Input
               className="px-3 font-mono text-sm"
               placeholder="feature/my-feature"
@@ -80,7 +80,7 @@ const CreateBranchDialog = memo(function CreateBranchDialog({
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label className="text-sm font-normal">从分支创建</Label>
+            <Label className="text-sm font-normal">{i18n.t('从分支创建')}</Label>
             <Select value={from} onValueChange={setFrom}>
               <SelectTrigger className="px-3"><SelectValue /></SelectTrigger>
               <SelectContent className="max-h-40">
@@ -93,7 +93,7 @@ const CreateBranchDialog = memo(function CreateBranchDialog({
             </Select>
           </div>
           <div className="flex gap-2 justify-end pt-1">
-            <Button variant="outline" onClick={onClose} disabled={loading}>取消</Button>
+            <Button variant="outline" onClick={onClose} disabled={loading}>{i18n.t('取消')}</Button>
             <Button
               onClick={handleCreate}
               disabled={loading || !name.trim()}
@@ -102,8 +102,7 @@ const CreateBranchDialog = memo(function CreateBranchDialog({
               {loading
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 : <Plus className="w-3.5 h-3.5" />}
-              创建分支
-            </Button>
+              {i18n.t('创建分支')}</Button>
           </div>
         </div>
       </DialogContent>

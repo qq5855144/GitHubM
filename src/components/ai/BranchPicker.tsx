@@ -7,6 +7,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select';
+import i18n from "@/i18n";
 
 interface BranchPickerProps {
   branches: string[];
@@ -35,7 +36,7 @@ const BranchPicker = memo(function BranchPicker({
         <div className="flex items-center gap-1 min-w-0">
           <GitBranch className="w-3 h-3 text-muted-foreground shrink-0" />
           <span className="truncate font-medium font-mono">
-            {loading ? '加载中…' : (value || '选择分支')}
+            {loading ? i18n.t('加载中…') : (value || i18n.t('选择分支'))}
           </span>
           <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
         </div>

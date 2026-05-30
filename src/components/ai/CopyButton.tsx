@@ -2,6 +2,7 @@
 import { memo, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { copyToClipboard } from '@/lib/utils';
+import i18n from "@/i18n";
 
 interface CopyButtonProps {
   text: string;
@@ -20,7 +21,7 @@ const CopyButton = memo(function CopyButton({ text }: CopyButtonProps) {
     <button
       onClick={handleCopy}
       className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-      title="复制内容"
+      title={i18n.t('复制内容')}
     >
       {copied
         ? <Check className="w-3.5 h-3.5 text-green-500" />

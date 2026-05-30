@@ -50,11 +50,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 function BuildStatusBadge({ status }: { status: string }) {
-  if (status === 'built') return <Badge className="bg-success/10 text-success border-success/30 text-xs flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />构建成功</Badge>;
-  if (status === 'building') return <Badge className="bg-warning/10 text-warning border-warning/30 text-xs flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />构建中</Badge>;
-  if (status === 'errored') return <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs flex items-center gap-1"><XCircle className="w-3 h-3" />构建失败</Badge>;
+  if (status === 'built') return <Badge className="bg-success/10 text-success border-success/30 text-xs flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />{i18n.t('构建成功')}</Badge>;
+  if (status === 'building') return <Badge className="bg-warning/10 text-warning border-warning/30 text-xs flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />{i18n.t('构建中')}</Badge>;
+  if (status === 'errored') return <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs flex items-center gap-1"><XCircle className="w-3 h-3" />{i18n.t('构建失败')}</Badge>;
   return <Badge variant="outline" className="text-xs text-muted-foreground border-border">{status}</Badge>;
 }
 
@@ -103,7 +104,7 @@ export default function PagesDeployPage() {
       const data = await listPagesBuilds(owner, repo, { per_page: 10 });
       setBuilds(Array.isArray(data) ? data : []);
     } catch {
-      toast.error('加载构建历史失败');
+      toast.error(i18n.t('加载构建历史失败'));
     } finally {
       setLoadingBuilds(false);
     }
@@ -116,9 +117,9 @@ export default function PagesDeployPage() {
       const result = await enablePages(owner, repo, { branch: selectedBranch, path: selectedDir });
       setPages(result);
       setNotEnabled(false);
-      toast.success('GitHub Pages 已启用');
+      toast.success(i18n.t('GitHub Pages 已启用'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '启用失败，请检查仓库权限');
+      toast.error(err instanceof Error ? err.message : i18n.t('启用失败，请检查仓库权限'));
     } finally {
       setSaving(false);
     }
@@ -133,9 +134,9 @@ export default function PagesDeployPage() {
         cname: cname.trim() || null,
       });
       setPages({ ...pages, source: { branch: selectedBranch, directory: selectedDir }, cname: cname.trim() || null });
-      toast.success('Pages 配置已更新');
+      toast.success(i18n.t('Pages 配置已更新'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '更新失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('更新失败'));
     } finally {
       setSaving(false);
     }
@@ -146,10 +147,10 @@ export default function PagesDeployPage() {
     setTriggering(true);
     try {
       await triggerPagesBuild(owner, repo);
-      toast.success('构建已触发，稍后查看构建状态');
+      toast.success(i18n.t('构建已触发，稍后查看构建状态'));
       setTimeout(loadBuilds, 3000);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '触发构建失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('触发构建失败'));
     } finally {
       setTriggering(false);
     }
@@ -162,10 +163,10 @@ export default function PagesDeployPage() {
       await disablePages(owner, repo);
       setPages(null);
       setNotEnabled(true);
-      toast.success('GitHub Pages 已禁用');
+      toast.success(i18n.t('GitHub Pages 已禁用'));
       setDisableOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '禁用失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('禁用失败'));
     } finally {
       setDisabling(false);
     }
@@ -184,18 +185,17 @@ export default function PagesDeployPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-3xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-foreground">Pages 部署</span>
+        <span className="text-foreground">{i18n.t('Pages 部署')}</span>
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <Globe className="w-5 h-5 text-primary" />
-          GitHub Pages 部署
-        </h1>
+          {i18n.t('GitHub Pages 部署')}</h1>
         {pages && (
           <Button
             variant="ghost"
@@ -204,7 +204,7 @@ export default function PagesDeployPage() {
             onClick={handleTriggerBuild}
             disabled={triggering}
           >
-            {triggering ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />触发中</> : <><Play className="w-4 h-4 mr-2" />触发构建</>}
+            {triggering ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{i18n.t('触发中')}</> : <><Play className="w-4 h-4 mr-2" />{i18n.t('触发构建')}</>}
           </Button>
         )}
       </div>
@@ -214,16 +214,16 @@ export default function PagesDeployPage() {
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border bg-secondary/30 flex items-center gap-3">
             <Globe className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium text-foreground">部署状态</span>
-            {pages.status === 'built' && <Badge className="bg-success/10 text-success border-success/30 text-xs flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />已部署</Badge>}
-            {pages.status === 'building' && <Badge className="bg-warning/10 text-warning border-warning/30 text-xs flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />部署中</Badge>}
-            {pages.status === 'errored' && <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs flex items-center gap-1"><XCircle className="w-3 h-3" />部署失败</Badge>}
-            {(!pages.status || pages.status === 'null') && <Badge variant="outline" className="text-xs text-muted-foreground">尚未部署</Badge>}
+            <span className="text-sm font-medium text-foreground">{i18n.t('部署状态')}</span>
+            {pages.status === 'built' && <Badge className="bg-success/10 text-success border-success/30 text-xs flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />{i18n.t('已部署')}</Badge>}
+            {pages.status === 'building' && <Badge className="bg-warning/10 text-warning border-warning/30 text-xs flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />{i18n.t('部署中')}</Badge>}
+            {pages.status === 'errored' && <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs flex items-center gap-1"><XCircle className="w-3 h-3" />{i18n.t('部署失败')}</Badge>}
+            {(!pages.status || pages.status === 'null') && <Badge variant="outline" className="text-xs text-muted-foreground">{i18n.t('尚未部署')}</Badge>}
           </div>
           <div className="p-4 space-y-2 text-sm">
             {pages.html_url && (
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground w-24 shrink-0">网站地址</span>
+                <span className="text-muted-foreground w-24 shrink-0">{i18n.t('网站地址')}</span>
                 <a href={pages.html_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline flex items-center gap-1 font-mono text-xs break-all">
                   {pages.html_url}
                   <ExternalLink className="w-3 h-3 shrink-0" />
@@ -232,13 +232,13 @@ export default function PagesDeployPage() {
             )}
             {pages.cname && (
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground w-24 shrink-0">自定义域名</span>
+                <span className="text-muted-foreground w-24 shrink-0">{i18n.t('自定义域名')}</span>
                 <span className="text-foreground font-mono text-xs">{pages.cname}</span>
               </div>
             )}
             {pages.source && (
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground w-24 shrink-0">部署来源</span>
+                <span className="text-muted-foreground w-24 shrink-0">{i18n.t('部署来源')}</span>
                 <code className="text-foreground font-mono text-xs bg-secondary px-1.5 py-0.5 rounded">{pages.source.branch}{pages.source.directory}</code>
               </div>
             )}
@@ -247,8 +247,8 @@ export default function PagesDeployPage() {
       ) : notEnabled ? (
         <div className="bg-card border border-border rounded-lg py-8 text-center px-6">
           <AlertCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-foreground font-medium">此仓库尚未启用 GitHub Pages</p>
-          <p className="text-sm text-muted-foreground mt-1">配置下方选项并点击"启用"开始部署</p>
+          <p className="text-foreground font-medium">{i18n.t('此仓库尚未启用 GitHub Pages')}</p>
+          <p className="text-sm text-muted-foreground mt-1">{i18n.t('配置下方选项并点击"启用"开始部署')}</p>
         </div>
       ) : null}
 
@@ -256,11 +256,11 @@ export default function PagesDeployPage() {
       <div className="bg-card border border-border rounded-lg p-4 space-y-4">
         <div className="flex items-center gap-2 mb-1">
           <Settings className="w-4 h-4 text-muted-foreground" />
-          <p className="text-sm font-semibold text-foreground">Pages 配置</p>
+          <p className="text-sm font-semibold text-foreground">{i18n.t('Pages 配置')}</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label className="text-sm font-normal text-foreground">部署分支</Label>
+            <Label className="text-sm font-normal text-foreground">{i18n.t('部署分支')}</Label>
             {branches.length > 0 ? (
               <Select value={selectedBranch} onValueChange={setSelectedBranch}>
                 <SelectTrigger className="bg-secondary border-border text-foreground h-9">
@@ -275,45 +275,44 @@ export default function PagesDeployPage() {
             )}
           </div>
           <div className="space-y-1.5">
-            <Label className="text-sm font-normal text-foreground">发布目录</Label>
+            <Label className="text-sm font-normal text-foreground">{i18n.t('发布目录')}</Label>
             <Select value={selectedDir} onValueChange={(v) => setSelectedDir(v as '/' | '/docs')}>
               <SelectTrigger className="bg-secondary border-border text-foreground h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-popover border-border">
-                <SelectItem value="/" className="text-foreground text-sm">/ （根目录）</SelectItem>
+                <SelectItem value="/" className="text-foreground text-sm">{i18n.t('/ （根目录）')}</SelectItem>
                 <SelectItem value="/docs" className="text-foreground text-sm">/docs</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-sm font-normal text-foreground">自定义域名（可选）</Label>
+          <Label className="text-sm font-normal text-foreground">{i18n.t('自定义域名（可选）')}</Label>
           <Input
             value={cname}
             onChange={(e) => setCname(e.target.value)}
             placeholder="example.com"
             className="bg-secondary border-border text-foreground placeholder:text-muted-foreground h-9 font-mono"
           />
-          <p className="text-xs text-muted-foreground">如需自定义域名，还需在 DNS 处配置 CNAME 记录指向 {owner}.github.io</p>
+          <p className="text-xs text-muted-foreground">{i18n.t('如需自定义域名，还需在 DNS 处配置 CNAME 记录指向')}{owner}.github.io</p>
         </div>
         <div className="flex gap-3 flex-wrap">
           {notEnabled ? (
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleEnable} disabled={saving}>
-              {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />启用中</> : <><Globe className="w-4 h-4 mr-2" />启用 Pages</>}
+              {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{i18n.t('启用中')}</> : <><Globe className="w-4 h-4 mr-2" />{i18n.t('启用 Pages')}</>}
             </Button>
           ) : (
             <>
               <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleUpdate} disabled={saving}>
-                {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />保存中</> : '保存配置'}
+                {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{i18n.t('保存中')}</> : i18n.t('保存配置')}
               </Button>
               <Button
                 variant="ghost"
                 className="border border-destructive/40 text-destructive hover:bg-destructive/10"
                 onClick={() => setDisableOpen(true)}
               >
-                禁用 Pages
-              </Button>
+                {i18n.t('禁用 Pages')}</Button>
             </>
           )}
         </div>
@@ -324,18 +323,17 @@ export default function PagesDeployPage() {
         <div className="px-4 py-3 border-b border-border bg-secondary/30 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">构建历史</span>
+            <span className="text-sm font-medium text-foreground">{i18n.t('构建历史')}</span>
           </div>
           <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary" onClick={loadBuilds} disabled={loadingBuilds}>
             {loadingBuilds ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
-            刷新
-          </Button>
+            {i18n.t('刷新')}</Button>
         </div>
         {loadingBuilds ? (
           <div className="p-4 space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 bg-muted" />)}</div>
         ) : builds.length === 0 ? (
           <div className="py-10 text-center text-sm text-muted-foreground">
-            <p>暂无构建记录，点击"刷新"加载</p>
+            <p>{i18n.t('暂无构建记录，点击"刷新"加载')}</p>
           </div>
         ) : (
           <div className="divide-y divide-border">
@@ -359,15 +357,14 @@ export default function PagesDeployPage() {
       <AlertDialog open={disableOpen} onOpenChange={setDisableOpen}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">确认禁用 GitHub Pages</AlertDialogTitle>
+            <AlertDialogTitle className="text-foreground">{i18n.t('确认禁用 GitHub Pages')}</AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
-              禁用后网站将无法访问，配置信息会丢失。此操作不可撤销，如需重新启用需重新配置。
-            </AlertDialogDescription>
+              {i18n.t('禁用后网站将无法访问，配置信息会丢失。此操作不可撤销，如需重新启用需重新配置。')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-secondary">取消</AlertDialogCancel>
+            <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
             <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDisable} disabled={disabling}>
-              {disabling ? '禁用中...' : '确认禁用'}
+              {disabling ? i18n.t('禁用中...') : i18n.t('确认禁用')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

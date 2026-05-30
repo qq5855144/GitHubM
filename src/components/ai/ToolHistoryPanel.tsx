@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ToolHistoryItem } from './aiTypes';
+import i18n from "@/i18n";
 
 interface ToolHistoryPanelProps {
   items: ToolHistoryItem[];
@@ -36,8 +37,8 @@ export function ToolHistoryPanel({ items }: ToolHistoryPanelProps) {
         <div className="bg-muted/50 p-4 rounded-full mb-4">
           <Wrench className="w-8 h-8 opacity-20" />
         </div>
-        <p className="text-sm">暂无工具调用历史</p>
-        <p className="text-[10px] mt-1 opacity-60">AI 执行任务时会在此显示步骤</p>
+        <p className="text-sm">{i18n.t('暂无工具调用历史')}</p>
+        <p className="text-[10px] mt-1 opacity-60">{i18n.t('AI 执行任务时会在此显示步骤')}</p>
       </div>
     );
   }
@@ -47,7 +48,7 @@ export function ToolHistoryPanel({ items }: ToolHistoryPanelProps) {
       <div className="p-4 border-b bg-muted/20 flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wider flex items-center gap-2">
           <Wrench className="w-3.5 h-3.5" />
-          任务执行过程 ({items.length})
+          {i18n.t('任务执行过程 (')}{items.length})
         </h3>
       </div>
       
@@ -89,7 +90,7 @@ export function ToolHistoryPanel({ items }: ToolHistoryPanelProps) {
                     {item.label}
                   </span>
                   <span className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">
-                    {item.elapsedMs ? `${item.elapsedMs}ms` : '执行中...'}
+                    {item.elapsedMs ? `${item.elapsedMs}ms` : i18n.t('执行中...')}
                   </span>
                 </div>
                 
@@ -101,8 +102,7 @@ export function ToolHistoryPanel({ items }: ToolHistoryPanelProps) {
                   <details className="mt-2 group/details">
                     <summary className="text-[10px] text-primary/70 hover:text-primary cursor-pointer list-none flex items-center gap-1 transition-colors select-none">
                       <ChevronRight className="w-3 h-3 group-open/details:rotate-90 transition-transform" />
-                      查看执行结果
-                    </summary>
+                      {i18n.t('查看执行结果')}</summary>
                     <div className="mt-1.5 p-2 bg-muted/50 rounded border border-border/50 text-[10px] font-mono whitespace-pre-wrap break-all max-h-[150px] overflow-y-auto scrollbar-thin">
                       {item.result}
                     </div>

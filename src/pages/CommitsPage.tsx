@@ -31,6 +31,7 @@ import { getCommits, getCommit, getBranches, formatRelativeTime } from '@/servic
 import type { GitHubCommit, GitHubBranch } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
+import i18n from "@/i18n";
 
 export default function CommitsPage() {
   const { owner, repo } = useParams<{ owner: string; repo: string }>();
@@ -85,7 +86,7 @@ export default function CommitsPage() {
       setHasNextPage(result.hasNextPage);
       setPage(pageNum);
     } catch (err) {
-      toast.error('加载提交历史失败');
+      toast.error(i18n.t('加载提交历史失败'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -103,7 +104,7 @@ export default function CommitsPage() {
       const detail = await getCommit(owner, repo, sha);
       setSelectedCommit(detail);
     } catch (err) {
-      toast.error('加载提交详情失败');
+      toast.error(i18n.t('加载提交详情失败'));
       console.error(err);
     } finally {
       setCommitDetailLoading(false);
@@ -114,22 +115,21 @@ export default function CommitsPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-foreground">提交历史</span>
+        <span className="text-foreground">{i18n.t('提交历史')}</span>
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <GitCommit className="w-5 h-5 text-primary" />
-          提交历史
-        </h1>
+          {i18n.t('提交历史')}</h1>
         <Select value={selectedBranch} onValueChange={setSelectedBranch}>
           <SelectTrigger className="bg-secondary border-border text-foreground w-40 h-9">
             <GitBranch className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
-            <SelectValue placeholder="选择分支" />
+            <SelectValue placeholder={i18n.t('选择分支')} />
           </SelectTrigger>
           <SelectContent className="bg-popover border-border max-h-48">
             {branches.map((branch) => (
@@ -156,7 +156,7 @@ export default function CommitsPage() {
             ))}
           </div>
         ) : commits.length === 0 ? (
-          <div className="py-16 text-center text-muted-foreground">暂无提交记录</div>
+          <div className="py-16 text-center text-muted-foreground">{i18n.t('暂无提交记录')}</div>
         ) : (
           <div className="divide-y divide-border">
             {commits.map((commit) => (
@@ -222,8 +222,7 @@ export default function CommitsPage() {
             className="border-border hover:bg-secondary"
             onClick={() => loadCommits(page + 1, true)}
           >
-            加载更多
-          </Button>
+            {i18n.t('加载更多')}</Button>
         </div>
       )}
 
@@ -232,8 +231,7 @@ export default function CommitsPage() {
         <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-2xl bg-card border-border max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-foreground text-base font-medium">
-              提交详情
-            </DialogTitle>
+              {i18n.t('提交详情')}</DialogTitle>
           </DialogHeader>
           {commitDetailLoading ? (
             <div className="space-y-2">
@@ -252,14 +250,14 @@ export default function CommitsPage() {
               </div>
               {selectedCommit.stats && (
                 <div className="flex items-center gap-3 text-sm bg-secondary rounded-lg px-3 py-2">
-                  <span className="text-muted-foreground">{selectedCommit.stats.total} 个改动</span>
+                  <span className="text-muted-foreground">{selectedCommit.stats.total} {i18n.t('个改动')}</span>
                   <span className="text-primary flex items-center gap-1"><Plus className="w-3.5 h-3.5" />{selectedCommit.stats.additions}</span>
                   <span className="text-destructive flex items-center gap-1"><Minus className="w-3.5 h-3.5" />{selectedCommit.stats.deletions}</span>
                 </div>
               )}
               {selectedCommit.files && (
                 <div className="space-y-2">
-                  <p className="text-sm font-medium text-foreground">变更文件 ({selectedCommit.files.length})</p>
+                  <p className="text-sm font-medium text-foreground">{i18n.t('变更文件 (')}{selectedCommit.files.length})</p>
                   <div className="space-y-2">
                     {selectedCommit.files.map((file) => (
                       <div key={file.filename} className="bg-secondary border border-border rounded-md overflow-hidden">

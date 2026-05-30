@@ -116,6 +116,7 @@ import type { GitHubContent, GitHubBranch } from '@/types/types';
 import { toast } from 'sonner';
 import { decodeBase64Content, copyToClipboard } from '@/lib/utils';
 import { getFileIconInfo, isImageFile } from '@/components/common/FileIcon';
+import i18n from "@/i18n";
 
 /**
  * 带认证下载文件（raw.githubusercontent.com 私有仓库需 Bearer token）。
@@ -193,7 +194,7 @@ function fileToBase64(file: File): Promise<string> {
       }
       resolve(btoa(binary));
     };
-    reader.onerror = () => reject(new Error('读取文件失败'));
+    reader.onerror = () => reject(new Error(i18n.t('读取文件失败')));
     reader.readAsArrayBuffer(file);
   });
 }
@@ -352,11 +353,11 @@ export default function CodeBrowserPage() {
             setEditorFullscreen(window.innerWidth < 768);
           }
         } else {
-          setFileContent('（无法解码文件内容）');
+          setFileContent(i18n.t('（无法解码文件内容）'));
         }
       }
     } catch (err) {
-      toast.error('加载文件内容失败');
+      toast.error(i18n.t('加载文件内容失败'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -436,7 +437,7 @@ export default function CodeBrowserPage() {
 
   // ─── 保存编辑 ───
   const handleSaveEdit = async (force = false) => {
-    if (!owner || !repo || !currentFile || !commitMsg.trim()) { toast.error('请填写提交信息'); return; }
+    if (!owner || !repo || !currentFile || !commitMsg.trim()) { toast.error(i18n.t('请填写提交信息')); return; }
     if (syntaxErrors.length > 0 && !force) {
       setShowSyntaxWarning(true);
       return;
@@ -450,36 +451,36 @@ export default function CodeBrowserPage() {
         sha: currentFile.sha,
         branch: currentBranch,
       });
-      toast.success('文件已保存并提交');
+      toast.success(i18n.t('文件已保存并提交'));
       // 直接导航到上级目录，不更新 fileContent（避免触发响应式副作用）
       closeAction(true);
-    } catch (err) { toast.error(err instanceof Error ? err.message : '保存失败'); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('保存失败')); }
     finally { setActionBusy(false); }
   };
 
   // ─── 新建文件 ───
   const handleCreateFile = async () => {
-    if (!owner || !repo || !newFileName.trim()) { toast.error('请填写文件名'); return; }
+    if (!owner || !repo || !newFileName.trim()) { toast.error(i18n.t('请填写文件名')); return; }
     const baseDir = pendingDirPath !== null ? pendingDirPath : filePath;
     const targetPath = baseDir ? `${baseDir}/${newFileName.trim()}` : newFileName.trim();
     const finalMsg = commitMsg.trim() || `Add ${newFileName.trim()}`;
     setActionBusy(true);
     try {
       const existing = await getFileInfo(owner, repo, targetPath, currentBranch);
-      if (existing) { toast.error('文件已存在，请换一个名字'); return; }
+      if (existing) { toast.error(i18n.t('文件已存在，请换一个名字')); return; }
       const b64 = newFileContent ? btoa(unescape(encodeURIComponent(newFileContent))) : btoa('');
       await createFileContent(owner, repo, targetPath, { message: finalMsg, content: b64, branch: currentBranch });
       toast.success(`已创建文件 ${newFileName.trim()}`);
       closeAction();
       loadContents();
       setTreeRefreshKey(k => k + 1);
-    } catch (err) { toast.error(err instanceof Error ? err.message : '创建失败'); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('创建失败')); }
     finally { setActionBusy(false); }
   };
 
   // ─── 新建文件夹 ───
   const handleCreateFolder = async () => {
-    if (!owner || !repo || !newFolderName.trim()) { toast.error('请填写文件夹名'); return; }
+    if (!owner || !repo || !newFolderName.trim()) { toast.error(i18n.t('请填写文件夹名')); return; }
     const baseDir = pendingDirPath !== null ? pendingDirPath : filePath;
     const gitkeepPath = baseDir ? `${baseDir}/${newFolderName.trim()}/.gitkeep` : `${newFolderName.trim()}/.gitkeep`;
     const finalMsg = commitMsg.trim() || `Add ${newFolderName.trim()} folder`;
@@ -490,7 +491,7 @@ export default function CodeBrowserPage() {
       closeAction();
       loadContents();
       setTreeRefreshKey(k => k + 1);
-    } catch (err) { toast.error(err instanceof Error ? err.message : '创建失败'); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('创建失败')); }
     finally { setActionBusy(false); }
   };
 
@@ -509,7 +510,7 @@ export default function CodeBrowserPage() {
   const handleUpload = async () => {
     if (!owner || !repo) return;
     const pending = uploadFiles.filter((f) => f.status === 'pending' || f.status === 'error');
-    if (pending.length === 0) { toast.error('没有待上传的文件'); return; }
+    if (pending.length === 0) { toast.error(i18n.t('没有待上传的文件')); return; }
     const msg = uploadCommitMsg.trim() || 'Upload files';
     setUploading(true);
     setUploadProgress(0);
@@ -518,7 +519,7 @@ export default function CodeBrowserPage() {
       const f = pending[i];
       const tp = f.targetPath.replace(/^\/+/, '');
       if (!tp) {
-        setUploadFiles((p) => p.map((x) => x.id === f.id ? { ...x, status: 'error', error: '路径不能为空' } : x));
+        setUploadFiles((p) => p.map((x) => x.id === f.id ? { ...x, status: 'error', error: i18n.t('路径不能为空') } : x));
         fail++; continue;
       }
       setUploadFiles((p) => p.map((x) => x.id === f.id ? { ...x, status: 'uploading' } : x));
@@ -538,7 +539,7 @@ export default function CodeBrowserPage() {
           ok++;
         }
       } catch (err) {
-        const msg2 = err instanceof Error ? err.message : '上传失败';
+        const msg2 = err instanceof Error ? err.message : i18n.t('上传失败');
         setUploadFiles((p) => p.map((x) => x.id === f.id ? { ...x, status: 'error', error: msg2 } : x));
         fail++;
       }
@@ -552,7 +553,7 @@ export default function CodeBrowserPage() {
 
   // ─── 删除文件 ───
   const handleDeleteFile = async () => {
-    if (!owner || !repo || !actionTarget || !commitMsg.trim()) { toast.error('请填写提交信息'); return; }
+    if (!owner || !repo || !actionTarget || !commitMsg.trim()) { toast.error(i18n.t('请填写提交信息')); return; }
     setActionBusy(true);
     try {
       await deleteFileContent(owner, repo, actionTarget.path, {
@@ -565,13 +566,13 @@ export default function CodeBrowserPage() {
         const parentParts = filePath.split('/').slice(0, -1);
         navigate(`/repos/${owner}/${repo}/code${parentParts.length ? '/' + parentParts.join('/') : ''}`);
       } else { loadContents(); }
-    } catch (err) { toast.error(err instanceof Error ? err.message : '删除失败'); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('删除失败')); }
     finally { setActionBusy(false); }
   };
 
   // ─── 删除文件夹 ───
   const handleDeleteFolder = async () => {
-    if (!owner || !repo || !actionTarget || !commitMsg.trim()) { toast.error('请填写提交信息'); return; }
+    if (!owner || !repo || !actionTarget || !commitMsg.trim()) { toast.error(i18n.t('请填写提交信息')); return; }
     setActionBusy(true);
     setDeleteProgress({ done: 0, total: 0 });
     try {
@@ -584,16 +585,16 @@ export default function CodeBrowserPage() {
       setTreeRefreshKey(k => k + 1);
       closeAction();
       loadContents();
-    } catch (err) { toast.error(err instanceof Error ? err.message : '删除失败'); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('删除失败')); }
     finally { setActionBusy(false); setDeleteProgress(null); }
   };
 
   // ─── 重命名 ───
   const handleRename = async () => {
     if (!owner || !repo || !actionTarget || !renameTo.trim() || !commitMsg.trim()) {
-      toast.error('请填写新名称和提交信息'); return;
+      toast.error(i18n.t('请填写新名称和提交信息')); return;
     }
-    if (renameTo.trim() === actionTarget.name) { toast.error('新名称与原名称相同'); return; }
+    if (renameTo.trim() === actionTarget.name) { toast.error(i18n.t('新名称与原名称相同')); return; }
     setActionBusy(true);
     try {
       const dirParts = actionTarget.path.split('/');
@@ -601,7 +602,7 @@ export default function CodeBrowserPage() {
       const newPath = dirParts.join('/');
       if (actionTarget.type === 'file') {
         const fileInfo = await getFileInfo(owner, repo, actionTarget.path, currentBranch);
-        if (!fileInfo || !fileInfo.content) throw new Error('无法读取文件内容');
+        if (!fileInfo || !fileInfo.content) throw new Error(i18n.t('无法读取文件内容'));
         await createFileContent(owner, repo, newPath, { message: `${commitMsg.trim()} (rename)`, content: fileInfo.content.replace(/\n/g, ''), branch: currentBranch });
         await deleteFileContent(owner, repo, actionTarget.path, { message: `${commitMsg.trim()} (remove old)`, sha: actionTarget.sha, branch: currentBranch });
         toast.success(`已重命名为 ${renameTo.trim()}`);
@@ -609,7 +610,7 @@ export default function CodeBrowserPage() {
         closeAction();
         navigate(`/repos/${owner}/${repo}/code/${newPath}`);
       } else {
-        toast.info('文件夹重命名需要一段时间，请稍候...');
+        toast.info(i18n.t('文件夹重命名需要一段时间，请稍候...'));
         const treeData = await getRepoContents(owner, repo, actionTarget.path, currentBranch) as GitHubContent[];
         const allFiles: Array<{ path: string; content: string; sha: string }> = [];
         const collectFiles = async (items: GitHubContent[]) => {
@@ -636,40 +637,40 @@ export default function CodeBrowserPage() {
         closeAction();
         loadContents();
       }
-    } catch (err) { toast.error(err instanceof Error ? err.message : '重命名失败'); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('重命名失败')); }
     finally { setActionBusy(false); }
   };
 
   // ─── 移动文件 ───
   const handleMove = async () => {
     if (!owner || !repo || !actionTarget || !moveTo.trim() || !commitMsg.trim()) {
-      toast.error('请填写目标路径和提交信息'); return;
+      toast.error(i18n.t('请填写目标路径和提交信息')); return;
     }
-    if (moveTo.trim() === actionTarget.path) { toast.error('目标路径与当前路径相同'); return; }
-    if (actionTarget.type !== 'file') { toast.error('暂只支持移动文件'); return; }
+    if (moveTo.trim() === actionTarget.path) { toast.error(i18n.t('目标路径与当前路径相同')); return; }
+    if (actionTarget.type !== 'file') { toast.error(i18n.t('暂只支持移动文件')); return; }
     setActionBusy(true);
     try {
       const fileInfo = await getFileInfo(owner, repo, actionTarget.path, currentBranch);
-      if (!fileInfo?.content) throw new Error('无法读取文件内容');
+      if (!fileInfo?.content) throw new Error(i18n.t('无法读取文件内容'));
       await createFileContent(owner, repo, moveTo.trim(), { message: `${commitMsg.trim()} (move to ${moveTo.trim()})`, content: fileInfo.content.replace(/\n/g, ''), branch: currentBranch });
       await deleteFileContent(owner, repo, actionTarget.path, { message: `${commitMsg.trim()} (remove original)`, sha: actionTarget.sha, branch: currentBranch });
       toast.success(`已移动到 ${moveTo.trim()}`);
       setTreeRefreshKey(k => k + 1);
       closeAction();
       loadContents();
-    } catch (err) { toast.error(err instanceof Error ? err.message : '移动失败'); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('移动失败')); }
     finally { setActionBusy(false); }
   };
 
   const handleCopyPath = (path: string) => {
     copyToClipboard(path);
-    toast.success('路径已复制');
+    toast.success(i18n.t('路径已复制'));
   };
 
   const handleCopyRawLink = (path: string) => {
     const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${currentBranch}/${path}`;
     copyToClipboard(rawUrl);
-    toast.success('Raw 链接已复制');
+    toast.success(i18n.t('Raw 链接已复制'));
   };
 
   const pathParts = filePath ? filePath.split('/') : [];
@@ -680,13 +681,11 @@ export default function CodeBrowserPage() {
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => navigate(`/repos/${owner}/${repo}/code/${item.path}`)}>
         <FileItemIcon filename={item.name} isDir={false} size="w-3.5 h-3.5 mr-2" />
-        查看文件
-      </ContextMenuItem>
+        {i18n.t('查看文件')}</ContextMenuItem>
       {!isImageFile(item.name) && (
         <ContextMenuItem className="text-foreground cursor-pointer text-sm"
           onClick={() => navigate(`/repos/${owner}/${repo}/code/${item.path}`)}>
-          <Pencil className="w-3.5 h-3.5 mr-2" />编辑文件
-        </ContextMenuItem>
+          <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('编辑文件')}</ContextMenuItem>
       )}
       {item.download_url && (
         <ContextMenuItem className="text-foreground cursor-pointer text-sm"
@@ -694,38 +693,31 @@ export default function CodeBrowserPage() {
             try {
               await downloadCodeFile(item.download_url!, item.name, token ?? '');
             } catch {
-              toast.error('下载失败，请检查网络或权限');
+              toast.error(i18n.t('下载失败，请检查网络或权限'));
             }
           }}>
-          <Download className="w-3.5 h-3.5 mr-2" />下载文件
-        </ContextMenuItem>
+          <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('下载文件')}</ContextMenuItem>
       )}
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => handleCopyPath(item.path)}>
-        <ClipboardCopy className="w-3.5 h-3.5 mr-2" />复制路径
-      </ContextMenuItem>
+        <ClipboardCopy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制路径')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => handleCopyRawLink(item.path)}>
-        <Link className="w-3.5 h-3.5 mr-2" />复制 Raw 链接
-      </ContextMenuItem>
+        <Link className="w-3.5 h-3.5 mr-2" />{i18n.t('复制 Raw 链接')}</ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => openAction('rename', item)}>
-        <Pencil className="w-3.5 h-3.5 mr-2" />重命名
-      </ContextMenuItem>
+        <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => openAction('move', item)}>
-        <MoveRight className="w-3.5 h-3.5 mr-2" />移动到...
-      </ContextMenuItem>
+        <MoveRight className="w-3.5 h-3.5 mr-2" />{i18n.t('移动到...')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => navigate(`/repos/${owner}/${repo}/commits/${currentBranch}?path=${item.path}`)}>
-        <History className="w-3.5 h-3.5 mr-2" />查看历史
-      </ContextMenuItem>
+        <History className="w-3.5 h-3.5 mr-2" />{i18n.t('查看历史')}</ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-destructive cursor-pointer text-sm focus:text-destructive"
         onClick={() => { setCommitMsg(`Delete ${item.name}`); openAction('delete-file', item); }}>
-        <Trash2 className="w-3.5 h-3.5 mr-2" />删除文件
-      </ContextMenuItem>
+        <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除文件')}</ContextMenuItem>
     </ContextMenuContent>
   );
 
@@ -734,35 +726,28 @@ export default function CodeBrowserPage() {
     <ContextMenuContent className="bg-popover border-border w-52">
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => navigate(`/repos/${owner}/${repo}/code/${item.path}`)}>
-        <FolderOpen className="w-3.5 h-3.5 mr-2 text-yellow-400" />打开文件夹
-      </ContextMenuItem>
+        <FolderOpen className="w-3.5 h-3.5 mr-2 text-yellow-400" />{i18n.t('打开文件夹')}</ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => { navigate(`/repos/${owner}/${repo}/code/${item.path}`); setTimeout(() => openAction('new-file'), 100); }}>
-        <FilePlus className="w-3.5 h-3.5 mr-2" />新建文件
-      </ContextMenuItem>
+        <FilePlus className="w-3.5 h-3.5 mr-2" />{i18n.t('新建文件')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => { navigate(`/repos/${owner}/${repo}/code/${item.path}`); setTimeout(() => openAction('new-folder'), 100); }}>
-        <FolderPlus className="w-3.5 h-3.5 mr-2" />新建子文件夹
-      </ContextMenuItem>
+        <FolderPlus className="w-3.5 h-3.5 mr-2" />{i18n.t('新建子文件夹')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => { navigate(`/repos/${owner}/${repo}/code/${item.path}`); setTimeout(() => openAction('upload'), 100); }}>
-        <Upload className="w-3.5 h-3.5 mr-2" />上传文件
-      </ContextMenuItem>
+        <Upload className="w-3.5 h-3.5 mr-2" />{i18n.t('上传文件')}</ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => handleCopyPath(item.path)}>
-        <ClipboardCopy className="w-3.5 h-3.5 mr-2" />复制路径
-      </ContextMenuItem>
+        <ClipboardCopy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制路径')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => openAction('rename', item)}>
-        <Pencil className="w-3.5 h-3.5 mr-2" />重命名
-      </ContextMenuItem>
+        <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-destructive cursor-pointer text-sm focus:text-destructive"
         onClick={() => { setCommitMsg(`Delete folder ${item.name}`); openAction('delete-folder', item); }}>
-        <Trash2 className="w-3.5 h-3.5 mr-2" />删除文件夹
-      </ContextMenuItem>
+        <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除文件夹')}</ContextMenuItem>
     </ContextMenuContent>
   );
 
@@ -784,14 +769,14 @@ export default function CodeBrowserPage() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* ─── 桌面端：Activity Bar ─── */}
         <div className="hidden md:flex flex-col w-12 border-r border-border bg-sidebar shrink-0 items-center py-3 gap-4 z-10">
-        <Button variant="ghost" size="icon" className={`w-10 h-10 rounded-xl ${treeVisible ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setTreeVisible(true)} title="资源管理器">
+        <Button variant="ghost" size="icon" className={`w-10 h-10 rounded-xl ${treeVisible ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setTreeVisible(true)} title={i18n.t('资源管理器')}>
           <FolderOpen className="w-5 h-5" />
         </Button>
-        <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => setShowSearchPanel(true)} title="搜索">
+        <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => setShowSearchPanel(true)} title={i18n.t('搜索')}>
           <Search className="w-5 h-5" />
         </Button>
         <div className="mt-auto mb-2 flex flex-col gap-4">
-          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => navigate('/repos')} title="返回仓库列表">
+          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => navigate('/repos')} title={i18n.t('返回仓库列表')}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
         </div>
@@ -808,17 +793,17 @@ export default function CodeBrowserPage() {
             size="icon"
             className="md:hidden h-8 w-8 text-muted-foreground hover:bg-secondary shrink-0"
             onClick={() => setTreeOpen(true)}
-            title="打开文件树"
+            title={i18n.t('打开文件树')}
           >
             <PanelLeftOpen className="w-4 h-4" />
           </Button>
           {/* 移动端保留面包屑等 */}
         <div className="flex items-center gap-1 text-sm text-muted-foreground flex-1 min-w-0 overflow-x-auto whitespace-nowrap scrollbar-none">
-          <button type="button" className="hover:text-primary transition-colors shrink-0" onClick={() => navigate('/repos')}>仓库</button>
+          <button type="button" className="hover:text-primary transition-colors shrink-0" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
           <ChevronRight className="w-3 h-3 shrink-0" />
           <button type="button" className="hover:text-primary transition-colors shrink-0 max-w-[120px] truncate" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
           <ChevronRight className="w-3 h-3 shrink-0" />
-          <button type="button" className="hover:text-primary transition-colors shrink-0" onClick={() => navigate(`/repos/${owner}/${repo}/code`)}>代码</button>
+          <button type="button" className="hover:text-primary transition-colors shrink-0" onClick={() => navigate(`/repos/${owner}/${repo}/code`)}>{i18n.t('代码')}</button>
           {pathParts.map((part, i) => {
             // 渲染时预计算目标路径字符串，onClick 绑定不可变常量，消除闭包时序问题
             const targetPath = pathParts.slice(0, i + 1).join('/');
@@ -859,7 +844,7 @@ export default function CodeBrowserPage() {
                 variant="outline"
                 size="sm"
                 className="md:hidden h-7 px-2 text-xs gap-1 border-border hover:bg-secondary shrink-0 max-w-[110px]"
-                title="切换分支"
+                title={i18n.t('切换分支')}
               >
                 <GitBranch className="w-3 h-3 text-muted-foreground shrink-0" />
                 <span className="truncate font-mono">{currentBranch}</span>
@@ -900,8 +885,8 @@ export default function CodeBrowserPage() {
           {treeVisible && (
             <aside className="hidden md:flex flex-col w-64 shrink-0 border-r border-border bg-sidebar overflow-hidden">
               <div className="h-10 px-4 flex items-center justify-between border-b border-border shrink-0">
-                <span className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">资源管理器</span>
-                <Button variant="ghost" size="icon" className="w-6 h-6 text-muted-foreground hover:bg-secondary" onClick={() => setTreeVisible(false)} title="收起侧边栏">
+                <span className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">{i18n.t('资源管理器')}</span>
+                <Button variant="ghost" size="icon" className="w-6 h-6 text-muted-foreground hover:bg-secondary" onClick={() => setTreeVisible(false)} title={i18n.t('收起侧边栏')}>
                   <PanelLeftClose className="w-4 h-4" />
                 </Button>
               </div>
@@ -927,7 +912,7 @@ export default function CodeBrowserPage() {
               onDownload={(item) => {
                 if (item.download_url) {
                   downloadCodeFile(item.download_url, item.name, token ?? '').catch(() =>
-                    toast.error('下载失败，请检查网络或权限')
+                    toast.error(i18n.t('下载失败，请检查网络或权限'))
                   );
                 }
               }}
@@ -940,7 +925,7 @@ export default function CodeBrowserPage() {
         <Sheet open={treeOpen} onOpenChange={setTreeOpen}>
           <SheetContent side="left" className="w-72 p-0 flex flex-col bg-sidebar">
             <SheetHeader className="px-3 py-2 border-b border-border">
-              <SheetTitle className="text-sm font-medium text-foreground">{repo} 文件树</SheetTitle>
+              <SheetTitle className="text-sm font-medium text-foreground">{repo} {i18n.t('文件树')}</SheetTitle>
             </SheetHeader>
             <div className="flex-1 min-h-0 overflow-hidden">
               <FileTree
@@ -965,7 +950,7 @@ export default function CodeBrowserPage() {
                 onDownload={(item) => {
                   if (item.download_url) {
                     downloadCodeFile(item.download_url, item.name, token ?? '').catch(() =>
-                      toast.error('下载失败，请检查网络或权限')
+                      toast.error(i18n.t('下载失败，请检查网络或权限'))
                     );
                   }
                   setTreeOpen(false);
@@ -989,11 +974,11 @@ export default function CodeBrowserPage() {
                 </div>
               </div>
               <div className="flex items-center px-4 h-7 border-b border-border bg-background text-xs text-muted-foreground shrink-0 overflow-x-auto whitespace-nowrap scrollbar-none">
-                <span className="hover:text-foreground cursor-pointer" onClick={() => navigate('/repos')}>仓库</span>
+                <span className="hover:text-foreground cursor-pointer" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</span>
                 <ChevronRight className="w-3 h-3 mx-1 opacity-50" />
                 <span className="hover:text-foreground cursor-pointer" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</span>
                 <ChevronRight className="w-3 h-3 mx-1 opacity-50" />
-                <span className="hover:text-foreground cursor-pointer" onClick={() => navigate(`/repos/${owner}/${repo}/code`)}>代码</span>
+                <span className="hover:text-foreground cursor-pointer" onClick={() => navigate(`/repos/${owner}/${repo}/code`)}>{i18n.t('代码')}</span>
                 {pathParts.map((part, i) => {
                   const targetPath = pathParts.slice(0, i + 1).join('/');
                   const targetFullPath = `/repos/${owner}/${repo}/code/${targetPath}`;
@@ -1032,31 +1017,31 @@ export default function CodeBrowserPage() {
                 <div className="flex flex-col">
                   {/* 移动端工具栏 */}
                   <div className="flex md:hidden items-center justify-between px-2 h-12 bg-[#2d2d2d] text-white shrink-0 border-b border-white/10 select-none">
-                    <Button variant="ghost" size="icon" className="w-10 h-10 text-white hover:bg-white/10" onClick={() => closeAction(true)} title="返回">
+                    <Button variant="ghost" size="icon" className="w-10 h-10 text-white hover:bg-white/10" onClick={() => closeAction(true)} title={i18n.t('返回')}>
                       <ArrowLeft className="w-5 h-5" />
                     </Button>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => editorRef.current?.undo()} title="撤销">
+                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => editorRef.current?.undo()} title={i18n.t('撤销')}>
                         <Undo2 className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => editorRef.current?.redo()} title="重做">
+                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => editorRef.current?.redo()} title={i18n.t('重做')}>
                         <Redo2 className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => setShowSearchPanel(true)} title="搜索/替换">
+                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => setShowSearchPanel(true)} title={i18n.t('搜索/替换')}>
                         <Search className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => setIsReadingMode(true)} title="阅读模式">
+                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => setIsReadingMode(true)} title={i18n.t('阅读模式')}>
                         <BookOpen className="w-4 h-4" />
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" title="更多">
+                          <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" title={i18n.t('更多')}>
                             <MoreHorizontal className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56 bg-[#2d2d2d] text-white border-white/10" onCloseAutoFocus={(e) => e.preventDefault()}>
                           <div className="flex items-center justify-between px-2 py-1.5">
-                            <span className="text-sm">字号</span>
+                            <span className="text-sm">{i18n.t('字号')}</span>
                             <div className="flex items-center gap-1">
                               <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-white/10"
                                 onClick={(e) => { e.preventDefault(); setEditorFontSize(s => Math.max(10, s - 1)); }} disabled={editorFontSize <= 10}>
@@ -1072,16 +1057,14 @@ export default function CodeBrowserPage() {
                           <DropdownMenuSeparator className="bg-white/10" />
                           <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => { setWordWrap(w => w === 'on' ? 'off' : 'on'); }}>
                             <WrapText className="w-4 h-4 mr-2" />
-                            {wordWrap === 'on' ? '取消自动换行' : '自动换行'}
+                            {wordWrap === 'on' ? i18n.t('取消自动换行') : i18n.t('自动换行')}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-white/10" />
-                          <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => { copyToClipboard(editContent); toast.success('代码已复制'); }}>
-                            <Copy className="w-4 h-4 mr-2" />复制内容
-                          </DropdownMenuItem>
+                          <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => { copyToClipboard(editContent); toast.success(i18n.t('代码已复制')); }}>
+                            <Copy className="w-4 h-4 mr-2" />{i18n.t('复制内容')}</DropdownMenuItem>
                           {currentFile?.download_url && (
-                            <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={async () => { try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); } catch { toast.error('下载失败'); } }}>
-                              <Download className="w-4 h-4 mr-2" />下载文件
-                            </DropdownMenuItem>
+                            <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={async () => { try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); } catch { toast.error(i18n.t('下载失败')); } }}>
+                              <Download className="w-4 h-4 mr-2" />{i18n.t('下载文件')}</DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -1105,46 +1088,45 @@ export default function CodeBrowserPage() {
                     <span className="text-sm font-mono text-foreground truncate">{currentFile?.name}</span>
                     {currentFile && (
                       <span className="text-xs text-muted-foreground hidden lg:inline">
-                        · {formatFileSize(currentFile.size)} · {fsLineCount} 行
-                      </span>
+                        · {formatFileSize(currentFile.size)} · {fsLineCount} {i18n.t('行')}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-0.5 shrink-0">
                     <Button variant='ghost' size="icon"
                       className="w-7 h-7 text-muted-foreground hover:bg-secondary hidden md:flex"
                       onClick={() => { editorRef.current?.undo(); }}
-                      title="撤销 (Ctrl+Z)">
+                      title={i18n.t('撤销 (Ctrl+Z)')}>
                       <Undo2 className="w-3.5 h-3.5" />
                     </Button>
                     <Button variant='ghost' size="icon"
                       className="w-7 h-7 text-muted-foreground hover:bg-secondary hidden md:flex"
                       onClick={() => { editorRef.current?.redo(); }}
-                      title="重做 (Ctrl+Y)">
+                      title={i18n.t('重做 (Ctrl+Y)')}>
                       <Redo2 className="w-3.5 h-3.5" />
                     </Button>
                     <div className="w-px h-4 bg-border shrink-0 hidden md:block mx-0.5" />
                     <Button variant='ghost' size="icon"
                       className="w-7 h-7 text-muted-foreground hover:bg-secondary"
                       onClick={() => setShowSearchPanel(!showSearchPanel)}
-                      title="搜索 (Ctrl+F)">
+                      title={i18n.t('搜索 (Ctrl+F)')}>
                       <Search className="w-3.5 h-3.5" />
                     </Button>
                     <Button variant='ghost' size="icon"
                       className={`w-7 h-7 hover:bg-secondary hidden md:flex ${wordWrap === 'on' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
                       onClick={() => setWordWrap(w => w === 'on' ? 'off' : 'on')}
-                      title={wordWrap === 'on' ? '取消自动换行' : '自动换行'}>
+                      title={wordWrap === 'on' ? i18n.t('取消自动换行') : i18n.t('自动换行')}>
                       <WrapText className="w-3.5 h-3.5" />
                     </Button>
                     <Button variant='ghost' size="icon"
                       className="w-7 h-7 text-muted-foreground hover:bg-secondary hidden md:flex"
                       onClick={() => setEditorFullscreen(!editorFullscreen)}
-                      title={editorFullscreen ? "退出全屏" : "全屏模式"}>
+                      title={editorFullscreen ? i18n.t('退出全屏') : i18n.t('全屏模式')}>
                       {editorFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
                     </Button>
                     <Button variant='ghost' size="icon"
                       className="w-7 h-7 text-muted-foreground hover:bg-secondary md:hidden"
                       onClick={() => setIsReadingMode(!isReadingMode)}
-                      title={isReadingMode ? "退出阅读模式" : "阅读模式"}>
+                      title={isReadingMode ? i18n.t('退出阅读模式') : i18n.t('阅读模式')}>
                       {isReadingMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
                     </Button>
                     <DropdownMenu>
@@ -1155,7 +1137,7 @@ export default function CodeBrowserPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48" onCloseAutoFocus={(e) => e.preventDefault()}>
                         <div className="flex items-center justify-between px-2 py-1.5">
-                          <span className="text-xs text-muted-foreground">字号</span>
+                          <span className="text-xs text-muted-foreground">{i18n.t('字号')}</span>
                           <div className="flex items-center gap-1">
                             <Button variant="ghost" size="icon" className="w-6 h-6 hover:bg-secondary"
                               onClick={(e) => { e.preventDefault(); setEditorFontSize(s => Math.max(10, s - 1)); }} disabled={editorFontSize <= 10}>
@@ -1169,21 +1151,18 @@ export default function CodeBrowserPage() {
                           </div>
                         </div>
                         <DropdownMenuItem onSelect={() => setShowSearchPanel(true)}>
-                          <Search className="w-3.5 h-3.5 mr-2" />搜索 / 替换
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => { copyToClipboard(editContent); toast.success('代码已复制'); }}>
-                          <Copy className="w-3.5 h-3.5 mr-2" />复制内容
-                        </DropdownMenuItem>
+                          <Search className="w-3.5 h-3.5 mr-2" />{i18n.t('搜索 / 替换')}</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => { copyToClipboard(editContent); toast.success(i18n.t('代码已复制')); }}>
+                          <Copy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制内容')}</DropdownMenuItem>
                         {currentFile?.download_url && (
-                          <DropdownMenuItem onSelect={async () => { try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); } catch { toast.error('下载失败'); } }}>
-                            <Download className="w-3.5 h-3.5 mr-2" />下载文件
-                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={async () => { try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); } catch { toast.error(i18n.t('下载失败')); } }}>
+                            <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('下载文件')}</DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                     <div className="w-px h-4 bg-border shrink-0 mx-0.5" />
                     <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
-                      onClick={() => closeAction(true)} title="关闭编辑器">
+                      onClick={() => closeAction(true)} title={i18n.t('关闭编辑器')}>
                       <X className="w-3.5 h-3.5" />
                     </Button>
                   </div>
@@ -1230,17 +1209,15 @@ export default function CodeBrowserPage() {
                     <AlertDialogHeader>
                       <AlertDialogTitle className="flex items-center gap-2">
                         <AlertCircle className="w-5 h-5 text-destructive" />
-                        存在语法错误
-                      </AlertDialogTitle>
+                        {i18n.t('存在语法错误')}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        当前代码存在 {syntaxErrors.length} 个语法错误。是否仍要强行保存？
-                      </AlertDialogDescription>
+                        {i18n.t('当前代码存在')}{syntaxErrors.length} {i18n.t('个语法错误。是否仍要强行保存？')}</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>返回修改</AlertDialogCancel>
+                      <AlertDialogCancel>{i18n.t('返回修改')}</AlertDialogCancel>
                       <AlertDialogAction onClick={() => {
                         handleSaveEdit(true);
-                      }}>强行保存</AlertDialogAction>
+                      }}>{i18n.t('强行保存')}</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
@@ -1252,7 +1229,7 @@ export default function CodeBrowserPage() {
                     size="icon"
                     className="absolute top-4 right-4 z-50 rounded-full shadow-lg h-10 w-10 opacity-80 hover:opacity-100 bg-background border border-border md:hidden"
                     onClick={() => setIsReadingMode(false)}
-                    title="退出阅读模式"
+                    title={i18n.t('退出阅读模式')}
                   >
                     <Minimize2 className="w-5 h-5 text-foreground" />
                   </Button>
@@ -1265,7 +1242,7 @@ export default function CodeBrowserPage() {
                 <div className="flex flex-col shrink-0 border-t border-border bg-card/95 select-none">
                   {syntaxErrors.length > 0 && (
                     <div className="px-3 py-1.5 bg-destructive/10 border-b border-destructive/20 text-xs text-destructive max-h-24 overflow-y-auto">
-                      <div className="font-semibold mb-1 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />发现 {syntaxErrors.length} 个语法错误：</div>
+                      <div className="font-semibold mb-1 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />{i18n.t('发现')}{syntaxErrors.length} {i18n.t('个语法错误：')}</div>
                       <ul className="list-disc list-inside pl-4 space-y-0.5">
                         {syntaxErrors.map((err, i) => (
                           <li key={i}>[{err.line}:{err.column}] {err.message}</li>
@@ -1279,19 +1256,18 @@ export default function CodeBrowserPage() {
                         setCommitMsg(e.target.value);
                         setShowSyntaxWarning(false);
                       }}
-                      placeholder="提交信息（必填）..."
+                      placeholder={i18n.t('提交信息（必填）...')}
                       className="h-8 bg-secondary border-border text-foreground placeholder:text-muted-foreground text-sm" />
                   </div>
                   <Button variant="ghost" size="sm"
                     className="h-8 text-xs text-muted-foreground border border-border hover:bg-secondary shrink-0 px-3"
                     onClick={() => closeAction(true)}>
-                    <X className="w-3 h-3 mr-1" />取消
-                  </Button>
+                    <X className="w-3 h-3 mr-1" />{i18n.t('取消')}</Button>
                   <Button size="sm" className={`h-8 text-xs shrink-0 px-3 ${syntaxErrors.length > 0 ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}
                     onClick={() => handleSaveEdit()} disabled={actionBusy || !commitMsg.trim()}>
                     {actionBusy
-                      ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />提交中...</>
-                      : <><Save className="w-3 h-3 mr-1" />保存并提交</>}
+                      ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />{i18n.t('提交中...')}</>
+                      : <><Save className="w-3 h-3 mr-1" />{i18n.t('保存并提交')}</>}
                   </Button>
                   </div>
                 </div>
@@ -1315,7 +1291,7 @@ export default function CodeBrowserPage() {
                   }
                 }}>
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">返回上级</span>
+                <span className="hidden sm:inline">{i18n.t('返回上级')}</span>
               </Button>
             ) : (
               <span className="text-xs text-muted-foreground px-1 font-mono">/</span>
@@ -1326,15 +1302,15 @@ export default function CodeBrowserPage() {
               <div className="flex items-center gap-1 shrink-0">
                 <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1 px-2"
                   onClick={() => openAction('new-file')}>
-                  <FilePlus className="w-3 h-3" /><span className="hidden sm:inline">新建文件</span>
+                  <FilePlus className="w-3 h-3" /><span className="hidden sm:inline">{i18n.t('新建文件')}</span>
                 </Button>
                 <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1 px-2"
                   onClick={() => openAction('new-folder')}>
-                  <FolderPlus className="w-3 h-3" /><span className="hidden sm:inline">新建文件夹</span>
+                  <FolderPlus className="w-3 h-3" /><span className="hidden sm:inline">{i18n.t('新建文件夹')}</span>
                 </Button>
                 <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1 px-2"
                   onClick={() => openAction('upload')}>
-                  <Upload className="w-3 h-3" /><span className="hidden sm:inline">上传</span>
+                  <Upload className="w-3 h-3" /><span className="hidden sm:inline">{i18n.t('上传')}</span>
                 </Button>
               </div>
             )}
@@ -1343,23 +1319,23 @@ export default function CodeBrowserPage() {
               <div className="flex items-center gap-1 shrink-0">
                 {currentFile.download_url && (
                   <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 px-2"
-                    title="下载文件"
+                    title={i18n.t('下载文件')}
                     onClick={async () => {
                       try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); }
-                      catch { toast.error('下载失败'); }
+                      catch { toast.error(i18n.t('下载失败')); }
                     }}>
-                    <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">下载</span>
+                    <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">{i18n.t('下载')}</span>
                   </Button>
                 )}
                 <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 px-2"
-                  title="复制路径"
-                  onClick={() => { copyToClipboard(currentFile.path); toast.success('路径已复制'); }}>
-                  <ClipboardCopy className="w-3.5 h-3.5" /><span className="hidden md:inline">复制路径</span>
+                  title={i18n.t('复制路径')}
+                  onClick={() => { copyToClipboard(currentFile.path); toast.success(i18n.t('路径已复制')); }}>
+                  <ClipboardCopy className="w-3.5 h-3.5" /><span className="hidden md:inline">{i18n.t('复制路径')}</span>
                 </Button>
                 <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 px-2"
-                  title="查看提交历史"
+                  title={i18n.t('查看提交历史')}
                   onClick={() => navigate(`/repos/${owner}/${repo}/commits/${currentBranch}?path=${currentFile.path}`)}>
-                  <History className="w-3.5 h-3.5" /><span className="hidden md:inline">历史</span>
+                  <History className="w-3.5 h-3.5" /><span className="hidden md:inline">{i18n.t('历史')}</span>
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -1368,22 +1344,18 @@ export default function CodeBrowserPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-44">
-                    <DropdownMenuItem onClick={() => { const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${currentBranch}/${currentFile.path}`; copyToClipboard(rawUrl); toast.success('Raw 链接已复制'); }}>
-                      <Link className="w-3.5 h-3.5 mr-2" />复制 Raw 链接
-                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${currentBranch}/${currentFile.path}`; copyToClipboard(rawUrl); toast.success(i18n.t('Raw 链接已复制')); }}>
+                      <Link className="w-3.5 h-3.5 mr-2" />{i18n.t('复制 Raw 链接')}</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => openAction('rename', currentFile)}>
-                      <Pencil className="w-3.5 h-3.5 mr-2" />重命名
-                    </DropdownMenuItem>
+                      <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => openAction('move', currentFile)}>
-                      <MoveRight className="w-3.5 h-3.5 mr-2" />移动到...
-                    </DropdownMenuItem>
+                      <MoveRight className="w-3.5 h-3.5 mr-2" />{i18n.t('移动到...')}</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
                       onClick={() => { setCommitMsg(`Delete ${currentFile.name}`); openAction('delete-file', currentFile); }}>
-                      <Trash2 className="w-3.5 h-3.5 mr-2" />删除文件
-                    </DropdownMenuItem>
+                      <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除文件')}</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -1411,8 +1383,7 @@ export default function CodeBrowserPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-xs border-border text-muted-foreground px-1.5 py-0 h-4 flex items-center gap-1">
-                      <ImageIcon className="w-3 h-3" />图片预览
-                    </Badge>
+                      <ImageIcon className="w-3 h-3" />{i18n.t('图片预览')}</Badge>
                     {currentFile.download_url && (
                       <Button
                         variant="ghost"
@@ -1422,12 +1393,11 @@ export default function CodeBrowserPage() {
                           try {
                             await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? '');
                           } catch {
-                            toast.error('下载失败，请检查网络或权限');
+                            toast.error(i18n.t('下载失败，请检查网络或权限'));
                           }
                         }}
                       >
-                        <Download className="w-3.5 h-3.5 mr-1" />下载
-                      </Button>
+                        <Download className="w-3.5 h-3.5 mr-1" />{i18n.t('下载')}</Button>
                     )}
                   </div>
                 </div>
@@ -1447,7 +1417,7 @@ export default function CodeBrowserPage() {
               <div className="flex md:hidden flex-col items-center justify-center py-16 gap-4">
                 <div className="flex items-center gap-3 text-muted-foreground">
                   <FileEdit className="w-6 h-6 text-primary animate-pulse" />
-                  <span className="text-sm">正在打开编辑器...</span>
+                  <span className="text-sm">{i18n.t('正在打开编辑器...')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <FileItemIcon filename={currentFile.name} isDir={false} size="w-4 h-4" />
@@ -1463,11 +1433,10 @@ export default function CodeBrowserPage() {
             {contents.length === 0 ? (
               <div className="py-12 text-center">
                 <FolderOpen className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground text-sm">空目录</p>
+                <p className="text-muted-foreground text-sm">{i18n.t('空目录')}</p>
                 <Button variant="ghost" size="sm" className="mt-3 h-8 text-xs text-muted-foreground border border-border hover:bg-secondary"
                   onClick={() => openAction('new-file')}>
-                  <Plus className="w-3.5 h-3.5 mr-1.5" />创建第一个文件
-                </Button>
+                  <Plus className="w-3.5 h-3.5 mr-1.5" />{i18n.t('创建第一个文件')}</Button>
               </div>
             ) : (
               contents.map((item) => {
@@ -1500,14 +1469,14 @@ export default function CodeBrowserPage() {
                           {!isDir && item.download_url && (
                             <Button variant="ghost" size="icon"
                               className="h-6 w-6 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                              title="下载"
-                              onClick={async (e) => { e.stopPropagation(); try { await downloadCodeFile(item.download_url!, item.name, token ?? ''); } catch { toast.error('下载失败'); } }}>
+                              title={i18n.t('下载')}
+                              onClick={async (e) => { e.stopPropagation(); try { await downloadCodeFile(item.download_url!, item.name, token ?? ''); } catch { toast.error(i18n.t('下载失败')); } }}>
                               <Download className="w-3 h-3" />
                             </Button>
                           )}
                           <Button variant="ghost" size="icon"
                             className="h-6 w-6 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                            title="复制路径"
+                            title={i18n.t('复制路径')}
                             onClick={(e) => { e.stopPropagation(); handleCopyPath(item.path); }}>
                             <ClipboardCopy className="w-3 h-3" />
                           </Button>
@@ -1515,32 +1484,28 @@ export default function CodeBrowserPage() {
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon"
                                 className="h-6 w-6 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                                title="更多操作">
+                                title={i18n.t('更多操作')}>
                                 <MoreHorizontal className="w-3 h-3" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-44">
                               <DropdownMenuItem onClick={() => openAction('rename', item)}>
-                                <Pencil className="w-3.5 h-3.5 mr-2" />重命名
-                              </DropdownMenuItem>
+                                <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => openAction('move', item)}>
-                                <MoveRight className="w-3.5 h-3.5 mr-2" />移动到...
-                              </DropdownMenuItem>
+                                <MoveRight className="w-3.5 h-3.5 mr-2" />{i18n.t('移动到...')}</DropdownMenuItem>
                               {!isDir && (
                                 <DropdownMenuItem onClick={() => handleCopyRawLink(item.path)}>
-                                  <Link className="w-3.5 h-3.5 mr-2" />复制 Raw 链接
-                                </DropdownMenuItem>
+                                  <Link className="w-3.5 h-3.5 mr-2" />{i18n.t('复制 Raw 链接')}</DropdownMenuItem>
                               )}
                               {!isDir && (
                                 <DropdownMenuItem onClick={() => navigate(`/repos/${owner}/${repo}/commits/${currentBranch}?path=${item.path}`)}>
-                                  <History className="w-3.5 h-3.5 mr-2" />查看历史
-                                </DropdownMenuItem>
+                                  <History className="w-3.5 h-3.5 mr-2" />{i18n.t('查看历史')}</DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
                                 onClick={() => { setCommitMsg(`Delete ${item.name}`); openAction(isDir ? 'delete-folder' : 'delete-file', item); }}>
-                                <Trash2 className="w-3.5 h-3.5 mr-2" />删除{isDir ? '文件夹' : '文件'}
+                                <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除')}{isDir ? i18n.t('文件夹') : i18n.t('文件')}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -1567,32 +1532,31 @@ export default function CodeBrowserPage() {
         <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-2xl bg-card border-border">
           <DialogHeader>
             <DialogTitle className="text-foreground flex items-center gap-2">
-              <FilePlus className="w-4 h-4 text-primary" />新建文件
-            </DialogTitle>
+              <FilePlus className="w-4 h-4 text-primary" />{i18n.t('新建文件')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-sm font-normal text-foreground">文件名 *</Label>
+              <Label className="text-sm font-normal text-foreground">{i18n.t('文件名 *')}</Label>
               <Input value={newFileName} onChange={(e) => setNewFileName(e.target.value)} placeholder="example.txt"
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono" />
-              {(() => { const d = pendingDirPath !== null ? pendingDirPath : filePath; return d ? <p className="text-xs text-muted-foreground">将在 <code className="font-mono bg-secondary px-1 rounded">{d}/</code> 目录下创建</p> : <p className="text-xs text-muted-foreground">将在根目录下创建</p>; })()}
+              {(() => { const d = pendingDirPath !== null ? pendingDirPath : filePath; return d ? <p className="text-xs text-muted-foreground">{i18n.t('将在')}<code className="font-mono bg-secondary px-1 rounded">{d}/</code> {i18n.t('目录下创建')}</p> : <p className="text-xs text-muted-foreground">{i18n.t('将在根目录下创建')}</p>; })()}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm font-normal text-foreground">文件内容（可选）</Label>
+              <Label className="text-sm font-normal text-foreground">{i18n.t('文件内容（可选）')}</Label>
               <Textarea value={newFileContent} onChange={(e) => setNewFileContent(e.target.value)}
-                placeholder="在此输入文件内容..." rows={6}
+                placeholder={i18n.t('在此输入文件内容...')} rows={6}
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono text-xs resize-none" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm font-normal text-foreground">提交信息 *</Label>
+              <Label className="text-sm font-normal text-foreground">{i18n.t('提交信息 *')}</Label>
               <Input value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)} placeholder={`Create ${newFileName || 'file'}`}
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground" />
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary" onClick={() => closeAction()}>取消</Button>
+            <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary" onClick={() => closeAction()}>{i18n.t('取消')}</Button>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleCreateFile} disabled={actionBusy || !newFileName.trim()}>
-              {actionBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />创建中...</> : <><FilePlus className="w-4 h-4 mr-2" />创建文件</>}
+              {actionBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{i18n.t('创建中...')}</> : <><FilePlus className="w-4 h-4 mr-2" />{i18n.t('创建文件')}</>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1603,26 +1567,25 @@ export default function CodeBrowserPage() {
         <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <DialogHeader>
             <DialogTitle className="text-foreground flex items-center gap-2">
-              <FolderPlus className="w-4 h-4 text-primary" />新建文件夹
-            </DialogTitle>
+              <FolderPlus className="w-4 h-4 text-primary" />{i18n.t('新建文件夹')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-sm font-normal text-foreground">文件夹名称 *</Label>
+              <Label className="text-sm font-normal text-foreground">{i18n.t('文件夹名称 *')}</Label>
               <Input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="my-folder"
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono" />
-              <p className="text-xs text-muted-foreground">会自动在文件夹内创建 <code className="font-mono bg-secondary px-1 rounded">.gitkeep</code> 占位文件</p>
+              <p className="text-xs text-muted-foreground">{i18n.t('会自动在文件夹内创建')}<code className="font-mono bg-secondary px-1 rounded">.gitkeep</code> {i18n.t('占位文件')}</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm font-normal text-foreground">提交信息 *</Label>
+              <Label className="text-sm font-normal text-foreground">{i18n.t('提交信息 *')}</Label>
               <Input value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)} placeholder={`Create folder ${newFolderName || 'folder'}`}
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground" />
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary" onClick={() => closeAction()}>取消</Button>
+            <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary" onClick={() => closeAction()}>{i18n.t('取消')}</Button>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleCreateFolder} disabled={actionBusy || !newFolderName.trim()}>
-              {actionBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />创建中...</> : <><FolderPlus className="w-4 h-4 mr-2" />创建文件夹</>}
+              {actionBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{i18n.t('创建中...')}</> : <><FolderPlus className="w-4 h-4 mr-2" />{i18n.t('创建文件夹')}</>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1632,21 +1595,20 @@ export default function CodeBrowserPage() {
       <AlertDialog open={actionMode === 'delete-file'} onOpenChange={(open) => { if (!open) closeAction(); }}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">确认删除文件</AlertDialogTitle>
+            <AlertDialogTitle className="text-foreground">{i18n.t('确认删除文件')}</AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
-              将删除 <code className="font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded">{actionTarget?.path}</code>，此操作不可撤销。
-            </AlertDialogDescription>
+              {i18n.t('将删除')}<code className="font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded">{actionTarget?.path}</code>{i18n.t('，此操作不可撤销。')}</AlertDialogDescription>
           </AlertDialogHeader>
           <div className="px-1 py-2">
-            <Label className="text-sm font-normal text-foreground">提交信息 *</Label>
+            <Label className="text-sm font-normal text-foreground">{i18n.t('提交信息 *')}</Label>
             <Input value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)} placeholder={`Delete ${actionTarget?.name}`}
               className="mt-1.5 bg-secondary border-border text-foreground placeholder:text-muted-foreground" />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-secondary" onClick={() => closeAction()}>取消</AlertDialogCancel>
+            <AlertDialogCancel className="border-border hover:bg-secondary" onClick={() => closeAction()}>{i18n.t('取消')}</AlertDialogCancel>
             <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDeleteFile} disabled={actionBusy || !commitMsg.trim()}>
-              {actionBusy ? '删除中...' : '确认删除'}
+              {actionBusy ? i18n.t('删除中...') : i18n.t('确认删除')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1656,26 +1618,25 @@ export default function CodeBrowserPage() {
       <AlertDialog open={actionMode === 'delete-folder'} onOpenChange={(open) => { if (!open) closeAction(); }}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">确认删除文件夹</AlertDialogTitle>
+            <AlertDialogTitle className="text-foreground">{i18n.t('确认删除文件夹')}</AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
-              将递归删除 <code className="font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded">{actionTarget?.path}</code> 下的所有文件，此操作不可撤销。
-            </AlertDialogDescription>
+              {i18n.t('将递归删除')}<code className="font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded">{actionTarget?.path}</code> {i18n.t('下的所有文件，此操作不可撤销。')}</AlertDialogDescription>
           </AlertDialogHeader>
           <div className="px-1 py-2 space-y-2">
             <div>
-              <Label className="text-sm font-normal text-foreground">提交信息 *</Label>
+              <Label className="text-sm font-normal text-foreground">{i18n.t('提交信息 *')}</Label>
               <Input value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)} placeholder={`Delete folder ${actionTarget?.name}`}
                 className="mt-1.5 bg-secondary border-border text-foreground placeholder:text-muted-foreground" />
             </div>
             {deleteProgress && (
-              <p className="text-xs text-muted-foreground">正在删除... {deleteProgress.done}/{deleteProgress.total}</p>
+              <p className="text-xs text-muted-foreground">{i18n.t('正在删除...')}{deleteProgress.done}/{deleteProgress.total}</p>
             )}
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-secondary" onClick={() => closeAction()}>取消</AlertDialogCancel>
+            <AlertDialogCancel className="border-border hover:bg-secondary" onClick={() => closeAction()}>{i18n.t('取消')}</AlertDialogCancel>
             <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDeleteFolder} disabled={actionBusy || !commitMsg.trim()}>
-              {actionBusy ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />删除中...</> : '确认删除'}
+              {actionBusy ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />{i18n.t('删除中...')}</> : i18n.t('确认删除')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1685,29 +1646,29 @@ export default function CodeBrowserPage() {
       <Dialog open={actionMode === 'rename'} onOpenChange={(open) => { if (!open) closeAction(); }}>
         <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <DialogHeader>
-            <DialogTitle className="text-foreground">重命名 {actionTarget?.type === 'dir' ? '文件夹' : '文件'}</DialogTitle>
+            <DialogTitle className="text-foreground">{i18n.t('重命名')}{actionTarget?.type === 'dir' ? i18n.t('文件夹') : i18n.t('文件')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-sm font-normal text-muted-foreground">当前名称</Label>
+              <Label className="text-sm font-normal text-muted-foreground">{i18n.t('当前名称')}</Label>
               <p className="text-sm font-mono text-foreground bg-secondary rounded px-3 py-2">{actionTarget?.name}</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm font-normal text-foreground">新名称 *</Label>
-              <Input value={renameTo} onChange={(e) => setRenameTo(e.target.value)} placeholder="新名称..."
+              <Label className="text-sm font-normal text-foreground">{i18n.t('新名称 *')}</Label>
+              <Input value={renameTo} onChange={(e) => setRenameTo(e.target.value)} placeholder={i18n.t('新名称...')}
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm font-normal text-foreground">提交信息 *</Label>
+              <Label className="text-sm font-normal text-foreground">{i18n.t('提交信息 *')}</Label>
               <Input value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)} placeholder={`Rename ${actionTarget?.name} to ${renameTo || '...'}`}
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground" />
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary" onClick={() => closeAction()}>取消</Button>
+            <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary" onClick={() => closeAction()}>{i18n.t('取消')}</Button>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleRename}
               disabled={actionBusy || !renameTo.trim() || !commitMsg.trim()}>
-              {actionBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />处理中...</> : '确认重命名'}
+              {actionBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{i18n.t('处理中...')}</> : i18n.t('确认重命名')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1718,31 +1679,30 @@ export default function CodeBrowserPage() {
         <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <DialogHeader>
             <DialogTitle className="text-foreground flex items-center gap-2">
-              <MoveRight className="w-4 h-4 text-primary" />移动文件
-            </DialogTitle>
+              <MoveRight className="w-4 h-4 text-primary" />{i18n.t('移动文件')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-sm font-normal text-muted-foreground">当前路径</Label>
+              <Label className="text-sm font-normal text-muted-foreground">{i18n.t('当前路径')}</Label>
               <p className="text-sm font-mono text-foreground bg-secondary rounded px-3 py-2">{actionTarget?.path}</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm font-normal text-foreground">目标路径 *</Label>
+              <Label className="text-sm font-normal text-foreground">{i18n.t('目标路径 *')}</Label>
               <Input value={moveTo} onChange={(e) => setMoveTo(e.target.value)} placeholder="src/new/location/file.txt"
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono" />
-              <p className="text-xs text-muted-foreground">请输入完整路径（含文件名），如 <code className="font-mono">src/utils/helper.ts</code></p>
+              <p className="text-xs text-muted-foreground">{i18n.t('请输入完整路径（含文件名），如')}<code className="font-mono">src/utils/helper.ts</code></p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm font-normal text-foreground">提交信息 *</Label>
+              <Label className="text-sm font-normal text-foreground">{i18n.t('提交信息 *')}</Label>
               <Input value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)} placeholder={`Move ${actionTarget?.name}`}
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground" />
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary" onClick={() => closeAction()}>取消</Button>
+            <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary" onClick={() => closeAction()}>{i18n.t('取消')}</Button>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleMove}
               disabled={actionBusy || !moveTo.trim() || !commitMsg.trim()}>
-              {actionBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />移动中...</> : <><MoveRight className="w-4 h-4 mr-2" />确认移动</>}
+              {actionBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{i18n.t('移动中...')}</> : <><MoveRight className="w-4 h-4 mr-2" />{i18n.t('确认移动')}</>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1753,16 +1713,15 @@ export default function CodeBrowserPage() {
         <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-2xl bg-card border-border max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-foreground flex items-center gap-2">
-              <Upload className="w-4 h-4 text-primary" />上传文件到
-              <code className="font-mono text-sm bg-secondary px-1.5 py-0.5 rounded">
-                {filePath || '根目录'}
+              <Upload className="w-4 h-4 text-primary" />{i18n.t('上传文件到')}<code className="font-mono text-sm bg-secondary px-1.5 py-0.5 rounded">
+                {filePath || i18n.t('根目录')}
               </code>
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-sm font-normal text-foreground">提交信息</Label>
+              <Label className="text-sm font-normal text-foreground">{i18n.t('提交信息')}</Label>
               <Input value={uploadCommitMsg} onChange={(e) => setUploadCommitMsg(e.target.value)} placeholder="Upload files"
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground" />
             </div>
@@ -1771,7 +1730,7 @@ export default function CodeBrowserPage() {
               <input id="skip-cb" type="checkbox" checked={skipExisting}
                 onChange={(e) => setSkipExisting(e.target.checked)}
                 className="w-4 h-4 accent-primary" />
-              <label htmlFor="skip-cb" className="text-sm text-foreground cursor-pointer">跳过已存在的文件（不覆盖）</label>
+              <label htmlFor="skip-cb" className="text-sm text-foreground cursor-pointer">{i18n.t('跳过已存在的文件（不覆盖）')}</label>
             </div>
 
             <div
@@ -1786,31 +1745,30 @@ export default function CodeBrowserPage() {
               <input ref={uploadInputRef} type="file" multiple className="hidden"
                 onChange={(e) => addUploadFiles(e.target.files)} />
               <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-foreground font-medium">点击或拖放文件到此处</p>
-              <p className="text-xs text-muted-foreground mt-1">支持多文件，上传至当前路径</p>
+              <p className="text-sm text-foreground font-medium">{i18n.t('点击或拖放文件到此处')}</p>
+              <p className="text-xs text-muted-foreground mt-1">{i18n.t('支持多文件，上传至当前路径')}</p>
             </div>
 
             {uploadFiles.length > 0 && (
               <div className="bg-secondary/40 border border-border rounded-xl overflow-hidden">
                 <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2 text-xs flex-wrap">
-                    <span className="text-foreground font-medium">{uploadFiles.length} 个文件</span>
+                    <span className="text-foreground font-medium">{uploadFiles.length} {i18n.t('个文件')}</span>
                     {uploadFiles.filter(f => f.status === 'pending').length > 0 &&
-                      <Badge variant="outline" className="text-xs border-border text-muted-foreground">{uploadFiles.filter(f => f.status === 'pending').length} 待上传</Badge>}
+                      <Badge variant="outline" className="text-xs border-border text-muted-foreground">{uploadFiles.filter(f => f.status === 'pending').length} {i18n.t('待上传')}</Badge>}
                     {uploadFiles.filter(f => f.status === 'success').length > 0 &&
-                      <Badge className="bg-success/10 text-success border-success/30 text-xs">{uploadFiles.filter(f => f.status === 'success').length} 成功</Badge>}
+                      <Badge className="bg-success/10 text-success border-success/30 text-xs">{uploadFiles.filter(f => f.status === 'success').length} {i18n.t('成功')}</Badge>}
                     {uploadFiles.filter(f => f.status === 'error').length > 0 &&
-                      <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs">{uploadFiles.filter(f => f.status === 'error').length} 失败</Badge>}
+                      <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs">{uploadFiles.filter(f => f.status === 'error').length} {i18n.t('失败')}</Badge>}
                   </div>
                   <div className="flex gap-1.5">
                     {uploadFiles.some(f => f.status === 'error') && (
                       <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground hover:bg-secondary border border-border"
                         onClick={() => setUploadFiles(p => p.map(f => f.status === 'error' ? { ...f, status: 'pending', error: undefined } : f))}>
-                        <RefreshCw className="w-3 h-3 mr-1" />重试
-                      </Button>
+                        <RefreshCw className="w-3 h-3 mr-1" />{i18n.t('重试')}</Button>
                     )}
                     <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground hover:bg-secondary border border-border"
-                      onClick={() => setUploadFiles([])}>清空</Button>
+                      onClick={() => setUploadFiles([])}>{i18n.t('清空')}</Button>
                   </div>
                 </div>
                 <div className="divide-y divide-border max-h-52 overflow-y-auto">
@@ -1832,9 +1790,9 @@ export default function CodeBrowserPage() {
                           onChange={(e) => setUploadFiles(p => p.map(x => x.id === f.id ? { ...x, targetPath: e.target.value } : x))}
                           disabled={f.status !== 'pending' && f.status !== 'error'}
                           className="w-full mt-0.5 text-xs font-mono bg-transparent border-0 border-b border-dashed border-border/60 focus:outline-none focus:border-primary text-muted-foreground disabled:opacity-50 px-0"
-                          placeholder="目标路径..." />
+                          placeholder={i18n.t('目标路径...')} />
                         {f.error && <p className="text-xs text-destructive mt-0.5">{f.error}</p>}
-                        {f.status === 'skipped' && <p className="text-xs text-muted-foreground mt-0.5">文件已存在，已跳过</p>}
+                        {f.status === 'skipped' && <p className="text-xs text-muted-foreground mt-0.5">{i18n.t('文件已存在，已跳过')}</p>}
                       </div>
                       {(f.status === 'pending' || f.status === 'error') && (
                         <Button variant="ghost" size="icon" className="w-6 h-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
@@ -1851,7 +1809,7 @@ export default function CodeBrowserPage() {
             {uploading && (
               <div className="space-y-1">
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>上传中...</span><span>{uploadProgress}%</span>
+                  <span>{i18n.t('上传中...')}</span><span>{uploadProgress}%</span>
                 </div>
                 <Progress value={uploadProgress} className="h-1.5" />
               </div>
@@ -1860,13 +1818,13 @@ export default function CodeBrowserPage() {
 
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary"
-              onClick={() => setActionMode(null)}>关闭</Button>
+              onClick={() => setActionMode(null)}>{i18n.t('关闭')}</Button>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={handleUpload}
               disabled={uploading || uploadFiles.filter(f => f.status === 'pending' || f.status === 'error').length === 0}>
               {uploading
-                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />上传中...</>
-                : <><Upload className="w-4 h-4 mr-2" />提交上传（{uploadFiles.filter(f => f.status === 'pending' || f.status === 'error').length} 个）</>
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{i18n.t('上传中...')}</>
+                : <><Upload className="w-4 h-4 mr-2" />{i18n.t('提交上传（')}{uploadFiles.filter(f => f.status === 'pending' || f.status === 'error').length} {i18n.t('个）')}</>
               }
             </Button>
           </DialogFooter>

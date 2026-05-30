@@ -41,6 +41,7 @@ import {
 import { upsertSession, insertMessages, insertToolExecutionLogs, upsertWorkflowSnapshot, fetchLatestSnapshot, type PersistMessageInput } from '@/components/ai/aiSupabase';
 import type { Message, ModelConfig, ChatSession, ChatSessionMessage, ToolHistoryItem, TaskPlanStep, InlineStep, InlineTool, Attachment, FileRequest, StreamMetrics } from '@/components/ai/aiTypes';
 import { appendUsageRecord } from '@/components/ai/usageStats';
+import i18n from "@/i18n";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -121,15 +122,15 @@ function createConversationMemorySummary(messages: Message[]): ConversationMemor
 
   const window = candidates.slice(-MEMORY_SUMMARY_WINDOW_SIZE);
   const chunks = window.map((m, index) => {
-    const role = m.role === 'user' ? '用户' : '助手';
+    const role = m.role === 'user' ? i18n.t('用户') : i18n.t('助手');
     const text = m.content.replace(/\s+/g, ' ').trim();
     const shortened = text.length > 180 ? `${text.slice(0, 180)}…` : text;
     return `${index + 1}. ${role}：${shortened}`;
   });
 
   const summaryText = [
-    '【历史记忆摘要】',
-    '以下是更早对话中的关键上下文，请在后续回答中视为已知事实：',
+    i18n.t('【历史记忆摘要】'),
+    i18n.t('以下是更早对话中的关键上下文，请在后续回答中视为已知事实：'),
     ...chunks,
   ].join('\n');
 
@@ -333,11 +334,11 @@ export default function AiAssistantPage() {
       if (!networkInterruptedRef.current) return;
       networkInterruptedRef.current = false;
       setIsNetworkInterrupted(true); // 让 UI 重连条保持可见
-      toast.warning('网络连接已断开，AI 任务被中断', {
+      toast.warning(i18n.t('网络连接已断开，AI 任务被中断'), {
         duration: 0,
         id: 'reconnect-toast',
         action: {
-          label: '重新连接',
+          label: i18n.t('重新连接'),
           onClick: () => { toast.dismiss('reconnect-toast'); handleReconnect(); },
         },
       });
@@ -407,7 +408,7 @@ export default function AiAssistantPage() {
     const welcome: Message = {
       id: 'welcome',
       role: 'assistant',
-      content: `你好！我已连接到仓库 **${repo.full_name}**（${repo.private ? '私有' : '公开'}）。
+      content: `你好！我已连接到仓库 **${repo.full_name}**（${repo.private ? i18n.t('私有') : i18n.t('公开')}）。
 
 默认分支：\`${repo.default_branch}\`${repo.description ? `
 
@@ -514,7 +515,7 @@ export default function AiAssistantPage() {
       const firstUser = newMsgs.find(m => m.role === 'user');
       const title = firstUser
         ? firstUser.content.slice(0, 40) + (firstUser.content.length > 40 ? '…' : '')
-        : '新对话';
+        : i18n.t('新对话');
       sid = crypto.randomUUID();
       setSessionId(sid);
       await upsertSession({
@@ -900,7 +901,7 @@ export default function AiAssistantPage() {
             const { id: toolId, status: toolStatus, result: toolResult, elapsedMs } = chunk;
             let finalStatus: any = toolStatus;
             if (toolStatus === 'fail' && toolResult) {
-              if (toolResult.includes('【安全风控】') || toolResult.includes('【熔断拦截】')) {
+              if (toolResult.includes(i18n.t('【安全风控】')) || toolResult.includes(i18n.t('【熔断拦截】'))) {
                 finalStatus = 'blocked';
               }
             }
@@ -935,7 +936,7 @@ export default function AiAssistantPage() {
             queueMsg(prev => prev.map(m => {
               if (m.id !== initMsgId) return m;
               const inlinePlan: InlineStep[] = chunk.steps.map(s => ({ id: s.id, title: s.title, desc: s.desc, status: 'pending' }));
-              return { ...m, inlinePlan, bubbleType: 'step', stepTitle: '任务规划' };
+              return { ...m, inlinePlan, bubbleType: 'step', stepTitle: i18n.t('任务规划') };
             }));
             break;
           }
@@ -1019,15 +1020,15 @@ export default function AiAssistantPage() {
           case 'timeout': {
             // 任务超时：弹出提示，同时在输入区上方显示可恢复提示条
             const wfId = chunk.workflow_id;
-            const summary = lastUserTextRef.current.slice(0, 60) || '上次任务';
+            const summary = lastUserTextRef.current.slice(0, 60) || i18n.t('上次任务');
             setPendingResumeInfo({ workflowId: wfId, taskSummary: summary });
-            toast.warning('任务执行超时（超过 8 分钟），已自动暂停', {
+            toast.warning(i18n.t('任务执行超时（超过 8 分钟），已自动暂停'), {
               description: wfId
-                ? '点击「立即恢复」可从断点处继续，或稍后在「任务历史」中恢复。'
-                : '请在右侧「任务历史」Tab 中找到该任务并点击「恢复执行」继续。',
+                ? i18n.t('点击「立即恢复」可从断点处继续，或稍后在「任务历史」中恢复。')
+                : i18n.t('请在右侧「任务历史」Tab 中找到该任务并点击「恢复执行」继续。'),
               duration: 12000,
               action: {
-                label: wfId ? '立即恢复' : '查看历史',
+                label: wfId ? i18n.t('立即恢复') : i18n.t('查看历史'),
                 onClick: () => {
                   if (wfId) {
                     setPendingResumeInfo(null);
@@ -1095,7 +1096,7 @@ export default function AiAssistantPage() {
         setIsStreaming(false);
         // 持久化：只保存最终回答文本（answerMsgId 对应的气泡内容）
         // accumulated 为空时（纯工具任务无最终文字）用占位符替代，确保消息记录完整
-        const assistantContent = accumulated.trim() || '（任务已执行完成）';
+        const assistantContent = accumulated.trim() || i18n.t('（任务已执行完成）');
         const newMsgs: PersistMessageInput[] = isRegen
           ? [{ role: 'assistant', content: assistantContent }]
           : [{ role: 'user', content: userText }, { role: 'assistant', content: assistantContent }];
@@ -1118,12 +1119,12 @@ export default function AiAssistantPage() {
         cancelAndFlush();
         const isUserAbort = abortRef.current?.signal.aborted;
         const isNetworkDrop = !isUserAbort && (
-          err.message.includes('网络') ||
+          err.message.includes(i18n.t('网络')) ||
           err.message.includes('Failed to fetch') ||
           err.message.includes('NetworkError') ||
-          err.message.includes('超时') ||
+          err.message.includes(i18n.t('超时')) ||
           err.message.includes('timeout') ||
-          err.message.includes('中断')
+          err.message.includes(i18n.t('中断'))
         );
         // 错误写入最后一个活跃气泡
         const errTargetId = answerMsgId ?? currentStepBubbleId ?? initMsgId;
@@ -1218,7 +1219,7 @@ export default function AiAssistantPage() {
         // 重连时再次 idle：停止，不再继续递归重连
         cancelAndFlush();
         setMessages(prev => prev.map(m =>
-          m.id === aiMsg.id ? { ...m, content: '⚠️ 重连后仍无响应，请手动重试。', streaming: false } : m
+          m.id === aiMsg.id ? { ...m, content: i18n.t('⚠️ 重连后仍无响应，请手动重试。'), streaming: false } : m
         ));
         setIsStreaming(false);
       },
@@ -1243,7 +1244,7 @@ export default function AiAssistantPage() {
         setMessages(prev => prev.map(m => m.id === aiMsg.id ? { ...m, streaming: false } : m));
         setIsStreaming(false);
         await persistMessages(
-          [{ role: 'user', content: userText + ' [重连续跑]' }, { role: 'assistant', content: accumulated }],
+          [{ role: 'user', content: userText + i18n.t('[重连续跑]') }, { role: 'assistant', content: accumulated }],
           selectedRepo, selectedBranch,
         );
         // ── 持久化工具日志 + workflow 快照（重连完成） ─────────────────────────
@@ -1285,11 +1286,11 @@ export default function AiAssistantPage() {
     const hasWrite = toolHistory.some(t => WRITE_TOOLS.has(t.tool ?? ''));
     if (hasWrite) {
       // 有写操作：不自动重连，让用户手动确认
-      toast.warning('检测到本轮含写操作，自动重连可能导致重复执行。请确认后手动重连。', {
+      toast.warning(i18n.t('检测到本轮含写操作，自动重连可能导致重复执行。请确认后手动重连。'), {
         id: 'write-op-reconnect',
         duration: 0,
         action: {
-          label: '确认重连',
+          label: i18n.t('确认重连'),
           onClick: () => {
             toast.dismiss('write-op-reconnect');
             reconnectAttemptsRef.current = 0;
@@ -1308,7 +1309,7 @@ export default function AiAssistantPage() {
           id: 'reconnect-max-retry',
           duration: 0,
           action: {
-            label: '手动重连',
+            label: i18n.t('手动重连'),
             onClick: () => {
               toast.dismiss('reconnect-max-retry');
               reconnectAttemptsRef.current = 0;
@@ -1346,7 +1347,7 @@ export default function AiAssistantPage() {
         return st === 'done' || st === 'error';
       });
       if (!allDone) {
-        const summary = lastUserTextRef.current.slice(0, 60) || '上次任务';
+        const summary = lastUserTextRef.current.slice(0, 60) || i18n.t('上次任务');
         setPendingResumeInfo({ taskSummary: summary });
       }
     }
@@ -1400,7 +1401,7 @@ export default function AiAssistantPage() {
   const handleExportMarkdown = useCallback(() => {
     if (!selectedRepo || messages.length <= 1) return;
     const lines: string[] = [
-      `# AI 助手对话记录`,
+      i18n.t('# AI 助手对话记录'),
       ``,
       `> 仓库：${selectedRepo.full_name}  分支：\`${selectedBranch}\``,
       `> 导出时间：${new Date().toLocaleString('zh-CN')}`,
@@ -1412,14 +1413,14 @@ export default function AiAssistantPage() {
       if (m.id === 'welcome') return;
       if (m.bubbleType === 'thinking' || m.bubbleType === 'tool' || m.bubbleType === 'step') return;
       if (m.role === 'user') {
-        lines.push(`## 👤 用户`);
+        lines.push(i18n.t('## 👤 用户'));
         lines.push(``);
         lines.push(m.content);
         lines.push(``);
         lines.push(`---`);
         lines.push(``);
       } else if (m.role === 'assistant' && m.content) {
-        lines.push(`## 🤖 AI 助手`);
+        lines.push(i18n.t('## 🤖 AI 助手'));
         lines.push(``);
         lines.push(m.content);
         lines.push(``);
@@ -1435,7 +1436,7 @@ export default function AiAssistantPage() {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('对话已导出为 Markdown');
+    toast.success(i18n.t('对话已导出为 Markdown'));
   }, [messages, selectedRepo, selectedBranch]);
 
   // ── 重试指定消息（从该 AI 消息前的最后一条用户消息开始重发）────────────────
@@ -1510,8 +1511,8 @@ export default function AiAssistantPage() {
               {/* 在线指示点 */}
               <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full border-2 border-background" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight text-balance">AI 仓库助手</h1>
-            <p className="text-sm text-muted-foreground">选择仓库，开始智能编程</p>
+            <h1 className="text-2xl font-bold text-foreground tracking-tight text-balance">{i18n.t('AI 仓库助手')}</h1>
+            <p className="text-sm text-muted-foreground">{i18n.t('选择仓库，开始智能编程')}</p>
           </div>
 
           {/* ── 当前模型 chip ── */}
@@ -1521,7 +1522,7 @@ export default function AiAssistantPage() {
           >
             <ModelAvatar modelDef={currentModelDef} size="sm" />
             <div className="flex-1 min-w-0 text-left">
-              <p className="text-xs text-muted-foreground leading-none mb-0.5">当前模型</p>
+              <p className="text-xs text-muted-foreground leading-none mb-0.5">{i18n.t('当前模型')}</p>
               <div className="flex items-center gap-1.5">
                 <span className="text-sm font-semibold text-foreground truncate">{currentModelDef.label}</span>
                 {currentModelDef.badge && (
@@ -1544,11 +1545,10 @@ export default function AiAssistantPage() {
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card hover:bg-accent/50 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <History className="w-4 h-4" />
-              历史对话
-            </button>
+              {i18n.t('历史对话')}</button>
             <div className="flex-1 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/8 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400">
               <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-              <span className="text-pretty leading-snug">建议在测试仓库或非主分支操作</span>
+              <span className="text-pretty leading-snug">{i18n.t('建议在测试仓库或非主分支操作')}</span>
             </div>
           </div>
 
@@ -1578,7 +1578,7 @@ export default function AiAssistantPage() {
         <button
           onClick={handleBack}
           className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors shrink-0"
-          title="切换仓库"
+          title={i18n.t('切换仓库')}
         >
           <ArrowLeft className="w-4 h-4" />
           <span className="text-sm font-semibold text-foreground truncate hidden sm:block max-w-[100px]">
@@ -1598,7 +1598,7 @@ export default function AiAssistantPage() {
             variant="ghost" size="icon"
             className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
             onClick={() => setShowCreateBranch(true)}
-            title="新建分支"
+            title={i18n.t('新建分支')}
           >
             <Plus className="w-3.5 h-3.5" />
           </Button>
@@ -1608,7 +1608,7 @@ export default function AiAssistantPage() {
         <div className="flex items-center gap-1 shrink-0">
           {isStreaming && (
             <Badge variant="secondary" className="text-xs animate-pulse bg-primary/10 text-primary border-primary/20">
-              <Cpu className="w-3 h-3 mr-1 animate-spin" /><span className="hidden sm:inline">执行中</span>
+              <Cpu className="w-3 h-3 mr-1 animate-spin" /><span className="hidden sm:inline">{i18n.t('执行中')}</span>
             </Badge>
           )}
           <button
@@ -1619,7 +1619,7 @@ export default function AiAssistantPage() {
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted'
             )}
-            title={showFileBrowser ? '关闭文件浏览器' : '打开文件浏览器'}
+            title={showFileBrowser ? i18n.t('关闭文件浏览器') : i18n.t('打开文件浏览器')}
           >
             <FolderSearch className="w-3.5 h-3.5" />
           </button>
@@ -1631,7 +1631,7 @@ export default function AiAssistantPage() {
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted'
             )}
-            title={showToolHistory ? '关闭侧边面板' : '打开侧边面板'}
+            title={showToolHistory ? i18n.t('关闭侧边面板') : i18n.t('打开侧边面板')}
           >
             <Wrench className="w-3.5 h-3.5" />
             {(toolHistory.length > 0 || taskPlanSteps.length > 0) && !showToolHistory && (
@@ -1648,7 +1648,7 @@ export default function AiAssistantPage() {
             <button
               onClick={handleExportMarkdown}
               className="p-1.5 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted"
-              title="导出对话为 Markdown"
+              title={i18n.t('导出对话为 Markdown')}
             >
               <Download className="w-3.5 h-3.5" />
             </button>
@@ -1661,15 +1661,13 @@ export default function AiAssistantPage() {
         <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/20 shrink-0">
           <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           <p className="text-xs text-amber-600 dark:text-amber-400 flex-1 min-w-0">
-            当前分支 <span className="font-semibold">{selectedBranch}</span> 受保护，建议
-            <button onClick={() => setShowCreateBranch(true)} className="underline ml-1 hover:text-amber-700">
-              新建功能分支
-            </button>
+            {i18n.t('当前分支')}<span className="font-semibold">{selectedBranch}</span> {i18n.t('受保护，建议')}<button onClick={() => setShowCreateBranch(true)} className="underline ml-1 hover:text-amber-700">
+              {i18n.t('新建功能分支')}</button>
           </p>
           <button
             onClick={() => setIsProtectedBranch(false)}
             className="shrink-0 p-0.5 rounded text-amber-500/70 hover:text-amber-600 hover:bg-amber-500/15 transition-colors"
-            title="关闭提示"
+            title={i18n.t('关闭提示')}
           >
             <X className="w-3 h-3" />
           </button>
@@ -1714,7 +1712,7 @@ export default function AiAssistantPage() {
                       : hasError ? 'text-destructive'
                         : 'text-primary'
                   )}>
-                    {allDone ? '任务完成' : isStreaming ? '执行中' : '已完成'}
+                    {allDone ? i18n.t('任务完成') : isStreaming ? i18n.t('执行中') : i18n.t('已完成')}
                   </span>
                   {/* 进度条 */}
                   <div className="flex-1 h-1.5 rounded-full bg-border/60 overflow-hidden">
@@ -1801,12 +1799,11 @@ export default function AiAssistantPage() {
                           {/* 慢响应弱提示（只在当前流式气泡上显示） */}
                           {msg.streaming && showSlowHint && (
                             <p className="text-[11px] text-muted-foreground/60 italic mb-1.5 animate-pulse">
-                              正在处理复杂任务，请稍候…
-                            </p>
+                              {i18n.t('正在处理复杂任务，请稍候…')}</p>
                           )}
                           {/* 正文内容 */}
                           {msg.content ? (
-                            msg.content.includes('## 🔧 修复清单')
+                            msg.content.includes(i18n.t('## 🔧 修复清单'))
                               ? <RepairChecklist content={msg.content} />
                               : renderMarkdown(msg.content, (filePath) => {
                                   handleSend(`请将上面的 diff 修改应用到仓库文件 \`${filePath}\`，直接使用工具提交到当前分支。`);
@@ -1866,7 +1863,7 @@ export default function AiAssistantPage() {
                               onClick={handleRegenerate}
                               disabled={isStreaming}
                               className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                              title="重新生成"
+                              title={i18n.t('重新生成')}
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
                             </button>
@@ -1876,21 +1873,20 @@ export default function AiAssistantPage() {
                               onClick={() => handleRetryFromMsg(msg.id)}
                               disabled={isStreaming}
                               className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                              title="从此处重试"
+                              title={i18n.t('从此处重试')}
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
                             </button>
                           )}
-                          {isLastAi && (msg.content.includes('✅ 文件') || msg.content.includes('✅ 已 patch') || msg.content.includes('✅ 分支')) && (
+                          {isLastAi && (msg.content.includes(i18n.t('✅ 文件')) || msg.content.includes(i18n.t('✅ 已 patch')) || msg.content.includes(i18n.t('✅ 分支'))) && (
                             <button
                               onClick={() => handleSend(`请帮我从当前分支 \`${selectedBranch}\` 向默认分支提交一个 PR，标题总结刚才的修改内容`)}
                               disabled={isStreaming}
                               className="flex items-center gap-1 p-1 px-2 rounded text-xs text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
-                              title="一键提交 PR"
+                              title={i18n.t('一键提交 PR')}
                             >
                               <GitPullRequest className="w-3.5 h-3.5" />
-                              提交 PR
-                            </button>
+                              {i18n.t('提交 PR')}</button>
                           )}
                         </div>
                       )}
@@ -1911,7 +1907,7 @@ export default function AiAssistantPage() {
             <div className="px-3 pb-2 shrink-0">
               <div className="flex items-center gap-1.5 mb-1.5">
                 <Zap className="w-3 h-3 text-primary/70" />
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">快捷指令</span>
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{i18n.t('快捷指令')}</span>
               </div>
               <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                 {QUICK_PROMPTS.map(q => {
@@ -1945,7 +1941,7 @@ export default function AiAssistantPage() {
                   <button
                     onClick={() => setShowModelSettings(true)}
                     className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-primary/8 transition-colors group"
-                    title="切换模型"
+                    title={i18n.t('切换模型')}
                   >
                     <ModelAvatar modelDef={currentModelDef} size="sm" />
                     <span className="font-medium">{currentModelDef.label}</span>
@@ -1962,21 +1958,21 @@ export default function AiAssistantPage() {
                         ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:text-primary hover:bg-primary/8'
                     )}
-                    title="文件浏览器"
+                    title={i18n.t('文件浏览器')}
                   >
                     <PanelRight className="w-3 h-3 shrink-0" />
-                    <span className="hidden sm:inline">文件</span>
+                    <span className="hidden sm:inline">{i18n.t('文件')}</span>
                   </button>
                 </div>
                 <div className="flex items-center gap-0.5">
                   {sessionId && (
-                    <span className="text-[10px] text-green-500 px-1" title="对话已保存">●</span>
+                    <span className="text-[10px] text-green-500 px-1" title={i18n.t('对话已保存')}>●</span>
                   )}
                   <div className="w-px h-3.5 bg-border mx-0.5" />
                   <button
                     onClick={() => setShowHistory(true)}
                     className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/8 transition-colors"
-                    title="历史对话"
+                    title={i18n.t('历史对话')}
                   >
                     <History className="w-3.5 h-3.5" />
                   </button>
@@ -1984,7 +1980,7 @@ export default function AiAssistantPage() {
                     onClick={handleClearChat}
                     disabled={isStreaming}
                     className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/8 transition-colors disabled:opacity-40"
-                    title="清空对话"
+                    title={i18n.t('清空对话')}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -1998,8 +1994,7 @@ export default function AiAssistantPage() {
                 <div className="mx-3 mt-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
                   <WifiOff className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                   <span className="flex-1 min-w-0 text-xs text-amber-700 dark:text-amber-300 truncate">
-                    连接已中断，任务未完成
-                  </span>
+                    {i18n.t('连接已中断，任务未完成')}</span>
                   <Button
                     size="sm"
                     variant="outline"
@@ -2007,12 +2002,11 @@ export default function AiAssistantPage() {
                     onClick={() => { setIsNetworkInterrupted(false); handleReconnect(); }}
                   >
                     <RefreshCw className="w-3 h-3 mr-1" />
-                    重新连接
-                  </Button>
+                    {i18n.t('重新连接')}</Button>
                   <button
                     className="text-amber-500/60 hover:text-amber-600 dark:hover:text-amber-400 text-xs shrink-0"
                     onClick={() => setIsNetworkInterrupted(false)}
-                    title="忽略"
+                    title={i18n.t('忽略')}
                   >✕</button>
                 </div>
               )}
@@ -2022,7 +2016,7 @@ export default function AiAssistantPage() {
                 <div className="mx-3 mt-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
                   <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                   <span className="flex-1 min-w-0 text-xs text-amber-700 dark:text-amber-300 truncate">
-                    {pendingResumeInfo.workflowId ? '任务已超时暂停，可从断点处继续' : '任务已停止，可继续执行剩余步骤'}
+                    {pendingResumeInfo.workflowId ? i18n.t('任务已超时暂停，可从断点处继续') : i18n.t('任务已停止，可继续执行剩余步骤')}
                   </span>
                   {pendingResumeInfo.workflowId ? (
                     <Button
@@ -2036,8 +2030,7 @@ export default function AiAssistantPage() {
                       }}
                     >
                       <RotateCcw className="w-3 h-3 mr-1" />
-                      立即恢复
-                    </Button>
+                      {i18n.t('立即恢复')}</Button>
                   ) : (
                     <Button
                       size="sm"
@@ -2051,13 +2044,12 @@ export default function AiAssistantPage() {
                       }}
                     >
                       <ClipboardList className="w-3 h-3 mr-1" />
-                      查看历史
-                    </Button>
+                      {i18n.t('查看历史')}</Button>
                   )}
                   <button
                     className="text-amber-500/60 hover:text-amber-600 dark:hover:text-amber-400 text-xs shrink-0"
                     onClick={() => setPendingResumeInfo(null)}
-                    title="忽略"
+                    title={i18n.t('忽略')}
                   >✕</button>
                 </div>
               )}
@@ -2075,7 +2067,7 @@ export default function AiAssistantPage() {
                       <button
                         onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
                         className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
-                        title="移除附件"
+                        title={i18n.t('移除附件')}
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -2100,7 +2092,7 @@ export default function AiAssistantPage() {
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isStreaming}
                   className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/8 transition-colors disabled:opacity-40"
-                  title="上传文件或图片"
+                  title={i18n.t('上传文件或图片')}
                 >
                   <Paperclip className="w-3.5 h-3.5" />
                 </button>
@@ -2116,7 +2108,7 @@ export default function AiAssistantPage() {
                       textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                     }, 350);
                   }}
-                  placeholder="输入消息… （Enter 发送，Shift+Enter 换行）"
+                  placeholder={i18n.t('输入消息… （Enter 发送，Shift+Enter 换行）')}
                   className="flex-1 min-w-0 min-h-[36px] max-h-28 resize-none border-0 shadow-none bg-transparent px-0 py-0.5 text-sm focus-visible:ring-0 placeholder:text-muted-foreground/60 overflow-y-auto"
                   disabled={isStreaming}
                   rows={1}
@@ -2126,7 +2118,7 @@ export default function AiAssistantPage() {
                   <button
                     onClick={handleStop}
                     className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-destructive/10 border border-destructive/30 text-destructive hover:bg-destructive/20 transition-colors"
-                    title="停止生成"
+                    title={i18n.t('停止生成')}
                   >
                     <Square className="w-3.5 h-3.5" />
                   </button>
@@ -2135,7 +2127,7 @@ export default function AiAssistantPage() {
                     onClick={() => handleSend()}
                     disabled={!input.trim()}
                     className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-                    title="发送（Enter）"
+                    title={i18n.t('发送（Enter）')}
                   >
                     <Send className="w-3.5 h-3.5" />
                   </button>
@@ -2202,8 +2194,7 @@ export default function AiAssistantPage() {
                   )}
                 >
                   <ListChecks className="w-3.5 h-3.5 shrink-0" />
-                  任务计划
-                  {taskPlanSteps.length > 0 && (
+                  {i18n.t('任务计划')}{taskPlanSteps.length > 0 && (
                     <span className="text-[9px] font-mono bg-primary/10 text-primary px-1 rounded">
                       {taskPlanSteps.length}
                     </span>
@@ -2222,8 +2213,7 @@ export default function AiAssistantPage() {
                   )}
                 >
                   <Wrench className="w-3.5 h-3.5 shrink-0" />
-                  工具历史
-                  {toolHistory.length > 0 && (
+                  {i18n.t('工具历史')}{toolHistory.length > 0 && (
                     <span className="text-[9px] font-mono bg-muted text-muted-foreground px-1 rounded">
                       {toolHistory.length}
                     </span>
@@ -2242,8 +2232,7 @@ export default function AiAssistantPage() {
                   )}
                 >
                   <History className="w-3.5 h-3.5 shrink-0" />
-                  执行日志
-                  {sidePanelTab === 'runlog' && (
+                  {i18n.t('执行日志')}{sidePanelTab === 'runlog' && (
                     <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-primary rounded-t" />
                   )}
                 </button>
@@ -2260,8 +2249,7 @@ export default function AiAssistantPage() {
                   )}
                 >
                   <ClipboardList className="w-3.5 h-3.5 shrink-0" />
-                  任务历史
-                  {interruptedWorkflowCount > 0 && sidePanelTab !== 'history' && (
+                  {i18n.t('任务历史')}{interruptedWorkflowCount > 0 && sidePanelTab !== 'history' && (
                     <span className="text-[9px] font-mono bg-amber-500/15 text-amber-600 dark:text-amber-400 px-1 rounded">
                       {interruptedWorkflowCount}
                     </span>
@@ -2283,8 +2271,7 @@ export default function AiAssistantPage() {
                   )}
                 >
                   <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                  改进
-                  {pendingProposalCount > 0 && sidePanelTab !== 'workshop' && (
+                  {i18n.t('改进')}{pendingProposalCount > 0 && sidePanelTab !== 'workshop' && (
                     <span className="text-[9px] font-mono bg-primary/15 text-primary px-1 rounded">
                       {pendingProposalCount}
                     </span>
@@ -2297,7 +2284,7 @@ export default function AiAssistantPage() {
                 <button
                   onClick={() => setShowToolHistory(false)}
                   className="px-3 text-muted-foreground hover:text-foreground transition-colors min-w-[44px] flex items-center justify-center"
-                  title="关闭面板"
+                  title={i18n.t('关闭面板')}
                 >
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                     <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -2394,7 +2381,7 @@ function FileRequestCard({ request, onUpload }: FileRequestCardProps) {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/8 px-3 py-2 text-xs text-green-700 dark:text-green-400">
         <ImageIcon className="w-3.5 h-3.5 shrink-0" />
-        <span>文件已上传：{request.filename}</span>
+        <span>{i18n.t('文件已上传：')}{request.filename}</span>
       </div>
     );
   }
@@ -2404,10 +2391,10 @@ function FileRequestCard({ request, onUpload }: FileRequestCardProps) {
       <div className="flex items-start gap-2 mb-2">
         <Paperclip className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-foreground">需要上传文件</p>
+          <p className="text-xs font-medium text-foreground">{i18n.t('需要上传文件')}</p>
           <p className="text-xs text-muted-foreground mt-0.5 break-words">{request.description}</p>
           {request.filename && (
-            <p className="text-[10px] text-primary/70 mt-0.5">文件名：{request.filename}</p>
+            <p className="text-[10px] text-primary/70 mt-0.5">{i18n.t('文件名：')}{request.filename}</p>
           )}
         </div>
       </div>
@@ -2423,8 +2410,7 @@ function FileRequestCard({ request, onUpload }: FileRequestCardProps) {
         className="w-full flex items-center justify-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium py-1.5 transition-colors"
       >
         <Paperclip className="w-3 h-3" />
-        选择文件上传
-      </button>
+        {i18n.t('选择文件上传')}</button>
     </div>
   );
 }
@@ -2504,12 +2490,12 @@ function RepairChecklist({ content }: { content: string }) {
         <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-amber-500/10 border-b border-amber-500/20">
           <div className="flex items-center gap-2 min-w-0">
             <Wrench className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span className="text-sm font-semibold text-amber-800 dark:text-amber-300 truncate">修复清单</span>
+            <span className="text-sm font-semibold text-amber-800 dark:text-amber-300 truncate">{i18n.t('修复清单')}</span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {allDone
-              ? <span className="text-[11px] text-green-600 dark:text-green-400 font-medium">全部完成 ✓</span>
-              : <span className="text-[11px] text-amber-600 dark:text-amber-400">{doneItems}/{totalItems} 已完成</span>
+              ? <span className="text-[11px] text-green-600 dark:text-green-400 font-medium">{i18n.t('全部完成 ✓')}</span>
+              : <span className="text-[11px] text-amber-600 dark:text-amber-400">{doneItems}/{totalItems} {i18n.t('已完成')}</span>
             }
             {/* 进度条 */}
             <div className="w-16 h-1.5 rounded-full bg-amber-200/60 dark:bg-amber-900/40 overflow-hidden">
@@ -2570,8 +2556,7 @@ function RepairChecklist({ content }: { content: string }) {
         {/* 底部提示 */}
         <div className="px-3.5 pb-2.5">
           <p className="text-[11px] text-amber-600/70 dark:text-amber-400/60 text-pretty">
-            修复完成后，回复「重新构建」即可自动触发 CI 验证。
-          </p>
+            {i18n.t('修复完成后，回复「重新构建」即可自动触发 CI 验证。')}</p>
         </div>
       </div>
     </div>

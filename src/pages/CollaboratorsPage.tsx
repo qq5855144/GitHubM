@@ -49,13 +49,14 @@ import {
 import type { GitHubCollaborator } from '@/types/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 const PERMISSION_LABELS: Record<string, string> = {
-  pull: '读取',
-  triage: '分类',
-  push: '推送',
-  maintain: '维护',
-  admin: '管理员',
+  pull: i18n.t('读取'),
+  triage: i18n.t('分类'),
+  push: i18n.t('推送'),
+  maintain: i18n.t('维护'),
+  admin: i18n.t('管理员'),
 };
 
 export default function CollaboratorsPage() {
@@ -78,7 +79,7 @@ export default function CollaboratorsPage() {
       const result = await getCollaborators(owner, repo);
       setCollaborators(result.data);
     } catch (err) {
-      toast.error('加载协作者列表失败');
+      toast.error(i18n.t('加载协作者列表失败'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -92,7 +93,7 @@ export default function CollaboratorsPage() {
   const handleAdd = async () => {
     if (!owner || !repo) return;
     if (!newUsername.trim()) {
-      toast.error('请输入用户名');
+      toast.error(i18n.t('请输入用户名'));
       return;
     }
     setAdding(true);
@@ -104,7 +105,7 @@ export default function CollaboratorsPage() {
       setNewPermission('push');
       loadCollaborators();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '邀请失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('邀请失败'));
     } finally {
       setAdding(false);
     }
@@ -119,7 +120,7 @@ export default function CollaboratorsPage() {
       toast.success(`已移除协作者 ${removeTarget}`);
       setRemoveTarget(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '移除失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('移除失败'));
     } finally {
       setRemoving(false);
     }
@@ -138,7 +139,7 @@ export default function CollaboratorsPage() {
       );
       toast.success(`已更新 ${login} 的权限`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '更新权限失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('更新权限失败'));
     }
   };
 
@@ -146,32 +147,30 @@ export default function CollaboratorsPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-foreground">协作者</span>
+        <span className="text-foreground">{i18n.t('协作者')}</span>
       </div>
 
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <Users className="w-5 h-5 text-primary" />
-          协作者管理
-        </h1>
+          {i18n.t('协作者管理')}</h1>
         <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
               <Plus className="w-4 h-4 mr-2" />
-              邀请协作者
-            </Button>
+              {i18n.t('邀请协作者')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-md bg-card border-border">
             <DialogHeader>
-              <DialogTitle className="text-foreground">邀请协作者</DialogTitle>
+              <DialogTitle className="text-foreground">{i18n.t('邀请协作者')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">GitHub 用户名 *</Label>
+                <Label className="text-sm font-normal text-foreground">{i18n.t('GitHub 用户名 *')}</Label>
                 <Input
                   value={newUsername}
                   onChange={(e) => setNewUsername(e.target.value)}
@@ -180,7 +179,7 @@ export default function CollaboratorsPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">权限级别</Label>
+                <Label className="text-sm font-normal text-foreground">{i18n.t('权限级别')}</Label>
                 <Select value={newPermission} onValueChange={(v) => setNewPermission(v as typeof newPermission)}>
                   <SelectTrigger className="bg-secondary border-border text-foreground">
                     <SelectValue />
@@ -200,14 +199,13 @@ export default function CollaboratorsPage() {
                   className="flex-1 border-border hover:bg-secondary"
                   onClick={() => setAddDialogOpen(false)}
                 >
-                  取消
-                </Button>
+                  {i18n.t('取消')}</Button>
                 <Button
                   className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                   onClick={handleAdd}
                   disabled={adding || !newUsername.trim()}
                 >
-                  {adding ? '邀请中...' : '发送邀请'}
+                  {adding ? i18n.t('邀请中...') : i18n.t('发送邀请')}
                 </Button>
               </div>
             </div>
@@ -232,7 +230,7 @@ export default function CollaboratorsPage() {
         ) : collaborators.length === 0 ? (
           <div className="py-16 text-center">
             <Users className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-foreground font-medium">暂无协作者</p>
+            <p className="text-foreground font-medium">{i18n.t('暂无协作者')}</p>
           </div>
         ) : (
           <div className="divide-y divide-border">
@@ -255,13 +253,12 @@ export default function CollaboratorsPage() {
                       {collaborator.login}
                     </a>
                     {collaborator.login === user?.login && (
-                      <Badge variant="outline" className="text-xs border-border text-muted-foreground">你</Badge>
+                      <Badge variant="outline" className="text-xs border-border text-muted-foreground">{i18n.t('你')}</Badge>
                     )}
                     {collaborator.permissions?.admin && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Shield className="w-3 h-3" />
-                        管理员
-                      </div>
+                        {i18n.t('管理员')}</div>
                     )}
                   </div>
                   <div className="flex items-center gap-1 mt-0.5">
@@ -312,19 +309,18 @@ export default function CollaboratorsPage() {
       <AlertDialog open={!!removeTarget} onOpenChange={() => setRemoveTarget(null)}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">确认移除协作者</AlertDialogTitle>
+            <AlertDialogTitle className="text-foreground">{i18n.t('确认移除协作者')}</AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
-              确定要移除 <span className="font-medium text-foreground">{removeTarget}</span> 的协作者权限吗？
-            </AlertDialogDescription>
+              {i18n.t('确定要移除')}<span className="font-medium text-foreground">{removeTarget}</span> {i18n.t('的协作者权限吗？')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">取消</AlertDialogCancel>
+            <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleRemove}
               disabled={removing}
             >
-              {removing ? '移除中...' : '确认移除'}
+              {removing ? i18n.t('移除中...') : i18n.t('确认移除')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getFollowers, getFollowing, followUser, unfollowUser, searchUsers } from '@/services/github';
 import type { GitHubUser } from '@/types/types';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 type ListType = 'followers' | 'following';
 
@@ -21,8 +22,8 @@ export default function FollowListPage() {
   const { user } = useAuth();
 
   const listType = (type === 'following' ? 'following' : 'followers') as ListType;
-  const title = listType === 'followers' ? '我的粉丝' : '正在关注';
-  const emptyText = listType === 'followers' ? '暂无粉丝' : '尚未关注任何人';
+  const title = listType === 'followers' ? i18n.t('我的粉丝') : i18n.t('正在关注');
+  const emptyText = listType === 'followers' ? i18n.t('暂无粉丝') : i18n.t('尚未关注任何人');
 
   const [list, setList] = useState<GitHubUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,7 +106,7 @@ export default function FollowListPage() {
         toast.success(`已关注 @${targetLogin}`);
       }
     } catch {
-      toast.error('操作失败，请重试');
+      toast.error(i18n.t('操作失败，请重试'));
     } finally {
       setActioningSet((prev) => { const next = new Set(prev); next.delete(targetLogin); return next; });
     }
@@ -137,7 +138,7 @@ export default function FollowListPage() {
       setFollowingSet((prev) => new Set(prev).add(targetLogin));
       toast.success(`已关注 @${targetLogin}`);
     } catch {
-      toast.error('关注失败，请重试');
+      toast.error(i18n.t('关注失败，请重试'));
     } finally {
       setActioningSet((prev) => { const next = new Set(prev); next.delete(targetLogin); return next; });
     }
@@ -174,8 +175,7 @@ export default function FollowListPage() {
             onClick={() => { setSearchOpen(true); setSearchQuery(''); setSearchResults([]); }}
           >
             <UserPlus className="w-3.5 h-3.5" />
-            添加关注
-          </Button>
+            {i18n.t('添加关注')}</Button>
         )}
       </div>
 
@@ -225,8 +225,7 @@ export default function FollowListPage() {
                         className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary gap-1"
                       >
                         <ExternalLink className="w-3 h-3" />
-                        主页
-                      </Button>
+                        {i18n.t('主页')}</Button>
                     </a>
                     {/* 关注 / 取消关注（不显示自己） */}
                     {!isSelf && (
@@ -244,9 +243,9 @@ export default function FollowListPage() {
                         {actioning ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
                         ) : isFollowing ? (
-                          <><UserMinus className="w-3 h-3" />取消关注</>
+                          <><UserMinus className="w-3 h-3" />{i18n.t('取消关注')}</>
                         ) : (
-                          <><UserPlus className="w-3 h-3" />关注</>
+                          <><UserPlus className="w-3 h-3" />{i18n.t('关注')}</>
                         )}
                       </Button>
                     )}
@@ -267,9 +266,9 @@ export default function FollowListPage() {
               disabled={loadingMore}
             >
               {loadingMore ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />加载中...</>
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{i18n.t('加载中...')}</>
               ) : (
-                '加载更多'
+                i18n.t('加载更多')
               )}
             </Button>
           </div>
@@ -282,9 +281,8 @@ export default function FollowListPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="w-4 h-4 text-primary" />
-              搜索并关注用户
-            </DialogTitle>
-            <DialogDescription>输入用户名搜索 GitHub 用户</DialogDescription>
+              {i18n.t('搜索并关注用户')}</DialogTitle>
+            <DialogDescription>{i18n.t('输入用户名搜索 GitHub 用户')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 pt-1">
             {/* 搜索框 */}
@@ -292,7 +290,7 @@ export default function FollowListPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 className="pl-9 pr-8"
-                placeholder="输入用户名…"
+                placeholder={i18n.t('输入用户名…')}
                 value={searchQuery}
                 onChange={(e) => handleSearchInput(e.target.value)}
                 autoFocus
@@ -312,11 +310,10 @@ export default function FollowListPage() {
             <div className="min-h-[120px] max-h-72 overflow-y-auto rounded-lg border border-border">
               {searching ? (
                 <div className="flex items-center justify-center py-10 text-muted-foreground text-sm gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />搜索中…
-                </div>
+                  <Loader2 className="w-4 h-4 animate-spin" />{i18n.t('搜索中…')}</div>
               ) : searchResults.length === 0 ? (
                 <div className="flex items-center justify-center py-10 text-muted-foreground text-sm">
-                  {searchQuery ? '未找到相关用户' : '请输入用户名进行搜索'}
+                  {searchQuery ? i18n.t('未找到相关用户') : i18n.t('请输入用户名进行搜索')}
                 </div>
               ) : (
                 <div className="divide-y divide-border">
@@ -357,9 +354,9 @@ export default function FollowListPage() {
                             {actioning ? (
                               <Loader2 className="w-3 h-3 animate-spin" />
                             ) : isFollowing ? (
-                              <><UserCheck className="w-3 h-3" />已关注</>
+                              <><UserCheck className="w-3 h-3" />{i18n.t('已关注')}</>
                             ) : (
-                              <><UserPlus className="w-3 h-3" />关注</>
+                              <><UserPlus className="w-3 h-3" />{i18n.t('关注')}</>
                             )}
                           </Button>
                         )}

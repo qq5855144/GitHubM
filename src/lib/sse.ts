@@ -4,6 +4,7 @@
 // - 使用原生 fetch，避免 ky 的 timeout 误中断长时间 SSE 流
 import { createParser, type EventSourceParser } from 'eventsource-parser';
 import type { StreamMetrics } from '@/components/ai/aiTypes';
+import i18n from "@/i18n";
 
 export interface StreamRequestOptions {
   functionUrl: string;
@@ -37,12 +38,12 @@ function friendlyError(err: unknown): Error {
   const e = err as Error;
   const msg = e?.message ?? String(err);
   if (msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('network'))
-    return new Error('网络连接失败，请检查网络后重试');
+    return new Error(i18n.t('网络连接失败，请检查网络后重试'));
   if (msg.includes('CORS') || msg.includes('cors'))
-    return new Error('跨域请求被拒绝，请联系管理员');
+    return new Error(i18n.t('跨域请求被拒绝，请联系管理员'));
   if (msg.includes('AbortError') || e?.name === 'AbortError')
-    return new Error('请求被中断');
-  return new Error(msg || '未知错误');
+    return new Error(i18n.t('请求被中断'));
+  return new Error(msg || i18n.t('未知错误'));
 }
 
 /**
@@ -52,9 +53,9 @@ async function parseHttpError(response: Response): Promise<string> {
   const status = response.status;
   const statusText = response.statusText || '';
 
-  if (status === 401) return `认证失败（401）：API Key 无效或已过期，请在模型设置中重新填写`;
-  if (status === 403) return `无权限（403）：API Key 无权访问此接口，请检查账号权限`;
-  if (status === 429) return `请求过于频繁（429）：触发限流，请稍后再试`;
+  if (status === 401) return i18n.t('认证失败（401）：API Key 无效或已过期，请在模型设置中重新填写');
+  if (status === 403) return i18n.t('无权限（403）：API Key 无权访问此接口，请检查账号权限');
+  if (status === 429) return i18n.t('请求过于频繁（429）：触发限流，请稍后再试');
 
   let body = '';
   try {
@@ -101,12 +102,12 @@ export async function sendStreamRequest(options: StreamRequestOptions): Promise<
   if (!functionUrl || !functionUrl.startsWith('http')) {
     onError(new Error(
       `AI 服务地址未配置（functionUrl="${functionUrl}"）。` +
-      `请确认构建时 VITE_SUPABASE_URL 已正确注入，或联系管理员。`
+      i18n.t('请确认构建时 VITE_SUPABASE_URL 已正确注入，或联系管理员。')
     ));
     return;
   }
   if (!supabaseAnonKey) {
-    onError(new Error('AI 服务密钥未配置（VITE_SUPABASE_ANON_KEY 为空），请联系管理员。'));
+    onError(new Error(i18n.t('AI 服务密钥未配置（VITE_SUPABASE_ANON_KEY 为空），请联系管理员。')));
     return;
   }
 
@@ -152,7 +153,7 @@ export async function sendStreamRequest(options: StreamRequestOptions): Promise<
     if (e?.name === 'AbortError') {
       const reason = (connectController.signal as AbortSignal & { reason?: string }).reason;
       if (reason === 'timeout') {
-        onError(new Error('连接超时：服务器响应过慢，请稍后重试或在设置中增大超时时间'));
+        onError(new Error(i18n.t('连接超时：服务器响应过慢，请稍后重试或在设置中增大超时时间')));
       }
       return;
     }
@@ -168,7 +169,7 @@ export async function sendStreamRequest(options: StreamRequestOptions): Promise<
     return;
   }
 
-  if (!response.body) { onError(new Error('响应体为空')); return; }
+  if (!response.body) { onError(new Error(i18n.t('响应体为空'))); return; }
 
   // ── Idle timeout 定时器 ────────────────────────────────────────────────────
   // 每次收到任何事件（含 heartbeat）都重置；超时则触发 onIdle

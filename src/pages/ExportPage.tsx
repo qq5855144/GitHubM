@@ -31,6 +31,7 @@ import {
 } from '@/services/github';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 type ExportFormat = 'json' | 'csv';
 type ExportType = 'repos' | 'issues' | 'pulls' | 'commits' | 'activity';
@@ -43,11 +44,11 @@ interface ExportTask {
 }
 
 const EXPORT_TASKS: ExportTask[] = [
-  { id: 'repos', label: '仓库列表', description: '导出所有仓库信息（名称、描述、语言、星标数等）', needsRepo: false },
-  { id: 'issues', label: 'Issue 列表', description: '导出指定仓库的 Issues（标题、状态、标签等）', needsRepo: true },
-  { id: 'pulls', label: 'Pull Request 列表', description: '导出指定仓库的 PRs（标题、状态、分支等）', needsRepo: true },
-  { id: 'commits', label: '提交历史', description: '导出指定仓库的提交记录', needsRepo: true },
-  { id: 'activity', label: '个人活动记录', description: '导出最近 100 条用户活动事件', needsRepo: false },
+  { id: 'repos', label: i18n.t('仓库列表'), description: i18n.t('导出所有仓库信息（名称、描述、语言、星标数等）'), needsRepo: false },
+  { id: 'issues', label: i18n.t('Issue 列表'), description: i18n.t('导出指定仓库的 Issues（标题、状态、标签等）'), needsRepo: true },
+  { id: 'pulls', label: i18n.t('Pull Request 列表'), description: i18n.t('导出指定仓库的 PRs（标题、状态、分支等）'), needsRepo: true },
+  { id: 'commits', label: i18n.t('提交历史'), description: i18n.t('导出指定仓库的提交记录'), needsRepo: true },
+  { id: 'activity', label: i18n.t('个人活动记录'), description: i18n.t('导出最近 100 条用户活动事件'), needsRepo: false },
 ];
 
 function objectsToCSV(data: Record<string, unknown>[]): string {
@@ -84,7 +85,7 @@ function downloadFile(content: string, filename: string, mime: string) {
       const base64 = btoa(unescape(encodeURIComponent(content)));
       bridge.saveBlobData(filename, mime, base64);
     } catch {
-      toast.error('导出失败，请稍后重试');
+      toast.error(i18n.t('导出失败，请稍后重试'));
     }
     return;
   }
@@ -116,7 +117,7 @@ export default function ExportPage() {
   const handleExport = async (task: ExportTask) => {
     if (!user) return;
     if (task.needsRepo && !repoInput.trim()) {
-      toast.error('请先输入仓库名称（owner/repo 格式）');
+      toast.error(i18n.t('请先输入仓库名称（owner/repo 格式）'));
       return;
     }
 
@@ -201,7 +202,7 @@ export default function ExportPage() {
       setExported((prev) => new Set([...prev, task.id]));
       toast.success(`${task.label}已导出 (${rawData.length} 条数据)`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '导出失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('导出失败'));
     } finally {
       setLoading(null);
     }
@@ -211,24 +212,23 @@ export default function ExportPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-3xl mx-auto">
       <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
         <Database className="w-5 h-5 text-primary" />
-        数据导出
-      </h1>
+        {i18n.t('数据导出')}</h1>
 
       {/* 全局设置 */}
       <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-        <p className="text-sm font-semibold text-foreground">导出设置</p>
+        <p className="text-sm font-semibold text-foreground">{i18n.t('导出设置')}</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label className="text-sm font-normal text-foreground">目标仓库（需要仓库数据时）</Label>
+            <Label className="text-sm font-normal text-foreground">{i18n.t('目标仓库（需要仓库数据时）')}</Label>
             <Input
               value={repoInput}
               onChange={(e) => setRepoInput(e.target.value)}
-              placeholder="owner/repo 或 repo（使用当前账号）"
+              placeholder={i18n.t('owner/repo 或 repo（使用当前账号）')}
               className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono text-sm"
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-sm font-normal text-foreground">导出格式</Label>
+            <Label className="text-sm font-normal text-foreground">{i18n.t('导出格式')}</Label>
             <Select value={format} onValueChange={(v) => setFormat(v as ExportFormat)}>
               <SelectTrigger className="bg-secondary border-border text-foreground h-9">
                 <SelectValue />
@@ -264,12 +264,11 @@ export default function ExportPage() {
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-foreground">{task.label}</p>
                   {task.needsRepo && (
-                    <Badge variant="outline" className="text-xs border-border text-muted-foreground">需要仓库</Badge>
+                    <Badge variant="outline" className="text-xs border-border text-muted-foreground">{i18n.t('需要仓库')}</Badge>
                   )}
                   {isDone && (
                     <Badge className="bg-success/10 text-success border-success/30 text-xs flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" />已导出
-                    </Badge>
+                      <CheckCircle2 className="w-3 h-3" />{i18n.t('已导出')}</Badge>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{task.description}</p>
@@ -282,9 +281,9 @@ export default function ExportPage() {
                 disabled={isLoading || !!loading}
               >
                 {isLoading ? (
-                  <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />导出中</>
+                  <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />{i18n.t('导出中')}</>
                 ) : (
-                  <><Download className="w-3.5 h-3.5 mr-1.5" />导出</>
+                  <><Download className="w-3.5 h-3.5 mr-1.5" />{i18n.t('导出')}</>
                 )}
               </Button>
             </div>
@@ -294,7 +293,7 @@ export default function ExportPage() {
 
       <div className="bg-secondary/50 border border-border rounded-lg p-3 flex gap-2 text-xs text-muted-foreground">
         <AlertCircle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
-        <p>数据导出受 GitHub API 速率限制，每次最多导出 100 条记录。如需更多数据，请使用 GitHub 官方数据导出功能。</p>
+        <p>{i18n.t('数据导出受 GitHub API 速率限制，每次最多导出 100 条记录。如需更多数据，请使用 GitHub 官方数据导出功能。')}</p>
       </div>
     </div>
   );

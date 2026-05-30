@@ -41,6 +41,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext';
 import { cn } from '@/lib/utils';
+import i18n from "@/i18n";
 
 // 应用 Logo（侧边栏用）——内联 SVG，无路径依赖，GitHub Pages / file:// 均可正常显示
 function AppLogo({ size = 20 }: { size?: number }) {
@@ -50,7 +51,7 @@ function AppLogo({ size = 20 }: { size?: number }) {
       width={size}
       height={size}
       viewBox="0 0 16 16"
-      aria-label="GitHub 管理器"
+      aria-label={i18n.t('GitHub 管理器')}
       style={{ display: 'block', flexShrink: 0 }}
     >
       <path
@@ -68,17 +69,17 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: '首页', path: '/', icon: Home },
-  { label: '仓库', path: '/repos', icon: BookOpen },
-  { label: '通知', path: '/notifications', icon: Bell },
-  { label: '搜索', path: '/search', icon: Search },
-  { label: '活动', path: '/activity', icon: Activity },
+  { label: i18n.t('首页'), path: '/', icon: Home },
+  { label: i18n.t('仓库'), path: '/repos', icon: BookOpen },
+  { label: i18n.t('通知'), path: '/notifications', icon: Bell },
+  { label: i18n.t('搜索'), path: '/search', icon: Search },
+  { label: i18n.t('活动'), path: '/activity', icon: Activity },
   { label: 'Gists', path: '/gists', icon: Code2 },
   { label: 'Packages', path: '/packages', icon: Package2 },
-  { label: '账号管理', path: '/accounts', icon: Users },
-  { label: '数据导出', path: '/export', icon: Download },
+  { label: i18n.t('账号管理'), path: '/accounts', icon: Users },
+  { label: i18n.t('数据导出'), path: '/export', icon: Download },
   { label: 'GraphQL', path: '/graphql-playground', icon: Braces },
-  { label: 'AI 助手', path: '/ai-assistant', icon: Sparkles },
+  { label: i18n.t('AI 助手'), path: '/ai-assistant', icon: Sparkles },
 ];
 
 const themeIcons: Record<ThemeMode, React.ComponentType<{ className?: string }>> = {
@@ -89,11 +90,11 @@ const themeIcons: Record<ThemeMode, React.ComponentType<{ className?: string }>>
 
 // 移动端底部 Tab 导航（WebView APK 友好，5 个核心入口）
 const bottomTabs = [
-  { label: '首页',  path: '/',             icon: Home },
-  { label: '仓库',  path: '/repos',        icon: BookOpen },
+  { label: i18n.t('首页'),  path: '/',             icon: Home },
+  { label: i18n.t('仓库'),  path: '/repos',        icon: BookOpen },
   { label: 'AI',   path: '/ai-assistant', icon: Sparkles },
-  { label: '通知',  path: '/notifications', icon: Bell },
-  { label: '我的',  path: '/settings',     icon: User },
+  { label: i18n.t('通知'),  path: '/notifications', icon: Bell },
+  { label: i18n.t('我的'),  path: '/settings',     icon: User },
 ];
 
 function MobileBottomNav() {
@@ -161,7 +162,7 @@ function SidebarNav({
           <AppLogo size={28} />
         </div>
         {!collapsed && (
-          <span className="flex-1 min-w-0 font-semibold text-sidebar-foreground text-sm tracking-tight truncate">GitHub 管理器</span>
+          <span className="flex-1 min-w-0 font-semibold text-sidebar-foreground text-sm tracking-tight truncate">{i18n.t('GitHub 管理器')}</span>
         )}
         {/* 移动端 Sheet 模式的关闭按钮（collapsed 桌面端不显示） */}
         {onClose && !collapsed && (
@@ -169,7 +170,7 @@ function SidebarNav({
             type="button"
             onClick={onClose}
             className="shrink-0 p-1 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
-            aria-label="关闭菜单"
+            aria-label={i18n.t('关闭菜单')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -244,7 +245,7 @@ function SidebarNav({
         {rateLimit && !collapsed && (
           <div className="px-3 py-2 mb-1">
             <div className="flex items-center justify-between text-xs text-sidebar-foreground/50 mb-1.5">
-              <span>API 请求</span>
+              <span>{i18n.t('API 请求')}</span>
               <span className={cn(
                 rateLimit.remaining > 1000 ? 'text-success' :
                 rateLimit.remaining > 100 ? 'text-warning' : 'text-destructive'
@@ -280,7 +281,7 @@ function SidebarNav({
                 <Settings className="w-4 h-4" />
               </Link>
             </TooltipTrigger>
-            <TooltipContent side="right">设置</TooltipContent>
+            <TooltipContent side="right">{i18n.t('设置')}</TooltipContent>
           </Tooltip>
         ) : (
           <Link
@@ -294,7 +295,7 @@ function SidebarNav({
             )}
           >
             <Settings className="w-4 h-4 shrink-0" />
-            <span>设置</span>
+            <span>{i18n.t('设置')}</span>
           </Link>
         )}
 
@@ -310,7 +311,7 @@ function SidebarNav({
                 <LogOut className="w-4 h-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="right">退出登录</TooltipContent>
+            <TooltipContent side="right">{i18n.t('退出登录')}</TooltipContent>
           </Tooltip>
         ) : (
           <button
@@ -319,7 +320,7 @@ function SidebarNav({
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-destructive w-full transition-colors"
           >
             <LogOut className="w-4 h-4 shrink-0" />
-            <span>退出登录</span>
+            <span>{i18n.t('退出登录')}</span>
           </button>
         )}
       </div>
@@ -395,7 +396,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           {/* 当前页面标题 */}
           <div className="flex-1 min-w-0">
             <span className="text-sm font-semibold text-foreground truncate">
-              {currentNavItem?.label || 'GitHub 管理器'}
+              {currentNavItem?.label || i18n.t('GitHub 管理器')}
             </span>
           </div>
 
@@ -429,7 +430,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {currentTheme === 'light' ? '当前：浅色' : currentTheme === 'dark' ? '当前：深色' : '当前：跟随系统'}
+                {currentTheme === 'light' ? i18n.t('当前：浅色') : currentTheme === 'dark' ? i18n.t('当前：深色') : i18n.t('当前：跟随系统')}
               </TooltipContent>
             </Tooltip>
 
@@ -461,16 +462,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 <DropdownMenuContent align="end" className="w-48 bg-popover border-border">
                   <DropdownMenuItem onClick={() => navigate('/settings')} className="text-foreground hover:bg-secondary cursor-pointer">
                     <Settings className="w-4 h-4 mr-2" />
-                    个人设置
-                  </DropdownMenuItem>
+                    {i18n.t('个人设置')}</DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-border" />
                   <DropdownMenuItem
                     onClick={handleLogout}
                     className="text-destructive hover:bg-secondary cursor-pointer"
                   >
                     <LogOut className="w-4 h-4 mr-2" />
-                    退出登录
-                  </DropdownMenuItem>
+                    {i18n.t('退出登录')}</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}

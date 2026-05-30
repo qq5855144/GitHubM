@@ -35,6 +35,7 @@ import {
 import type { GitHubRepo } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
+import i18n from "@/i18n";
 
 type SortKey = 'updated' | 'created' | 'stars' | 'name';
 
@@ -89,7 +90,7 @@ export default function StarredPage() {
       setHasMore(data.length === 30);
       setPage(p);
     } catch {
-      toast.error('加载收藏列表失败');
+      toast.error(i18n.t('加载收藏列表失败'));
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -110,7 +111,7 @@ export default function StarredPage() {
       });
       toast.success(`已取消收藏 ${repo.full_name}`);
     } catch {
-      toast.error('取消收藏失败');
+      toast.error(i18n.t('取消收藏失败'));
     } finally {
       setUnstarring(null);
     }
@@ -134,20 +135,17 @@ export default function StarredPage() {
       {/* 页头 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate('/')}>
-          首页
-        </button>
+          {i18n.t('首页')}</button>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-foreground">我的收藏</span>
+        <span className="text-foreground">{i18n.t('我的收藏')}</span>
       </div>
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <Star className="w-5 h-5 text-primary fill-primary/30" />
-          我的收藏
-          {!loading && (
+          {i18n.t('我的收藏')}{!loading && (
             <Badge variant="outline" className="text-xs border-border text-muted-foreground font-normal">
-              {repos.length}{hasMore ? '+' : ''} 个
-            </Badge>
+              {repos.length}{hasMore ? '+' : ''} {i18n.t('个')}</Badge>
           )}
         </h1>
         <Button
@@ -158,8 +156,7 @@ export default function StarredPage() {
           disabled={loading}
         >
           <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-          刷新
-        </Button>
+          {i18n.t('刷新')}</Button>
       </div>
 
       {/* 搜索 + 排序 */}
@@ -169,7 +166,7 @@ export default function StarredPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索收藏的仓库…"
+            placeholder={i18n.t('搜索收藏的仓库…')}
             className="pl-9 h-9 bg-secondary border-border text-foreground placeholder:text-muted-foreground text-sm"
           />
         </div>
@@ -179,10 +176,10 @@ export default function StarredPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-popover border-border">
-            <SelectItem value="updated">最近更新</SelectItem>
-            <SelectItem value="created">收藏时间</SelectItem>
-            <SelectItem value="stars">Star 数</SelectItem>
-            <SelectItem value="name">名称</SelectItem>
+            <SelectItem value="updated">{i18n.t('最近更新')}</SelectItem>
+            <SelectItem value="created">{i18n.t('收藏时间')}</SelectItem>
+            <SelectItem value="stars">{i18n.t('Star 数')}</SelectItem>
+            <SelectItem value="name">{i18n.t('名称')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -206,12 +203,12 @@ export default function StarredPage() {
           <div className="py-16 text-center">
             <Bookmark className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
             <p className="text-foreground font-medium">
-              {search.trim() ? '没有匹配的收藏仓库' : '还没有收藏任何仓库'}
+              {search.trim() ? i18n.t('没有匹配的收藏仓库') : i18n.t('还没有收藏任何仓库')}
             </p>
             <p className="text-sm text-muted-foreground mt-1 text-pretty max-w-xs mx-auto">
               {search.trim()
-                ? '换个关键词试试'
-                : '去搜索或浏览仓库，点击 Star 按钮即可收藏'}
+                ? i18n.t('换个关键词试试')
+                : i18n.t('去搜索或浏览仓库，点击 Star 按钮即可收藏')}
             </p>
           </div>
         ) : (
@@ -294,10 +291,10 @@ export default function StarredPage() {
                       className="shrink-0 h-8 text-xs text-warning border border-warning/40 hover:bg-warning/10 hover:text-warning"
                       disabled={unstarring === repo.id}
                       onClick={() => handleUnstar(repo)}
-                      title="取消收藏"
+                      title={i18n.t('取消收藏')}
                     >
                       <Star className="w-3.5 h-3.5 mr-1 fill-warning" />
-                      {unstarring === repo.id ? '处理中…' : '已收藏'}
+                      {unstarring === repo.id ? i18n.t('处理中…') : i18n.t('已收藏')}
                     </Button>
                   </div>
                 </div>
@@ -315,7 +312,7 @@ export default function StarredPage() {
           disabled={loadingMore}
           onClick={() => loadStarred(page + 1, true)}
         >
-          {loadingMore ? <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />加载中…</> : '加载更多'}
+          {loadingMore ? <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />{i18n.t('加载中…')}</> : i18n.t('加载更多')}
         </Button>
       )}
     </div>

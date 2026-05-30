@@ -11,21 +11,22 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getUserEvents, formatRelativeTime } from '@/services/github';
 import type { GitHubEvent } from '@/types/types';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 function getEventTypeInfo(type: string): { label: string; color: string } {
   const types: Record<string, { label: string; color: string }> = {
-    PushEvent: { label: '推送', color: 'bg-primary/10 text-primary border-primary/30' },
-    CreateEvent: { label: '创建', color: 'bg-success/10 text-success border-success/30' },
-    DeleteEvent: { label: '删除', color: 'bg-destructive/10 text-destructive border-destructive/30' },
+    PushEvent: { label: i18n.t('推送'), color: 'bg-primary/10 text-primary border-primary/30' },
+    CreateEvent: { label: i18n.t('创建'), color: 'bg-success/10 text-success border-success/30' },
+    DeleteEvent: { label: i18n.t('删除'), color: 'bg-destructive/10 text-destructive border-destructive/30' },
     IssuesEvent: { label: 'Issue', color: 'bg-warning/10 text-warning border-warning/30' },
     PullRequestEvent: { label: 'Pull Request', color: 'bg-chart-4/10 text-chart-4 border-chart-4/30' },
-    WatchEvent: { label: '收藏', color: 'bg-warning/10 text-warning border-warning/30' },
+    WatchEvent: { label: i18n.t('收藏'), color: 'bg-warning/10 text-warning border-warning/30' },
     ForkEvent: { label: 'Fork', color: 'bg-accent/10 text-accent border-accent/30' },
-    IssueCommentEvent: { label: '评论', color: 'bg-secondary text-muted-foreground border-border' },
-    PullRequestReviewEvent: { label: '审查', color: 'bg-chart-3/10 text-chart-3 border-chart-3/30' },
-    ReleaseEvent: { label: '发布', color: 'bg-primary/10 text-primary border-primary/30' },
-    PublicEvent: { label: '开源', color: 'bg-success/10 text-success border-success/30' },
-    MemberEvent: { label: '成员', color: 'bg-accent/10 text-accent border-accent/30' },
+    IssueCommentEvent: { label: i18n.t('评论'), color: 'bg-secondary text-muted-foreground border-border' },
+    PullRequestReviewEvent: { label: i18n.t('审查'), color: 'bg-chart-3/10 text-chart-3 border-chart-3/30' },
+    ReleaseEvent: { label: i18n.t('发布'), color: 'bg-primary/10 text-primary border-primary/30' },
+    PublicEvent: { label: i18n.t('开源'), color: 'bg-success/10 text-success border-success/30' },
+    MemberEvent: { label: i18n.t('成员'), color: 'bg-accent/10 text-accent border-accent/30' },
   };
   return types[type] || { label: type.replace('Event', ''), color: 'bg-secondary text-muted-foreground border-border' };
 }
@@ -48,12 +49,12 @@ function getEventDescription(event: GitHubEvent): string {
     }
     case 'IssuesEvent': {
       const payload = event.payload as { action?: string; issue?: { title?: string; number?: number } };
-      const actionMap: Record<string, string> = { opened: '创建了', closed: '关闭了', reopened: '重新打开了' };
+      const actionMap: Record<string, string> = { opened: i18n.t('创建了'), closed: i18n.t('关闭了'), reopened: i18n.t('重新打开了') };
       return `${actionMap[payload.action || ''] || payload.action} Issue #${payload.issue?.number}: ${payload.issue?.title} (${repo})`;
     }
     case 'PullRequestEvent': {
       const payload = event.payload as { action?: string; pull_request?: { title?: string; number?: number } };
-      const actionMap: Record<string, string> = { opened: '创建了', closed: '关闭了', merged: '合并了', reopened: '重新打开了' };
+      const actionMap: Record<string, string> = { opened: i18n.t('创建了'), closed: i18n.t('关闭了'), merged: i18n.t('合并了'), reopened: i18n.t('重新打开了') };
       return `${actionMap[payload.action || ''] || payload.action} PR #${payload.pull_request?.number}: ${payload.pull_request?.title} (${repo})`;
     }
     case 'WatchEvent':
@@ -142,7 +143,7 @@ export default function ActivityPage() {
       }
       setPage(pageNum);
     } catch (err) {
-      toast.error('加载活动记录失败');
+      toast.error(i18n.t('加载活动记录失败'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -158,8 +159,7 @@ export default function ActivityPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-3xl mx-auto">
       <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
         <Activity className="w-5 h-5 text-primary" />
-        最近活动
-      </h1>
+        {i18n.t('最近活动')}</h1>
 
       {loading ? (
         <div className="space-y-3">
@@ -176,7 +176,7 @@ export default function ActivityPage() {
       ) : events.length === 0 ? (
         <div className="py-16 text-center">
           <Activity className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-          <p className="text-foreground font-medium">暂无活动记录</p>
+          <p className="text-foreground font-medium">{i18n.t('暂无活动记录')}</p>
         </div>
       ) : (
         <div className="relative">
@@ -232,7 +232,7 @@ export default function ActivityPage() {
             onClick={() => loadEvents(page + 1, true)}
             disabled={loadingMore}
           >
-            {loadingMore ? '加载中...' : '加载更多'}
+            {loadingMore ? i18n.t('加载中...') : i18n.t('加载更多')}
           </Button>
         </div>
       )}

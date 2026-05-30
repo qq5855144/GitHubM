@@ -35,6 +35,7 @@ import {
   getRepoBranches,
 } from '@/services/github';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 interface UploadFile {
   id: string;
@@ -59,7 +60,7 @@ function fileToBase64(file: File): Promise<string> {
       const base64 = result.split(',')[1];
       resolve(base64);
     };
-    reader.onerror = () => reject(new Error('读取文件失败'));
+    reader.onerror = () => reject(new Error(i18n.t('读取文件失败')));
     reader.readAsDataURL(file);
   });
 }
@@ -105,7 +106,7 @@ export default function UploadPage() {
       if (defaultBranch) setBranch(defaultBranch);
       setBranchLoaded(true);
     } catch {
-      toast.error('加载分支列表失败');
+      toast.error(i18n.t('加载分支列表失败'));
     } finally {
       setLoadingBranches(false);
     }
@@ -127,11 +128,11 @@ export default function UploadPage() {
 
   const handleUpload = async () => {
     if (!owner || !repo) return;
-    if (files.length === 0) { toast.error('请先选择要上传的文件'); return; }
+    if (files.length === 0) { toast.error(i18n.t('请先选择要上传的文件')); return; }
     const pendingFiles = files.filter((f) => f.status === 'pending' || f.status === 'error');
-    if (pendingFiles.length === 0) { toast.error('没有待上传的文件'); return; }
-    if (!commitMsg.trim()) { toast.error('请填写提交信息'); return; }
-    if (!branch.trim()) { toast.error('请选择目标分支'); return; }
+    if (pendingFiles.length === 0) { toast.error(i18n.t('没有待上传的文件')); return; }
+    if (!commitMsg.trim()) { toast.error(i18n.t('请填写提交信息')); return; }
+    if (!branch.trim()) { toast.error(i18n.t('请选择目标分支')); return; }
 
     setUploading(true);
     setProgress(0);
@@ -143,7 +144,7 @@ export default function UploadPage() {
       const f = pendingFiles[i];
       const targetPath = (f.targetPath || f.file.name).replace(/^\/+/, '');
       if (!targetPath) {
-        setFiles((prev) => prev.map((x) => x.id === f.id ? { ...x, status: 'error', error: '路径不能为空' } : x));
+        setFiles((prev) => prev.map((x) => x.id === f.id ? { ...x, status: 'error', error: i18n.t('路径不能为空') } : x));
         failCount++;
         continue;
       }
@@ -176,7 +177,7 @@ export default function UploadPage() {
           successCount++;
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : '上传失败';
+        const msg = err instanceof Error ? err.message : i18n.t('上传失败');
         setFiles((prev) => prev.map((x) => x.id === f.id ? { ...x, status: 'error', error: msg } : x));
         failCount++;
       }
@@ -206,25 +207,24 @@ export default function UploadPage() {
       {/* 面包屑 */}
       {owner && repo && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-          <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>仓库</button>
+          <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
           <ChevronRight className="w-3 h-3" />
           <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
           <ChevronRight className="w-3 h-3" />
-          <span className="text-foreground">批量上传</span>
+          <span className="text-foreground">{i18n.t('批量上传')}</span>
         </div>
       )}
 
       <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
         <Upload className="w-5 h-5 text-primary" />
-        批量上传文件
-      </h1>
+        {i18n.t('批量上传文件')}</h1>
 
       {/* 配置区 */}
       <div className="bg-card border border-border rounded-lg p-4 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* 目标分支 */}
           <div className="space-y-1.5">
-            <Label className="text-sm font-normal text-foreground">目标分支</Label>
+            <Label className="text-sm font-normal text-foreground">{i18n.t('目标分支')}</Label>
             <div className="flex gap-2">
               {branches.length > 0 ? (
                 <Select value={branch} onValueChange={setBranch}>
@@ -251,7 +251,7 @@ export default function UploadPage() {
                 className="h-9 w-9 text-muted-foreground border border-border hover:bg-secondary shrink-0"
                 onClick={loadBranches}
                 disabled={loadingBranches}
-                title="加载分支列表"
+                title={i18n.t('加载分支列表')}
               >
                 {loadingBranches ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               </Button>
@@ -259,22 +259,22 @@ export default function UploadPage() {
           </div>
           {/* 目标目录 */}
           <div className="space-y-1.5">
-            <Label className="text-sm font-normal text-foreground">上传目录（可选）</Label>
+            <Label className="text-sm font-normal text-foreground">{i18n.t('上传目录（可选）')}</Label>
             <Input
               value={targetDir}
               onChange={(e) => setTargetDir(e.target.value)}
-              placeholder="如 src/assets 或留空上传到根目录"
+              placeholder={i18n.t('如 src/assets 或留空上传到根目录')}
               className="bg-secondary border-border text-foreground placeholder:text-muted-foreground h-9"
             />
           </div>
         </div>
         {/* 提交信息 */}
         <div className="space-y-1.5">
-          <Label className="text-sm font-normal text-foreground">提交信息 *</Label>
+          <Label className="text-sm font-normal text-foreground">{i18n.t('提交信息 *')}</Label>
           <Textarea
             value={commitMsg}
             onChange={(e) => setCommitMsg(e.target.value)}
-            placeholder="上传文件..."
+            placeholder={i18n.t('上传文件...')}
             className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none min-h-14"
           />
         </div>
@@ -288,8 +288,7 @@ export default function UploadPage() {
             className="w-4 h-4 accent-primary"
           />
           <label htmlFor="skip-existing" className="text-sm text-foreground cursor-pointer">
-            跳过已存在的文件（不覆盖）
-          </label>
+            {i18n.t('跳过已存在的文件（不覆盖）')}</label>
         </div>
       </div>
 
@@ -312,8 +311,8 @@ export default function UploadPage() {
           onChange={(e) => addFiles(e.target.files)}
         />
         <FolderOpen className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-        <p className="text-foreground font-medium">点击或拖放文件到此处</p>
-        <p className="text-sm text-muted-foreground mt-1">支持多文件选择，最多 100 个文件</p>
+        <p className="text-foreground font-medium">{i18n.t('点击或拖放文件到此处')}</p>
+        <p className="text-sm text-muted-foreground mt-1">{i18n.t('支持多文件选择，最多 100 个文件')}</p>
       </div>
 
       {/* 文件列表 */}
@@ -321,20 +320,18 @@ export default function UploadPage() {
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border bg-secondary/30 flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3 text-sm flex-wrap">
-              <span className="text-foreground font-medium">{files.length} 个文件</span>
-              {pendingCount > 0 && <Badge variant="outline" className="text-xs border-border text-muted-foreground">{pendingCount} 待上传</Badge>}
-              {successCount > 0 && <Badge className="bg-success/10 text-success border-success/30 text-xs">{successCount} 成功</Badge>}
-              {errorCount > 0 && <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs">{errorCount} 失败</Badge>}
+              <span className="text-foreground font-medium">{files.length} {i18n.t('个文件')}</span>
+              {pendingCount > 0 && <Badge variant="outline" className="text-xs border-border text-muted-foreground">{pendingCount} {i18n.t('待上传')}</Badge>}
+              {successCount > 0 && <Badge className="bg-success/10 text-success border-success/30 text-xs">{successCount} {i18n.t('成功')}</Badge>}
+              {errorCount > 0 && <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs">{errorCount} {i18n.t('失败')}</Badge>}
             </div>
             <div className="flex gap-2">
               {errorCount > 0 && (
                 <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary" onClick={retryFailed}>
-                  <RefreshCw className="w-3 h-3 mr-1" />重试失败
-                </Button>
+                  <RefreshCw className="w-3 h-3 mr-1" />{i18n.t('重试失败')}</Button>
               )}
               <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary" onClick={() => setFiles([])}>
-                清空列表
-              </Button>
+                {i18n.t('清空列表')}</Button>
             </div>
           </div>
           <div className="divide-y divide-border max-h-72 overflow-y-auto">
@@ -360,10 +357,10 @@ export default function UploadPage() {
                     onChange={(e) => updateFilePath(f.id, e.target.value)}
                     disabled={f.status !== 'pending' && f.status !== 'error'}
                     className="w-full mt-0.5 text-xs font-mono bg-transparent border-0 border-b border-dashed border-border/60 focus:outline-none focus:border-primary text-muted-foreground disabled:opacity-50 px-0"
-                    placeholder="目标路径..."
+                    placeholder={i18n.t('目标路径...')}
                   />
                   {f.error && <p className="text-xs text-destructive mt-0.5">{f.error}</p>}
-                  {f.status === 'skipped' && <p className="text-xs text-muted-foreground mt-0.5">文件已存在，已跳过</p>}
+                  {f.status === 'skipped' && <p className="text-xs text-muted-foreground mt-0.5">{i18n.t('文件已存在，已跳过')}</p>}
                 </div>
                 {/* 移除按钮 */}
                 {(f.status === 'pending' || f.status === 'error') && (
@@ -381,7 +378,7 @@ export default function UploadPage() {
       {uploading && (
         <div className="space-y-1.5">
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>上传中...</span>
+            <span>{i18n.t('上传中...')}</span>
             <span>{progress}%</span>
           </div>
           <Progress value={progress} className="h-2" />
@@ -395,17 +392,16 @@ export default function UploadPage() {
           className="border border-border text-muted-foreground hover:bg-secondary"
           onClick={() => navigate(`/repos/${owner}/${repo}`)}
         >
-          取消
-        </Button>
+          {i18n.t('取消')}</Button>
         <Button
           className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
           onClick={handleUpload}
           disabled={uploading || files.filter((f) => f.status === 'pending' || f.status === 'error').length === 0}
         >
           {uploading ? (
-            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />上传中</>
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{i18n.t('上传中')}</>
           ) : (
-            <><GitCommit className="w-4 h-4 mr-2" />提交上传 ({files.filter((f) => f.status === 'pending' || f.status === 'error').length} 个文件)</>
+            <><GitCommit className="w-4 h-4 mr-2" />{i18n.t('提交上传 (')}{files.filter((f) => f.status === 'pending' || f.status === 'error').length} {i18n.t('个文件)')}</>
           )}
         </Button>
       </div>

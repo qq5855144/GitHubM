@@ -9,6 +9,7 @@ import { cn, copyToClipboard } from '@/lib/utils';
 import { getRepoContents } from '@/services/github';
 import type { GitHubContent } from '@/types/types';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 // ── 类型 ──────────────────────────────────────────────────────────────────────
 
@@ -105,21 +106,21 @@ const TreeRow = memo(function TreeRow({
           <div className="flex items-center gap-0.5 shrink-0">
             <button
               className="p-0.5 rounded hover:bg-primary/10 hover:text-primary text-muted-foreground transition-colors"
-              title="让 AI 读取此文件"
+              title={i18n.t('让 AI 读取此文件')}
               onClick={(e) => { e.stopPropagation(); onFileAction(node.item, 'read'); }}
             >
               <Eye className="w-3 h-3" />
             </button>
             <button
               className="p-0.5 rounded hover:bg-primary/10 hover:text-primary text-muted-foreground transition-colors"
-              title="让 AI 编辑此文件"
+              title={i18n.t('让 AI 编辑此文件')}
               onClick={(e) => { e.stopPropagation(); onFileAction(node.item, 'edit'); }}
             >
               <Pencil className="w-3 h-3" />
             </button>
             <button
               className="p-0.5 rounded hover:bg-primary/10 hover:text-primary text-muted-foreground transition-colors"
-              title="复制路径"
+              title={i18n.t('复制路径')}
               onClick={(e) => { e.stopPropagation(); onFileAction(node.item, 'copy'); }}
             >
               <Copy className="w-3 h-3" />
@@ -130,7 +131,7 @@ const TreeRow = memo(function TreeRow({
           <div className="flex items-center gap-0.5 shrink-0">
             <button
               className="p-0.5 rounded hover:bg-primary/10 hover:text-primary text-muted-foreground transition-colors"
-              title="让 AI 列出此目录"
+              title={i18n.t('让 AI 列出此目录')}
               onClick={(e) => { e.stopPropagation(); onFileAction(node.item, 'read'); }}
             >
               <Eye className="w-3 h-3" />
@@ -184,7 +185,7 @@ const FileBrowserPanel = memo(function FileBrowserPanel({
       setNodes(sorted.map(item => ({ item })));
       setRootLoaded(true);
     } catch {
-      toast.error('加载文件树失败');
+      toast.error(i18n.t('加载文件树失败'));
     } finally {
       setRootLoading(false);
     }
@@ -239,7 +240,7 @@ const FileBrowserPanel = memo(function FileBrowserPanel({
   // 文件操作 → 插入文本到输入框
   const handleFileAction = useCallback((item: GitHubContent, action: 'read' | 'edit' | 'copy') => {
     if (action === 'copy') {
-      copyToClipboard(item.path).then(() => toast.success('路径已复制'));
+      copyToClipboard(item.path).then(() => toast.success(i18n.t('路径已复制')));
       return;
     }
     if (action === 'read') {
@@ -263,14 +264,14 @@ const FileBrowserPanel = memo(function FileBrowserPanel({
       <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
         <div className="flex items-center gap-1.5">
           <FolderSearch className="w-3.5 h-3.5 text-primary" />
-          <span className="text-xs font-semibold text-foreground">文件浏览器</span>
+          <span className="text-xs font-semibold text-foreground">{i18n.t('文件浏览器')}</span>
           <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[80px]">{repo}</span>
         </div>
         <div className="flex items-center gap-0.5">
           {rootLoaded && (
             <button
               className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              title="刷新"
+              title={i18n.t('刷新')}
               onClick={() => { setRootLoaded(false); setNodes([]); loadRoot(); }}
             >
               <RefreshCw className="w-3 h-3" />
@@ -279,7 +280,7 @@ const FileBrowserPanel = memo(function FileBrowserPanel({
           <button
             className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             onClick={onClose}
-            title="关闭"
+            title={i18n.t('关闭')}
           >
             <X className="w-3 h-3" />
           </button>
@@ -293,25 +294,23 @@ const FileBrowserPanel = memo(function FileBrowserPanel({
             {rootLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-xs">加载文件树…</span>
+                <span className="text-xs">{i18n.t('加载文件树…')}</span>
               </>
             ) : (
               <>
                 <FolderSearch className="w-6 h-6 opacity-40" />
-                <span className="text-xs">点击加载文件树</span>
+                <span className="text-xs">{i18n.t('点击加载文件树')}</span>
                 <button
                   className="text-xs px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
                   onClick={loadRoot}
                 >
-                  加载
-                </button>
+                  {i18n.t('加载')}</button>
               </>
             )}
           </div>
         ) : nodes.length === 0 ? (
           <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-            空目录
-          </div>
+            {i18n.t('空目录')}</div>
         ) : (
           nodes.map(node => (
             <TreeRow
@@ -330,10 +329,7 @@ const FileBrowserPanel = memo(function FileBrowserPanel({
       {/* 底部操作提示 */}
       <div className="px-3 py-1.5 border-t border-border shrink-0">
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          <Eye className="w-2.5 h-2.5 inline mr-0.5" />读取 &nbsp;
-          <Pencil className="w-2.5 h-2.5 inline mr-0.5" />编辑 &nbsp;
-          <Copy className="w-2.5 h-2.5 inline mr-0.5" />复制路径
-        </p>
+          <Eye className="w-2.5 h-2.5 inline mr-0.5" />{i18n.t('读取 &nbsp;')}<Pencil className="w-2.5 h-2.5 inline mr-0.5" />{i18n.t('编辑 &nbsp;')}<Copy className="w-2.5 h-2.5 inline mr-0.5" />{i18n.t('复制路径')}</p>
       </div>
     </div>
   );

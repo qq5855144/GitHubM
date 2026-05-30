@@ -27,6 +27,7 @@ import { gqlGetContributions, gqlGetPinnedRepos } from '@/services/github-graphq
 import type { GitHubRepo, GitHubEvent, ContributionCalendar, GQL_PinnedRepo } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
+import i18n from "@/i18n";
 
 // 贡献等级 → 样式映射
 function getContributionClass(level: string, count: number): string {
@@ -48,7 +49,7 @@ function ContributionHeatmap({
   calendar: ContributionCalendar | null;
   loading: boolean;
 }) {
-  const weekdayLabels = ['日', '', '二', '', '四', '', '六'];
+  const weekdayLabels = [i18n.t('日'), '', i18n.t('二'), '', i18n.t('四'), '', i18n.t('六')];
 
   if (loading) {
     return (
@@ -69,11 +70,9 @@ function ContributionHeatmap({
       <div className="flex items-center justify-between flex-wrap gap-2">
         <span className="text-sm font-medium text-foreground flex items-center gap-2">
           <Flame className="w-4 h-4 text-primary" />
-          贡献热力图
-        </span>
+          {i18n.t('贡献热力图')}</span>
         <Badge variant="outline" className="text-xs border-border text-muted-foreground">
-          今年共 <span className="text-foreground font-semibold mx-1">{calendar.totalContributions.toLocaleString()}</span> 次贡献
-        </Badge>
+          {i18n.t('今年共')}<span className="text-foreground font-semibold mx-1">{calendar.totalContributions.toLocaleString()}</span> {i18n.t('次贡献')}</Badge>
       </div>
 
       <TooltipProvider>
@@ -118,7 +117,7 @@ function ContributionHeatmap({
                           />
                         </TooltipTrigger>
                         <TooltipContent side="top" className="bg-popover border-border text-xs text-foreground">
-                          {day.date}：{day.contributionCount > 0 ? `${day.contributionCount} 次贡献` : '无贡献'}
+                          {day.date}：{day.contributionCount > 0 ? `${day.contributionCount} 次贡献` : i18n.t('无贡献')}
                         </TooltipContent>
                       </Tooltip>
                     );
@@ -132,11 +131,11 @@ function ContributionHeatmap({
 
       {/* 图例 */}
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <span>少</span>
+        <span>{i18n.t('少')}</span>
         {['bg-secondary', 'bg-primary/25', 'bg-primary/50', 'bg-primary/75', 'bg-primary'].map((cls, i) => (
           <div key={i} className={`w-3 h-3 rounded-sm ${cls}`} />
         ))}
-        <span>多</span>
+        <span>{i18n.t('多')}</span>
       </div>
     </div>
   );
@@ -242,7 +241,7 @@ export default function DashboardPage() {
         setEvents(events);
         return { repos, events };
       } catch (err) {
-        toast.error('加载仪表盘数据失败');
+        toast.error(i18n.t('加载仪表盘数据失败'));
         console.error(err);
         return { repos: [], events: [] };
       } finally {
@@ -309,11 +308,11 @@ export default function DashboardPage() {
       }
       case 'IssuesEvent': {
         const payload = event.payload as { action?: string; issue?: { title?: string } };
-        return `${payload.action === 'opened' ? '创建了' : payload.action === 'closed' ? '关闭了' : '更新了'} Issue: ${payload.issue?.title || ''} (${repoName})`;
+        return `${payload.action === 'opened' ? i18n.t('创建了') : payload.action === 'closed' ? i18n.t('关闭了') : i18n.t('更新了')} Issue: ${payload.issue?.title || ''} (${repoName})`;
       }
       case 'PullRequestEvent': {
         const payload = event.payload as { action?: string; pull_request?: { title?: string } };
-        return `${payload.action === 'opened' ? '创建了' : payload.action === 'closed' ? '关闭了' : '更新了'} PR: ${payload.pull_request?.title || ''} (${repoName})`;
+        return `${payload.action === 'opened' ? i18n.t('创建了') : payload.action === 'closed' ? i18n.t('关闭了') : i18n.t('更新了')} PR: ${payload.pull_request?.title || ''} (${repoName})`;
       }
       case 'WatchEvent':
         return `标星了 ${repoName}`;
@@ -390,7 +389,7 @@ export default function DashboardPage() {
               </span>
             )}
             <span>
-              加入于 {new Date(user.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })}
+              {i18n.t('加入于')}{new Date(user.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })}
             </span>
           </div>
           <a
@@ -402,18 +401,17 @@ export default function DashboardPage() {
                        bg-background hover:bg-secondary transition-colors text-foreground"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            GitHub 主页
-          </a>
+            {i18n.t('GitHub 主页')}</a>
         </div>
       </div>
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: '公开仓库', value: user.public_repos as number | null, icon: BookOpen, color: 'text-primary', to: '/repos' },
-          { label: '关注者', value: user.followers as number | null, icon: Users, color: 'text-accent', to: '/follow-list/followers' },
-          { label: '正在关注', value: user.following as number | null, icon: Eye, color: 'text-chart-3', to: '/follow-list/following' },
-          { label: '我的收藏', value: starredCount, icon: Star, color: 'text-warning', to: '/starred' },
+          { label: i18n.t('公开仓库'), value: user.public_repos as number | null, icon: BookOpen, color: 'text-primary', to: '/repos' },
+          { label: i18n.t('关注者'), value: user.followers as number | null, icon: Users, color: 'text-accent', to: '/follow-list/followers' },
+          { label: i18n.t('正在关注'), value: user.following as number | null, icon: Eye, color: 'text-chart-3', to: '/follow-list/following' },
+          { label: i18n.t('我的收藏'), value: starredCount, icon: Star, color: 'text-warning', to: '/starred' },
         ].map((stat) => {
           const Icon = stat.icon;
           return (
@@ -433,8 +431,7 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold text-foreground">{formatNumber(stat.value)}</p>
               )}
               <p className="text-xs text-muted-foreground mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                点击查看 →
-              </p>
+                {i18n.t('点击查看 →')}</p>
             </button>
           );
         })}
@@ -445,15 +442,14 @@ export default function DashboardPage() {
         {/* 最近仓库 */}
         <Card className="bg-card border-border h-full flex flex-col">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-base font-semibold text-foreground">最近仓库</CardTitle>
+            <CardTitle className="text-base font-semibold text-foreground">{i18n.t('最近仓库')}</CardTitle>
             <Button
               variant="ghost"
               size="sm"
               className="text-accent hover:bg-secondary text-xs h-7"
               onClick={() => navigate('/repos')}
             >
-              查看全部
-            </Button>
+              {i18n.t('查看全部')}</Button>
           </CardHeader>
           <CardContent className="flex-1 p-0">
             {loading ? (
@@ -464,8 +460,7 @@ export default function DashboardPage() {
               </div>
             ) : repos.length === 0 ? (
               <div className="px-4 pb-4 text-center text-muted-foreground text-sm py-8">
-                暂无仓库
-              </div>
+                {i18n.t('暂无仓库')}</div>
             ) : (
               <div className="divide-y divide-border">
                 {repos.map((repo) => (
@@ -480,7 +475,7 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-accent truncate">{repo.name}</span>
                           {repo.private && (
-                            <Badge variant="outline" className="text-xs border-border text-muted-foreground h-4 px-1">私有</Badge>
+                            <Badge variant="outline" className="text-xs border-border text-muted-foreground h-4 px-1">{i18n.t('私有')}</Badge>
                           )}
                           {repo.fork && (
                             <GitFork className="w-3 h-3 text-muted-foreground shrink-0" />
@@ -522,8 +517,7 @@ export default function DashboardPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
               <Activity className="w-4 h-4 text-primary" />
-              最近活动
-            </CardTitle>
+              {i18n.t('最近活动')}</CardTitle>
           </CardHeader>
           <CardContent className="flex-1 p-0 overflow-y-auto max-h-[400px]">
             {loading ? (
@@ -534,8 +528,7 @@ export default function DashboardPage() {
               </div>
             ) : events.length === 0 ? (
               <div className="px-4 pb-4 text-center text-muted-foreground text-sm py-8">
-                暂无活动记录
-              </div>
+                {i18n.t('暂无活动记录')}</div>
             ) : (
               <div className="px-4 pb-4 space-y-0">
                 {events.map((event, index) => (
@@ -575,8 +568,7 @@ export default function DashboardPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
               <Pin className="w-4 h-4 text-primary" />
-              置顶仓库
-              <Badge variant="outline" className="text-xs border-border text-muted-foreground font-normal">GraphQL</Badge>
+              {i18n.t('置顶仓库')}<Badge variant="outline" className="text-xs border-border text-muted-foreground font-normal">GraphQL</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>

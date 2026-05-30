@@ -11,6 +11,7 @@ import {
   Cpu, Wrench, Loader2, ChevronDown, ChevronRight, BrainCircuit,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import i18n from "@/i18n";
 
 // ── 模型类型（从 aiTypes 导入，在此仅重导出供外部使用）──────────────────────────────
 export type { ModelType };
@@ -38,12 +39,12 @@ export interface ModelDef {
 export const MODEL_DEFS: ModelDef[] = [
   {
     type: 'wenxin',
-    label: '文心 ERNIE 4.5',
-    desc: '百度文心大模型，平台内置免费使用',
-    badge: '免费',
+    label: i18n.t('文心 ERNIE 4.5'),
+    desc: i18n.t('百度文心大模型，平台内置免费使用'),
+    badge: i18n.t('免费'),
     needKey: false,
     needEndpoint: false,
-    avatarText: '文',
+    avatarText: i18n.t('文'),
     avatarFrom: '#e85d04',
     avatarTo: '#f48c06',
     Icon: WenxinIcon,
@@ -51,11 +52,11 @@ export const MODEL_DEFS: ModelDef[] = [
   {
     type: 'gemini',
     label: 'Google Gemini',
-    desc: '谷歌 Gemini 系列，上下文窗口超大',
-    badge: '免费',
+    desc: i18n.t('谷歌 Gemini 系列，上下文窗口超大'),
+    badge: i18n.t('免费'),
     models: [
-      { value: 'gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash（速度快 · 推荐）' },
-      { value: 'gemini-2.5-pro-preview-05-06', label: 'Gemini 2.5 Pro（最强代码能力）' },
+      { value: 'gemini-2.5-flash-preview-05-20', label: i18n.t('Gemini 2.5 Flash（速度快 · 推荐）') },
+      { value: 'gemini-2.5-pro-preview-05-06', label: i18n.t('Gemini 2.5 Pro（最强代码能力）') },
       { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
     ],
     needKey: true,
@@ -70,15 +71,15 @@ export const MODEL_DEFS: ModelDef[] = [
   {
     type: 'deepseek',
     label: 'DeepSeek',
-    desc: '代码能力极强，中文理解出色，价格极低',
-    badge: '低价',
+    desc: i18n.t('代码能力极强，中文理解出色，价格极低'),
+    badge: i18n.t('低价'),
     models: [
       // 新命名（2026-05，推荐使用）
-      { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash（快速 · 低价 · 推荐）' },
-      { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro（深度思考 · 当前 2.5 折）' },
+      { value: 'deepseek-v4-flash', label: i18n.t('DeepSeek V4 Flash（快速 · 低价 · 推荐）') },
+      { value: 'deepseek-v4-pro', label: i18n.t('DeepSeek V4 Pro（深度思考 · 当前 2.5 折）') },
       // 旧名称兼容（2026/07/24 后弃用）
-      { value: 'deepseek-chat', label: 'DeepSeek Chat（旧名，即将弃用）' },
-      { value: 'deepseek-reasoner', label: 'DeepSeek Reasoner（旧名，即将弃用）' },
+      { value: 'deepseek-chat', label: i18n.t('DeepSeek Chat（旧名，即将弃用）') },
+      { value: 'deepseek-reasoner', label: i18n.t('DeepSeek Reasoner（旧名，即将弃用）') },
     ],
     needKey: true,
     needEndpoint: false,
@@ -91,20 +92,20 @@ export const MODEL_DEFS: ModelDef[] = [
   },
   {
     type: 'qwen',
-    label: 'Qwen 通义千问',
-    desc: '阿里云 Qwen 2.5 Coder，中文支持优秀',
-    badge: '免费额度',
+    label: i18n.t('Qwen 通义千问'),
+    desc: i18n.t('阿里云 Qwen 2.5 Coder，中文支持优秀'),
+    badge: i18n.t('免费额度'),
     models: [
-      { value: 'qwen2.5-coder-32b-instruct', label: 'Qwen2.5 Coder 32B（最强代码 · 推荐）' },
-      { value: 'qwen2.5-coder-7b-instruct', label: 'Qwen2.5 Coder 7B（轻量快速）' },
-      { value: 'qwen-plus', label: 'Qwen Plus（通用对话）' },
-      { value: 'qwen-turbo', label: 'Qwen Turbo（极速）' },
+      { value: 'qwen2.5-coder-32b-instruct', label: i18n.t('Qwen2.5 Coder 32B（最强代码 · 推荐）') },
+      { value: 'qwen2.5-coder-7b-instruct', label: i18n.t('Qwen2.5 Coder 7B（轻量快速）') },
+      { value: 'qwen-plus', label: i18n.t('Qwen Plus（通用对话）') },
+      { value: 'qwen-turbo', label: i18n.t('Qwen Turbo（极速）') },
     ],
     needKey: true,
     needEndpoint: false,
     keyPlaceholder: 'sk-xxxxxxxxxxxxxxxx',
     docsUrl: 'https://dashscope.console.aliyun.com/apiKey',
-    avatarText: '千',
+    avatarText: i18n.t('千'),
     avatarFrom: '#7c3aed',
     avatarTo: '#a855f7',
     Icon: QwenIcon,
@@ -112,9 +113,9 @@ export const MODEL_DEFS: ModelDef[] = [
   {
     type: 'openai',
     label: 'OpenAI GPT',
-    desc: '需填入 OpenAI API Key',
+    desc: i18n.t('需填入 OpenAI API Key'),
     models: [
-      { value: 'gpt-4o-mini', label: 'GPT-4o Mini（推荐）' },
+      { value: 'gpt-4o-mini', label: i18n.t('GPT-4o Mini（推荐）') },
       { value: 'gpt-4o', label: 'GPT-4o' },
       { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
     ],
@@ -129,11 +130,11 @@ export const MODEL_DEFS: ModelDef[] = [
   },
   {
     type: 'custom',
-    label: '自定义接口',
-    desc: '兼容 OpenAI 格式的任意接口',
+    label: i18n.t('自定义接口'),
+    desc: i18n.t('兼容 OpenAI 格式的任意接口'),
     needKey: true,
     needEndpoint: true,
-    keyPlaceholder: 'Bearer token 或 API Key',
+    keyPlaceholder: i18n.t('Bearer token 或 API Key'),
     avatarText: '{}',
     avatarFrom: '#64748b',
     avatarTo: '#475569',
@@ -145,27 +146,27 @@ export const MODEL_DEFS: ModelDef[] = [
 
 export const QUICK_PROMPTS = [
   // 探索类
-  { icon: FolderSearch,   label: '文件树',      text: '请用 file_tree 工具获取完整项目文件树（深度3），分析项目结构和技术栈' },
-  { icon: FolderOpen,     label: '项目结构',    text: '帮我分析一下这个仓库的整体项目结构和技术栈，包括主要目录和核心文件' },
-  { icon: BookOpen,       label: '查看 README', text: '请读取并展示 README.md 的内容' },
-  { icon: ScanSearch,     label: '搜索 TODO',   text: '请用 search_code 工具搜索仓库中所有包含 TODO 注释的代码位置，列出需要完成的工作' },
-  { icon: Files,          label: '批量读取',    text: '请列出根目录文件，然后用 batch_read 工具同时读取 README.md 和主要配置文件（如 package.json、build.gradle 等）' },
+  { icon: FolderSearch,   label: i18n.t('文件树'),      text: i18n.t('请用 file_tree 工具获取完整项目文件树（深度3），分析项目结构和技术栈') },
+  { icon: FolderOpen,     label: i18n.t('项目结构'),    text: i18n.t('帮我分析一下这个仓库的整体项目结构和技术栈，包括主要目录和核心文件') },
+  { icon: BookOpen,       label: i18n.t('查看 README'), text: i18n.t('请读取并展示 README.md 的内容') },
+  { icon: ScanSearch,     label: i18n.t('搜索 TODO'),   text: i18n.t('请用 search_code 工具搜索仓库中所有包含 TODO 注释的代码位置，列出需要完成的工作') },
+  { icon: Files,          label: i18n.t('批量读取'),    text: '请列出根目录文件，然后用 batch_read 工具同时读取 README.md 和主要配置文件（如 package.json、build.gradle 等）' },
   // 编辑类
-  { icon: FileCode2,      label: '代码审查',    text: '请先用 file_tree 获取项目结构，然后挑选 3-5 个主要源码文件进行代码质量审查，给出改进建议' },
-  { icon: Pencil,         label: '优化 README', text: '请读取 README.md，帮我优化内容使其更专业完整，然后用 write_file 写入更新' },
-  { icon: Wrench,         label: '重构建议',    text: '请分析项目文件树，找出可以重构优化的模块，并给出具体建议' },
+  { icon: FileCode2,      label: i18n.t('代码审查'),    text: '请先用 file_tree 获取项目结构，然后挑选 3-5 个主要源码文件进行代码质量审查，给出改进建议' },
+  { icon: Pencil,         label: i18n.t('优化 README'), text: i18n.t('请读取 README.md，帮我优化内容使其更专业完整，然后用 write_file 写入更新') },
+  { icon: Wrench,         label: i18n.t('重构建议'),    text: i18n.t('请分析项目文件树，找出可以重构优化的模块，并给出具体建议') },
   // Git 操作类
-  { icon: GitBranch,      label: '列出分支',    text: '请列出该仓库所有的分支' },
-  { icon: GitCommit,      label: '提交历史',    text: '请展示仓库最近 10 条提交记录，并总结最近的变更方向' },
-  { icon: GitMerge,       label: '查看 PR',     text: '请列出该仓库所有 open 状态的 Pull Request' },
-  { icon: GitPullRequest, label: '创建 PR',     text: '请帮我创建一个 Pull Request，从当前分支合并到默认分支，标题总结最近的修改内容' },
-  { icon: CircleAlert,    label: '查看 Issues', text: '请列出该仓库所有 open 状态的 Issues，并按优先级分类总结' },
+  { icon: GitBranch,      label: i18n.t('列出分支'),    text: i18n.t('请列出该仓库所有的分支') },
+  { icon: GitCommit,      label: i18n.t('提交历史'),    text: i18n.t('请展示仓库最近 10 条提交记录，并总结最近的变更方向') },
+  { icon: GitMerge,       label: i18n.t('查看 PR'),     text: i18n.t('请列出该仓库所有 open 状态的 Pull Request') },
+  { icon: GitPullRequest, label: i18n.t('创建 PR'),     text: i18n.t('请帮我创建一个 Pull Request，从当前分支合并到默认分支，标题总结最近的修改内容') },
+  { icon: CircleAlert,    label: i18n.t('查看 Issues'), text: i18n.t('请列出该仓库所有 open 状态的 Issues，并按优先级分类总结') },
   // CI/CD 类
-  { icon: Play,           label: '工作流列表',  text: '请列出仓库所有 GitHub Actions 工作流文件及其状态' },
-  { icon: ListChecks,     label: '最近部署',    text: '请查看最近 5 次 GitHub Actions 运行记录，告诉我哪些成功、哪些失败' },
-  { icon: BugPlay,        label: '排查失败',    text: '请找出最近一次失败的工作流运行，查看 Job 列表，下载失败 Job 的日志，分析报错原因并给出修复建议' },
-  { icon: Cpu,            label: '自动修复',    text: '请找出最近一次失败的工作流，分析日志，定位问题源码，自动修复并提交到当前分支' },
-  { icon: LayoutDashboard,label: '查看 Secrets','text': '请列出该仓库配置的 Actions Secrets 名称（不含值），检查是否有缺失的环境变量' },
+  { icon: Play,           label: i18n.t('工作流列表'),  text: i18n.t('请列出仓库所有 GitHub Actions 工作流文件及其状态') },
+  { icon: ListChecks,     label: i18n.t('最近部署'),    text: i18n.t('请查看最近 5 次 GitHub Actions 运行记录，告诉我哪些成功、哪些失败') },
+  { icon: BugPlay,        label: i18n.t('排查失败'),    text: '请找出最近一次失败的工作流运行，查看 Job 列表，下载失败 Job 的日志，分析报错原因并给出修复建议' },
+  { icon: Cpu,            label: i18n.t('自动修复'),    text: i18n.t('请找出最近一次失败的工作流，分析日志，定位问题源码，自动修复并提交到当前分支') },
+  { icon: LayoutDashboard,label: i18n.t('查看 Secrets'),'text': i18n.t('请列出该仓库配置的 Actions Secrets 名称（不含值），检查是否有缺失的环境变量') },
 ];
 
 // ── 纯工具函数 ──────────────────────────────────────────────────────────────────
@@ -264,7 +265,7 @@ export function ThinkingBlock({ content, done }: { content: string; done?: boole
       >
         <div className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground select-none uppercase tracking-wider">
           {done ? <BrainCircuit className="w-3 h-3 text-primary" /> : <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-          <span>{done ? '已完成思考' : '正在思考...'}</span>
+          <span>{done ? i18n.t('已完成思考') : i18n.t('正在思考...')}</span>
         </div>
         {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
       </button>

@@ -59,32 +59,33 @@ import {
 import type { GitHubWorkflow, GitHubWorkflowRun, GitHubWorkflowJob } from '@/types/types';
 import { toast } from 'sonner';
 import { copyToClipboard } from '@/lib/utils';
+import i18n from "@/i18n";
 
 function RunStatusBadge({ status, conclusion }: { status: string | null; conclusion: string | null }) {
   if (status === 'in_progress' || status === 'queued' || status === 'waiting') {
     return (
       <Badge className="bg-warning/10 text-warning border-warning/30 text-xs flex items-center gap-1">
         <Loader2 className="w-3 h-3 animate-spin" />
-        {status === 'in_progress' ? '运行中' : status === 'queued' ? '排队中' : '等待中'}
+        {status === 'in_progress' ? i18n.t('运行中') : status === 'queued' ? i18n.t('排队中') : i18n.t('等待中')}
       </Badge>
     );
   }
   if (conclusion === 'success') {
-    return <Badge className="bg-success/10 text-success border-success/30 text-xs flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />成功</Badge>;
+    return <Badge className="bg-success/10 text-success border-success/30 text-xs flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />{i18n.t('成功')}</Badge>;
   }
   if (conclusion === 'failure') {
-    return <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs flex items-center gap-1"><XCircle className="w-3 h-3" />失败</Badge>;
+    return <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs flex items-center gap-1"><XCircle className="w-3 h-3" />{i18n.t('失败')}</Badge>;
   }
   if (conclusion === 'cancelled') {
-    return <Badge className="bg-secondary text-muted-foreground border-border text-xs">已取消</Badge>;
+    return <Badge className="bg-secondary text-muted-foreground border-border text-xs">{i18n.t('已取消')}</Badge>;
   }
   if (conclusion === 'skipped') {
-    return <Badge className="bg-secondary text-muted-foreground border-border text-xs flex items-center gap-1"><SkipForward className="w-3 h-3" />已跳过</Badge>;
+    return <Badge className="bg-secondary text-muted-foreground border-border text-xs flex items-center gap-1"><SkipForward className="w-3 h-3" />{i18n.t('已跳过')}</Badge>;
   }
   if (conclusion === 'timed_out') {
-    return <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs flex items-center gap-1"><Clock className="w-3 h-3" />超时</Badge>;
+    return <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs flex items-center gap-1"><Clock className="w-3 h-3" />{i18n.t('超时')}</Badge>;
   }
-  return <Badge className="bg-secondary text-muted-foreground border-border text-xs">{conclusion || status || '未知'}</Badge>;
+  return <Badge className="bg-secondary text-muted-foreground border-border text-xs">{conclusion || status || i18n.t('未知')}</Badge>;
 }
 
 // ANSI 颜色码转 Tailwind className（精简版）
@@ -128,7 +129,7 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
       const text = await getJobLogs(owner, repo, jobId);
       setLogs(text);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '获取日志失败';
+      const msg = err instanceof Error ? err.message : i18n.t('获取日志失败');
       setLogs(`[错误] ${msg}`);
     } finally {
       setLoading(false);
@@ -158,7 +159,7 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error('复制失败');
+      toast.error(i18n.t('复制失败'));
     }
   };
 
@@ -166,11 +167,10 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
     <div className="bg-[#0d1117] border border-border rounded-lg overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-secondary/20">
         <Terminal className="w-3.5 h-3.5 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground flex-1">日志输出</span>
+        <span className="text-xs text-muted-foreground flex-1">{i18n.t('日志输出')}</span>
         {isRunning && (
           <span className="flex items-center gap-1 text-[10px] text-warning">
-            <Loader2 className="w-3 h-3 animate-spin" />实时刷新
-          </span>
+            <Loader2 className="w-3 h-3 animate-spin" />{i18n.t('实时刷新')}</span>
         )}
         <Button
           variant="ghost"
@@ -180,7 +180,7 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
           disabled={loading || !logs}
         >
           {copied ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
-          {copied ? '已复制' : '复制'}
+          {copied ? i18n.t('已复制') : i18n.t('复制')}
         </Button>
       </div>
       <div
@@ -190,7 +190,7 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
         {loading ? (
           <div className="flex items-center gap-2 text-muted-foreground py-4">
             <Loader2 className="w-4 h-4 animate-spin" />
-            <span>加载日志...</span>
+            <span>{i18n.t('加载日志...')}</span>
           </div>
         ) : logs ? (
           logs.split('\n').map((line, i) => (
@@ -199,7 +199,7 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
             </div>
           ))
         ) : (
-          <span className="text-muted-foreground">暂无日志</span>
+          <span className="text-muted-foreground">{i18n.t('暂无日志')}</span>
         )}
       </div>
     </div>
@@ -244,8 +244,8 @@ function JobItem({ job, owner, repo }: { job: GitHubWorkflowJob; owner: string; 
               onClick={() => setShowLogs(!showLogs)}
             >
               <Terminal className="w-3 h-3" />
-              {showLogs ? '收起日志' : '查看日志'}
-              {isRunning && <span className="text-warning text-[10px]">● 实时</span>}
+              {showLogs ? i18n.t('收起日志') : i18n.t('查看日志')}
+              {isRunning && <span className="text-warning text-[10px]">{i18n.t('● 实时')}</span>}
             </Button>
           </div>
           {showLogs && (
@@ -290,10 +290,10 @@ function RunDetail({ owner, repo, run, onClose }: {
     setCancelling(true);
     try {
       await cancelWorkflowRun(owner, repo, run.id);
-      toast.success('已取消工作流运行');
+      toast.success(i18n.t('已取消工作流运行'));
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '取消失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('取消失败'));
     } finally {
       setCancelling(false);
     }
@@ -303,10 +303,10 @@ function RunDetail({ owner, repo, run, onClose }: {
     setRerunning(true);
     try {
       await rerunWorkflowRun(owner, repo, run.id);
-      toast.success('已重新触发工作流');
+      toast.success(i18n.t('已重新触发工作流'));
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '重新运行失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('重新运行失败'));
     } finally {
       setRerunning(false);
     }
@@ -315,14 +315,13 @@ function RunDetail({ owner, repo, run, onClose }: {
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
       <div className="p-4 border-b border-border bg-secondary/30 flex items-center gap-3 flex-wrap">
-        <button type="button" onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground">← 返回列表</button>
+        <button type="button" onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground">{i18n.t('← 返回列表')}</button>
         <span className="text-muted-foreground text-sm">/</span>
         <span className="text-sm font-medium text-foreground truncate max-w-xs">{run.name} #{run.run_number}</span>
         <RunStatusBadge status={run.status} conclusion={run.conclusion} />
         {isRunning && (
           <span className="text-[11px] text-warning flex items-center gap-1 ml-1">
-            <Loader2 className="w-3 h-3 animate-spin" />自动刷新中
-          </span>
+            <Loader2 className="w-3 h-3 animate-spin" />{i18n.t('自动刷新中')}</span>
         )}
         <div className="ml-auto flex gap-2">
           {(run.status === 'in_progress' || run.status === 'queued') && (
@@ -334,7 +333,7 @@ function RunDetail({ owner, repo, run, onClose }: {
               disabled={cancelling}
             >
               <XCircle className="w-3.5 h-3.5 mr-1" />
-              {cancelling ? '取消中...' : '取消运行'}
+              {cancelling ? i18n.t('取消中...') : i18n.t('取消运行')}
             </Button>
           )}
           {run.status === 'completed' && (
@@ -345,17 +344,17 @@ function RunDetail({ owner, repo, run, onClose }: {
               disabled={rerunning}
             >
               <RefreshCw className="w-3.5 h-3.5 mr-1" />
-              {rerunning ? '触发中...' : '重新运行'}
+              {rerunning ? i18n.t('触发中...') : i18n.t('重新运行')}
             </Button>
           )}
         </div>
       </div>
       <div className="p-4 space-y-1 text-xs text-muted-foreground border-b border-border">
         <div className="flex gap-4 flex-wrap">
-          <span>触发者：<span className="text-foreground">{run.triggering_actor?.login}</span></span>
-          <span>分支：<code className="font-mono text-foreground">{run.head_branch}</code></span>
-          <span>事件：<span className="text-foreground">{run.event}</span></span>
-          <span>开始：<span className="text-foreground">{formatRelativeTime(run.created_at)}</span></span>
+          <span>{i18n.t('触发者：')}<span className="text-foreground">{run.triggering_actor?.login}</span></span>
+          <span>{i18n.t('分支：')}<code className="font-mono text-foreground">{run.head_branch}</code></span>
+          <span>{i18n.t('事件：')}<span className="text-foreground">{run.event}</span></span>
+          <span>{i18n.t('开始：')}<span className="text-foreground">{formatRelativeTime(run.created_at)}</span></span>
         </div>
         <p className="text-foreground text-sm mt-1">{run.head_commit?.message?.split('\n')[0]}</p>
       </div>
@@ -363,7 +362,7 @@ function RunDetail({ owner, repo, run, onClose }: {
         {loadingJobs ? (
           <div className="p-4 space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-8 bg-muted" />)}</div>
         ) : jobs.length === 0 ? (
-          <div className="py-8 text-center text-muted-foreground text-sm">暂无任务数据</div>
+          <div className="py-8 text-center text-muted-foreground text-sm">{i18n.t('暂无任务数据')}</div>
         ) : jobs.map((job) => <JobItem key={job.id} job={job} owner={owner} repo={repo} />)}
       </div>
     </div>
@@ -428,7 +427,7 @@ export default function ActionsPage() {
       setTriggerDialog(null);
       setTimeout(() => loadRuns(1), 2000);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '触发失败，请确保工作流支持 workflow_dispatch');
+      toast.error(err instanceof Error ? err.message : i18n.t('触发失败，请确保工作流支持 workflow_dispatch'));
     } finally {
       setTriggering(null);
     }
@@ -446,7 +445,7 @@ export default function ActionsPage() {
       setHasMore(res.workflow_runs.length === 20);
       setPage(pg);
     } catch (err) {
-      toast.error('加载运行记录失败');
+      toast.error(i18n.t('加载运行记录失败'));
       console.error(err);
     } finally {
       setLoadingRuns(false);
@@ -460,7 +459,7 @@ export default function ActionsPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-5xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
@@ -469,19 +468,19 @@ export default function ActionsPage() {
 
       <div className="flex items-center gap-2">
         <Zap className="w-5 h-5 text-primary" />
-        <h1 className="text-xl font-bold text-foreground">Actions 工作流</h1>
+        <h1 className="text-xl font-bold text-foreground">{i18n.t('Actions 工作流')}</h1>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* 工作流列表 */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border bg-secondary/30">
-            <p className="text-sm font-medium text-foreground">工作流</p>
+            <p className="text-sm font-medium text-foreground">{i18n.t('工作流')}</p>
           </div>
           {loadingWf ? (
             <div className="p-3 space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-8 bg-muted" />)}</div>
           ) : workflows.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">暂无工作流</div>
+            <div className="py-8 text-center text-sm text-muted-foreground">{i18n.t('暂无工作流')}</div>
           ) : (
             <div className="divide-y divide-border">
               {workflows.map((wf) => (
@@ -501,7 +500,7 @@ export default function ActionsPage() {
                     className="w-7 h-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary hover:bg-primary/10"
                     onClick={() => openTriggerDialog(wf)}
                     disabled={triggering === wf.id}
-                    title="触发工作流"
+                    title={i18n.t('触发工作流')}
                   >
                     {triggering === wf.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
                   </Button>
@@ -520,10 +519,10 @@ export default function ActionsPage() {
               <div className="flex items-center gap-3 flex-wrap">
                 <Select value={selectedWorkflow} onValueChange={(v) => { setSelectedWorkflow(v); setSelectedRun(null); }}>
                   <SelectTrigger className="bg-secondary border-border text-foreground w-36 h-9 text-sm">
-                    <SelectValue placeholder="工作流" />
+                    <SelectValue placeholder={i18n.t('工作流')} />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-border">
-                    <SelectItem value="all" className="text-foreground text-sm">全部工作流</SelectItem>
+                    <SelectItem value="all" className="text-foreground text-sm">{i18n.t('全部工作流')}</SelectItem>
                     {workflows.map((wf) => (
                       <SelectItem key={wf.id} value={String(wf.id)} className="text-foreground text-sm">{wf.name}</SelectItem>
                     ))}
@@ -534,11 +533,11 @@ export default function ActionsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-border">
-                    <SelectItem value="all" className="text-foreground text-sm">全部状态</SelectItem>
-                    <SelectItem value="success" className="text-foreground text-sm">成功</SelectItem>
-                    <SelectItem value="failure" className="text-foreground text-sm">失败</SelectItem>
-                    <SelectItem value="in_progress" className="text-foreground text-sm">运行中</SelectItem>
-                    <SelectItem value="cancelled" className="text-foreground text-sm">已取消</SelectItem>
+                    <SelectItem value="all" className="text-foreground text-sm">{i18n.t('全部状态')}</SelectItem>
+                    <SelectItem value="success" className="text-foreground text-sm">{i18n.t('成功')}</SelectItem>
+                    <SelectItem value="failure" className="text-foreground text-sm">{i18n.t('失败')}</SelectItem>
+                    <SelectItem value="in_progress" className="text-foreground text-sm">{i18n.t('运行中')}</SelectItem>
+                    <SelectItem value="cancelled" className="text-foreground text-sm">{i18n.t('已取消')}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button
@@ -556,7 +555,7 @@ export default function ActionsPage() {
                 ) : runs.length === 0 ? (
                   <div className="py-12 text-center">
                     <AlertCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-foreground font-medium">暂无运行记录</p>
+                    <p className="text-foreground font-medium">{i18n.t('暂无运行记录')}</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-border">
@@ -597,7 +596,7 @@ export default function ActionsPage() {
                   onClick={() => loadRuns(page + 1, true)}
                   disabled={loadingRuns}
                 >
-                  {loadingRuns ? '加载中...' : '加载更多'}
+                  {loadingRuns ? i18n.t('加载中...') : i18n.t('加载更多')}
                 </Button>
               )}
             </>
@@ -612,7 +611,7 @@ export default function ActionsPage() {
         <DialogHeader>
           <DialogTitle className="text-foreground flex items-center gap-2 text-balance">
             <Zap className="w-4 h-4 text-primary shrink-0" />
-            触发工作流：{triggerDialog?.name}
+            {i18n.t('触发工作流：')}{triggerDialog?.name}
           </DialogTitle>
         </DialogHeader>
 
@@ -620,8 +619,7 @@ export default function ActionsPage() {
           {/* 分支选择 */}
           <div className="space-y-1.5">
             <Label className="text-sm font-normal text-muted-foreground flex items-center gap-1.5">
-              <GitBranch className="w-3.5 h-3.5" />运行分支
-            </Label>
+              <GitBranch className="w-3.5 h-3.5" />{i18n.t('运行分支')}</Label>
             {loadingBranches ? (
               <Skeleton className="h-9 bg-muted w-full" />
             ) : branches.length > 0 ? (
@@ -640,7 +638,7 @@ export default function ActionsPage() {
                 className="bg-secondary border-border text-foreground h-9 text-sm font-mono"
                 value={triggerRef}
                 onChange={(e) => setTriggerRef(e.target.value)}
-                placeholder="分支名称，例如 main"
+                placeholder={i18n.t('分支名称，例如 main')}
               />
             )}
           </div>
@@ -649,8 +647,7 @@ export default function ActionsPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-normal text-muted-foreground">
-                自定义 Inputs（可选）
-              </Label>
+                {i18n.t('自定义 Inputs（可选）')}</Label>
               <Button
                 type="button"
                 variant="ghost"
@@ -658,13 +655,11 @@ export default function ActionsPage() {
                 className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary gap-1"
                 onClick={() => setInputPairs((prev) => [...prev, { key: '', value: '' }])}
               >
-                <Plus className="w-3 h-3" />添加
-              </Button>
+                <Plus className="w-3 h-3" />{i18n.t('添加')}</Button>
             </div>
             {inputPairs.length === 0 ? (
               <p className="text-xs text-muted-foreground py-1">
-                无需 inputs 时留空，工作流将使用默认值运行
-              </p>
+                {i18n.t('无需 inputs 时留空，工作流将使用默认值运行')}</p>
             ) : (
               <div className="space-y-2">
                 {inputPairs.map((pair, idx) => (
@@ -703,15 +698,14 @@ export default function ActionsPage() {
             className="border border-border text-muted-foreground hover:bg-secondary"
             onClick={() => setTriggerDialog(null)}
           >
-            取消
-          </Button>
+            {i18n.t('取消')}</Button>
           <Button
             className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
             onClick={handleTriggerConfirm}
             disabled={!!triggering || !triggerRef.trim()}
           >
             {triggering ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-            {triggering ? '触发中…' : '触发运行'}
+            {triggering ? i18n.t('触发中…') : i18n.t('触发运行')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -50,6 +50,7 @@ import {
 } from '@/services/github';
 import { supabase } from '@/db/supabase';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -79,7 +80,7 @@ function formatBytes(bytes: number): string {
 async function downloadWithAuth(url: string, filename: string): Promise<void> {
   const token = getToken();
   if (!token) {
-    toast.error('请先登录后再下载');
+    toast.error(i18n.t('请先登录后再下载'));
     return;
   }
 
@@ -129,8 +130,8 @@ function AssetItem({ asset }: { asset: GitHubReleaseAsset }) {
         disabled={downloading}
       >
         {downloading
-          ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />下载中</>
-          : <><Download className="w-3.5 h-3.5 mr-1.5" />下载</>
+          ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />{i18n.t('下载中')}</>
+          : <><Download className="w-3.5 h-3.5 mr-1.5" />{i18n.t('下载')}</>
         }
       </Button>
     </div>
@@ -159,12 +160,12 @@ function ReleaseItem({
             {release.name && release.name !== release.tag_name && (
               <span className="text-sm text-muted-foreground truncate">{release.name}</span>
             )}
-            {release.draft && <Badge variant="outline" className="text-xs text-muted-foreground border-border">草稿</Badge>}
-            {release.prerelease && <Badge className="bg-warning/10 text-warning border-warning/30 text-xs">预发布</Badge>}
+            {release.draft && <Badge variant="outline" className="text-xs text-muted-foreground border-border">{i18n.t('草稿')}</Badge>}
+            {release.prerelease && <Badge className="bg-warning/10 text-warning border-warning/30 text-xs">{i18n.t('预发布')}</Badge>}
           </div>
           <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
             <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatRelativeTime(release.published_at || release.created_at)}</span>
-            <span>{release.assets.length} 个产物 · {formatBytes(totalSize)}</span>
+            <span>{release.assets.length} {i18n.t('个产物 ·')}{formatBytes(totalSize)}</span>
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -178,7 +179,7 @@ function ReleaseItem({
             size="icon"
             className="w-7 h-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
             onClick={(e) => { e.stopPropagation(); onDelete(release.id); }}
-            title="删除 Release"
+            title={i18n.t('删除 Release')}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
@@ -202,7 +203,7 @@ function ReleaseItem({
                 }}
               >
                 {dlZip
-                  ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />下载中</>
+                  ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />{i18n.t('下载中')}</>
                   : <><Archive className="w-3 h-3 mr-1.5" />Source code (.zip)</>
                 }
               </Button>
@@ -220,14 +221,14 @@ function ReleaseItem({
                 }}
               >
                 {dlTar
-                  ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />下载中</>
+                  ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />{i18n.t('下载中')}</>
                   : <><Archive className="w-3 h-3 mr-1.5" />Source code (.tar.gz)</>
                 }
               </Button>
             )}
           </div>
           {release.assets.length === 0 ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">此版本没有产物文件</div>
+            <div className="py-6 text-center text-sm text-muted-foreground">{i18n.t('此版本没有产物文件')}</div>
           ) : (
             <div className="divide-y divide-border/50">
               {release.assets.map((asset) => <AssetItem key={asset.id} asset={asset} />)}
@@ -253,7 +254,7 @@ function ArtifactDownloadButton({ art, owner, repo }: { art: GitHubArtifact; own
   const handleDownload = async () => {
     const token = getToken();
     if (!token) {
-      toast.error('请先登录后再下载');
+      toast.error(i18n.t('请先登录后再下载'));
       return;
     }
 
@@ -285,14 +286,14 @@ function ArtifactDownloadButton({ art, owner, repo }: { art: GitHubArtifact; own
         return;
       }
       if (!data?.url) {
-        toast.error('获取下载链接失败，请稍后重试');
+        toast.error(i18n.t('获取下载链接失败，请稍后重试'));
         return;
       }
 
       window.open(data.url, '_blank', 'noopener,noreferrer');
       toast.success(`已打开 ${art.name}.zip 的下载链接`);
     } catch (err) {
-      toast.error(`下载失败：${err instanceof Error ? err.message : '未知错误'}`);
+      toast.error(`下载失败：${err instanceof Error ? err.message : i18n.t('未知错误')}`);
     } finally {
       setDownloading(false);
     }
@@ -307,8 +308,8 @@ function ArtifactDownloadButton({ art, owner, repo }: { art: GitHubArtifact; own
       onClick={handleDownload}
     >
       {downloading
-        ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />获取中</>
-        : <><Download className="w-3.5 h-3.5 mr-1.5" />下载</>
+        ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />{i18n.t('获取中')}</>
+        : <><Download className="w-3.5 h-3.5 mr-1.5" />{i18n.t('下载')}</>
       }
     </Button>
   );
@@ -337,7 +338,7 @@ export default function ArtifactsPage() {
       setHasMoreReleases(data.length === 20);
       setReleasePage(page);
     } catch (err) {
-      toast.error('加载 Release 列表失败');
+      toast.error(i18n.t('加载 Release 列表失败'));
       console.error(err);
     } finally {
       setLoadingReleases(false);
@@ -351,7 +352,7 @@ export default function ArtifactsPage() {
       const data = await getRepoArtifacts(owner, repo, { per_page: 30 });
       setArtifacts(Array.isArray(data.artifacts) ? data.artifacts : []);
     } catch (err) {
-      toast.error('加载 Artifacts 失败');
+      toast.error(i18n.t('加载 Artifacts 失败'));
       console.error(err);
     } finally {
       setLoadingArtifacts(false);
@@ -366,10 +367,10 @@ export default function ArtifactsPage() {
     try {
       await deleteRelease(owner, repo, deleteRelTarget);
       setReleases((prev) => prev.filter((r) => r.id !== deleteRelTarget));
-      toast.success('Release 已删除');
+      toast.success(i18n.t('Release 已删除'));
       setDeleteRelTarget(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('删除失败'));
     } finally {
       setDeleting(false);
     }
@@ -381,10 +382,10 @@ export default function ArtifactsPage() {
     try {
       await deleteArtifact(owner, repo, deleteArtTarget);
       setArtifacts((prev) => prev.filter((a) => a.id !== deleteArtTarget));
-      toast.success('Artifact 已删除');
+      toast.success(i18n.t('Artifact 已删除'));
       setDeleteArtTarget(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('删除失败'));
     } finally {
       setDeleting(false);
     }
@@ -394,17 +395,16 @@ export default function ArtifactsPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-foreground">产物</span>
+        <span className="text-foreground">{i18n.t('产物')}</span>
       </div>
 
       <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
         <Package className="w-5 h-5 text-primary" />
-        仓库产物
-      </h1>
+        {i18n.t('仓库产物')}</h1>
 
       <Tabs defaultValue="releases">
         <TabsList className="bg-secondary border border-border">
@@ -435,12 +435,11 @@ export default function ArtifactsPage() {
             ) : releases.length === 0 ? (
               <div className="py-16 text-center">
                 <Tag className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                <p className="text-foreground font-medium">暂无 Release</p>
-                <p className="text-sm text-muted-foreground mt-1">创建 Release 后可在此查看和下载产物</p>
+                <p className="text-foreground font-medium">{i18n.t('暂无 Release')}</p>
+                <p className="text-sm text-muted-foreground mt-1">{i18n.t('创建 Release 后可在此查看和下载产物')}</p>
                 <a href={`https://github.com/${owner}/${repo}/releases/new`} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block">
                   <Button className="bg-primary text-primary-foreground hover:bg-primary/90 mt-3">
-                    <ExternalLink className="w-4 h-4 mr-2" />在 GitHub 创建 Release
-                  </Button>
+                    <ExternalLink className="w-4 h-4 mr-2" />{i18n.t('在 GitHub 创建 Release')}</Button>
                 </a>
               </div>
             ) : (
@@ -453,8 +452,7 @@ export default function ArtifactsPage() {
           </div>
           {hasMoreReleases && !loadingReleases && (
             <Button variant="ghost" className="w-full mt-3 border border-border text-muted-foreground hover:bg-secondary" onClick={() => loadReleases(releasePage + 1, true)}>
-              加载更多
-            </Button>
+              {i18n.t('加载更多')}</Button>
           )}
         </TabsContent>
 
@@ -462,8 +460,7 @@ export default function ArtifactsPage() {
         <TabsContent value="artifacts" className="mt-4">
           <div className="flex justify-end mb-3">
             <Button variant="ghost" size="sm" className="border border-border text-muted-foreground hover:bg-secondary h-8" onClick={loadArtifacts} disabled={loadingArtifacts}>
-              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loadingArtifacts ? 'animate-spin' : ''}`} />刷新
-            </Button>
+              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loadingArtifacts ? 'animate-spin' : ''}`} />{i18n.t('刷新')}</Button>
           </div>
           <div className="bg-card border border-border rounded-lg overflow-hidden">
             {loadingArtifacts ? (
@@ -481,10 +478,9 @@ export default function ArtifactsPage() {
             ) : artifacts.length === 0 ? (
               <div className="py-16 text-center">
                 <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                <p className="text-foreground font-medium">暂无 Artifacts</p>
+                <p className="text-foreground font-medium">{i18n.t('暂无 Artifacts')}</p>
                 <p className="text-sm text-muted-foreground mt-1 text-pretty max-w-xs mx-auto">
-                  Actions Artifacts 是工作流运行后上传的产物文件，会在一段时间后自动过期。
-                </p>
+                  {i18n.t('Actions Artifacts 是工作流运行后上传的产物文件，会在一段时间后自动过期。')}</p>
               </div>
             ) : (
               <div className="divide-y divide-border">
@@ -494,16 +490,16 @@ export default function ArtifactsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-mono text-foreground">{art.name}</span>
-                        {art.expired && <Badge variant="outline" className="text-xs text-muted-foreground border-border">已过期</Badge>}
+                        {art.expired && <Badge variant="outline" className="text-xs text-muted-foreground border-border">{i18n.t('已过期')}</Badge>}
                       </div>
                       <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
                         <span>{formatBytes(art.size_in_bytes)}</span>
                         <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatRelativeTime(art.created_at)}</span>
                         {art.expires_at && !art.expired && (
-                          <span>过期：{formatRelativeTime(art.expires_at)}</span>
+                          <span>{i18n.t('过期：')}{formatRelativeTime(art.expires_at)}</span>
                         )}
                         {art.workflow_run && (
-                          <span>分支：<code className="font-mono">{art.workflow_run.head_branch}</code></span>
+                          <span>{i18n.t('分支：')}<code className="font-mono">{art.workflow_run.head_branch}</code></span>
                         )}
                       </div>
                     </div>
@@ -516,7 +512,7 @@ export default function ArtifactsPage() {
                         size="icon"
                         className="w-8 h-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                         onClick={() => setDeleteArtTarget(art.id)}
-                        title="删除"
+                        title={i18n.t('删除')}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
@@ -533,13 +529,13 @@ export default function ArtifactsPage() {
       <AlertDialog open={!!deleteRelTarget} onOpenChange={() => setDeleteRelTarget(null)}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">确认删除 Release</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">此操作不可撤销，该 Release 及所有关联产物文件将被永久删除。</AlertDialogDescription>
+            <AlertDialogTitle className="text-foreground">{i18n.t('确认删除 Release')}</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">{i18n.t('此操作不可撤销，该 Release 及所有关联产物文件将被永久删除。')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-secondary">取消</AlertDialogCancel>
+            <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
             <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDeleteRelease} disabled={deleting}>
-              {deleting ? '删除中...' : '确认删除'}
+              {deleting ? i18n.t('删除中...') : i18n.t('确认删除')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -549,13 +545,13 @@ export default function ArtifactsPage() {
       <AlertDialog open={!!deleteArtTarget} onOpenChange={() => setDeleteArtTarget(null)}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">确认删除 Artifact</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">此操作不可撤销，该 Artifact 文件将被永久删除。</AlertDialogDescription>
+            <AlertDialogTitle className="text-foreground">{i18n.t('确认删除 Artifact')}</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">{i18n.t('此操作不可撤销，该 Artifact 文件将被永久删除。')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-secondary">取消</AlertDialogCancel>
+            <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
             <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDeleteArtifact} disabled={deleting}>
-              {deleting ? '删除中...' : '确认删除'}
+              {deleting ? i18n.t('删除中...') : i18n.t('确认删除')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

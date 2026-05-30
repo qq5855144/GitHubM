@@ -25,6 +25,7 @@ import { getPullRequests, formatRelativeTime } from '@/services/github';
 import type { GitHubPullRequest, PrState } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
+import i18n from "@/i18n";
 
 export default function PullsPage() {
   const { owner, repo } = useParams<{ owner: string; repo: string }>();
@@ -68,7 +69,7 @@ export default function PullsPage() {
       setHasNextPage(result.hasNextPage);
       setPage(pageNum);
     } catch (err) {
-      toast.error('加载 PR 列表失败');
+      toast.error(i18n.t('加载 PR 列表失败'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -88,22 +89,22 @@ export default function PullsPage() {
 
   const getPrStateBadge = (pr: GitHubPullRequest) => {
     if (pr.merged_at || pr.merged) {
-      return <Badge variant="outline" className="text-xs border-chart-4/50 text-chart-4 bg-chart-4/10">已合并</Badge>;
+      return <Badge variant="outline" className="text-xs border-chart-4/50 text-chart-4 bg-chart-4/10">{i18n.t('已合并')}</Badge>;
     }
     if (pr.state === 'closed') {
-      return <Badge variant="outline" className="text-xs border-destructive/50 text-destructive bg-destructive/10">已关闭</Badge>;
+      return <Badge variant="outline" className="text-xs border-destructive/50 text-destructive bg-destructive/10">{i18n.t('已关闭')}</Badge>;
     }
     if (pr.draft) {
-      return <Badge variant="outline" className="text-xs border-muted-foreground text-muted-foreground">草稿</Badge>;
+      return <Badge variant="outline" className="text-xs border-muted-foreground text-muted-foreground">{i18n.t('草稿')}</Badge>;
     }
-    return <Badge variant="outline" className="text-xs border-primary/50 text-primary bg-primary/10">开放</Badge>;
+    return <Badge variant="outline" className="text-xs border-primary/50 text-primary bg-primary/10">{i18n.t('开放')}</Badge>;
   };
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
@@ -119,7 +120,7 @@ export default function PullsPage() {
       <div className="flex gap-3 bg-card border border-border rounded-lg p-3">
         <div className="flex gap-2">
           {(['open', 'closed', 'all'] as PrState[]).map((state) => {
-            const labels: Record<PrState, string> = { open: '开放', closed: '已关闭', all: '全部' };
+            const labels: Record<PrState, string> = { open: i18n.t('开放'), closed: i18n.t('已关闭'), all: i18n.t('全部') };
             return (
               <button
                 key={state}
@@ -138,10 +139,10 @@ export default function PullsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border">
-              <SelectItem value="created" className="text-foreground">创建时间</SelectItem>
-              <SelectItem value="updated" className="text-foreground">更新时间</SelectItem>
-              <SelectItem value="popularity" className="text-foreground">热度</SelectItem>
-              <SelectItem value="long-running" className="text-foreground">持续时间</SelectItem>
+              <SelectItem value="created" className="text-foreground">{i18n.t('创建时间')}</SelectItem>
+              <SelectItem value="updated" className="text-foreground">{i18n.t('更新时间')}</SelectItem>
+              <SelectItem value="popularity" className="text-foreground">{i18n.t('热度')}</SelectItem>
+              <SelectItem value="long-running" className="text-foreground">{i18n.t('持续时间')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -161,7 +162,7 @@ export default function PullsPage() {
         ) : pulls.length === 0 ? (
           <div className="py-16 text-center">
             <GitPullRequest className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-foreground font-medium">暂无 Pull Request</p>
+            <p className="text-foreground font-medium">{i18n.t('暂无 Pull Request')}</p>
           </div>
         ) : (
           <div className="divide-y divide-border">
@@ -237,8 +238,7 @@ export default function PullsPage() {
             className="border-border hover:bg-secondary"
             onClick={() => loadPulls(page + 1, true)}
           >
-            加载更多
-          </Button>
+            {i18n.t('加载更多')}</Button>
         </div>
       )}
     </div>

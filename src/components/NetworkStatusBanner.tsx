@@ -1,5 +1,6 @@
 import { WifiOff, Wifi } from 'lucide-react';
 import { useNetworkStatus } from '@/hooks/use-network-status';
+import i18n from "@/i18n";
 
 /**
  * 全局网络状态横幅
@@ -31,12 +32,12 @@ export function NetworkStatusBanner() {
       {isOnline ? (
         <>
           <Wifi className="w-3.5 h-3.5 shrink-0" />
-          <span>网络已恢复</span>
+          <span>{i18n.t('网络已恢复')}</span>
         </>
       ) : (
         <>
           <WifiOff className="w-3.5 h-3.5 shrink-0" />
-          <span>网络已断开，请检查网络连接</span>
+          <span>{i18n.t('网络已断开，请检查网络连接')}</span>
         </>
       )}
     </div>

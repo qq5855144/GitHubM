@@ -36,6 +36,7 @@ import type { GitHubGistDetail, GitHubComment } from '@/types/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { copyToClipboard } from '@/lib/utils';
+import i18n from "@/i18n";
 
 export default function GistDetailPage() {
   const { gistId } = useParams<{ gistId: string }>();
@@ -57,7 +58,7 @@ export default function GistDetailPage() {
     if (!gistId) return;
     Promise.all([getGist(gistId), getGistComments(gistId)])
       .then(([g, c]) => { setGist(g); setComments(c); })
-      .catch((err) => { toast.error('加载 Gist 失败'); console.error(err); })
+      .catch((err) => { toast.error(i18n.t('加载 Gist 失败')); console.error(err); })
       .finally(() => setLoading(false));
   }, [gistId]);
 
@@ -65,7 +66,7 @@ export default function GistDetailPage() {
     copyToClipboard(content);
     setCopied(filename);
     setTimeout(() => setCopied(null), 2000);
-    toast.success('已复制到剪贴板');
+    toast.success(i18n.t('已复制到剪贴板'));
   };
 
   const handleEditOpen = () => {
@@ -86,9 +87,9 @@ export default function GistDetailPage() {
       const updated = await updateGist(gistId, { description: editDesc, files });
       setGist(updated);
       setEditMode(false);
-      toast.success('Gist 已更新');
+      toast.success(i18n.t('Gist 已更新'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '更新失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('更新失败'));
     } finally {
       setSaving(false);
     }
@@ -99,10 +100,10 @@ export default function GistDetailPage() {
     setForking(true);
     try {
       const forked = await forkGist(gistId);
-      toast.success('已 Fork，跳转到新 Gist');
+      toast.success(i18n.t('已 Fork，跳转到新 Gist'));
       navigate(`/gists/${forked.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Fork 失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('Fork 失败'));
     } finally {
       setForking(false);
     }
@@ -115,9 +116,9 @@ export default function GistDetailPage() {
       const c = await createGistComment(gistId, newComment.trim());
       setComments((prev) => [...prev, c]);
       setNewComment('');
-      toast.success('评论已发布');
+      toast.success(i18n.t('评论已发布'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '评论失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('评论失败'));
     } finally {
       setCommenting(false);
     }
@@ -154,7 +155,7 @@ export default function GistDetailPage() {
               {Object.keys(gist.files)[0]}
             </span>
             <Badge variant="outline" className={`text-xs ${gist.public ? 'border-primary/40 text-primary' : 'border-border text-muted-foreground'}`}>
-              {gist.public ? <><Globe className="w-2.5 h-2.5 mr-1" />公开</> : <><Lock className="w-2.5 h-2.5 mr-1" />私密</>}
+              {gist.public ? <><Globe className="w-2.5 h-2.5 mr-1" />{i18n.t('公开')}</> : <><Lock className="w-2.5 h-2.5 mr-1" />{i18n.t('私密')}</>}
             </Badge>
           </div>
           {gist.description && <p className="text-muted-foreground text-sm mt-1 text-pretty">{gist.description}</p>}
@@ -166,13 +167,12 @@ export default function GistDetailPage() {
         <div className="flex gap-2 shrink-0">
           {!isOwner && (
             <Button variant="ghost" size="sm" className="border border-border text-muted-foreground hover:bg-secondary h-8" onClick={handleFork} disabled={forking}>
-              <GitFork className="w-3.5 h-3.5 mr-1.5" />{forking ? 'Fork中...' : 'Fork'}
+              <GitFork className="w-3.5 h-3.5 mr-1.5" />{forking ? i18n.t('Fork中...') : 'Fork'}
             </Button>
           )}
           {isOwner && !editMode && (
             <Button variant="ghost" size="sm" className="border border-border text-muted-foreground hover:bg-secondary h-8" onClick={handleEditOpen}>
-              <Pencil className="w-3.5 h-3.5 mr-1.5" />编辑
-            </Button>
+              <Pencil className="w-3.5 h-3.5 mr-1.5" />{i18n.t('编辑')}</Button>
           )}
         </div>
       </div>
@@ -181,7 +181,7 @@ export default function GistDetailPage() {
       {editMode && (
         <div className="bg-card border border-border rounded-lg p-4 space-y-3">
           <div className="space-y-1">
-            <Label className="text-sm font-normal text-foreground">描述</Label>
+            <Label className="text-sm font-normal text-foreground">{i18n.t('描述')}</Label>
             <Input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} className="bg-secondary border-border text-foreground" />
           </div>
           {Object.entries(editFiles).map(([name, content]) => (
@@ -196,10 +196,9 @@ export default function GistDetailPage() {
           ))}
           <div className="flex gap-3">
             <Button variant="ghost" className="flex-1 border border-border text-muted-foreground hover:bg-secondary" onClick={() => setEditMode(false)}>
-              <X className="w-4 h-4 mr-2" />取消
-            </Button>
+              <X className="w-4 h-4 mr-2" />{i18n.t('取消')}</Button>
             <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleSave} disabled={saving}>
-              <Save className="w-4 h-4 mr-2" />{saving ? '保存中...' : '保存'}
+              <Save className="w-4 h-4 mr-2" />{saving ? i18n.t('保存中...') : i18n.t('保存')}
             </Button>
           </div>
         </div>
@@ -215,7 +214,7 @@ export default function GistDetailPage() {
               {file.content && (
                 <Button variant="ghost" size="sm" className="h-7 text-muted-foreground hover:bg-secondary" onClick={() => handleCopy(filename, file.content!)}>
                   {copied === filename ? <Check className="w-3 h-3 mr-1" /> : <Copy className="w-3 h-3 mr-1" />}
-                  {copied === filename ? '已复制' : '复制'}
+                  {copied === filename ? i18n.t('已复制') : i18n.t('复制')}
                 </Button>
               )}
               <a href={file.raw_url} target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground hover:text-accent">Raw</a>
@@ -228,7 +227,7 @@ export default function GistDetailPage() {
                   <span className="select-none text-muted-foreground w-8 text-right mr-4 shrink-0">{i + 1}</span>
                   <span className="flex-1 min-w-0">{line}</span>
                 </span>
-              )) : <span className="text-muted-foreground">（内容过长，请查看 Raw）</span>}
+              )) : <span className="text-muted-foreground">{i18n.t('（内容过长，请查看 Raw）')}</span>}
             </pre>
           </div>
         </div>
@@ -238,7 +237,7 @@ export default function GistDetailPage() {
       <div className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-muted-foreground" />
-          评论 ({comments.length})
+          {i18n.t('评论 (')}{comments.length})
         </h2>
         {comments.map((comment) => (
           <div key={comment.id} className="flex gap-3">
@@ -264,7 +263,7 @@ export default function GistDetailPage() {
             <Textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              placeholder="发表评论..."
+              placeholder={i18n.t('发表评论...')}
               className="bg-secondary border-border text-foreground placeholder:text-muted-foreground text-sm resize-none min-h-20"
             />
             <Button
@@ -273,7 +272,7 @@ export default function GistDetailPage() {
               disabled={commenting || !newComment.trim()}
             >
               <Send className="w-4 h-4 mr-2" />
-              {commenting ? '发布中...' : '发布评论'}
+              {commenting ? i18n.t('发布中...') : i18n.t('发布评论')}
             </Button>
           </div>
         </div>

@@ -3,6 +3,7 @@
 // IP 在服务端做 SHA-256 哈希，不暴露明文，保护用户隐私
 
 import { supabase } from '@/db/supabase';
+import i18n from "@/i18n";
 
 const SESSION_KEY = 'visit_session_id'; // 会话 ID（本次打开浏览器期间唯一）
 const LAST_VISIT_KEY = 'visit_last_path'; // 上一次记录的路径（用于去重节流）
@@ -34,7 +35,7 @@ async function doRecordVisit(path: string, referrer: string | null): Promise<voi
     });
     return;
   } catch (e) {
-    console.warn('[visitStats] 第一次上报失败，准备重试:', e);
+    console.warn(i18n.t('[visitStats] 第一次上报失败，准备重试:'), e);
   }
 
   // 重试一次（短暂延迟后）
@@ -46,7 +47,7 @@ async function doRecordVisit(path: string, referrer: string | null): Promise<voi
     });
     return;
   } catch (e) {
-    console.warn('[visitStats] 重试后仍失败:', e);
+    console.warn(i18n.t('[visitStats] 重试后仍失败:'), e);
   }
 
   // 兜底：使用 sendBeacon（页面卸载时也能发，可靠性更高）
@@ -64,7 +65,7 @@ async function doRecordVisit(path: string, referrer: string | null): Promise<voi
     // sendBeacon 失败则彻底放弃
   }
 
-  throw new Error('访问统计上报最终失败');
+  throw new Error(i18n.t('访问统计上报最终失败'));
 }
 
 // ── 记录一次页面访问（上报到 Edge Function）────────────────────────────────
@@ -90,7 +91,7 @@ export async function recordVisit(pagePath?: string): Promise<void> {
     await doRecordVisit(path, referrer);
   } catch (e) {
     // 最终仍失败时仅 console.warn，不阻断业务
-    console.warn('[visitStats] recordVisit 最终失败:', e);
+    console.warn(i18n.t('[visitStats] recordVisit 最终失败:'), e);
   }
 }
 
@@ -125,14 +126,14 @@ export async function fetchVisitStats(days = 7): Promise<VisitStatsResult> {
   );
 
   if (error) {
-    const msg = await error?.context?.text().catch(() => error?.message ?? '未知错误');
-    console.error('[visitStats] fetchVisitStats 失败:', msg);
-    throw new Error(msg ?? '获取访问统计失败');
+    const msg = await error?.context?.text().catch(() => error?.message ?? i18n.t('未知错误'));
+    console.error(i18n.t('[visitStats] fetchVisitStats 失败:'), msg);
+    throw new Error(msg ?? i18n.t('获取访问统计失败'));
   }
 
   if (!data) {
-    console.error('[visitStats] fetchVisitStats 返回空数据');
-    throw new Error('获取访问统计返回空数据');
+    console.error(i18n.t('[visitStats] fetchVisitStats 返回空数据'));
+    throw new Error(i18n.t('获取访问统计返回空数据'));
   }
 
   return data;

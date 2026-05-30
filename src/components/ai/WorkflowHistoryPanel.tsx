@@ -39,6 +39,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import i18n from "@/i18n";
 
 // ── 类型 ──────────────────────────────────────────────────────────────────
 
@@ -99,9 +100,9 @@ function fmtDuration(startIso: string | null, endIso: string | null): string {
 
 function WorkflowStatusBadge({ status }: { status: WorkflowRow['status'] }) {
   const cfg = {
-    done:         { label: '已完成',   cls: 'bg-green-500/15 text-green-600 border-green-500/30' },
-    partial_fail: { label: '部分失败', cls: 'bg-amber-500/15 text-amber-600 border-amber-500/30' },
-    running:      { label: '执行中',   cls: 'bg-blue-500/15 text-blue-500 border-blue-500/30' },
+    done:         { label: i18n.t('已完成'),   cls: 'bg-green-500/15 text-green-600 border-green-500/30' },
+    partial_fail: { label: i18n.t('部分失败'), cls: 'bg-amber-500/15 text-amber-600 border-amber-500/30' },
+    running:      { label: i18n.t('执行中'),   cls: 'bg-blue-500/15 text-blue-500 border-blue-500/30' },
   }[status] ?? { label: status, cls: '' };
   return <Badge variant="outline" className={cn('text-xs shrink-0', cfg.cls)}>{cfg.label}</Badge>;
 }
@@ -147,7 +148,7 @@ function StepDetailDialog({
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-balance pr-4">任务详情</DialogTitle>
+          <DialogTitle className="text-balance pr-4">{i18n.t('任务详情')}</DialogTitle>
           {workflow && (
             <p className="text-sm text-muted-foreground text-pretty mt-1 line-clamp-2">
               {workflow.task_summary}
@@ -163,7 +164,7 @@ function StepDetailDialog({
           <ScrollArea className="max-h-[60vh]">
             <div className="pr-3 space-y-2">
               {steps.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-6">暂无步骤数据</p>
+                <p className="text-sm text-muted-foreground text-center py-6">{i18n.t('暂无步骤数据')}</p>
               )}
               {steps.map((step, idx) => (
                 <div
@@ -178,8 +179,7 @@ function StepDetailDialog({
                         <span className="text-sm font-medium text-balance">{step.title}</span>
                         {step.retry_count > 0 && (
                           <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-600 border-amber-500/30">
-                            重试 {step.retry_count} 次
-                          </Badge>
+                            {i18n.t('重试')}{step.retry_count} {i18n.t('次')}</Badge>
                         )}
                       </div>
                       {step.description && (
@@ -189,13 +189,13 @@ function StepDetailDialog({
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground pl-6">
                     {step.started_at && (
-                      <span>开始：{fmtTime(step.started_at)}</span>
+                      <span>{i18n.t('开始：')}{fmtTime(step.started_at)}</span>
                     )}
                     {step.finished_at && (
-                      <span>完成：{fmtTime(step.finished_at)}</span>
+                      <span>{i18n.t('完成：')}{fmtTime(step.finished_at)}</span>
                     )}
                     {step.started_at && step.finished_at && (
-                      <span>耗时：{fmtDuration(step.started_at, step.finished_at)}</span>
+                      <span>{i18n.t('耗时：')}{fmtDuration(step.started_at, step.finished_at)}</span>
                     )}
                   </div>
                 </div>
@@ -270,16 +270,16 @@ export default function WorkflowHistoryPanel({ userId, onResume, refreshTrigger,
           onValueChange={v => setStatusFilter(v as typeof statusFilter)}
         >
           <SelectTrigger className="h-7 text-xs w-28 shrink-0">
-            <SelectValue placeholder="全部状态" />
+            <SelectValue placeholder={i18n.t('全部状态')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部状态</SelectItem>
+            <SelectItem value="all">{i18n.t('全部状态')}</SelectItem>
             {interruptedCount > 0 && (
-              <SelectItem value="interrupted">可恢复 ({interruptedCount})</SelectItem>
+              <SelectItem value="interrupted">{i18n.t('可恢复 (')}{interruptedCount})</SelectItem>
             )}
-            <SelectItem value="done">已完成</SelectItem>
-            <SelectItem value="partial_fail">部分失败</SelectItem>
-            <SelectItem value="running">执行中</SelectItem>
+            <SelectItem value="done">{i18n.t('已完成')}</SelectItem>
+            <SelectItem value="partial_fail">{i18n.t('部分失败')}</SelectItem>
+            <SelectItem value="running">{i18n.t('执行中')}</SelectItem>
           </SelectContent>
         </Select>
         <div className="flex-1" />
@@ -288,7 +288,7 @@ export default function WorkflowHistoryPanel({ userId, onResume, refreshTrigger,
           size="icon"
           className="h-7 w-7"
           onClick={load}
-          title="刷新"
+          title={i18n.t('刷新')}
         >
           <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
         </Button>
@@ -306,7 +306,7 @@ export default function WorkflowHistoryPanel({ userId, onResume, refreshTrigger,
           {!loading && filtered.length === 0 && (
             <div className="flex flex-col items-center gap-2 py-10 text-muted-foreground">
               <AlertCircle className="w-8 h-8" />
-              <p className="text-sm">暂无历史工作流</p>
+              <p className="text-sm">{i18n.t('暂无历史工作流')}</p>
             </div>
           )}
 
@@ -326,8 +326,7 @@ export default function WorkflowHistoryPanel({ userId, onResume, refreshTrigger,
                     <div className="flex items-center gap-1 shrink-0">
                       {wf.id === latestResumableId && (
                         <Badge variant="outline" className="text-xs h-4 px-1.5 border-amber-500/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30">
-                          可恢复
-                        </Badge>
+                          {i18n.t('可恢复')}</Badge>
                       )}
                       <WorkflowStatusBadge status={wf.status} />
                     </div>
@@ -337,8 +336,7 @@ export default function WorkflowHistoryPanel({ userId, onResume, refreshTrigger,
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     <span className="truncate max-w-[120px]">{wf.repo}</span>
                     <span>
-                      {wf.done_steps}/{wf.total_steps} 步完成
-                      {wf.fail_steps > 0 && ` · ${wf.fail_steps} 失败`}
+                      {wf.done_steps}/{wf.total_steps} {i18n.t('步完成')}{wf.fail_steps > 0 && ` · ${wf.fail_steps} 失败`}
                     </span>
                   </div>
 
@@ -346,7 +344,7 @@ export default function WorkflowHistoryPanel({ userId, onResume, refreshTrigger,
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     <span>{fmtTime(wf.created_at)}</span>
                     {wf.finished_at && (
-                      <span>耗时 {fmtDuration(wf.created_at, wf.finished_at)}</span>
+                      <span>{i18n.t('耗时')}{fmtDuration(wf.created_at, wf.finished_at)}</span>
                     )}
                   </div>
 
@@ -362,8 +360,7 @@ export default function WorkflowHistoryPanel({ userId, onResume, refreshTrigger,
                       }}
                     >
                       <RotateCcw className="w-3 h-3 mr-1" />
-                      恢复执行
-                    </Button>
+                      {i18n.t('恢复执行')}</Button>
                   )}
                 </div>
 
@@ -386,19 +383,17 @@ export default function WorkflowHistoryPanel({ userId, onResume, refreshTrigger,
                       onClick={e => e.stopPropagation()}
                     >
                       <AlertDialogHeader>
-                        <AlertDialogTitle>确认删除</AlertDialogTitle>
+                        <AlertDialogTitle>{i18n.t('确认删除')}</AlertDialogTitle>
                         <AlertDialogDescription>
-                          此操作不可撤销，将永久删除该工作流及所有步骤记录。
-                        </AlertDialogDescription>
+                          {i18n.t('此操作不可撤销，将永久删除该工作流及所有步骤记录。')}</AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>取消</AlertDialogCancel>
+                        <AlertDialogCancel>{i18n.t('取消')}</AlertDialogCancel>
                         <AlertDialogAction
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                           onClick={() => handleDelete(wf.id)}
                         >
-                          删除
-                        </AlertDialogAction>
+                          {i18n.t('删除')}</AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>

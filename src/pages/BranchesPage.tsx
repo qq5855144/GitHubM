@@ -52,6 +52,7 @@ import {
 import type { GitHubBranch } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
+import i18n from "@/i18n";
 
 interface BranchWithCompare extends GitHubBranch {
   ahead_by?: number;
@@ -148,7 +149,7 @@ export default function BranchesPage() {
       setHasNextPage(result.hasNextPage);
       setPage(pageNum);
     } catch (err) {
-      toast.error('加载分支列表失败');
+      toast.error(i18n.t('加载分支列表失败'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -162,7 +163,7 @@ export default function BranchesPage() {
   const handleCreateBranch = async () => {
     if (!owner || !repo) return;
     if (!newBranchName.trim()) {
-      toast.error('请输入分支名称');
+      toast.error(i18n.t('请输入分支名称'));
       return;
     }
     setCreating(true);
@@ -170,7 +171,7 @@ export default function BranchesPage() {
       // 获取基础分支的 SHA
       const baseBranch = branches.find((b) => b.name === newBranchFrom);
       if (!baseBranch) {
-        toast.error('找不到基础分支');
+        toast.error(i18n.t('找不到基础分支'));
         return;
       }
       await createBranch(owner, repo, {
@@ -183,7 +184,7 @@ export default function BranchesPage() {
       pageCache.invalidate(`branches:${owner}/${repo}:`);
       loadBranches(1, false, true);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '创建分支失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('创建分支失败'));
     } finally {
       setCreating(false);
     }
@@ -206,7 +207,7 @@ export default function BranchesPage() {
       toast.success(`分支 ${deleteTarget} 已删除`);
       setDeleteTarget(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('删除失败'));
     } finally {
       setDeleting(false);
     }
@@ -216,32 +217,30 @@ export default function BranchesPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-foreground">分支管理</span>
+        <span className="text-foreground">{i18n.t('分支管理')}</span>
       </div>
 
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <GitBranch className="w-5 h-5 text-primary" />
-          分支管理
-        </h1>
+          {i18n.t('分支管理')}</h1>
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
               <Plus className="w-4 h-4 mr-2" />
-              新建分支
-            </Button>
+              {i18n.t('新建分支')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-md bg-card border-border">
             <DialogHeader>
-              <DialogTitle className="text-foreground">创建新分支</DialogTitle>
+              <DialogTitle className="text-foreground">{i18n.t('创建新分支')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">分支名称 *</Label>
+                <Label className="text-sm font-normal text-foreground">{i18n.t('分支名称 *')}</Label>
                 <Input
                   value={newBranchName}
                   onChange={(e) => setNewBranchName(e.target.value)}
@@ -250,7 +249,7 @@ export default function BranchesPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">基于分支</Label>
+                <Label className="text-sm font-normal text-foreground">{i18n.t('基于分支')}</Label>
                 <Select value={newBranchFrom} onValueChange={setNewBranchFrom}>
                   <SelectTrigger className="bg-secondary border-border text-foreground">
                     <SelectValue />
@@ -270,14 +269,13 @@ export default function BranchesPage() {
                   className="flex-1 border-border hover:bg-secondary"
                   onClick={() => setCreateDialogOpen(false)}
                 >
-                  取消
-                </Button>
+                  {i18n.t('取消')}</Button>
                 <Button
                   className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                   onClick={handleCreateBranch}
                   disabled={creating || !newBranchName.trim()}
                 >
-                  {creating ? '创建中...' : '创建'}
+                  {creating ? i18n.t('创建中...') : i18n.t('创建')}
                 </Button>
               </div>
             </div>
@@ -297,7 +295,7 @@ export default function BranchesPage() {
             ))}
           </div>
         ) : branches.length === 0 ? (
-          <div className="py-12 text-center text-muted-foreground">暂无分支</div>
+          <div className="py-12 text-center text-muted-foreground">{i18n.t('暂无分支')}</div>
         ) : (
           <div className="divide-y divide-border">
             {/* 默认分支排在最前 */}
@@ -311,13 +309,12 @@ export default function BranchesPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <code className="text-sm font-mono text-foreground">{branch.name}</code>
                     {branch.name === defaultBranch && (
-                      <Badge variant="outline" className="text-xs border-primary/50 text-primary bg-primary/10">默认</Badge>
+                      <Badge variant="outline" className="text-xs border-primary/50 text-primary bg-primary/10">{i18n.t('默认')}</Badge>
                     )}
                     {branch.protected && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Shield className="w-3 h-3" />
-                        受保护
-                      </div>
+                        {i18n.t('受保护')}</div>
                     )}
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
@@ -326,13 +323,11 @@ export default function BranchesPage() {
                       <>
                         {branch.ahead_by > 0 && (
                           <span className="flex items-center gap-0.5 text-primary">
-                            <ArrowUp className="w-3 h-3" />{branch.ahead_by} 领先
-                          </span>
+                            <ArrowUp className="w-3 h-3" />{branch.ahead_by} {i18n.t('领先')}</span>
                         )}
                         {branch.behind_by > 0 && (
                           <span className="flex items-center gap-0.5 text-muted-foreground">
-                            <ArrowDown className="w-3 h-3" />{branch.behind_by} 落后
-                          </span>
+                            <ArrowDown className="w-3 h-3" />{branch.behind_by} {i18n.t('落后')}</span>
                         )}
                       </>
                     )}
@@ -361,8 +356,7 @@ export default function BranchesPage() {
             className="border-border hover:bg-secondary"
             onClick={() => loadBranches(page + 1, true)}
           >
-            加载更多
-          </Button>
+            {i18n.t('加载更多')}</Button>
         </div>
       )}
 
@@ -370,19 +364,18 @@ export default function BranchesPage() {
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">确认删除分支</AlertDialogTitle>
+            <AlertDialogTitle className="text-foreground">{i18n.t('确认删除分支')}</AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
-              确定要删除分支 <code className="font-mono text-foreground">{deleteTarget}</code> 吗？此操作无法撤销。
-            </AlertDialogDescription>
+              {i18n.t('确定要删除分支')}<code className="font-mono text-foreground">{deleteTarget}</code> {i18n.t('吗？此操作无法撤销。')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">取消</AlertDialogCancel>
+            <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDeleteBranch}
               disabled={deleting}
             >
-              {deleting ? '删除中...' : '确认删除'}
+              {deleting ? i18n.t('删除中...') : i18n.t('确认删除')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -13,6 +13,7 @@ import type {
   GQL_ReviewDecision,
   GQL_LanguageEdge,
 } from '@/types/types';
+import i18n from "@/i18n";
 
 const GRAPHQL_ENDPOINT = 'https://api.github.com/graphql';
 
@@ -34,7 +35,7 @@ export async function graphqlQuery<T = unknown>(
   variables: Record<string, unknown> = {}
 ): Promise<GraphQLResponse<T>> {
   const token = getToken();
-  if (!token) throw new Error('未登录，请先设置 GitHub Token');
+  if (!token) throw new Error(i18n.t('未登录，请先设置 GitHub Token'));
 
   const response = await fetch(GRAPHQL_ENDPOINT, {
     method: 'POST',
@@ -66,7 +67,7 @@ async function gql<T = unknown>(
     throw new Error(result.errors[0].message);
   }
   if (!result.data) {
-    throw new Error('GraphQL 返回空数据');
+    throw new Error(i18n.t('GraphQL 返回空数据'));
   }
   return result.data;
 }

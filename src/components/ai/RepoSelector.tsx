@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getUserRepos } from '@/services/github';
 import type { GitHubRepo } from '@/types/types';
+import i18n from "@/i18n";
 
 // 虚拟行高：仓库卡片固定行高，virtualizer 估算用
 const ITEM_HEIGHT = 72; // px  (与下方卡片 py-3 + 两行内容实际高度一致)
@@ -36,7 +37,7 @@ const RepoSelector = memo(function RepoSelector({ onSelect }: RepoSelectorProps)
       setHasMore(res.hasNextPage);
       setPage(p);
     } catch {
-      toast.error('获取仓库列表失败');
+      toast.error(i18n.t('获取仓库列表失败'));
     } finally {
       setLoading(false);
     }
@@ -71,7 +72,7 @@ const RepoSelector = memo(function RepoSelector({ onSelect }: RepoSelectorProps)
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           className="pl-9 px-9"
-          placeholder="搜索仓库名称或描述…"
+          placeholder={i18n.t('搜索仓库名称或描述…')}
           value={query}
           onChange={e => { setQuery(e.target.value); }}
         />
@@ -94,7 +95,7 @@ const RepoSelector = memo(function RepoSelector({ onSelect }: RepoSelectorProps)
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
-            {query ? `未找到匹配 "${query}" 的仓库` : '暂无仓库'}
+            {query ? `未找到匹配 "${query}" 的仓库` : i18n.t('暂无仓库')}
           </div>
         ) : (
           /* 虚拟滚动：固定总高度容器 + 绝对定位偏移每行 */
@@ -120,8 +121,7 @@ const RepoSelector = memo(function RepoSelector({ onSelect }: RepoSelectorProps)
                       onClick={() => load(page + 1)}
                       className="w-full p-3 text-center text-sm text-primary hover:bg-muted/60 transition-colors border-t border-border"
                     >
-                      加载更多仓库…
-                    </button>
+                      {i18n.t('加载更多仓库…')}</button>
                   ) : (
                     /* 仓库行 */
                     <button
@@ -173,8 +173,7 @@ const RepoSelector = memo(function RepoSelector({ onSelect }: RepoSelectorProps)
         {/* 分页加载中提示 */}
         {loading && repos.length > 0 && (
           <div className="p-3 text-center text-xs text-muted-foreground sticky bottom-0 bg-background/80 backdrop-blur-sm border-t border-border">
-            加载中…
-          </div>
+            {i18n.t('加载中…')}</div>
         )}
       </div>
 
@@ -184,8 +183,7 @@ const RepoSelector = memo(function RepoSelector({ onSelect }: RepoSelectorProps)
         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors self-end"
       >
         <RefreshCw className="w-3.5 h-3.5" />
-        刷新列表
-      </button>
+        {i18n.t('刷新列表')}</button>
     </div>
   );
 });

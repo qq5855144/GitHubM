@@ -59,6 +59,7 @@ import {
 import { formatRelativeTime } from '@/services/github';
 import type { GQL_Discussion, GQL_DiscussionCategory, GQL_DiscussionComment } from '@/types/types';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 /** 讨论评论展开面板 */
 function DiscussionComments({
@@ -82,7 +83,7 @@ function DiscussionComments({
   useEffect(() => {
     gqlGetDiscussionComments(owner, repo, discussion.number)
       .then(({ comments: c }) => setComments(c))
-      .catch(() => toast.error('加载评论失败'))
+      .catch(() => toast.error(i18n.t('加载评论失败')))
       .finally(() => setLoading(false));
   }, [owner, repo, discussion.number]);
 
@@ -93,9 +94,9 @@ function DiscussionComments({
       const comment = await gqlAddDiscussionComment(discussion.id, newComment.trim());
       setComments((prev) => [...prev, comment]);
       setNewComment('');
-      toast.success('评论已发布');
+      toast.success(i18n.t('评论已发布'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '发布失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('发布失败'));
     } finally {
       setSubmitting(false);
     }
@@ -114,9 +115,9 @@ function DiscussionComments({
       setComments((prev) =>
         prev.map((c) => ({ ...c, isAnswer: c.id === commentId }))
       );
-      toast.success('已标记为最佳答案 ✅');
+      toast.success(i18n.t('已标记为最佳答案 ✅'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '操作失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('操作失败'));
     }
   };
 
@@ -126,10 +127,10 @@ function DiscussionComments({
     try {
       await gqlDeleteDiscussionComment(deleteTarget);
       setComments((prev) => prev.filter((c) => c.id !== deleteTarget));
-      toast.success('评论已删除');
+      toast.success(i18n.t('评论已删除'));
       setDeleteTarget(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('删除失败'));
     } finally {
       setDeleting(false);
     }
@@ -168,7 +169,7 @@ function DiscussionComments({
           ))}
         </div>
       ) : comments.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-4">暂无评论，成为第一个回复的人</p>
+        <p className="text-sm text-muted-foreground text-center py-4">{i18n.t('暂无评论，成为第一个回复的人')}</p>
       ) : (
         <div className="space-y-3">
           {comments.map((comment) => (
@@ -187,8 +188,7 @@ function DiscussionComments({
                     <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.createdAt)}</span>
                     {comment.isAnswer && (
                       <Badge className="bg-success/10 text-success border-success/30 text-xs flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" />最佳答案
-                      </Badge>
+                        <CheckCircle2 className="w-3 h-3" />{i18n.t('最佳答案')}</Badge>
                     )}
                     {comment.upvoteCount > 0 && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -207,7 +207,7 @@ function DiscussionComments({
                       variant="ghost"
                       size="icon"
                       className="w-7 h-7 text-muted-foreground hover:text-success hover:bg-success/10"
-                      title="标记为最佳答案"
+                      title={i18n.t('标记为最佳答案')}
                       onClick={() => handleMarkAnswer(comment.id)}
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
@@ -217,7 +217,7 @@ function DiscussionComments({
                     variant="ghost"
                     size="icon"
                     className="w-7 h-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                    title="删除评论"
+                    title={i18n.t('删除评论')}
                     onClick={() => setDeleteTarget(comment.id)}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -235,16 +235,15 @@ function DiscussionComments({
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="撰写回复（支持 Markdown）..."
+          placeholder={i18n.t('撰写回复（支持 Markdown）...')}
           className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none text-sm min-h-20"
           rows={3}
         />
         <div className="flex justify-between items-center">
-          <span className="text-xs text-muted-foreground">Ctrl+Enter 快速提交</span>
+          <span className="text-xs text-muted-foreground">{i18n.t('Ctrl+Enter 快速提交')}</span>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="border-border hover:bg-secondary" onClick={onClose}>
-              收起
-            </Button>
+              {i18n.t('收起')}</Button>
             <Button
               size="sm"
               className="bg-primary text-primary-foreground hover:bg-primary/90"
@@ -252,7 +251,7 @@ function DiscussionComments({
               disabled={submitting || !newComment.trim()}
             >
               <Send className="w-3.5 h-3.5 mr-1.5" />
-              {submitting ? '发布中...' : '发布回复'}
+              {submitting ? i18n.t('发布中...') : i18n.t('发布回复')}
             </Button>
           </div>
         </div>
@@ -262,17 +261,17 @@ function DiscussionComments({
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">确认删除评论？</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">此操作不可撤销。</AlertDialogDescription>
+            <AlertDialogTitle className="text-foreground">{i18n.t('确认删除评论？')}</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">{i18n.t('此操作不可撤销。')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-secondary">取消</AlertDialogCancel>
+            <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDeleteComment}
               disabled={deleting}
             >
-              {deleting ? '删除中...' : '确认删除'}
+              {deleting ? i18n.t('删除中...') : i18n.t('确认删除')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -313,7 +312,7 @@ export default function DiscussionsPage() {
       setCategories(result.categories);
       setRepositoryId(result.repositoryId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'GraphQL 查询失败');
+      setError(err instanceof Error ? err.message : i18n.t('GraphQL 查询失败'));
     } finally {
       setLoading(false);
     }
@@ -338,9 +337,9 @@ export default function DiscussionsPage() {
       setNewTitle('');
       setNewBody('');
       setNewCategoryId('');
-      toast.success('讨论已创建 🎉');
+      toast.success(i18n.t('讨论已创建 🎉'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '创建失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('创建失败'));
     } finally {
       setCreating(false);
     }
@@ -359,7 +358,7 @@ export default function DiscussionsPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
@@ -370,8 +369,7 @@ export default function DiscussionsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <MessageCircle className="w-5 h-5 text-primary" />
-          讨论区
-          <Badge variant="outline" className="text-xs border-border text-muted-foreground font-normal">
+          {i18n.t('讨论区')}<Badge variant="outline" className="text-xs border-border text-muted-foreground font-normal">
             GraphQL
           </Badge>
         </h1>
@@ -389,23 +387,22 @@ export default function DiscussionsPage() {
         >
           <DialogTrigger asChild>
             <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
-              <Plus className="w-4 h-4 mr-1.5" />新建讨论
-            </Button>
+              <Plus className="w-4 h-4 mr-1.5" />{i18n.t('新建讨论')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-2xl bg-card border-border">
             <DialogHeader>
-              <DialogTitle className="text-foreground">发起新讨论</DialogTitle>
+              <DialogTitle className="text-foreground">{i18n.t('发起新讨论')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-1.5">
-                <Label className="text-sm font-normal text-foreground">分类</Label>
+                <Label className="text-sm font-normal text-foreground">{i18n.t('分类')}</Label>
                 <Select value={newCategoryId} onValueChange={setNewCategoryId}>
                   <SelectTrigger className="bg-secondary border-border text-foreground">
-                    <SelectValue placeholder={categories.length === 0 ? '暂无可用分类' : '选择讨论分类...'} />
+                    <SelectValue placeholder={categories.length === 0 ? i18n.t('暂无可用分类') : i18n.t('选择讨论分类...')} />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-border z-[200]">
                     {categories.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-muted-foreground">暂无分类数据</div>
+                      <div className="px-3 py-2 text-sm text-muted-foreground">{i18n.t('暂无分类数据')}</div>
                     ) : (
                       categories.map((cat) => (
                         <SelectItem key={cat.id} value={cat.id} className="text-foreground">
@@ -417,32 +414,32 @@ export default function DiscussionsPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm font-normal text-foreground">标题</Label>
+                <Label className="text-sm font-normal text-foreground">{i18n.t('标题')}</Label>
                 <Input
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="讨论标题..."
+                  placeholder={i18n.t('讨论标题...')}
                   className="bg-secondary border-border text-foreground placeholder:text-muted-foreground"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm font-normal text-foreground">内容（支持 Markdown）</Label>
+                <Label className="text-sm font-normal text-foreground">{i18n.t('内容（支持 Markdown）')}</Label>
                 <Textarea
                   value={newBody}
                   onChange={(e) => setNewBody(e.target.value)}
-                  placeholder="详细描述你的问题或想法..."
+                  placeholder={i18n.t('详细描述你的问题或想法...')}
                   className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none min-h-32"
                   rows={6}
                 />
               </div>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" className="border-border hover:bg-secondary" onClick={() => setCreateOpen(false)}>取消</Button>
+                <Button variant="outline" className="border-border hover:bg-secondary" onClick={() => setCreateOpen(false)}>{i18n.t('取消')}</Button>
                 <Button
                   className="bg-primary text-primary-foreground hover:bg-primary/90"
                   onClick={handleCreateDiscussion}
                   disabled={creating || !newTitle.trim() || !newCategoryId}
                 >
-                  {creating ? '创建中...' : '发布讨论'}
+                  {creating ? i18n.t('创建中...') : i18n.t('发布讨论')}
                 </Button>
               </div>
             </div>
@@ -458,8 +455,7 @@ export default function DiscussionsPage() {
             onClick={() => handleCategoryChange('all')}
             className={`px-3 py-1.5 rounded-full text-xs transition-colors shrink-0 ${selectedCategory === 'all' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
           >
-            全部
-          </button>
+            {i18n.t('全部')}</button>
           {categories.map((cat) => (
             <button
               key={cat.id}
@@ -486,17 +482,16 @@ export default function DiscussionsPage() {
       ) : error ? (
         <div className="bg-card border border-border rounded-lg py-16 text-center px-6">
           <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-foreground font-semibold mb-2">无法加载讨论数据</p>
+          <p className="text-foreground font-semibold mb-2">{i18n.t('无法加载讨论数据')}</p>
           <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">{error}</p>
           <Button size="sm" onClick={() => loadDiscussions()} className="bg-primary text-primary-foreground hover:bg-primary/90">
-            重新加载
-          </Button>
+            {i18n.t('重新加载')}</Button>
         </div>
       ) : discussions.length === 0 ? (
         <div className="bg-card border border-border rounded-lg py-16 text-center px-6">
           <MessageCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-foreground font-semibold mb-2">该仓库暂无讨论</p>
-          <p className="text-sm text-muted-foreground mb-6">点击右上角「新建讨论」发起第一个话题</p>
+          <p className="text-foreground font-semibold mb-2">{i18n.t('该仓库暂无讨论')}</p>
+          <p className="text-sm text-muted-foreground mb-6">{i18n.t('点击右上角「新建讨论」发起第一个话题')}</p>
         </div>
       ) : (
         <div className="bg-card border border-border rounded-lg overflow-hidden divide-y divide-border">
@@ -519,13 +514,11 @@ export default function DiscussionsPage() {
                       </span>
                       {d.isAnswered && (
                         <Badge className="bg-success/10 text-success border-success/30 text-xs flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" />已解答
-                        </Badge>
+                          <CheckCircle2 className="w-3 h-3" />{i18n.t('已解答')}</Badge>
                       )}
                       {d.locked && (
                         <Badge variant="outline" className="text-xs border-border text-muted-foreground flex items-center gap-1">
-                          <Lock className="w-2.5 h-2.5" />已锁定
-                        </Badge>
+                          <Lock className="w-2.5 h-2.5" />{i18n.t('已锁定')}</Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
@@ -536,8 +529,7 @@ export default function DiscussionsPage() {
                         <Clock className="w-3 h-3" />{formatRelativeTime(d.createdAt)}
                       </span>
                       <span className="flex items-center gap-1">
-                        <MessageCircle className="w-3 h-3" />{getCommentCount(d)} 条回复
-                      </span>
+                        <MessageCircle className="w-3 h-3" />{getCommentCount(d)} {i18n.t('条回复')}</span>
                       {d.upvoteCount > 0 && (
                         <span className="flex items-center gap-1">
                           <ThumbsUp className="w-3 h-3" />{d.upvoteCount}

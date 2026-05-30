@@ -2,6 +2,7 @@
 import { supabase } from '@/db/supabase';
 import type { ChatSession, ChatSessionMessage, ToolHistoryItem } from './aiTypes';
 import type { Message } from './aiTypes';
+import i18n from "@/i18n";
 
 export interface PersistMessageInput {
   role: string;
@@ -21,7 +22,7 @@ export async function upsertSession(
     .upsert({ ...session }, { onConflict: 'id' })
     .select('id')
     .maybeSingle();
-  if (error) { console.error('保存会话失败', error); return null; }
+  if (error) { console.error(i18n.t('保存会话失败'), error); return null; }
   return data?.id ?? null;
 }
 
@@ -38,7 +39,7 @@ export async function insertMessages(
     meta_json: m.meta ? JSON.stringify(m.meta) : null,
   }));
   const { error } = await supabase.from('ai_chat_messages').insert(rows);
-  if (error) console.error('保存消息失败', error);
+  if (error) console.error(i18n.t('保存消息失败'), error);
 }
 
 /** 获取指定用户的会话列表（按仓库分组，最多 50 条） */
@@ -92,7 +93,7 @@ export async function insertToolExecutionLogs(
     user_id: userId ?? null,
   }));
   const { error } = await supabase.from('tool_execution_logs').insert(rows);
-  if (error) console.error('[aiSupabase] 工具日志保存失败', error);
+  if (error) console.error(i18n.t('[aiSupabase] 工具日志保存失败'), error);
 }
 
 /** 查询指定 session 的工具执行日志（按 turn + 时间升序） */
@@ -109,7 +110,7 @@ export async function fetchToolExecutionLogs(
     .eq('session_id', sessionId)
     .order('started_at', { ascending: true })
     .limit(500);
-  if (error) { console.error('[aiSupabase] 工具日志查询失败', error); return []; }
+  if (error) { console.error(i18n.t('[aiSupabase] 工具日志查询失败'), error); return []; }
   return Array.isArray(data) ? data : [];
 }
 
@@ -133,7 +134,7 @@ export async function upsertWorkflowSnapshot(
     },
     { onConflict: 'session_id,turn_id' },
   );
-  if (error) console.error('[aiSupabase] workflow 快照保存失败', error);
+  if (error) console.error(i18n.t('[aiSupabase] workflow 快照保存失败'), error);
 }
 
 /** 获取指定 session 最新的 workflow 快照 */

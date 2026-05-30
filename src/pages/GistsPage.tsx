@@ -49,6 +49,7 @@ import {
 import type { GitHubGist } from '@/types/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 export default function GistsPage() {
   const { user } = useAuth();
@@ -77,7 +78,7 @@ export default function GistsPage() {
       setHasMore(data.length === 20);
       setPage(pg);
     } catch (err) {
-      toast.error('加载 Gist 列表失败');
+      toast.error(i18n.t('加载 Gist 列表失败'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -87,8 +88,8 @@ export default function GistsPage() {
   useEffect(() => { loadGists(1); }, [loadGists]);
 
   const handleCreate = async () => {
-    if (!newFilename.trim()) { toast.error('请输入文件名'); return; }
-    if (!newContent.trim()) { toast.error('请输入文件内容'); return; }
+    if (!newFilename.trim()) { toast.error(i18n.t('请输入文件名')); return; }
+    if (!newContent.trim()) { toast.error(i18n.t('请输入文件内容')); return; }
     setCreating(true);
     try {
       await createGist({
@@ -96,12 +97,12 @@ export default function GistsPage() {
         public: newPublic,
         files: { [newFilename.trim()]: { content: newContent } },
       });
-      toast.success('Gist 创建成功');
+      toast.success(i18n.t('Gist 创建成功'));
       setCreateOpen(false);
       setNewDesc(''); setNewFilename(''); setNewContent(''); setNewPublic(true);
       loadGists(1);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '创建失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('创建失败'));
     } finally {
       setCreating(false);
     }
@@ -113,10 +114,10 @@ export default function GistsPage() {
     try {
       await deleteGist(deleteTarget);
       setGists((prev) => prev.filter((g) => g.id !== deleteTarget));
-      toast.success('Gist 已删除');
+      toast.success(i18n.t('Gist 已删除'));
       setDeleteTarget(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('删除失败'));
     } finally {
       setDeleting(false);
     }
@@ -126,10 +127,10 @@ export default function GistsPage() {
     setForking(gistId);
     try {
       await forkGist(gistId);
-      toast.success('已 Fork Gist');
+      toast.success(i18n.t('已 Fork Gist'));
       loadGists(1);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Fork 失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('Fork 失败'));
     } finally {
       setForking(null);
     }
@@ -140,46 +141,43 @@ export default function GistsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <Code2 className="w-5 h-5 text-primary" />
-          我的 Gists
-        </h1>
+          {i18n.t('我的 Gists')}</h1>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
               <Plus className="w-4 h-4 mr-2" />
-              新建 Gist
-            </Button>
+              {i18n.t('新建 Gist')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-2xl bg-card border-border">
             <DialogHeader>
-              <DialogTitle className="text-foreground">创建 Gist</DialogTitle>
+              <DialogTitle className="text-foreground">{i18n.t('创建 Gist')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3 py-2">
               <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">描述（可选）</Label>
-                <Input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="描述这个 Gist..." className="bg-secondary border-border text-foreground placeholder:text-muted-foreground" />
+                <Label className="text-sm font-normal text-foreground">{i18n.t('描述（可选）')}</Label>
+                <Input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder={i18n.t('描述这个 Gist...')} className="bg-secondary border-border text-foreground placeholder:text-muted-foreground" />
               </div>
               <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">文件名 *</Label>
+                <Label className="text-sm font-normal text-foreground">{i18n.t('文件名 *')}</Label>
                 <Input value={newFilename} onChange={(e) => setNewFilename(e.target.value)} placeholder="example.js" className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono" />
               </div>
               <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">内容 *</Label>
-                <Textarea value={newContent} onChange={(e) => setNewContent(e.target.value)} placeholder="// 代码内容..." className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono text-xs min-h-32 resize-none" />
+                <Label className="text-sm font-normal text-foreground">{i18n.t('内容 *')}</Label>
+                <Textarea value={newContent} onChange={(e) => setNewContent(e.target.value)} placeholder={i18n.t('// 代码内容...')} className="bg-secondary border-border text-foreground placeholder:text-muted-foreground font-mono text-xs min-h-32 resize-none" />
               </div>
               <div className="flex items-center gap-3">
                 <Switch id="gist-public" checked={newPublic} onCheckedChange={setNewPublic} />
                 <Label htmlFor="gist-public" className="text-sm text-foreground cursor-pointer flex items-center gap-1.5">
-                  {newPublic ? <><Globe className="w-3.5 h-3.5 text-primary" />公开</>
-                    : <><Lock className="w-3.5 h-3.5 text-muted-foreground" />私密</>}
+                  {newPublic ? <><Globe className="w-3.5 h-3.5 text-primary" />{i18n.t('公开')}</>
+                    : <><Lock className="w-3.5 h-3.5 text-muted-foreground" />{i18n.t('私密')}</>}
                 </Label>
               </div>
               <div className="flex gap-3 pt-1">
                 <Button variant="ghost" className="flex-1 border border-border text-muted-foreground hover:bg-secondary" onClick={() => setCreateOpen(false)}>
-                  <X className="w-4 h-4 mr-2" />取消
-                </Button>
+                  <X className="w-4 h-4 mr-2" />{i18n.t('取消')}</Button>
                 <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleCreate} disabled={creating || !newFilename.trim() || !newContent.trim()}>
                   <Save className="w-4 h-4 mr-2" />
-                  {creating ? '创建中...' : '创建'}
+                  {creating ? i18n.t('创建中...') : i18n.t('创建')}
                 </Button>
               </div>
             </div>
@@ -200,7 +198,7 @@ export default function GistsPage() {
         ) : gists.length === 0 ? (
           <div className="py-16 text-center">
             <Code2 className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-foreground font-medium">暂无 Gist</p>
+            <p className="text-foreground font-medium">{i18n.t('暂无 Gist')}</p>
           </div>
         ) : (
           <div className="divide-y divide-border">
@@ -224,10 +222,10 @@ export default function GistsPage() {
                           {firstFile?.filename || gist.id.substring(0, 8)}
                         </button>
                         {files.length > 1 && (
-                          <span className="text-xs text-muted-foreground">+{files.length - 1} 个文件</span>
+                          <span className="text-xs text-muted-foreground">+{files.length - 1} {i18n.t('个文件')}</span>
                         )}
                         <Badge variant="outline" className={`text-xs shrink-0 ${gist.public ? 'border-primary/40 text-primary' : 'border-border text-muted-foreground'}`}>
-                          {gist.public ? <><Globe className="w-2.5 h-2.5 mr-1" />公开</> : <><Lock className="w-2.5 h-2.5 mr-1" />私密</>}
+                          {gist.public ? <><Globe className="w-2.5 h-2.5 mr-1" />{i18n.t('公开')}</> : <><Lock className="w-2.5 h-2.5 mr-1" />{i18n.t('私密')}</>}
                         </Badge>
                       </div>
                       {gist.description && (
@@ -235,7 +233,7 @@ export default function GistsPage() {
                       )}
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
                         <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatRelativeTime(gist.updated_at)}</span>
-                        <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{gist.comments} 评论</span>
+                        <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{gist.comments} {i18n.t('评论')}</span>
                       </div>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -257,7 +255,7 @@ export default function GistsPage() {
                           size="icon"
                           className="w-8 h-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                           onClick={() => setDeleteTarget(gist.id)}
-                          title="删除"
+                          title={i18n.t('删除')}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -273,20 +271,19 @@ export default function GistsPage() {
 
       {hasMore && !loading && (
         <Button variant="ghost" className="w-full border border-border text-muted-foreground hover:bg-secondary" onClick={() => loadGists(page + 1, true)}>
-          加载更多
-        </Button>
+          {i18n.t('加载更多')}</Button>
       )}
 
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">确认删除 Gist</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">此操作无法撤销，Gist 将被永久删除。</AlertDialogDescription>
+            <AlertDialogTitle className="text-foreground">{i18n.t('确认删除 Gist')}</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">{i18n.t('此操作无法撤销，Gist 将被永久删除。')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-secondary">取消</AlertDialogCancel>
+            <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
             <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDelete} disabled={deleting}>
-              {deleting ? '删除中...' : '确认删除'}
+              {deleting ? i18n.t('删除中...') : i18n.t('确认删除')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

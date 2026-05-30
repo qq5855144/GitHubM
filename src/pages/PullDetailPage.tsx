@@ -59,6 +59,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import i18n from "@/i18n";
 
 /** Review 状态图标与颜色 */
 function ReviewStateIcon({ state }: { state: GQL_PRReview['state'] }) {
@@ -79,11 +80,11 @@ function ReviewStateIcon({ state }: { state: GQL_PRReview['state'] }) {
 /** Review 状态标签文字 */
 function reviewStateText(state: GQL_PRReview['state']): string {
   switch (state) {
-    case 'APPROVED': return '已批准';
-    case 'CHANGES_REQUESTED': return '请求更改';
-    case 'COMMENTED': return '留下评论';
-    case 'DISMISSED': return '已忽略';
-    default: return '待审查';
+    case 'APPROVED': return i18n.t('已批准');
+    case 'CHANGES_REQUESTED': return i18n.t('请求更改');
+    case 'COMMENTED': return i18n.t('留下评论');
+    case 'DISMISSED': return i18n.t('已忽略');
+    default: return i18n.t('待审查');
   }
 }
 
@@ -94,7 +95,7 @@ function ReviewDecisionBanner({ decision }: { decision: GQL_ReviewDecision | nul
     return (
       <div className="flex items-center gap-2 bg-success/10 border border-success/30 rounded-lg px-4 py-2.5">
         <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-        <span className="text-sm text-success font-medium">所有审查者已批准，可以合并</span>
+        <span className="text-sm text-success font-medium">{i18n.t('所有审查者已批准，可以合并')}</span>
       </div>
     );
   }
@@ -102,7 +103,7 @@ function ReviewDecisionBanner({ decision }: { decision: GQL_ReviewDecision | nul
     return (
       <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/30 rounded-lg px-4 py-2.5">
         <XCircleIcon className="w-4 h-4 text-destructive shrink-0" />
-        <span className="text-sm text-destructive font-medium">有审查者请求更改，需要修复后才能合并</span>
+        <span className="text-sm text-destructive font-medium">{i18n.t('有审查者请求更改，需要修复后才能合并')}</span>
       </div>
     );
   }
@@ -110,7 +111,7 @@ function ReviewDecisionBanner({ decision }: { decision: GQL_ReviewDecision | nul
     return (
       <div className="flex items-center gap-2 bg-warning/10 border border-warning/30 rounded-lg px-4 py-2.5">
         <Shield className="w-4 h-4 text-warning shrink-0" />
-        <span className="text-sm text-warning font-medium">需要至少一个审查批准才能合并</span>
+        <span className="text-sm text-warning font-medium">{i18n.t('需要至少一个审查批准才能合并')}</span>
       </div>
     );
   }
@@ -151,7 +152,7 @@ export default function PullDetailPage() {
         setComments(commentsData);
         setFiles(filesData);
       } catch (err) {
-        toast.error('加载 PR 详情失败');
+        toast.error(i18n.t('加载 PR 详情失败'));
         console.error(err);
       } finally {
         setLoading(false);
@@ -183,9 +184,9 @@ export default function PullDetailPage() {
       const comment = await createPullRequestComment(owner, repo, Number(number), newComment.trim());
       setComments((prev) => [...prev, comment]);
       setNewComment('');
-      toast.success('评论已发布');
+      toast.success(i18n.t('评论已发布'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '发布失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('发布失败'));
     } finally {
       setSubmitting(false);
     }
@@ -204,11 +205,11 @@ export default function PullDetailPage() {
     setMerging(true);
     try {
       await mergePullRequest(owner, repo, Number(number), { merge_method: 'merge' });
-      toast.success('Pull Request 已合并！');
+      toast.success(i18n.t('Pull Request 已合并！'));
       const updated = await getPullRequest(owner, repo, Number(number));
       setPr(updated);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '合并失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('合并失败'));
     } finally {
       setMerging(false);
     }
@@ -221,9 +222,9 @@ export default function PullDetailPage() {
       const newState = pr.state === 'open' ? 'closed' : 'open';
       const updated = await updatePullRequest(owner, repo, Number(number), { state: newState });
       setPr(updated);
-      toast.success(newState === 'closed' ? 'PR 已关闭' : 'PR 已重新打开');
+      toast.success(newState === 'closed' ? i18n.t('PR 已关闭') : i18n.t('PR 已重新打开'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '操作失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('操作失败'));
     } finally {
       setClosing(false);
     }
@@ -249,7 +250,7 @@ export default function PullDetailPage() {
     return (
       <div className="p-6 text-center">
         <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-3" />
-        <p className="text-foreground">PR 不存在</p>
+        <p className="text-foreground">{i18n.t('PR 不存在')}</p>
       </div>
     );
   }
@@ -258,7 +259,7 @@ export default function PullDetailPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-5xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
@@ -278,7 +279,7 @@ export default function PullDetailPage() {
           <div className="flex items-center gap-2 mt-1 flex-wrap text-sm text-muted-foreground">
             <span>{pr.user.login}</span>
             <span>·</span>
-            <span>{formatRelativeTime(pr.created_at)} 创建</span>
+            <span>{formatRelativeTime(pr.created_at)} {i18n.t('创建')}</span>
             <div className="flex items-center gap-1">
               <GitBranch className="w-3.5 h-3.5" />
               <code className="font-mono text-xs">{pr.head.ref}</code>
@@ -293,13 +294,13 @@ export default function PullDetailPage() {
       <div className="flex flex-wrap gap-3 text-sm items-center">
         <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
           <FileDiff className="w-4 h-4 text-muted-foreground" />
-          <span className="text-muted-foreground">{pr.changed_files} 个文件</span>
+          <span className="text-muted-foreground">{pr.changed_files} {i18n.t('个文件')}</span>
           <span className="text-primary">+{pr.additions}</span>
           <span className="text-destructive">-{pr.deletions}</span>
         </div>
         <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
           <MessageSquare className="w-4 h-4 text-muted-foreground" />
-          <span className="text-muted-foreground">{pr.comments + pr.review_comments} 条评论</span>
+          <span className="text-muted-foreground">{pr.comments + pr.review_comments} {i18n.t('条评论')}</span>
         </div>
         {/* 查看完整 Diff */}
         <Button
@@ -309,8 +310,7 @@ export default function PullDetailPage() {
           onClick={() => navigate(`/repos/${owner}/${repo}/pulls/${number}/diff`, { state: { pr } })}
         >
           <FileDiff className="w-3.5 h-3.5" />
-          查看 Diff
-        </Button>
+          {i18n.t('查看 Diff')}</Button>
       </div>
 
       {/* GraphQL：Review Decision 横幅 */}
@@ -327,7 +327,7 @@ export default function PullDetailPage() {
                 disabled={merging}
               >
                 <GitMerge className="w-4 h-4 mr-2" />
-                {merging ? '合并中...' : '合并 Pull Request'}
+                {merging ? i18n.t('合并中...') : i18n.t('合并 Pull Request')}
               </Button>
               <Button
                 variant="outline"
@@ -336,8 +336,7 @@ export default function PullDetailPage() {
                 disabled={closing}
               >
                 <X className="w-4 h-4 mr-2" />
-                关闭 PR
-              </Button>
+                {i18n.t('关闭 PR')}</Button>
             </>
           )}
         </div>
@@ -352,8 +351,7 @@ export default function PullDetailPage() {
             disabled={closing}
           >
             <Check className="w-4 h-4 mr-2" />
-            重新打开 PR
-          </Button>
+            {i18n.t('重新打开 PR')}</Button>
         </div>
       )}
 
@@ -361,13 +359,12 @@ export default function PullDetailPage() {
       <Tabs defaultValue="description">
         <TabsList className="bg-secondary border border-border">
           <TabsTrigger value="description" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground">
-            描述与评论
-          </TabsTrigger>
+            {i18n.t('描述与评论')}</TabsTrigger>
           <TabsTrigger value="reviews" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground">
-            审查 {reviews.length > 0 ? `(${reviews.length})` : ''}
+            {i18n.t('审查')}{reviews.length > 0 ? `(${reviews.length})` : ''}
           </TabsTrigger>
           <TabsTrigger value="files" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground">
-            文件变更 ({files.length})
+            {i18n.t('文件变更 (')}{files.length})
           </TabsTrigger>
         </TabsList>
 
@@ -382,13 +379,13 @@ export default function PullDetailPage() {
               </Avatar>
               <span className="text-sm font-medium text-foreground">{pr.user.login}</span>
               <span className="text-xs text-muted-foreground">{formatRelativeTime(pr.created_at)}</span>
-              <Badge variant="outline" className="ml-auto text-xs border-border text-muted-foreground">作者</Badge>
+              <Badge variant="outline" className="ml-auto text-xs border-border text-muted-foreground">{i18n.t('作者')}</Badge>
             </div>
             <div className="p-4">
               {pr.body ? (
                 <MarkdownRenderer content={pr.body} />
               ) : (
-                <p className="text-muted-foreground text-sm italic">无描述</p>
+                <p className="text-muted-foreground text-sm italic">{i18n.t('无描述')}</p>
               )}
             </div>
           </div>
@@ -418,19 +415,19 @@ export default function PullDetailPage() {
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   onKeyDown={handleCommentKeyDown}
-                  placeholder="撰写评论（支持 Markdown）..."
+                  placeholder={i18n.t('撰写评论（支持 Markdown）...')}
                   className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm min-h-24"
                   rows={4}
                 />
                 <div className="flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground">Ctrl+Enter 快速提交</span>
+                  <span className="text-xs text-muted-foreground">{i18n.t('Ctrl+Enter 快速提交')}</span>
                   <Button
                     className="bg-primary text-primary-foreground hover:bg-primary/90"
                     onClick={handleComment}
                     disabled={submitting || !newComment.trim()}
                     size="sm"
                   >
-                    {submitting ? '发布中...' : <><Send className="w-3.5 h-3.5 mr-1.5" />发布评论</>}
+                    {submitting ? i18n.t('发布中...') : <><Send className="w-3.5 h-3.5 mr-1.5" />{i18n.t('发布评论')}</>}
                   </Button>
                 </div>
               </div>
@@ -459,7 +456,7 @@ export default function PullDetailPage() {
                 <div className="bg-card border border-border rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <UserCheck className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm font-medium text-foreground">待审查</span>
+                    <span className="text-sm font-medium text-foreground">{i18n.t('待审查')}</span>
                   </div>
                   <div className="flex flex-wrap gap-3">
                     {requestedReviewers.map((r) => (
@@ -480,7 +477,7 @@ export default function PullDetailPage() {
               {reviews.length === 0 && requestedReviewers.length === 0 ? (
                 <div className="bg-card border border-border rounded-lg py-12 text-center">
                   <UserCheck className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">该 PR 暂无 Code Review 记录</p>
+                  <p className="text-sm text-muted-foreground">{i18n.t('该 PR 暂无 Code Review 记录')}</p>
                 </div>
               ) : (
                 reviews.map((review) => (
@@ -566,26 +563,24 @@ export default function PullDetailPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-foreground flex items-center gap-2">
               <GitMerge className="w-4 h-4 text-primary" />
-              确认合并 Pull Request？
-            </AlertDialogTitle>
+              {i18n.t('确认合并 Pull Request？')}</AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground text-sm space-y-2">
-              <span>将把分支 </span>
+              <span>{i18n.t('将把分支')}</span>
               <code className="font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded text-xs">{pr.head.ref}</code>
-              <span> 合并到 </span>
+              <span> {i18n.t('合并到')}</span>
               <code className="font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded text-xs">{pr.base.ref}</code>
-              <span>，合并后不可撤销。</span>
+              <span>{i18n.t('，合并后不可撤销。')}</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-secondary">取消</AlertDialogCancel>
+            <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={() => { setMergeConfirmOpen(false); handleMerge(); }}
               disabled={merging}
             >
               <GitMerge className="w-4 h-4 mr-2" />
-              确认合并
-            </AlertDialogAction>
+              {i18n.t('确认合并')}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

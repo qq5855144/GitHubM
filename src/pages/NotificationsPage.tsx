@@ -25,6 +25,7 @@ import {
 import type { GitHubNotification } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
+import i18n from "@/i18n";
 
 export default function NotificationsPage() {
   const navigate = useNavigate();
@@ -51,7 +52,7 @@ export default function NotificationsPage() {
       setNotifications(result.data);
       pageCache.set(cacheKey, result.data, 2 * 60 * 1000); // 通知 2 分钟 TTL
     } catch (err) {
-      toast.error('加载通知失败');
+      toast.error(i18n.t('加载通知失败'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -71,7 +72,7 @@ export default function NotificationsPage() {
         return updated;
       });
     } catch (err) {
-      toast.error('标记失败');
+      toast.error(i18n.t('标记失败'));
       console.error(err);
     }
   };
@@ -132,9 +133,9 @@ export default function NotificationsPage() {
         pageCache.set(`notifications:${showAll}`, updated, 2 * 60 * 1000);
         return updated;
       });
-      toast.success('全部已标记为已读');
+      toast.success(i18n.t('全部已标记为已读'));
     } catch (err) {
-      toast.error('操作失败');
+      toast.error(i18n.t('操作失败'));
       console.error(err);
     } finally {
       setMarkingAll(false);
@@ -162,11 +163,11 @@ export default function NotificationsPage() {
       PullRequest: 'PR',
       Issue: 'Issue',
       CheckSuite: 'Actions',
-      Release: '版本发布',
-      Commit: '提交',
-      Discussion: '讨论',
-      RepositoryVulnerabilityAlert: '安全警报',
-      RepositoryAdvisory: '安全公告',
+      Release: i18n.t('版本发布'),
+      Commit: i18n.t('提交'),
+      Discussion: i18n.t('讨论'),
+      RepositoryVulnerabilityAlert: i18n.t('安全警报'),
+      RepositoryAdvisory: i18n.t('安全公告'),
       RepositoryDependabotAlertsThread: 'Dependabot',
     };
     return map[type] || type;
@@ -179,7 +180,7 @@ export default function NotificationsPage() {
       {/* 页头 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-foreground">通知</h1>
+          <h1 className="text-xl font-bold text-foreground">{i18n.t('通知')}</h1>
           {unreadCount > 0 && (
             <Badge className="bg-primary text-primary-foreground text-xs">
               {unreadCount}
@@ -194,8 +195,7 @@ export default function NotificationsPage() {
               onCheckedChange={setShowAll}
             />
             <Label htmlFor="show-all" className="text-sm text-muted-foreground cursor-pointer">
-              显示全部
-            </Label>
+              {i18n.t('显示全部')}</Label>
           </div>
           <Button
             variant="ghost"
@@ -204,8 +204,7 @@ export default function NotificationsPage() {
             onClick={() => loadNotifications(true)}
           >
             <RefreshCw className="w-4 h-4 mr-1.5" />
-            刷新
-          </Button>
+            {i18n.t('刷新')}</Button>
           {unreadCount > 0 && (
             <Button
               variant="outline"
@@ -215,7 +214,7 @@ export default function NotificationsPage() {
               disabled={markingAll}
             >
               <CheckCircle2 className="w-4 h-4 mr-1.5" />
-              {markingAll ? '处理中...' : '全部已读'}
+              {markingAll ? i18n.t('处理中...') : i18n.t('全部已读')}
             </Button>
           )}
         </div>
@@ -235,9 +234,9 @@ export default function NotificationsPage() {
         ) : notifications.length === 0 ? (
           <div className="py-16 text-center">
             <BellOff className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-foreground font-medium">暂无通知</p>
+            <p className="text-foreground font-medium">{i18n.t('暂无通知')}</p>
             <p className="text-muted-foreground text-sm mt-1">
-              {showAll ? '没有任何通知' : '没有未读通知'}
+              {showAll ? i18n.t('没有任何通知') : i18n.t('没有未读通知')}
             </p>
           </div>
         ) : (
@@ -286,8 +285,7 @@ export default function NotificationsPage() {
                       className="shrink-0 text-muted-foreground hover:bg-secondary h-7 text-xs"
                       onClick={(e) => { e.stopPropagation(); handleMarkRead(notification.id); }}
                     >
-                      标为已读
-                    </Button>
+                      {i18n.t('标为已读')}</Button>
                   )}
                 </div>
               </div>

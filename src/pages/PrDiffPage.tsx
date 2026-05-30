@@ -44,6 +44,7 @@ import {
 import type { GitHubPullRequest, GitHubFile, GitHubComment } from '@/types/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 // ===== 类型 =====
 interface DiffLine {
@@ -132,7 +133,7 @@ function InlineCommentInput({ onSubmit, onCancel }: InlineCommentInputProps) {
             ref={ref}
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="添加行内评审评论（支持 Markdown）..."
+            placeholder={i18n.t('添加行内评审评论（支持 Markdown）...')}
             className="bg-card border-border text-foreground placeholder:text-muted-foreground resize-none text-sm min-h-20"
             rows={3}
           />
@@ -144,8 +145,7 @@ function InlineCommentInput({ onSubmit, onCancel }: InlineCommentInputProps) {
               onClick={onCancel}
               disabled={submitting}
             >
-              取消
-            </Button>
+              {i18n.t('取消')}</Button>
             <Button
               size="sm"
               className="h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
@@ -153,8 +153,7 @@ function InlineCommentInput({ onSubmit, onCancel }: InlineCommentInputProps) {
               disabled={submitting || !body.trim()}
             >
               {submitting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Send className="w-3 h-3 mr-1" />}
-              提交评论
-            </Button>
+              {i18n.t('提交评论')}</Button>
           </div>
         </div>
       </td>
@@ -181,7 +180,7 @@ function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onC
   if (!file.patch) {
     return (
       <div className="px-4 py-3 text-xs text-muted-foreground italic">
-        {file.status === 'binary' ? '二进制文件，无法预览差异' : '无差异内容'}
+        {file.status === 'binary' ? i18n.t('二进制文件，无法预览差异') : i18n.t('无差异内容')}
       </div>
     );
   }
@@ -200,9 +199,9 @@ function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onC
       });
       onCommentAdded(comment, file.filename, lineNum);
       setActiveCommentLine(null);
-      toast.success('评论已提交');
+      toast.success(i18n.t('评论已提交'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '提交评论失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('提交评论失败'));
       throw err;
     }
   };
@@ -257,7 +256,7 @@ function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onC
                         type="button"
                         className="opacity-0 group-hover:opacity-100 transition-opacity w-4 h-4 flex items-center justify-center text-muted-foreground hover:text-primary"
                         onClick={() => setActiveCommentLine(isCommentActive ? null : idx)}
-                        title="添加评论"
+                        title={i18n.t('添加评论')}
                       >
                         <Plus className="w-3 h-3" />
                       </button>
@@ -331,7 +330,7 @@ function SideBySideDiff({ file, commentGroups, prHead, owner, repo, pullNumber, 
   if (!file.patch) {
     return (
       <div className="px-4 py-3 text-xs text-muted-foreground italic">
-        {file.status === 'binary' ? '二进制文件，无法预览差异' : '无差异内容'}
+        {file.status === 'binary' ? i18n.t('二进制文件，无法预览差异') : i18n.t('无差异内容')}
       </div>
     );
   }
@@ -378,9 +377,9 @@ function SideBySideDiff({ file, commentGroups, prHead, owner, repo, pullNumber, 
       });
       onCommentAdded(comment, file.filename, lineNum);
       setActiveCommentLine(null);
-      toast.success('评论已提交');
+      toast.success(i18n.t('评论已提交'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '提交评论失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('提交评论失败'));
       throw err;
     }
   };
@@ -551,7 +550,7 @@ export default function PrDiffPage() {
         setFiles(filesData);
         setReviewComments(commentsData);
       } catch (err) {
-        toast.error('加载 Diff 失败');
+        toast.error(i18n.t('加载 Diff 失败'));
         console.error(err);
       } finally {
         setLoading(false);
@@ -576,15 +575,15 @@ export default function PrDiffPage() {
         body: reviewBody.trim(),
       });
       const labels: Record<ReviewEvent, string> = {
-        APPROVE: '已批准 PR',
-        REQUEST_CHANGES: '已请求更改',
-        COMMENT: '评审评论已提交',
+        APPROVE: i18n.t('已批准 PR'),
+        REQUEST_CHANGES: i18n.t('已请求更改'),
+        COMMENT: i18n.t('评审评论已提交'),
       };
       toast.success(labels[reviewDialog]);
       setReviewDialog(null);
       setReviewBody('');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '提交评审失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('提交评审失败'));
     } finally {
       setSubmittingReview(false);
     }
@@ -592,25 +591,25 @@ export default function PrDiffPage() {
 
   const reviewDialogMeta: Record<ReviewEvent, { title: string; desc: string; icon: React.ReactNode; confirmClass: string; confirmLabel: string }> = {
     APPROVE: {
-      title: '批准 Pull Request',
-      desc: '表示代码审查通过，同意合并此 PR。',
+      title: i18n.t('批准 Pull Request'),
+      desc: i18n.t('表示代码审查通过，同意合并此 PR。'),
       icon: <CheckCircle2 className="w-4 h-4 text-success" />,
       confirmClass: 'bg-success text-success-foreground hover:bg-success/90',
-      confirmLabel: '批准',
+      confirmLabel: i18n.t('批准'),
     },
     REQUEST_CHANGES: {
-      title: '请求更改',
-      desc: '表示需要作者修改后才能合并。',
+      title: i18n.t('请求更改'),
+      desc: i18n.t('表示需要作者修改后才能合并。'),
       icon: <X className="w-4 h-4 text-destructive" />,
       confirmClass: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-      confirmLabel: '请求更改',
+      confirmLabel: i18n.t('请求更改'),
     },
     COMMENT: {
-      title: '提交评论',
-      desc: '添加评审评论，不改变 PR 的合并状态。',
+      title: i18n.t('提交评论'),
+      desc: i18n.t('添加评审评论，不改变 PR 的合并状态。'),
       icon: <MessageCircle className="w-4 h-4 text-primary" />,
       confirmClass: 'bg-primary text-primary-foreground hover:bg-primary/90',
-      confirmLabel: '提交评论',
+      confirmLabel: i18n.t('提交评论'),
     },
   };
 
@@ -628,7 +627,7 @@ export default function PrDiffPage() {
     return (
       <div className="p-6 text-center">
         <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-3" />
-        <p className="text-foreground">无法加载 PR 信息</p>
+        <p className="text-foreground">{i18n.t('无法加载 PR 信息')}</p>
       </div>
     );
   }
@@ -637,7 +636,7 @@ export default function PrDiffPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-6xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
@@ -653,10 +652,10 @@ export default function PrDiffPage() {
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-bold text-foreground text-balance">{pr.title}</h1>
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
-            <span>{files.length} 个文件变更</span>
-            <span className="text-success">+{pr.additions} 行</span>
-            <span className="text-destructive">-{pr.deletions} 行</span>
-            <span>{reviewComments.length} 条行内评论</span>
+            <span>{files.length} {i18n.t('个文件变更')}</span>
+            <span className="text-success">+{pr.additions} {i18n.t('行')}</span>
+            <span className="text-destructive">-{pr.deletions} {i18n.t('行')}</span>
+            <span>{reviewComments.length} {i18n.t('条行内评论')}</span>
           </div>
         </div>
 
@@ -669,7 +668,7 @@ export default function PrDiffPage() {
             onClick={() => setReviewDialog('COMMENT')}
           >
             <MessageCircle className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">评论</span>
+            <span className="hidden md:inline">{i18n.t('评论')}</span>
           </Button>
           <Button
             size="sm"
@@ -678,7 +677,7 @@ export default function PrDiffPage() {
             onClick={() => setReviewDialog('REQUEST_CHANGES')}
           >
             <X className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">请求更改</span>
+            <span className="hidden md:inline">{i18n.t('请求更改')}</span>
           </Button>
           <Button
             size="sm"
@@ -686,7 +685,7 @@ export default function PrDiffPage() {
             onClick={() => setReviewDialog('APPROVE')}
           >
             <Check className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">批准</span>
+            <span className="hidden md:inline">{i18n.t('批准')}</span>
           </Button>
         </div>
       </div>
@@ -699,16 +698,14 @@ export default function PrDiffPage() {
           onClick={() => setMode('unified')}
         >
           <AlignJustify className="w-3.5 h-3.5" />
-          合并视图
-        </button>
+          {i18n.t('合并视图')}</button>
         <button
           type="button"
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors ${mode === 'side' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
           onClick={() => setMode('side')}
         >
           <Columns2 className="w-3.5 h-3.5" />
-          分屏视图
-        </button>
+          {i18n.t('分屏视图')}</button>
       </div>
 
       {/* 文件 Diff 列表 */}
@@ -746,20 +743,20 @@ export default function PrDiffPage() {
                 <Textarea
                   value={reviewBody}
                   onChange={(e) => setReviewBody(e.target.value)}
-                  placeholder="添加评审说明（可选）..."
+                  placeholder={i18n.t('添加评审说明（可选）...')}
                   className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none text-sm min-h-24"
                   rows={4}
                 />
               </div>
               <AlertDialogFooter>
-                <AlertDialogCancel className="border-border hover:bg-secondary">取消</AlertDialogCancel>
+                <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
                 <AlertDialogAction
                   className={reviewDialogMeta[reviewDialog].confirmClass}
                   onClick={handleSubmitReview}
                   disabled={submittingReview}
                 >
                   {submittingReview
-                    ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />提交中...</>
+                    ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />{i18n.t('提交中...')}</>
                     : reviewDialogMeta[reviewDialog].confirmLabel
                   }
                 </AlertDialogAction>

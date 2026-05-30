@@ -29,6 +29,7 @@ import type { GitHubIssue, GitHubComment } from '@/types/types';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import i18n from "@/i18n";
 
 export default function IssueDetailPage() {
   const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
@@ -53,7 +54,7 @@ export default function IssueDetailPage() {
         setIssue(issueData);
         setComments(commentsData);
       } catch (err) {
-        toast.error('加载 Issue 详情失败');
+        toast.error(i18n.t('加载 Issue 详情失败'));
         console.error(err);
       } finally {
         setLoading(false);
@@ -69,9 +70,9 @@ export default function IssueDetailPage() {
       const comment = await createIssueComment(owner, repo, Number(number), newComment.trim());
       setComments((prev) => [...prev, comment]);
       setNewComment('');
-      toast.success('评论已发布');
+      toast.success(i18n.t('评论已发布'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '发布失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('发布失败'));
     } finally {
       setSubmitting(false);
     }
@@ -92,9 +93,9 @@ export default function IssueDetailPage() {
       const newState = issue.state === 'open' ? 'closed' : 'open';
       const updated = await updateIssue(owner, repo, Number(number), { state: newState });
       setIssue(updated);
-      toast.success(newState === 'closed' ? 'Issue 已关闭' : 'Issue 已重新打开');
+      toast.success(newState === 'closed' ? i18n.t('Issue 已关闭') : i18n.t('Issue 已重新打开'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '操作失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('操作失败'));
     } finally {
       setToggling(false);
     }
@@ -114,7 +115,7 @@ export default function IssueDetailPage() {
     return (
       <div className="p-6 text-center">
         <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-3" />
-        <p className="text-foreground">Issue 不存在</p>
+        <p className="text-foreground">{i18n.t('Issue 不存在')}</p>
       </div>
     );
   }
@@ -123,7 +124,7 @@ export default function IssueDetailPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate('/repos')}>仓库</button>
+        <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
@@ -148,11 +149,10 @@ export default function IssueDetailPage() {
                 variant="outline"
                 className={`text-xs ${issue.state === 'open' ? 'border-primary text-primary' : 'border-muted-foreground text-muted-foreground'}`}
               >
-                {issue.state === 'open' ? '开放' : '已关闭'}
+                {issue.state === 'open' ? i18n.t('开放') : i18n.t('已关闭')}
               </Badge>
               <span className="text-sm text-muted-foreground">
-                {issue.user.login} 于 {formatRelativeTime(issue.created_at)} 创建 · {comments.length} 条评论
-              </span>
+                {issue.user.login} {i18n.t('于')}{formatRelativeTime(issue.created_at)} {i18n.t('创建 ·')}{comments.length} {i18n.t('条评论')}</span>
             </div>
           </div>
           {/* 状态切换 */}
@@ -165,9 +165,9 @@ export default function IssueDetailPage() {
               disabled={toggling}
             >
               {issue.state === 'open' ? (
-                <><X className="w-3.5 h-3.5 mr-1" />关闭</>
+                <><X className="w-3.5 h-3.5 mr-1" />{i18n.t('关闭')}</>
               ) : (
-                <><Check className="w-3.5 h-3.5 mr-1" />重新打开</>
+                <><Check className="w-3.5 h-3.5 mr-1" />{i18n.t('重新打开')}</>
               )}
             </Button>
           </div>
@@ -204,13 +204,13 @@ export default function IssueDetailPage() {
           </Avatar>
           <span className="text-sm font-medium text-foreground">{issue.user.login}</span>
           <span className="text-xs text-muted-foreground">{formatRelativeTime(issue.created_at)}</span>
-          <Badge variant="outline" className="ml-auto text-xs border-border text-muted-foreground">作者</Badge>
+          <Badge variant="outline" className="ml-auto text-xs border-border text-muted-foreground">{i18n.t('作者')}</Badge>
         </div>
         <div className="p-4">
           {issue.body ? (
             <MarkdownRenderer content={issue.body} />
           ) : (
-            <p className="text-muted-foreground text-sm italic">无描述</p>
+            <p className="text-muted-foreground text-sm italic">{i18n.t('无描述')}</p>
           )}
         </div>
       </div>
@@ -226,7 +226,7 @@ export default function IssueDetailPage() {
             <span className="text-sm font-medium text-foreground">{comment.user.login}</span>
             <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.created_at)}</span>
             {user?.login === comment.user.login && (
-              <Badge variant="outline" className="ml-auto text-xs border-border text-muted-foreground">你</Badge>
+              <Badge variant="outline" className="ml-auto text-xs border-border text-muted-foreground">{i18n.t('你')}</Badge>
             )}
           </div>
           <div className="p-4">
@@ -243,22 +243,21 @@ export default function IssueDetailPage() {
               <AvatarImage src={user.avatar_url} />
               <AvatarFallback className="bg-secondary text-xs">{user.login[0]}</AvatarFallback>
             </Avatar>
-            <span className="text-sm font-medium text-foreground">添加评论</span>
+            <span className="text-sm font-medium text-foreground">{i18n.t('添加评论')}</span>
           </div>
           <div className="p-4 space-y-3">
             <Textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               onKeyDown={handleCommentKeyDown}
-              placeholder="撰写评论（支持 Markdown）..."
+              placeholder={i18n.t('撰写评论（支持 Markdown）...')}
               className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm min-h-24"
               rows={4}
             />
             <div className="flex justify-between items-center">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Edit2 className="w-3 h-3" />
-                支持 Markdown · Ctrl+Enter 快速提交
-              </span>
+                {i18n.t('支持 Markdown · Ctrl+Enter 快速提交')}</span>
               <Button
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={handleComment}
@@ -266,12 +265,11 @@ export default function IssueDetailPage() {
                 size="sm"
               >
                 {submitting ? (
-                  '发布中...'
+                  i18n.t('发布中...')
                 ) : (
                   <>
                     <Send className="w-3.5 h-3.5 mr-1.5" />
-                    发布评论
-                  </>
+                    {i18n.t('发布评论')}</>
                 )}
               </Button>
             </div>

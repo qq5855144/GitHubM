@@ -1,6 +1,7 @@
 // 主题上下文 - 支持深色/浅色/跟随系统 + 主题色自定义
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import i18n from "@/i18n";
 
 export type ThemeMode = 'dark' | 'light' | 'system';
 
@@ -26,7 +27,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   // ── 原有色 ──────────────────────────────────────────────────────────────
   {
     id: 'purple',
-    label: '紫罗兰',
+    label: i18n.t('紫罗兰'),
     lightPrimary: '263 70% 58%',
     lightAccent:  '258 88% 66%',
     lightRing:    '263 70% 58%',
@@ -38,7 +39,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'blue',
-    label: '海洋蓝',
+    label: i18n.t('海洋蓝'),
     lightPrimary: '217 91% 50%',
     lightAccent:  '210 100% 56%',
     lightRing:    '217 91% 50%',
@@ -50,7 +51,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'green',
-    label: '翠绿',
+    label: i18n.t('翠绿'),
     lightPrimary: '142 71% 40%',
     lightAccent:  '152 80% 42%',
     lightRing:    '142 71% 40%',
@@ -62,7 +63,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'orange',
-    label: '暖橙',
+    label: i18n.t('暖橙'),
     lightPrimary: '24 95% 50%',
     lightAccent:  '32 95% 52%',
     lightRing:    '24 95% 50%',
@@ -74,7 +75,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'rose',
-    label: '玫瑰红',
+    label: i18n.t('玫瑰红'),
     lightPrimary: '346 77% 50%',
     lightAccent:  '354 83% 57%',
     lightRing:    '346 77% 50%',
@@ -86,7 +87,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'cyan',
-    label: '青碧',
+    label: i18n.t('青碧'),
     lightPrimary: '192 90% 40%',
     lightAccent:  '186 88% 44%',
     lightRing:    '192 90% 40%',
@@ -99,7 +100,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   // ── 新增色 ──────────────────────────────────────────────────────────────
   {
     id: 'indigo',
-    label: '靛蓝',
+    label: i18n.t('靛蓝'),
     lightPrimary: '239 84% 58%',
     lightAccent:  '245 88% 64%',
     lightRing:    '239 84% 58%',
@@ -111,7 +112,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'sky',
-    label: '天空蓝',
+    label: i18n.t('天空蓝'),
     lightPrimary: '199 89% 46%',
     lightAccent:  '204 94% 50%',
     lightRing:    '199 89% 46%',
@@ -123,7 +124,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'emerald',
-    label: '祖母绿',
+    label: i18n.t('祖母绿'),
     lightPrimary: '160 84% 36%',
     lightAccent:  '166 90% 38%',
     lightRing:    '160 84% 36%',
@@ -135,7 +136,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'teal',
-    label: '青绿',
+    label: i18n.t('青绿'),
     lightPrimary: '174 72% 38%',
     lightAccent:  '178 76% 40%',
     lightRing:    '174 72% 38%',
@@ -147,7 +148,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'amber',
-    label: '琥珀',
+    label: i18n.t('琥珀'),
     lightPrimary: '38 92% 48%',
     lightAccent:  '45 96% 50%',
     lightRing:    '38 92% 48%',
@@ -159,7 +160,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'pink',
-    label: '樱花粉',
+    label: i18n.t('樱花粉'),
     lightPrimary: '330 81% 54%',
     lightAccent:  '336 84% 58%',
     lightRing:    '330 81% 54%',
@@ -171,7 +172,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'violet',
-    label: '薰衣草',
+    label: i18n.t('薰衣草'),
     lightPrimary: '280 68% 56%',
     lightAccent:  '275 72% 62%',
     lightRing:    '280 68% 56%',
@@ -183,7 +184,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'gold',
-    label: '金色',
+    label: i18n.t('金色'),
     lightPrimary: '43 96% 42%',
     lightAccent:  '48 98% 46%',
     lightRing:    '43 96% 42%',
@@ -196,7 +197,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   // ── 扩展色 ──────────────────────────────────────────────────────────────
   {
     id: 'coral',
-    label: '珊瑚橙',
+    label: i18n.t('珊瑚橙'),
     lightPrimary: '16 88% 50%',
     lightAccent:  '22 92% 54%',
     lightRing:    '16 88% 50%',
@@ -208,7 +209,7 @@ export const ACCENT_SCHEMES: AccentScheme[] = [
   },
   {
     id: 'lime',
-    label: '荧光绿',
+    label: i18n.t('荧光绿'),
     lightPrimary: '82 66% 38%',
     lightAccent:  '90 70% 40%',
     lightRing:    '82 66% 38%',

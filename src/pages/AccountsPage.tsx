@@ -38,6 +38,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { SavedAccount } from '@/types/types';
+import i18n from "@/i18n";
 
 export default function AccountsPage() {
   const navigate = useNavigate();
@@ -50,15 +51,15 @@ export default function AccountsPage() {
   const [deleteTarget, setDeleteTarget] = useState<SavedAccount | null>(null);
 
   const handleAdd = async () => {
-    if (!newToken.trim()) { toast.error('请输入 Token'); return; }
+    if (!newToken.trim()) { toast.error(i18n.t('请输入 Token')); return; }
     setAdding(true);
     try {
       await login(newToken.trim());
-      toast.success('账号添加成功');
+      toast.success(i18n.t('账号添加成功'));
       setAddOpen(false);
       setNewToken('');
     } catch {
-      toast.error('Token 无效，请检查后重试');
+      toast.error(i18n.t('Token 无效，请检查后重试'));
     } finally {
       setAdding(false);
     }
@@ -72,7 +73,7 @@ export default function AccountsPage() {
       toast.success(`已切换到 ${acc.user.login}`);
       navigate('/');
     } catch {
-      toast.error('切换失败，Token 可能已失效');
+      toast.error(i18n.t('切换失败，Token 可能已失效'));
     } finally {
       setSwitching(null);
     }
@@ -80,7 +81,7 @@ export default function AccountsPage() {
 
   const handleRemove = (acc: SavedAccount) => {
     if (acc.token === token) {
-      toast.error('无法删除当前使用的账号，请先切换到其他账号');
+      toast.error(i18n.t('无法删除当前使用的账号，请先切换到其他账号'));
       return;
     }
     setDeleteTarget(acc);
@@ -98,23 +99,21 @@ export default function AccountsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <Users className="w-5 h-5 text-primary" />
-          账号管理
-        </h1>
+          {i18n.t('账号管理')}</h1>
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger asChild>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
               <Plus className="w-4 h-4 mr-2" />
-              添加账号
-            </Button>
+              {i18n.t('添加账号')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-md bg-card border-border">
             <DialogHeader>
-              <DialogTitle className="text-foreground">添加 GitHub 账号</DialogTitle>
+              <DialogTitle className="text-foreground">{i18n.t('添加 GitHub 账号')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="bg-secondary/50 border border-border rounded-lg p-3 text-xs text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5 text-warning" />Token 安全提示</p>
-                <p>请使用 GitHub Settings → Developer settings → Personal access tokens 中生成的 Token。Token 仅存储在本地浏览器中。</p>
+                <p className="font-medium text-foreground flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5 text-warning" />{i18n.t('Token 安全提示')}</p>
+                <p>{i18n.t('请使用 GitHub Settings → Developer settings → Personal access tokens 中生成的 Token。Token 仅存储在本地浏览器中。')}</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-normal text-foreground">Personal Access Token *</Label>
@@ -140,11 +139,10 @@ export default function AccountsPage() {
               </div>
               <div className="flex gap-3">
                 <Button variant="ghost" className="flex-1 border border-border text-muted-foreground hover:bg-secondary" onClick={() => { setAddOpen(false); setNewToken(''); }}>
-                  <X className="w-4 h-4 mr-2" />取消
-                </Button>
+                  <X className="w-4 h-4 mr-2" />{i18n.t('取消')}</Button>
                 <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleAdd} disabled={adding || !newToken.trim()}>
                   <LogIn className="w-4 h-4 mr-2" />
-                  {adding ? '验证中...' : '添加并登录'}
+                  {adding ? i18n.t('验证中...') : i18n.t('添加并登录')}
                 </Button>
               </div>
             </div>
@@ -155,8 +153,8 @@ export default function AccountsPage() {
       {savedAccounts.length === 0 ? (
         <div className="bg-card border border-border rounded-lg py-16 text-center">
           <Users className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-          <p className="text-foreground font-medium">暂无已保存的账号</p>
-          <p className="text-sm text-muted-foreground mt-1">点击"添加账号"开始管理多个 GitHub 账号</p>
+          <p className="text-foreground font-medium">{i18n.t('暂无已保存的账号')}</p>
+          <p className="text-sm text-muted-foreground mt-1">{i18n.t('点击"添加账号"开始管理多个 GitHub 账号')}</p>
         </div>
       ) : (
         <div className="bg-card border border-border rounded-lg overflow-hidden divide-y divide-border">
@@ -174,8 +172,7 @@ export default function AccountsPage() {
                     <span className="text-sm font-medium text-foreground">{acc.user.login}</span>
                     {isCurrent && (
                       <Badge className="bg-primary/10 text-primary border-primary/30 text-xs flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" />当前账号
-                      </Badge>
+                        <CheckCircle2 className="w-3 h-3" />{i18n.t('当前账号')}</Badge>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">{acc.user.name || acc.user.login}</p>
@@ -193,9 +190,9 @@ export default function AccountsPage() {
                       disabled={!!switching}
                     >
                       {isSwitching ? (
-                        <><span className="w-3 h-3 rounded-full border-2 border-primary border-t-transparent animate-spin mr-1.5" />切换中</>
+                        <><span className="w-3 h-3 rounded-full border-2 border-primary border-t-transparent animate-spin mr-1.5" />{i18n.t('切换中')}</>
                       ) : (
-                        <><LogIn className="w-3.5 h-3.5 mr-1.5" />切换</>
+                        <><LogIn className="w-3.5 h-3.5 mr-1.5" />{i18n.t('切换')}</>
                       )}
                     </Button>
                   )}
@@ -204,7 +201,7 @@ export default function AccountsPage() {
                     size="icon"
                     className="w-8 h-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={() => handleRemove(acc)}
-                    title={isCurrent ? '无法删除当前账号' : '删除账号'}
+                    title={isCurrent ? i18n.t('无法删除当前账号') : i18n.t('删除账号')}
                     disabled={isCurrent}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -220,7 +217,7 @@ export default function AccountsPage() {
       {user && (
         <div className="bg-card border border-border rounded-lg p-4 flex items-center gap-3">
           <div className="flex-1 min-w-0">
-            <p className="text-sm text-muted-foreground">当前已登录为 <span className="text-foreground font-medium">{user.login}</span></p>
+            <p className="text-sm text-muted-foreground">{i18n.t('当前已登录为')}<span className="text-foreground font-medium">{user.login}</span></p>
           </div>
           <Button
             variant="ghost"
@@ -228,24 +225,21 @@ export default function AccountsPage() {
             className="border border-destructive/40 text-destructive hover:bg-destructive/10 h-8 shrink-0"
             onClick={() => { logout(); navigate('/login'); }}
           >
-            退出登录
-          </Button>
+            {i18n.t('退出登录')}</Button>
         </div>
       )}
 
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">确认删除账号</AlertDialogTitle>
+            <AlertDialogTitle className="text-foreground">{i18n.t('确认删除账号')}</AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
-              将从本地删除账号 <strong className="text-foreground">{deleteTarget?.user.login}</strong> 的 Token 记录，此操作不可撤销。
-            </AlertDialogDescription>
+              {i18n.t('将从本地删除账号')}<strong className="text-foreground">{deleteTarget?.user.login}</strong> {i18n.t('的 Token 记录，此操作不可撤销。')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-secondary">取消</AlertDialogCancel>
+            <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
             <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={confirmRemove}>
-              确认删除
-            </AlertDialogAction>
+              {i18n.t('确认删除')}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

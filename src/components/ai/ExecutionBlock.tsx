@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Message } from './aiTypes';
+import i18n from "@/i18n";
 
 // ── 每种气泡类型对应的小图标，用于折叠摘要行 ─────────────────────────────────
 function BubbleIcon({ type, className }: { type: Message['bubbleType']; className?: string }) {
@@ -68,7 +69,7 @@ function ToolRow({ msg }: { msg: Message }) {
             'font-medium truncate flex-1',
             (isRunning || isQueued) ? 'text-foreground/80' : isBlocked ? 'text-yellow-700 dark:text-yellow-500' : isFail ? 'text-destructive' : 'text-foreground/70',
           )}>
-            {msg.toolLabel || msg.toolName || '工具调用'}
+            {msg.toolLabel || msg.toolName || i18n.t('工具调用')}
           </span>
           {msg.toolHint && (
             <span className="text-muted-foreground/50 truncate max-w-[100px] hidden sm:block text-[11px]">
@@ -123,7 +124,7 @@ function ThinkingRow({ msg }: { msg: Message }) {
             ? <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />
             : <CheckCircle2 className="w-3 h-3 text-primary/50 shrink-0" />}
           <span className={cn('font-medium shrink-0', isThinking ? 'text-muted-foreground' : 'text-muted-foreground/70')}>
-            {isThinking ? '思考中…' : '思考完成'}
+            {isThinking ? i18n.t('思考中…') : i18n.t('思考完成')}
           </span>
           {!expanded && preview && (
             <span className="text-muted-foreground/40 truncate flex-1 italic hidden sm:block">
@@ -169,9 +170,9 @@ function StepRow({ msg, toolMsgs }: { msg: Message; toolMsgs: Message[] }) {
           'font-medium truncate flex-1',
           msg.streaming ? 'text-primary' : 'text-foreground/70',
         )}>
-          {msg.stepTitle ?? '执行步骤'}
+          {msg.stepTitle ?? i18n.t('执行步骤')}
         </span>
-        {msg.streaming && <span className="text-[10px] text-primary/70 shrink-0 animate-pulse">进行中…</span>}
+        {msg.streaming && <span className="text-[10px] text-primary/70 shrink-0 animate-pulse">{i18n.t('进行中…')}</span>}
         {stepDone && <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />}
       </div>
       {/* 工具子行 */}
@@ -213,7 +214,7 @@ export default function ExecutionBlock({ msgs, streaming }: ExecutionBlockProps)
   const summaryParts: string[] = [];
   if (stepCount > 0) summaryParts.push(`${stepCount} 步`);
   if (toolCount > 0) summaryParts.push(`${toolCount} 个工具`);
-  if (hasThinking) summaryParts.push('思考');
+  if (hasThinking) summaryParts.push(i18n.t('思考'));
   const summary = summaryParts.join(' · ');
 
   // ── 构建渲染树：step 与其紧跟的 tool 绑定在一起 ─────────────────────────
@@ -289,7 +290,7 @@ export default function ExecutionBlock({ msgs, streaming }: ExecutionBlockProps)
             'font-medium text-xs flex-1 truncate',
             streaming ? 'text-primary' : 'text-foreground/70',
           )}>
-            {streaming ? '执行中…' : hasError ? '执行出错' : '执行完成'}
+            {streaming ? i18n.t('执行中…') : hasError ? i18n.t('执行出错') : i18n.t('执行完成')}
           </span>
 
           {/* 摘要标签 */}
@@ -300,7 +301,7 @@ export default function ExecutionBlock({ msgs, streaming }: ExecutionBlockProps)
           )}
 
           {streaming && (
-            <span className="text-[10px] text-primary/70 shrink-0 animate-pulse">进行中…</span>
+            <span className="text-[10px] text-primary/70 shrink-0 animate-pulse">{i18n.t('进行中…')}</span>
           )}
 
           {/* 展开/折叠箭头 */}

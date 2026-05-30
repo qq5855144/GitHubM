@@ -5,6 +5,7 @@
 import { useState, useCallback } from 'react';
 import { Copy, Check, GitMerge, ChevronDown, ChevronRight, FileCode2 } from 'lucide-react';
 import { cn, copyToClipboard } from '@/lib/utils';
+import i18n from "@/i18n";
 
 // ── 类型 ─────────────────────────────────────────────────────────────────────
 
@@ -157,7 +158,7 @@ function DiffFileBlock({ file, onApply }: DiffFileBlockProps) {
           <button
             onClick={handleCopy}
             className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            title="复制 Diff"
+            title={i18n.t('复制 Diff')}
           >
             {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
           </button>
@@ -165,11 +166,10 @@ function DiffFileBlock({ file, onApply }: DiffFileBlockProps) {
             <button
               onClick={() => onApply(displayPath)}
               className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-sans font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
-              title="让 AI 将此修改应用到仓库"
+              title={i18n.t('让 AI 将此修改应用到仓库')}
             >
               <GitMerge className="w-3 h-3" />
-              应用
-            </button>
+              {i18n.t('应用')}</button>
           )}
         </div>
       </div>

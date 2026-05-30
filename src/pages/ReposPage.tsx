@@ -89,6 +89,7 @@ import { toast } from 'sonner';
 import { useDebounce } from '@/hooks/use-debounce';
 import { pageCache } from '@/lib/page-cache';
 import { copyToClipboard } from '@/lib/utils';
+import i18n from "@/i18n";
 
 // 仓库右键上下文菜单
 // ContextMenu 菜单内容（不含任何弹窗，只触发回调）
@@ -110,23 +111,23 @@ function RepoContextMenu({ repo, onDeleteRequest, onDeleteSuccess }: {
         toast.success(`已为 ${repo.name} 加 Star ⭐`);
       }
     } catch {
-      toast.error('操作失败');
+      toast.error(i18n.t('操作失败'));
     }
   };
 
   const handleFork = async () => {
     try {
-      toast.info('正在 Fork 仓库...');
+      toast.info(i18n.t('正在 Fork 仓库...'));
       await forkRepo(repo.owner.login, repo.name);
-      toast.success(`Fork 成功！`);
+      toast.success(i18n.t('Fork 成功！'));
     } catch {
-      toast.error('Fork 失败');
+      toast.error(i18n.t('Fork 失败'));
     }
   };
 
   const handleCopyUrl = () => {
     copyToClipboard(repo.clone_url || repo.html_url);
-    toast.success('仓库地址已复制');
+    toast.success(i18n.t('仓库地址已复制'));
   };
 
   // 仅渲染菜单内容，AlertDialog 由外部（ContextMenu 树之外）负责渲染
@@ -135,47 +136,37 @@ function RepoContextMenu({ repo, onDeleteRequest, onDeleteSuccess }: {
     <ContextMenuContent className="bg-popover border-border w-52">
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => navigate(`/repos/${repo.full_name}`)}>
-        <BookOpen className="w-3.5 h-3.5 mr-2" />查看仓库详情
-      </ContextMenuItem>
+        <BookOpen className="w-3.5 h-3.5 mr-2" />{i18n.t('查看仓库详情')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => navigate(`/repos/${repo.full_name}/code`)}>
-        <Code2 className="w-3.5 h-3.5 mr-2" />浏览代码
-      </ContextMenuItem>
+        <Code2 className="w-3.5 h-3.5 mr-2" />{i18n.t('浏览代码')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => navigate(`/repos/${repo.full_name}/commits/${repo.default_branch}`)}>
-        <GitBranch className="w-3.5 h-3.5 mr-2" />查看提交记录
-      </ContextMenuItem>
+        <GitBranch className="w-3.5 h-3.5 mr-2" />{i18n.t('查看提交记录')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => navigate(`/repos/${repo.full_name}/issues`)}>
-        <AlertCircle className="w-3.5 h-3.5 mr-2" />查看 Issues
-      </ContextMenuItem>
+        <AlertCircle className="w-3.5 h-3.5 mr-2" />{i18n.t('查看 Issues')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => navigate(`/repos/${repo.full_name}/pulls`)}>
-        <GitPullRequest className="w-3.5 h-3.5 mr-2" />查看 Pull Requests
-      </ContextMenuItem>
+        <GitPullRequest className="w-3.5 h-3.5 mr-2" />{i18n.t('查看 Pull Requests')}</ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleToggleStar}>
-        <Star className="w-3.5 h-3.5 mr-2" />Star / 取消 Star
-      </ContextMenuItem>
+        <Star className="w-3.5 h-3.5 mr-2" />{i18n.t('Star / 取消 Star')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleFork}>
-        <GitFork className="w-3.5 h-3.5 mr-2" />Fork 仓库
-      </ContextMenuItem>
+        <GitFork className="w-3.5 h-3.5 mr-2" />{i18n.t('Fork 仓库')}</ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleCopyUrl}>
-        <Copy className="w-3.5 h-3.5 mr-2" />复制仓库地址
-      </ContextMenuItem>
+        <Copy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制仓库地址')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm" asChild>
         <a href={repo.html_url} target="_blank" rel="noopener noreferrer">
-          <ExternalLink className="w-3.5 h-3.5 mr-2" />在 GitHub 中打开
-        </a>
+          <ExternalLink className="w-3.5 h-3.5 mr-2" />{i18n.t('在 GitHub 中打开')}</a>
       </ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem
         className="text-destructive cursor-pointer text-sm focus:text-destructive"
         onClick={onDeleteRequest}
       >
-        <Trash2 className="w-3.5 h-3.5 mr-2" />删除仓库
-      </ContextMenuItem>
+        <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除仓库')}</ContextMenuItem>
     </ContextMenuContent>
   );
 }
@@ -198,7 +189,7 @@ function RepoDeleteDialog({ repo, open, onOpenChange, onDeleteSuccess }: {
 
   const handleDelete = async () => {
     if (!repo) return;
-    if (confirmName !== repo.name) { toast.error('仓库名称不一致'); return; }
+    if (confirmName !== repo.name) { toast.error(i18n.t('仓库名称不一致')); return; }
     setDeleting(true);
     try {
       await deleteRepo(repo.owner.login, repo.name);
@@ -206,7 +197,7 @@ function RepoDeleteDialog({ repo, open, onOpenChange, onDeleteSuccess }: {
       handleOpenChange(false);
       onDeleteSuccess(repo.name);
     } catch {
-      toast.error('删除失败，请确认你有足够权限');
+      toast.error(i18n.t('删除失败，请确认你有足够权限'));
     } finally {
       setDeleting(false);
     }
@@ -217,18 +208,16 @@ function RepoDeleteDialog({ repo, open, onOpenChange, onDeleteSuccess }: {
       <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-foreground flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-destructive" />删除仓库
-          </AlertDialogTitle>
+            <AlertTriangle className="w-4 h-4 text-destructive" />{i18n.t('删除仓库')}</AlertDialogTitle>
           <AlertDialogDescription className="text-muted-foreground text-sm space-y-2">
-            <span>此操作将永久删除 </span>
+            <span>{i18n.t('此操作将永久删除')}</span>
             <code className="font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded text-xs">{repo?.full_name}</code>
-            <span>，包括所有代码、Issues、PR 等，且不可恢复。</span>
+            <span>{i18n.t('，包括所有代码、Issues、PR 等，且不可恢复。')}</span>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="px-1 py-2 space-y-1.5">
           <Label className="text-sm font-normal text-foreground">
-            请输入仓库名称 <code className="font-mono bg-secondary px-1 rounded text-xs">{repo?.name}</code> 确认删除
-          </Label>
+            {i18n.t('请输入仓库名称')}<code className="font-mono bg-secondary px-1 rounded text-xs">{repo?.name}</code> {i18n.t('确认删除')}</Label>
           <Input
             value={confirmName}
             onChange={(e) => setConfirmName(e.target.value)}
@@ -237,13 +226,13 @@ function RepoDeleteDialog({ repo, open, onOpenChange, onDeleteSuccess }: {
           />
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel className="border-border hover:bg-secondary">取消</AlertDialogCancel>
+          <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
           <AlertDialogAction
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={handleDelete}
             disabled={deleting || confirmName !== (repo?.name ?? '')}
           >
-            {deleting ? '删除中...' : '确认删除'}
+            {deleting ? i18n.t('删除中...') : i18n.t('确认删除')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -265,20 +254,20 @@ function RepoCardDropdown({ repo, onDeleteRequest, onDeleteSuccess }: { repo: Gi
         await starRepo(repo.owner.login, repo.name);
         toast.success(`已为 ${repo.name} 加 Star ⭐`);
       }
-    } catch { toast.error('操作失败'); }
+    } catch { toast.error(i18n.t('操作失败')); }
   };
 
   const handleFork = async () => {
     try {
-      toast.info('正在 Fork...');
+      toast.info(i18n.t('正在 Fork...'));
       await forkRepo(repo.owner.login, repo.name);
-      toast.success('Fork 成功！');
-    } catch { toast.error('Fork 失败'); }
+      toast.success(i18n.t('Fork 成功！'));
+    } catch { toast.error(i18n.t('Fork 失败')); }
   };
 
   const handleCopyUrl = () => {
     copyToClipboard(repo.clone_url || repo.html_url);
-    toast.success('仓库地址已复制');
+    toast.success(i18n.t('仓库地址已复制'));
   };
 
   return (
@@ -296,44 +285,35 @@ function RepoCardDropdown({ repo, onDeleteRequest, onDeleteSuccess }: { repo: Gi
       <DropdownMenuContent align="end" className="bg-popover border-border w-52">
         <DropdownMenuItem className="text-foreground cursor-pointer text-sm"
           onClick={() => navigate(`/repos/${repo.full_name}`)}>
-          <BookOpen className="w-3.5 h-3.5 mr-2" />查看仓库详情
-        </DropdownMenuItem>
+          <BookOpen className="w-3.5 h-3.5 mr-2" />{i18n.t('查看仓库详情')}</DropdownMenuItem>
         <DropdownMenuItem className="text-foreground cursor-pointer text-sm"
           onClick={() => navigate(`/repos/${repo.full_name}/code`)}>
-          <Code2 className="w-3.5 h-3.5 mr-2" />浏览代码
-        </DropdownMenuItem>
+          <Code2 className="w-3.5 h-3.5 mr-2" />{i18n.t('浏览代码')}</DropdownMenuItem>
         <DropdownMenuItem className="text-foreground cursor-pointer text-sm"
           onClick={() => navigate(`/repos/${repo.full_name}/issues`)}>
-          <AlertCircle className="w-3.5 h-3.5 mr-2" />查看 Issues
-        </DropdownMenuItem>
+          <AlertCircle className="w-3.5 h-3.5 mr-2" />{i18n.t('查看 Issues')}</DropdownMenuItem>
         <DropdownMenuItem className="text-foreground cursor-pointer text-sm"
           onClick={() => navigate(`/repos/${repo.full_name}/pulls`)}>
-          <GitPullRequest className="w-3.5 h-3.5 mr-2" />查看 Pull Requests
-        </DropdownMenuItem>
+          <GitPullRequest className="w-3.5 h-3.5 mr-2" />{i18n.t('查看 Pull Requests')}</DropdownMenuItem>
         <DropdownMenuSeparator className="bg-border" />
         <DropdownMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleToggleStar}>
-          <Star className="w-3.5 h-3.5 mr-2" />Star / 取消 Star
-        </DropdownMenuItem>
+          <Star className="w-3.5 h-3.5 mr-2" />{i18n.t('Star / 取消 Star')}</DropdownMenuItem>
         <DropdownMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleFork}>
-          <GitFork className="w-3.5 h-3.5 mr-2" />Fork 仓库
-        </DropdownMenuItem>
+          <GitFork className="w-3.5 h-3.5 mr-2" />{i18n.t('Fork 仓库')}</DropdownMenuItem>
         <DropdownMenuSeparator className="bg-border" />
         <DropdownMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleCopyUrl}>
-          <Copy className="w-3.5 h-3.5 mr-2" />复制仓库地址
-        </DropdownMenuItem>
+          <Copy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制仓库地址')}</DropdownMenuItem>
         <DropdownMenuItem className="text-foreground cursor-pointer text-sm" asChild>
           <a href={repo.html_url} target="_blank" rel="noopener noreferrer"
              onClick={(e) => e.stopPropagation()}>
-            <ExternalLink className="w-3.5 h-3.5 mr-2" />在 GitHub 中打开
-          </a>
+            <ExternalLink className="w-3.5 h-3.5 mr-2" />{i18n.t('在 GitHub 中打开')}</a>
         </DropdownMenuItem>
         <DropdownMenuSeparator className="bg-border" />
         <DropdownMenuItem
           className="text-destructive cursor-pointer text-sm focus:text-destructive"
           onClick={(e) => { e.stopPropagation(); onDeleteRequest(); }}
         >
-          <Trash2 className="w-3.5 h-3.5 mr-2" />删除仓库
-        </DropdownMenuItem>
+          <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除仓库')}</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -403,7 +383,7 @@ export default function ReposPage() {
       setHasNextPage(result.hasNextPage);
       setPage(pageNum);
     } catch (err) {
-      toast.error('加载仓库列表失败');
+      toast.error(i18n.t('加载仓库列表失败'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -435,7 +415,7 @@ export default function ReposPage() {
 
   const handleCreateRepo = async () => {
     if (!newRepoName.trim()) {
-      toast.error('请输入仓库名称');
+      toast.error(i18n.t('请输入仓库名称'));
       return;
     }
     setCreating(true);
@@ -459,7 +439,7 @@ export default function ReposPage() {
       pageCache.invalidate('repos:'); // 创建后使仓库列表缓存失效
       loadRepos(1, false, true);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '创建仓库失败');
+      toast.error(err instanceof Error ? err.message : i18n.t('创建仓库失败'));
     } finally {
       setCreating(false);
     }
@@ -470,8 +450,8 @@ export default function ReposPage() {
       {/* 页头 */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-foreground">仓库</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">管理您的 GitHub 仓库</p>
+          <h1 className="text-xl font-bold text-foreground">{i18n.t('仓库')}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{i18n.t('管理您的 GitHub 仓库')}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button
@@ -486,17 +466,17 @@ export default function ReposPage() {
             <DialogTrigger asChild>
               <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
                 <Plus className="w-4 h-4 mr-2" />
-                <span className="hidden md:inline">新建仓库</span>
-                <span className="md:hidden">新建</span>
+                <span className="hidden md:inline">{i18n.t('新建仓库')}</span>
+                <span className="md:hidden">{i18n.t('新建')}</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
               <DialogHeader>
-                <DialogTitle className="text-foreground">创建新仓库</DialogTitle>
+                <DialogTitle className="text-foreground">{i18n.t('创建新仓库')}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-2">
                 <div className="space-y-1">
-                  <Label className="text-sm font-normal text-foreground">仓库名称 *</Label>
+                  <Label className="text-sm font-normal text-foreground">{i18n.t('仓库名称 *')}</Label>
                   <Input
                     value={newRepoName}
                     onChange={(e) => setNewRepoName(e.target.value)}
@@ -505,39 +485,39 @@ export default function ReposPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-sm font-normal text-foreground">描述（可选）</Label>
+                  <Label className="text-sm font-normal text-foreground">{i18n.t('描述（可选）')}</Label>
                   <Textarea
                     value={newRepoDesc}
                     onChange={(e) => setNewRepoDesc(e.target.value)}
-                    placeholder="项目简介..."
+                    placeholder={i18n.t('项目简介...')}
                     className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none"
                     rows={2}
                   />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label className="text-sm font-normal text-foreground">私有仓库</Label>
-                    <p className="text-xs text-muted-foreground">只有您有权访问此仓库</p>
+                    <Label className="text-sm font-normal text-foreground">{i18n.t('私有仓库')}</Label>
+                    <p className="text-xs text-muted-foreground">{i18n.t('只有您有权访问此仓库')}</p>
                   </div>
                   <Switch checked={newRepoPrivate} onCheckedChange={setNewRepoPrivate} />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label className="text-sm font-normal text-foreground">初始化 README</Label>
-                    <p className="text-xs text-muted-foreground">自动创建 README 文件</p>
+                    <Label className="text-sm font-normal text-foreground">{i18n.t('初始化 README')}</Label>
+                    <p className="text-xs text-muted-foreground">{i18n.t('自动创建 README 文件')}</p>
                   </div>
                   <Switch checked={newRepoAutoInit} onCheckedChange={setNewRepoAutoInit} />
                 </div>
                 {newRepoAutoInit && (
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-sm font-normal text-foreground">.gitignore 模板</Label>
+                      <Label className="text-sm font-normal text-foreground">{i18n.t('.gitignore 模板')}</Label>
                       <Select value={newRepoGitignore} onValueChange={setNewRepoGitignore}>
                         <SelectTrigger className="bg-secondary border-border text-foreground h-9">
-                          <SelectValue placeholder="选择模板" />
+                          <SelectValue placeholder={i18n.t('选择模板')} />
                         </SelectTrigger>
                         <SelectContent className="bg-popover border-border max-h-48">
-                          <SelectItem value="none" className="text-foreground">无</SelectItem>
+                          <SelectItem value="none" className="text-foreground">{i18n.t('无')}</SelectItem>
                           {gitignoreTemplates.map((t) => (
                             <SelectItem key={t} value={t} className="text-foreground">{t}</SelectItem>
                           ))}
@@ -545,13 +525,13 @@ export default function ReposPage() {
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-sm font-normal text-foreground">许可证</Label>
+                      <Label className="text-sm font-normal text-foreground">{i18n.t('许可证')}</Label>
                       <Select value={newRepoLicense} onValueChange={setNewRepoLicense}>
                         <SelectTrigger className="bg-secondary border-border text-foreground h-9">
-                          <SelectValue placeholder="选择许可证" />
+                          <SelectValue placeholder={i18n.t('选择许可证')} />
                         </SelectTrigger>
                         <SelectContent className="bg-popover border-border max-h-48">
-                          <SelectItem value="none" className="text-foreground">无</SelectItem>
+                          <SelectItem value="none" className="text-foreground">{i18n.t('无')}</SelectItem>
                           {licenses.map((l) => (
                             <SelectItem key={l.key} value={l.key} className="text-foreground">{l.name}</SelectItem>
                           ))}
@@ -566,14 +546,13 @@ export default function ReposPage() {
                     className="flex-1 border-border hover:bg-secondary"
                     onClick={() => setCreateDialogOpen(false)}
                   >
-                    取消
-                  </Button>
+                    {i18n.t('取消')}</Button>
                   <Button
                     className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                     onClick={handleCreateRepo}
                     disabled={creating || !newRepoName.trim()}
                   >
-                    {creating ? '创建中...' : '创建仓库'}
+                    {creating ? i18n.t('创建中...') : i18n.t('创建仓库')}
                   </Button>
                 </div>
               </div>
@@ -589,7 +568,7 @@ export default function ReposPage() {
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索仓库..."
+            placeholder={i18n.t('搜索仓库...')}
             className="pl-9 bg-secondary border-border text-foreground placeholder:text-muted-foreground"
           />
         </div>
@@ -600,11 +579,11 @@ export default function ReposPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border">
-              <SelectItem value="all" className="text-foreground">全部</SelectItem>
-              <SelectItem value="owner" className="text-foreground">我的</SelectItem>
-              <SelectItem value="public" className="text-foreground">公开</SelectItem>
-              <SelectItem value="private" className="text-foreground">私有</SelectItem>
-              <SelectItem value="member" className="text-foreground">参与的</SelectItem>
+              <SelectItem value="all" className="text-foreground">{i18n.t('全部')}</SelectItem>
+              <SelectItem value="owner" className="text-foreground">{i18n.t('我的')}</SelectItem>
+              <SelectItem value="public" className="text-foreground">{i18n.t('公开')}</SelectItem>
+              <SelectItem value="private" className="text-foreground">{i18n.t('私有')}</SelectItem>
+              <SelectItem value="member" className="text-foreground">{i18n.t('参与的')}</SelectItem>
             </SelectContent>
           </Select>
           <Select value={sortField} onValueChange={(v) => setSortField(v as RepoSortField)}>
@@ -612,10 +591,10 @@ export default function ReposPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border">
-              <SelectItem value="pushed" className="text-foreground">最近推送</SelectItem>
-              <SelectItem value="updated" className="text-foreground">最近更新</SelectItem>
-              <SelectItem value="created" className="text-foreground">创建时间</SelectItem>
-              <SelectItem value="full_name" className="text-foreground">名称</SelectItem>
+              <SelectItem value="pushed" className="text-foreground">{i18n.t('最近推送')}</SelectItem>
+              <SelectItem value="updated" className="text-foreground">{i18n.t('最近更新')}</SelectItem>
+              <SelectItem value="created" className="text-foreground">{i18n.t('创建时间')}</SelectItem>
+              <SelectItem value="full_name" className="text-foreground">{i18n.t('名称')}</SelectItem>
             </SelectContent>
           </Select>
           <Button
@@ -644,9 +623,9 @@ export default function ReposPage() {
         ) : filteredRepos.length === 0 ? (
           <div className="py-16 text-center">
             <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-foreground font-medium">暂无仓库</p>
+            <p className="text-foreground font-medium">{i18n.t('暂无仓库')}</p>
             <p className="text-muted-foreground text-sm mt-1">
-              {searchQuery ? '没有找到匹配的仓库' : '创建您的第一个仓库'}
+              {searchQuery ? i18n.t('没有找到匹配的仓库') : i18n.t('创建您的第一个仓库')}
             </p>
           </div>
         ) : (
@@ -672,9 +651,9 @@ export default function ReposPage() {
                             className="text-xs h-4 px-1.5 border-border text-muted-foreground"
                           >
                             {repo.private ? (
-                              <><Lock className="w-2.5 h-2.5 mr-0.5" />私有</>
+                              <><Lock className="w-2.5 h-2.5 mr-0.5" />{i18n.t('私有')}</>
                             ) : (
-                              <><Globe className="w-2.5 h-2.5 mr-0.5" />公开</>
+                              <><Globe className="w-2.5 h-2.5 mr-0.5" />{i18n.t('公开')}</>
                             )}
                           </Badge>
                           {repo.fork && (
@@ -684,8 +663,7 @@ export default function ReposPage() {
                           )}
                           {repo.archived && (
                             <Badge variant="outline" className="text-xs h-4 px-1.5 border-border text-muted-foreground">
-                              已归档
-                            </Badge>
+                              {i18n.t('已归档')}</Badge>
                           )}
                         </div>
                         {repo.description && (
@@ -770,7 +748,7 @@ export default function ReposPage() {
             onClick={() => loadRepos(page + 1, true)}
             disabled={loadingMore}
           >
-            {loadingMore ? '加载中...' : '加载更多'}
+            {loadingMore ? i18n.t('加载中...') : i18n.t('加载更多')}
           </Button>
         </div>
       )}

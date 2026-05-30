@@ -60,6 +60,8 @@ import {
   Bar,
   BarChart,
 } from 'recharts';
+import { useTranslation } from 'react-i18next';
+import { Globe } from 'lucide-react';
 
 const themeOptions: { value: ThemeMode; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { value: 'light', label: '浅色', Icon: Sun },
@@ -237,6 +239,7 @@ function saveCollapsed(data: Record<string, boolean>) {
 
 // ── 主页面 ───────────────────────────────────────────────────────────────────
 export default function SettingsPage() {
+  const { t, i18n } = useTranslation();
   const { user, rateLimit, login, token, refreshRateLimit } = useAuth();
   const { theme: currentTheme, setTheme, accentSchemeId, setAccentScheme } = useTheme();
 
@@ -408,18 +411,23 @@ export default function SettingsPage() {
     { label: '历史总独立 IP', value: visitSummary.allTimeUv, icon: <Users className="w-4 h-4" />, color: 'text-primary' },
   ];
 
+  const changeLanguage = (lng: string) => {
+    i18n.changeLanguage(lng);
+    localStorage.setItem('app_language', lng);
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-2xl mx-auto">
       <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
         <Settings className="w-5 h-5 text-primary" />
-        设置
+        {t('settings.title')}
       </h1>
 
       {/* 用户信息（不折叠，始终显示） */}
       {user && (
         <div className="bg-card border border-border rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-foreground">账号信息</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t('settings.accountInfo')}</h2>
             <Button
               variant="outline"
               size="sm"
@@ -427,7 +435,7 @@ export default function SettingsPage() {
               onClick={() => setEditOpen(true)}
             >
               <Pencil className="w-3.5 h-3.5" />
-              编辑资料
+              {t('settings.editProfile')}
             </Button>
           </div>
           <div className="flex items-center gap-4">
@@ -445,7 +453,7 @@ export default function SettingsPage() {
                   {user.name || user.login}
                 </span>
                 <Badge variant="outline" className="border-primary/50 text-primary text-xs shrink-0">
-                  已认证
+                  {t('settings.verified')}
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground">@{user.login}</p>
@@ -457,25 +465,25 @@ export default function SettingsPage() {
           <div className="mt-4 grid grid-cols-1 gap-2 text-xs text-muted-foreground border-t border-border pt-4">
             {user.email && (
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground/60 w-14 shrink-0">邮箱</span>
+                <span className="text-muted-foreground/60 w-14 shrink-0">{t('settings.email')}</span>
                 <span className="truncate text-foreground/80">{user.email}</span>
               </div>
             )}
             {user.company && (
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground/60 w-14 shrink-0">公司</span>
+                <span className="text-muted-foreground/60 w-14 shrink-0">{t('settings.company')}</span>
                 <span className="truncate text-foreground/80">{user.company}</span>
               </div>
             )}
             {user.location && (
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground/60 w-14 shrink-0">地区</span>
+                <span className="text-muted-foreground/60 w-14 shrink-0">{t('settings.location')}</span>
                 <span className="truncate text-foreground/80">{user.location}</span>
               </div>
             )}
             {user.blog && (
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground/60 w-14 shrink-0">网站</span>
+                <span className="text-muted-foreground/60 w-14 shrink-0">{t('settings.website')}</span>
                 <a
                   href={user.blog.startsWith('http') ? user.blog : `https://${user.blog}`}
                   target="_blank"
@@ -494,11 +502,11 @@ export default function SettingsPage() {
               </div>
             )}
             <div className="flex items-center gap-3 mt-1 pt-2 border-t border-border/60">
-              <span>{user.public_repos} 个公开仓库</span>
+              <span>{user.public_repos} {t('settings.publicRepos')}</span>
               <span>·</span>
-              <span>{user.followers} 粉丝</span>
+              <span>{user.followers} followers</span>
               <span>·</span>
-              <span>关注 {user.following} 人</span>
+              <span>following {user.following}</span>
             </div>
           </div>
           <div className="mt-3">
@@ -509,32 +517,72 @@ export default function SettingsPage() {
                 className="w-full border border-border text-muted-foreground hover:text-foreground hover:bg-secondary text-xs h-8 gap-1.5"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                查看 GitHub 主页
+                {t('settings.viewGithub')}
               </Button>
             </a>
           </div>
         </div>
       )}
 
-      {/* ── 分组 1：外观 ─────────────────────────────────────────────────── */}
+      {/* ── 分组 1：偏好设置 ─────────────────────────────────────────────────── */}
       <SectionGroup
         id="appearance"
-        title="外观"
-        icon={<Palette className="w-4 h-4" />}
+        title={t('settings.preferences')}
+        icon={<Settings className="w-4 h-4" />}
         collapsed={collapsed['appearance'] ?? true}
         onToggle={toggleSection}
       >
+        {/* 多语言 */}
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
+            <Globe className="w-3.5 h-3.5" />{t('settings.language')}
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => changeLanguage('zh-CN')}
+              className={cn(
+                'flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all',
+                i18n.language === 'zh-CN'
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border bg-secondary/50 text-muted-foreground hover:border-primary/40 hover:bg-secondary'
+              )}
+            >
+              <span className="text-xs font-medium">{t('settings.langZh')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => changeLanguage('en')}
+              className={cn(
+                'flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all',
+                i18n.language === 'en'
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border bg-secondary/50 text-muted-foreground hover:border-primary/40 hover:bg-secondary'
+              )}
+            >
+              <span className="text-xs font-medium">{t('settings.langEn')}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 分隔线 */}
+        <div className="border-t border-border/60 mt-4 mb-2" />
+
         {/* 外观主题 */}
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
-            <Sun className="w-3.5 h-3.5" />外观主题
+            <Sun className="w-3.5 h-3.5" />{t('settings.theme')}
           </p>
           <div className="grid grid-cols-3 gap-3">
-            {themeOptions.map(({ value, label, Icon }) => (
+            {[
+              { value: 'light', label: t('settings.themeLight'), Icon: Sun },
+              { value: 'dark', label: t('settings.themeDark'), Icon: Moon },
+              { value: 'system', label: t('settings.themeSystem'), Icon: Monitor }
+            ].map(({ value, label, Icon }) => (
               <button
                 key={value}
                 type="button"
-                onClick={() => setTheme(value)}
+                onClick={() => setTheme(value as ThemeMode)}
                 className={cn(
                   'flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all',
                   currentTheme === value
@@ -548,7 +596,7 @@ export default function SettingsPage() {
             ))}
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            {currentTheme === 'system' ? '当前跟随系统偏好自动切换主题' : `当前使用${currentTheme === 'dark' ? '深色' : '浅色'}主题`}
+            {currentTheme === 'system' ? t('settings.themeDescSystem') : (currentTheme === 'dark' ? t('settings.themeDescDark') : t('settings.themeDescLight'))}
           </p>
         </div>
 
@@ -558,7 +606,7 @@ export default function SettingsPage() {
         {/* 强调色方案 */}
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
-            <Palette className="w-3.5 h-3.5" />强调色方案
+            <Palette className="w-3.5 h-3.5" />{t('settings.accentScheme')}
           </p>
           <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
             {ACCENT_SCHEMES.map((scheme) => (
@@ -598,7 +646,7 @@ export default function SettingsPage() {
       {/* ── 分组 2：账户与令牌 ──────────────────────────────────────────── */}
       <SectionGroup
         id="account"
-        title="账户与令牌"
+        title={t('settings.accountToken')}
         icon={<Key className="w-4 h-4" />}
         collapsed={collapsed['account'] ?? true}
         onToggle={toggleSection}
@@ -715,7 +763,7 @@ export default function SettingsPage() {
       {/* ── 分组 3：AI 配置 ─────────────────────────────────────────────── */}
       <SectionGroup
         id="ai"
-        title="AI 配置"
+        title={t('settings.aiConfig')}
         icon={<Bot className="w-4 h-4" />}
         collapsed={collapsed['ai'] ?? true}
         onToggle={toggleSection}
@@ -945,7 +993,7 @@ export default function SettingsPage() {
       {/* ── 分组 4：访问统计 ────────────────────────────────────────────── */}
       <SectionGroup
         id="visit"
-        title="访问统计"
+        title={t('settings.visitStats')}
         icon={<TrendingUp className="w-4 h-4" />}
         collapsed={collapsed['visit'] ?? true}
         onToggle={toggleSection}
@@ -1054,14 +1102,14 @@ export default function SettingsPage() {
       {/* ── 分组 5：关于 ─────────────────────────────────────────────── */}
       <SectionGroup
         id="danger"
-        title="关于"
+        title={t('settings.about')}
         icon={<Info className="w-4 h-4" />}
         collapsed={collapsed['danger'] ?? true}
         onToggle={toggleSection}
       >
         {/* 关于 */}
         <div>
-          <p className="text-xs font-medium text-muted-foreground mb-2">关于</p>
+          <p className="text-xs font-medium text-muted-foreground mb-2">{t('settings.about')}</p>
           <div className="space-y-3">
             <div className="space-y-1.5 text-xs text-muted-foreground">
               <p>GitHub 管理器 v{import.meta.env.VITE_APP_VERSION || '1.0.local'}</p>

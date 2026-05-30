@@ -2,13 +2,15 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, ExternalLink, Key } from 'lucide-react';
+import { Eye, EyeOff, ExternalLink, Key, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 
 // 应用 Logo（登录页用）——内联 SVG，无路径依赖，GitHub Pages / file:// 均可正常显示
 function AppLogo({ size = 48 }: { size?: number }) {
@@ -30,6 +32,7 @@ function AppLogo({ size = 48 }: { size?: number }) {
 }
 
 export default function LoginPage() {
+  const { t, i18n } = useTranslation();
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -37,10 +40,15 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  const changeLanguage = (lng: string) => {
+    i18n.changeLanguage(lng);
+    localStorage.setItem('app_language', lng);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token.trim()) {
-      setError('请输入 GitHub 令牌');
+      setError(t('login.errorEmpty'));
       return;
     }
 
@@ -49,27 +57,27 @@ export default function LoginPage() {
 
     try {
       await login(token.trim());
-      toast.success('登录成功！欢迎使用 GitHub 管理器');
+      toast.success(t('login.success'));
       navigate('/');
     } catch (err) {
       const status = (err as Error & { status?: number })?.status;
-      const message = err instanceof Error ? err.message : '登录失败';
+      const message = err instanceof Error ? err.message : 'Login failed';
 
       if (status === 401 || message.includes('Bad credentials') || message.includes('Requires authentication')) {
-        setError('令牌无效或已过期，请重新生成后重试');
+        setError(t('login.errInvalid'));
       } else if (status === 403) {
-        setError('令牌权限不足，请确保令牌包含 repo、user、notifications 权限');
+        setError(t('login.errPerm'));
       } else if (status === 404) {
-        setError('无法获取用户信息，请确认令牌有效');
+        setError(t('login.errFetch'));
       } else if (
         message.includes('Failed to fetch') ||
         message.includes('NetworkError') ||
         message.includes('Network request failed') ||
         !window.navigator.onLine
       ) {
-        setError('网络连接失败，请检查网络后重试');
+        setError(t('login.errNetwork'));
       } else {
-        setError(`登录失败：${message}`);
+        setError(t('login.errFail', { message }));
       }
     } finally {
       setLoading(false);
@@ -77,7 +85,26 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative">
+      {/* 语言切换 */}
+      <div className="absolute top-4 right-4 z-50">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
+              <Globe className="w-5 h-5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => changeLanguage('zh-CN')} className={i18n.language === 'zh-CN' ? 'bg-secondary' : ''}>
+              简体中文
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => changeLanguage('en')} className={i18n.language === 'en' ? 'bg-secondary' : ''}>
+              English
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
       {/* 背景装饰 */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-primary/10 blur-3xl" />
@@ -90,9 +117,9 @@ export default function LoginPage() {
           <div className="flex items-center justify-center mx-auto mb-4">
             <AppLogo size={56} />
           </div>
-          <h1 className="text-2xl font-bold text-foreground text-balance">GitHub 管理器</h1>
+          <h1 className="text-2xl font-bold text-foreground text-balance">{t('login.title')}</h1>
           <p className="text-muted-foreground mt-2 text-sm text-pretty">
-            通过 GitHub Personal Access Token 安全登录
+            {t('login.subtitle')}
           </p>
         </div>
 
@@ -101,7 +128,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="token" className="text-sm font-normal text-foreground">
-                Personal Access Token
+                {t('login.tokenLabel')}
               </Label>
               <div className="relative">
                 <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -111,7 +138,7 @@ export default function LoginPage() {
                   inputMode="text"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                  placeholder={t('login.placeholder')}
                   className="pl-10 pr-10 bg-secondary border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-primary font-mono text-sm"
                   style={showToken ? undefined : { WebkitTextSecurity: 'disc' } as React.CSSProperties}
                   autoComplete="off"
@@ -133,11 +160,11 @@ export default function LoginPage() {
               <Alert variant="destructive" className="border-destructive bg-destructive/10">
                 <AlertDescription className="text-destructive text-sm space-y-1">
                   <p>{error}</p>
-                  {(error.includes('无效') || error.includes('过期')) && (
-                    <p className="text-xs opacity-80">请前往 GitHub → Settings → Developer settings → Personal access tokens 重新生成</p>
+                  {(error.includes('无效') || error.includes('过期') || error.includes('invalid') || error.includes('expired')) && (
+                    <p className="text-xs opacity-80">{t('login.hintInvalid')}</p>
                   )}
-                  {error.includes('权限') && (
-                    <p className="text-xs opacity-80">生成 Token 时请勾选：<code className="bg-destructive/20 px-1 rounded">repo</code> <code className="bg-destructive/20 px-1 rounded">user</code> <code className="bg-destructive/20 px-1 rounded">notifications</code></p>
+                  {(error.includes('权限') || error.includes('permission')) && (
+                    <p className="text-xs opacity-80">{t('login.hintPerm')} <code className="bg-destructive/20 px-1 rounded">repo</code> <code className="bg-destructive/20 px-1 rounded">user</code> <code className="bg-destructive/20 px-1 rounded">notifications</code></p>
                   )}
                 </AlertDescription>
               </Alert>
@@ -151,10 +178,10 @@ export default function LoginPage() {
               {loading ? (
                 <span className="flex items-center gap-2">
                   <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                  验证中...
+                  {t('login.loading')}
                 </span>
               ) : (
-                '登录'
+                t('login.button')
               )}
             </Button>
           </form>
@@ -162,13 +189,13 @@ export default function LoginPage() {
 
         {/* 提示信息 */}
         <div className="mt-4 bg-card border border-border rounded-xl p-4 space-y-3">
-          <h3 className="text-sm font-medium text-foreground">如何获取 Personal Access Token？</h3>
+          <h3 className="text-sm font-medium text-foreground">{t('login.howToTitle')}</h3>
           <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-            <li>登录 GitHub，进入 Settings → Developer Settings</li>
-            <li>选择 Personal access tokens → Tokens (classic)</li>
-            <li>点击 Generate new token</li>
-            <li>选择所需权限：<code className="bg-secondary px-1 rounded text-foreground">repo</code>、<code className="bg-secondary px-1 rounded text-foreground">notifications</code>、<code className="bg-secondary px-1 rounded text-foreground">user</code></li>
-            <li>生成并复制令牌</li>
+            <li>{t('login.howTo1')}</li>
+            <li>{t('login.howTo2')}</li>
+            <li>{t('login.howTo3')}</li>
+            <li>{t('login.howTo4')}</li>
+            <li>{t('login.howTo5')}</li>
           </ol>
           <a
             href="https://github.com/settings/tokens/new"
@@ -177,13 +204,13 @@ export default function LoginPage() {
             className="flex items-center gap-1 text-xs text-primary hover:underline"
           >
             <ExternalLink className="w-3 h-3" />
-            前往 GitHub 创建令牌
+            {t('login.link')}
           </a>
         </div>
 
         {/* 安全说明 */}
         <p className="text-xs text-muted-foreground text-center mt-4 text-pretty">
-          令牌仅保存在本地浏览器中，不会上传至任何服务器
+          {t('login.security')}
         </p>
       </div>
     </div>

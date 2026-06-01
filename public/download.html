@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f0a1e" />
+  <meta name="description" content="GitHubM - 全功能 GitHub 管理面板 & AI 开发助手。管理仓库、Issues、PR，内置 40+ AI 工具，支持 Web & Android。" />
+
+  <title>GitHubM - 全功能 GitHub 管理 & AI 开发助手</title>
+
+  <link rel="icon" type="image/svg+xml" href="./logo.svg" />
+  <link rel="apple-touch-icon" href="./logo.svg" />
+
+  <!-- Font: Inter from Google Fonts for cleaner display -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0f0a1e;
+      --bg2:#1a1030;
+      --card:#1e1438;
+      --border:#2d1f4e;
+      --text:#e2dff0;
+      --muted:#988ab5;
+      --accent:#7c3aed;
+      --accent2:#a78bfa;
+      --gradient:linear-gradient(135deg,#7c3aed,#a78bfa,#6366f1);
+      --gradient2:linear-gradient(135deg,#7c3aed20,#a78bfa10);
+    }
+    html{scroll-behavior:smooth}
+    body{
+      font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      line-height:1.6;
+      overflow-x:hidden;
+      -webkit-font-smoothing:antialiased;
+    }
+
+    /* ── Background Glow ── */
+    body::before{
+      content:'';
+      position:fixed;top:-50%;left:-50%;
+      width:200%;height:200%;
+      background:radial-gradient(ellipse at 30% 0%,#7c3aed20 0%,transparent 50%),
+                 radial-gradient(ellipse at 70% 100%,#6366f120 0%,transparent 50%),
+                 radial-gradient(ellipse at 50% 50%,#a78bfa08 0%,transparent 60%);
+      pointer-events:none;z-index:0;
+    }
+
+    /* ── Container ── */
+    .container{max-width:1200px;margin:0 auto;padding:0 1.5rem;position:relative;z-index:1}
+
+    /* ── Nav ── */
+    nav{
+      position:fixed;top:0;left:0;right:0;z-index:100;
+      backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+      background:#0f0a1ecc;
+      border-bottom:1px solid var(--border);
+    }
+    nav .container{display:flex;align-items:center;justify-content:space-between;height:64px}
+    .nav-brand{display:flex;align-items:center;gap:.75rem;font-weight:700;font-size:1.15rem;color:#fff;text-decoration:none}
+    .nav-brand img{width:32px;height:32px}
+    .nav-links{display:flex;align-items:center;gap:1.5rem}
+    .nav-links a{color:var(--muted);text-decoration:none;font-size:.9rem;transition:color .2s}
+    .nav-links a:hover{color:#fff}
+    .nav-cta{
+      background:var(--accent);color:#fff;
+      padding:.5rem 1.25rem;border-radius:999px;
+      font-weight:600;font-size:.85rem;text-decoration:none;
+      transition:all .2s;
+    }
+    .nav-cta:hover{background:#8b5cf6;transform:scale(1.03)}
+
+    /* ── Hero ── */
+    .hero{
+      padding:8rem 0 5rem;
+      text-align:center;
+      position:relative;z-index:1;
+    }
+    .hero-badge{
+      display:inline-flex;align-items:center;gap:.4rem;
+      background:var(--card);border:1px solid var(--border);
+      border-radius:999px;padding:.35rem 1rem;
+      font-size:.8rem;color:var(--muted);margin-bottom:1.5rem;
+    }
+    .hero-badge .dot{width:7px;height:7px;border-radius:50%;background:#22c55e;animation:pulse-dot 2s infinite}
+    @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}
+
+    .hero-icon{
+      width:96px;height:96px;
+      border-radius:24px;
+      background:var(--gradient2);
+      display:inline-flex;align-items:center;justify-content:center;
+      margin-bottom:1.5rem;
+      box-shadow:0 0 60px #7c3aed30;
+    }
+    .hero-icon img{width:52px;height:52px}
+
+    h1{
+      font-size:clamp(2rem,5vw,3.5rem);
+      font-weight:900;line-height:1.15;
+      letter-spacing:-.02em;
+      margin-bottom:1rem;
+    }
+    h1 .gradient{
+      background:var(--gradient);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    h1 .white{color:#fff}
+
+    .hero-desc{
+      font-size:1.1rem;color:var(--muted);
+      max-width:600px;margin:0 auto 2.5rem;
+      line-height:1.7;
+    }
+
+    .hero-actions{
+      display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;align-items:center;
+    }
+    .btn{
+      display:inline-flex;align-items:center;gap:.5rem;
+      padding:.85rem 2rem;border-radius:999px;
+      font-weight:600;font-size:.95rem;
+      text-decoration:none;cursor:pointer;
+      transition:all .25s;
+      border:none;
+    }
+    .btn-primary{
+      background:var(--accent);color:#fff;
+      box-shadow:0 4px 24px #7c3aed40;
+    }
+    .btn-primary:hover{background:#8b5cf6;transform:translateY(-2px);box-shadow:0 8px 32px #7c3aed60}
+    .btn-outline{
+      background:transparent;color:#fff;
+      border:1px solid var(--border);
+    }
+    .btn-outline:hover{background:var(--card);border-color:var(--accent)}
+    .btn svg{width:20px;height:20px;flex-shrink:0}
+
+    .hero-meta{
+      margin-top:1.5rem;
+      font-size:.85rem;color:var(--muted);
+      display:flex;gap:1.5rem;justify-content:center;flex-wrap:wrap;
+    }
+    .hero-meta span{display:flex;align-items:center;gap:.3rem}
+
+    /* ── Features ── */
+    .section{padding:4rem 0}
+    .section-title{
+      text-align:center;margin-bottom:3rem;
+      font-size:clamp(1.5rem,3vw,2.2rem);
+      font-weight:800;color:#fff;
+      letter-spacing:-.01em;
+    }
+    .section-title .gradient{
+      background:var(--gradient);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+
+    .features-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+      gap:1.25rem;
+    }
+    .feature-card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:1.75rem;
+      transition:all .3s;
+      position:relative;
+      overflow:hidden;
+    }
+    .feature-card:hover{
+      border-color:var(--accent);
+      transform:translateY(-3px);
+      box-shadow:0 12px 40px #00000030;
+    }
+    .feature-card::before{
+      content:'';
+      position:absolute;top:0;left:0;right:0;
+      height:2px;
+      background:var(--gradient);
+      opacity:0;transition:opacity .3s;
+    }
+    .feature-card:hover::before{opacity:1}
+    .feature-icon{
+      width:44px;height:44px;
+      border-radius:12px;
+      background:var(--gradient2);
+      display:flex;align-items:center;justify-content:center;
+      margin-bottom:1rem;
+      font-size:1.3rem;
+    }
+    .feature-card h3{font-size:1.05rem;font-weight:700;color:#fff;margin-bottom:.4rem}
+    .feature-card p{font-size:.88rem;color:var(--muted);line-height:1.6}
+
+    /* ── Stats ── */
+    .stats{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:20px;
+      padding:2.5rem;
+      display:flex;flex-wrap:wrap;
+      justify-content:space-around;
+      gap:2rem;
+      text-align:center;
+    }
+    .stat-value{
+      font-size:2.2rem;font-weight:900;
+      background:var(--gradient);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    .stat-label{font-size:.85rem;color:var(--muted);margin-top:.2rem}
+
+    /* ── CTA Banner ── */
+    .cta{
+      background:var(--gradient2);
+      border:1px solid var(--border);
+      border-radius:24px;
+      padding:3rem 2rem;
+      text-align:center;
+      position:relative;
+      overflow:hidden;
+    }
+    .cta::before{
+      content:'';
+      position:absolute;top:-50%;left:-50%;
+      width:200%;height:200%;
+      background:radial-gradient(ellipse at center,#7c3aed15 0%,transparent 60%);
+    }
+    .cta>*{position:relative;z-index:1}
+    .cta h2{font-size:1.8rem;font-weight:800;color:#fff;margin-bottom:.75rem}
+    .cta p{color:var(--muted);margin-bottom:1.5rem;max-width:500px;margin-left:auto;margin-right:auto}
+
+    /* ── Footer ── */
+    footer{
+      padding:2.5rem 0;
+      border-top:1px solid var(--border);
+      text-align:center;
+    }
+    footer p{color:var(--muted);font-size:.85rem}
+    footer a{color:var(--accent2);text-decoration:none}
+    footer a:hover{text-decoration:underline}
+
+    /* ── Responsive ── */
+    @media(max-width:768px){
+      .hero{padding:6rem 0 3rem}
+      .nav-links .hide-mobile{display:none}
+      .stats{padding:1.5rem;gap:1rem}
+      .stat-value{font-size:1.8rem}
+      .cta{padding:2rem 1.25rem}
+    }
+
+    /* ── Simple Animations ── */
+    @keyframes fadeInUp{
+      from{opacity:0;transform:translateY(30px)}
+      to{opacity:1;transform:translateY(0)}
+    }
+    .animate-in{animation:fadeInUp .6s ease forwards}
+    .delay-1{animation-delay:.1s}
+    .delay-2{animation-delay:.2s}
+    .delay-3{animation-delay:.3s}
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="container">
+      <a href="./" class="nav-brand">
+        <img src="./logo.svg" alt="GitHubM" onerror="this.style.display='none'" />
+        GitHubM
+      </a>
+      <div class="nav-links">
+        <a href="#features" class="hide-mobile">功能</a>
+        <a href="#download" class="hide-mobile">下载</a>
+        <a href="https://github.com/qq5855144/GitHubM" class="hide-mobile">GitHub</a>
+        <a href="./" class="nav-cta">打开应用</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">
+        <span class="dot"></span> 最新版本 v1.0.387 · 2026-05-30
+      </div>
+
+      <div class="hero-icon">
+        <img src="./logo.svg" alt="GitHubM" onerror="this.innerHTML='<svg width=52 height=52 viewBox=\'0 0 24 24\' fill=none stroke=%23a78bfa stroke-width=1.5><path d=\'M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.009-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z\'/></svg>'" />
+      </div>
+
+      <h1>
+        <span class="white">全功能 </span>
+        <span class="gradient">GitHub 管理面板</span>
+        <br />
+        <span class="white">+ AI 开发助手</span>
+      </h1>
+
+      <p class="hero-desc">
+        一站式管理仓库、Issues、Pull Requests、Gists。内置 <strong style="color:#a78bfa">40+ AI 工具</strong>，
+        用自然语言驱动代码搜索、审查、重构全流程。支持 Web 浏览器与 Android 客户端。
+      </p>
+
+      <div class="hero-actions">
+        <a href="https://github.com/qq5855144/GitHubM/releases/download/v1.0.387/github-manager-v1.0.387.apk" class="btn btn-primary" id="downloadBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          下载 Android APK
+        </a>
+        <a href="./" class="btn btn-outline">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          在线 Web 版
+        </a>
+      </div>
+
+      <div class="hero-meta">
+        <span>📦 v1.0.387</span>
+        <span>📱 Android 6.0+</span>
+        <span>📏 4.4 MB</span>
+        <span>🔓 开源 MIT</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section" id="features">
+    <div class="container">
+      <h2 class="section-title">
+        🚀 <span class="gradient">强大功能</span>，一站管理
+      </h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">📦</div>
+          <h3>仓库管理</h3>
+          <p>浏览、搜索、创建仓库，查看分支与提交历史，管理协作者与项目设置。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🐛</div>
+          <h3>Issues & PR</h3>
+          <p>创建、筛选、评论 Issue，查看 PR 变更与合并状态，一站式代码审查。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h3>AI 开发助手</h3>
+          <p>内置 ReAct Agent，40+ 工具。支持文心、DeepSeek、GPT 等多模型，自然语言操作仓库。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔍</div>
+          <h3>代码搜索</h3>
+          <p>全仓库正则搜索、代码高亮、批量替换，AI 辅助代码审查与重构。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📱</div>
+          <h3>Android 客户端</h3>
+          <p>原生 WebView 封装，沉浸式体验，支持深色模式，随时随地管理 GitHub。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Actions & CI</h3>
+          <p>查看 Workflow 运行状态，触发/取消工作流，管理 Releases 与部署。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <section class="section" style="padding-top:0">
+    <div class="container">
+      <div class="stats">
+        <div><div class="stat-value">40+</div><div class="stat-label">AI 工具能力</div></div>
+        <div><div class="stat-value">3</div><div class="stat-label">AI 模型支持</div></div>
+        <div><div class="stat-value">2</div><div class="stat-label">平台 (Web + Android)</div></div>
+        <div><div class="stat-value">MIT</div><div class="stat-label">开源协议</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="section" id="download">
+    <div class="container">
+      <div class="cta">
+        <h2>🎉 立即下载 GitHubM</h2>
+        <p>支持 Android 6.0 及以上版本。开源免费，持续更新。</p>
+        <a href="https://github.com/qq5855144/GitHubM/releases/download/v1.0.387/github-manager-v1.0.387.apk" class="btn btn-primary" style="font-size:1rem;padding:1rem 2.5rem">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:22px;height:22px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          下载 APK (v1.0.387 · 4.4 MB)
+        </a>
+        <p style="margin-top:1rem;font-size:.85rem;color:var(--muted)">
+          也可以前往 <a href="https://github.com/qq5855144/GitHubM/releases" style="color:#a78bfa">GitHub Releases</a> 查看更多版本
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>
+        GitHubM · MIT License ·
+        <a href="https://github.com/qq5855144/GitHubM">GitHub 仓库</a> ·
+        <a href="./">在线 Web 版</a>
+      </p>
+      <p style="margin-top:.3rem">Made with ❤️ by qq5855144</p>
+    </div>
+  </footer>
+
+  <!-- Simple Analytics: download link tracking -->
+  <script>
+    // 检测是否在 Android WebView 中
+    const ua = navigator.userAgent.toLowerCase();
+    const isAndroid = /android/.test(ua);
+
+    // 如果在 Android 上且不在 WebView 中，突出下载按钮
+    if (isAndroid && !/wv/.test(ua)) {
+      const btn = document.getElementById('downloadBtn');
+      if (btn) {
+        btn.style.animation = 'fadeInUp .6s ease forwards, pulse 2s infinite';
+      }
+    }
+  </script>
+
+</body>
+</html>

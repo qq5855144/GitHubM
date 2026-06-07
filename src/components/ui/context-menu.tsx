@@ -12,11 +12,7 @@ const ContextMenuTrigger = React.forwardRef<
   React.ElementRef<typeof ContextMenuPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger>
 >(({ disabled, ...props }, ref) => {
-  const [isTouch, setIsTouch] = React.useState(false);
-  React.useEffect(() => {
-    setIsTouch(typeof window !== "undefined" && (("ontouchstart" in window) || navigator.maxTouchPoints > 0));
-  }, []);
-  return <ContextMenuPrimitive.Trigger ref={ref} disabled={disabled || isTouch} {...props} />;
+  return <ContextMenuPrimitive.Trigger ref={ref} disabled={disabled} {...props} />;
 });
 ContextMenuTrigger.displayName = ContextMenuPrimitive.Trigger.displayName;
 

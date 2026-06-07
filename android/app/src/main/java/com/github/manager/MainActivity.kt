@@ -142,7 +142,10 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            resolveAndDownload(pendingDownloadUrl, pendingDownloadFileName, pendingDownloadToken)
+            Toast.makeText(this, "准备加速下载：$pendingDownloadFileName", Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch {
+                FastDownloader.download(this@MainActivity, pendingDownloadUrl, pendingDownloadFileName, pendingDownloadToken)
+            }
         } else {
             Toast.makeText(this, "存储权限被拒绝，无法保存文件", Toast.LENGTH_LONG).show()
         }
@@ -153,6 +156,13 @@ class MainActivity : AppCompatActivity() {
     private val downloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val ctx = context ?: return
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            Toast.makeText(this, "通知权限已授予", Toast.LENGTH_SHORT).show()
+        }
+    }
             val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) ?: return
             if (id == -1L) return
 
@@ -1172,6 +1182,12 @@ class MainActivity : AppCompatActivity() {
     // ── 下载流程 ────────────────────────────────────────────────────
 
     private fun checkStoragePermissionAndDownload(url: String, fileName: String, token: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
             val granted = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
                 PackageManager.PERMISSION_GRANTED
@@ -1183,133 +1199,17 @@ class MainActivity : AppCompatActivity() {
                 return
             }
         }
-        resolveAndDownload(url, fileName, token)
+        
+        Toast.makeText(this, "准备加速下载：$fileName", Toast.LENGTH_SHORT).show()
+        kotlinx.coroutines.GlobalScope.launch {
+            FastDownloader.download(applicationContext, url, fileName, token)
+        }
     }
 
     /**
      * 核心修复：先在后台线程解析 GitHub 下载链接的最终 URL，再交给 DownloadManager。
      *
      * 问题根因：
-     *   GitHub 所有下载端点（browser_download_url / zipball / tarball / archive_download_url）
-     *   均会返回 302 重定向到 AWS S3 或 CDN 的预签名 URL。
-     *   DownloadManager 默认跟随重定向并转发所有自定义请求头，
-     *   将 Authorization header 发送给 S3 预签名 URL 会触发签名冲突（403 SignatureDoesNotMatch），
-     *   下载任务立刻失败——这就是"有通知但下载失败"的原因。
-     *
-     * 修复逻辑：
-     *   1. 用 HttpURLConnection（禁止自动重定向）向原始 URL 发一次带 auth 的请求
-     *   2. 若收到 3xx：取出 Location 头，用该预签名 URL 给 DownloadManager（不带 auth）
-     *   3. 若收到 200（无重定向）：直接下载，携带 auth
-     *   4. 若发生异常：回退到原始 URL + auth（降级处理）
-     */
-    /**
-     * 解析 GitHub 下载链接重定向，并通过 DownloadManager 入队。
-     *
-     * 原实现使用裸 Thread { }.start()，无线程池管控：
-     *   - 并发下载时每次触发均创建新线程，线程数无上界
-     *   - Activity 销毁后线程仍存活，可能泄漏 Activity 引用（通过 this 捕获）
-     *
-     * 新实现使用 lifecycleScope + Dispatchers.IO：
-     *   - IO Dispatcher 底层是共享线程池（默认 64 线程上限），无限制创建线程问题
-     *   - lifecycleScope 绑定 Activity 生命周期，onDestroy 时自动取消所有挂起协程
-     *   - 无需 runOnUiThread：withContext(Dispatchers.Main) 回到主线程，语义更清晰
-     *
-     * 重定向解析逻辑（不变）：
-     *   1. IO 线程：HttpURLConnection（禁止自动重定向）→ 取状态码 + Location
-     *   2. 3xx → Location（预签名 URL，不携带 Authorization）
-     *   3. 200 → 原始 URL（携带 Authorization）
-     *   4. 其他 / 异常 → 降级直接用原始 URL 提交 DownloadManager
-     */
-    private fun resolveAndDownload(url: String, fileName: String, token: String) {
-        Toast.makeText(this, "准备下载：$fileName", Toast.LENGTH_SHORT).show()
-
-        // lifecycleScope 绑定 Activity 生命周期，Activity 销毁时自动取消
-        lifecycleScope.launch {
-            // 返回 Pair<finalUrl, finalToken>，null 表示彻底失败
-            val result: Pair<String, String>? = withContext(Dispatchers.IO) {
-                runCatching {
-                    var currentUrl = url
-                    var currentToken = token
-                    var hops = 0
-                    val maxHops = 5   // 防止重定向死循环
-
-                    while (hops < maxHops) {
-                        val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
-                            if (currentToken.isNotBlank()) {
-                                setRequestProperty("Authorization", "Bearer $currentToken")
-                            }
-                            setRequestProperty("User-Agent", "GitHub Manager Android")
-                            instanceFollowRedirects = false // 手动跟随重定向，防止 auth 头泄露给 S3/CDN
-                            requestMethod = "GET"
-                            connectTimeout = 20_000  // 增大：国内访问 GitHub 延迟较高
-                            readTimeout = 20_000     // 增大：等待响应头超时
-                        }
-                        conn.connect()
-                        val code = conn.responseCode
-                        val location = conn.getHeaderField("Location")
-                        conn.disconnect()
-
-                        when {
-                            code in 301..308 && !location.isNullOrBlank() -> {
-                                // 跟随重定向：一旦离开 api.github.com，清空 token
-                                // 防止 Bearer token 被转发给 S3/CDN 预签名 URL 造成签名冲突
-                                val isGitHubApi = location.startsWith("https://api.github.com")
-                                currentToken = if (isGitHubApi) currentToken else ""
-                                currentUrl = location
-                                hops++
-                            }
-                            code == 200 -> {
-                                // 无重定向直链，保留原 token（raw.githubusercontent.com 等）
-                                return@runCatching Pair(currentUrl, currentToken)
-                            }
-                            else -> {
-                                // 非预期状态码（401/403/404 等），返回 null 进入降级分支
-                                return@runCatching null
-                            }
-                        }
-                    }
-                    // 超过最大跳数，返回当前解析到的最终 URL（不带 token，已是预签名 URL）
-                    Pair(currentUrl, currentToken)
-                }.getOrNull() // 网络异常时 getOrNull() 返回 null，走降级分支
-            }
-
-            if (result == null) {
-                // 解析失败：降级直接提交 DownloadManager，不带 token
-                // （对公开仓库有效；私有仓库需依赖 resolveAndDownload 成功路径）
-                enqueueDownload(url, fileName, "")
-            } else {
-                enqueueDownload(result.first, fileName, result.second)
-            }
-        }
-    }
-
-    /** 将最终 URL 提交给 DownloadManager，token 为空时不发送 Authorization header */
-    private fun enqueueDownload(url: String, fileName: String, token: String) {
-        // 安全化文件名：移除路径分隔符及非法字符，防止 setDestinationInExternalPublicDir 抛异常
-        val safeFileName = fileName
-            .replace(Regex("[/\\\\:*?\"<>|]"), "_")  // Windows/Unix 非法字符
-            .trim()
-            .takeIf { it.isNotBlank() } ?: "download_${System.currentTimeMillis()}"
-
-        runCatching {
-            val request = DownloadManager.Request(Uri.parse(url)).apply {
-                if (token.isNotBlank()) {
-                    addRequestHeader("Authorization", "Bearer $token")
-                }
-                addRequestHeader("User-Agent", "GitHub Manager Android")
-                setTitle(safeFileName)
-                setDescription("正在从 GitHub 下载：$safeFileName")
-                setNotificationVisibility(
-                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
-                )
-                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, safeFileName)
-                setAllowedOverMetered(true)
-                setAllowedOverRoaming(true) // 允许漫游网络下载（流量用户不应被拒绝）
-            }
-            val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
-            dm.enqueue(request)
-        }.onFailure { e ->
-            Toast.makeText(this, "下载失败：${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 

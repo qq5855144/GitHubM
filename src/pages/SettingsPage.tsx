@@ -1126,11 +1126,24 @@ export default function SettingsPage() {
                   )}
                 </div>
                 {updateInfo.downloadUrl && (
-                  <a href={updateInfo.downloadUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                    <Button size="sm" className="h-7 text-xs px-2 bg-primary text-primary-foreground hover:bg-primary/90">
-                      下载
-                    </Button>
-                  </a>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs px-2 bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      const bridge = (window as unknown as { AndroidBridge?: { downloadFile?: (u: string, f: string, t: string) => void } }).AndroidBridge;
+                      if (bridge?.downloadFile) {
+                        const filename = updateInfo.downloadUrl.split('/').pop() || 'update.apk';
+                        // 获取 token，更新通常在公开仓库，token 传空也可，但传 token 更稳妥
+                        const token = localStorage.getItem('github_manager_token') || '';
+                        bridge.downloadFile(updateInfo.downloadUrl, filename, token);
+                      } else {
+                        window.open(updateInfo.downloadUrl, '_blank', 'noopener,noreferrer');
+                      }
+                    }}
+                  >
+                    下载
+                  </Button>
                 )}
               </div>
             )}

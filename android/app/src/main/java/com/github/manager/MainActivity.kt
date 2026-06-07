@@ -790,6 +790,24 @@ class MainActivity : AppCompatActivity() {
                 // 若允许 WebView 加载外部页面，React Router 的 history.state.idx
                 // 会丢失，返回键无法回到应用内部路由。
                 if (url.startsWith("https://") || url.startsWith("http://")) {
+                    // 拦截明显的下载链接，使用应用内下载器（不跳转外部浏览器）
+                    val lowerUrl = url.lowercase()
+                    val isDownload = lowerUrl.matches(Regex(".*\\.(apk|zip|tar\\.gz|rar|7z|exe|dmg|iso|bin|msi|deb|pdf|doc|docx|xls|xlsx|ppt|pptx)(?:\\?.*)?$"))
+                            || url.contains("/releases/download/")
+                            || url.contains("/archive/refs/tags/")
+                            || url.contains("/releases/latest/download/")
+
+                    if (isDownload) {
+                        val fileName = URLUtil.guessFileName(url, null, null)
+                        view?.evaluateJavascript(
+                            "(function(){ try { return localStorage.getItem('github_manager_token') || '' } catch(e){ return '' } })()"
+                        ) { result ->
+                            val token = result?.removeSurrounding("\"")?.trim() ?: ""
+                            checkStoragePermissionAndDownload(url, fileName, token)
+                        }
+                        return true
+                    }
+
                     runCatching {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                         startActivity(intent)

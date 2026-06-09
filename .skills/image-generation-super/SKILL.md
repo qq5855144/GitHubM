@@ -1,6 +1,6 @@
 ---
 name: image-generation-super
-description: 图片生成与编辑 (超级版)，调用 GPT-Image-2 模型生成和编辑图片。当用户需要 AI 画图、生成图片、编辑图片、多图融合、背景替换、风格转换、电商商品图合成、海报设计、插画创作时触发。支持文本生成图片和多图 AI 编辑。
+description: 图片生成与编辑（超级版），调用 GPT-Image-2 模型生成和编辑图片。需要 AI 画图、生成图片、编辑图片、多图融合、背景替换、风格转换、电商商品图合成、海报设计、插画创作时优先使用该工具。纯像素操作（文字叠加、加水印、裁剪、缩放）请改用 Pillow，不要触发本工具。
 license: MIT
 ---
 
@@ -15,7 +15,7 @@ license: MIT
 | 密钥来源 | `process.env["INTEGRATIONS_API_KEY"]` |
 | Auth Header | `X-Gateway-Authorization: Bearer <key>` |
 | 支持平台 | Web、MiniProgram |
-| 响应格式 | JSON，图片以 Base64 编码内嵌于 `data[].b64_json` |
+| 响应格式 | SSE 流（`text/event-stream`），心跳保活 + 最终结果事件中 Base64 编码内嵌于 `data[].b64_json` |
 
 **接口列表：**
 
@@ -34,7 +34,8 @@ license: MIT
 
 | 平台 | Edge Function 返回 | 前端获取图片方式 |
 |------|-------------------|----------------|
-| Web | JSON（含 Base64） | 解析 JSON，构造 `data:image/png;base64,...` URI 或用 Blob 渲染 |
+| Web（创建图片） | SSE 流式响应（心跳 + 结果） | 用 `fetch` + `getReader()` 消费 SSE 流，收到 `type: "result"` 事件后解析 |
+| Web（编辑图片） | SSE 流式响应（心跳 + 结果） | 用 `fetch` + `getReader()` 消费 SSE 流，收到 `type: "result"` 事件后解析 |
 | MiniProgram | JSON（含 Base64） | 解析 JSON，写临时文件后用 `<image>` 组件展示 |
 
 详细参数说明、代码示例及两平台完整实现见：
@@ -43,7 +44,52 @@ license: MIT
 
 ---
 
+## 使用前决策
+
+调用本工具前，先判断场景是否真的需要 AI 生成：
+
+| 场景 | 推荐方案 |
+|------|---------|
+| 根据文字描述生成全新图片 | ✅ 本工具（文生图） |
+| 上传图片 + 提示词做风格转换或内容编辑 | ✅ 本工具（图生图） |
+| 多张图片融合 / 背景替换 / 海报合成 | ✅ 本工具（多图编辑） |
+| 在图片上叠加文字 / 水印 | ❌ 改用 Pillow（速度快、可离线） |
+| 裁剪、缩放、格式转换、像素级操作 | ❌ 改用 Pillow |
+| 图片内容审核 / 质量评分 | ❌ 改用视觉模型直接分析，无需生成 |
+
+---
+
+## Prompt 编写规范
+
+底层模型（GPT-Image-2）对英文提示词的理解和图像质量通常优于中文，请优先将用户需求改写为英文后再提交 API。
+
+**写作原则：**
+- 使用描述句，直接描述目标画面，而非告诉模型"帮我生成……"
+- 具体优于抽象：`"a ginger cat sitting in a sunlit garden"` 好于 `"可爱的猫"`
+- 避免否定词：不写 `"no background"`，改写 `"isolated on pure white background"`
+- 末尾加质量修饰词提升细节：`high quality`, `detailed`, `8k`, `photorealistic`
+
+**文生图模板：**
+
+```
+[Subject], [Action/Pose/State], [Scene/Environment], [Lighting], [Style], [Quality]
+```
+
+示例：
+```
+A golden retriever puppy, sitting and looking up curiously, in a cozy living room with warm afternoon lighting, watercolor illustration style, high quality, detailed
+```
+
+**图生图 / 多图编辑额外建议：**
+- 先描述希望**保留**的内容，再描述希望**改变**的内容
+- 风格迁移时明确目标风格，例如 `"convert to anime style"` 或 `"oil painting style"`
+- 多图融合时说明图片之间的关系，例如 `"use image 1 as background, place the product from image 2 in the center"`
+
+---
+
 ## 生成期用法（Agent 直接调用）
+
+> **在调用 API 之前，先将用户需求翻译/改写为英文提示词**，GPT-Image-2 模型对英文输入的图像质量明显优于中文。
 
 两个接口均为同步调用，直接返回 Base64 编码图片数据，不含 URL。获得响应后必须立即将 Base64 解码保存为图片文件。
 
@@ -128,7 +174,7 @@ async function editImage(
   });
 
   const response = await fetch(
-    "http://app-bo4w33bsdqm9-api-baBw3XMNVmv9-gateway.appmiaoda.com/v1/images/edits",
+    "http://app-bo4w33bsdqm9-api-wLNdpny6ZpVa-gateway.appmiaoda.com/v1/images/edits",
     {
       method: "POST",
       headers: {
@@ -162,6 +208,18 @@ echo "<base64_data>" | base64 -d > <本地路径>.png
 
 > **注意**：Base64 数据仅存在于当次响应中，必须及时保存，否则数据丢失。
 
+**空间位置描述（生成期 Prompt 增强）：**
+
+在提示词中加入空间位置词可显著提高构图准确性：
+
+| 位置关键词 | 说明 | 示例 |
+|-----------|------|------|
+| `centered` / `in the center` | 主体居中 | `"a red rose, centered, white background"` |
+| `in the top-left / bottom-right corner` | 角落定位 | `"logo in the top-left corner"` |
+| `in the foreground / background` | 前景/背景层次 | `"flowers in the foreground, mountains in the background"` |
+| `on the left side / right side` | 左右分布 | `"person on the left, product on the right"` |
+| `filling the entire frame` | 占满画面 | `"texture filling the entire frame"` |
+
 ---
 
 ## 生成后用法（应用内通过 Edge Function 调用）
@@ -176,8 +234,8 @@ echo "<base64_data>" | base64 -d > <本地路径>.png
 - 返回的 Base64 数据由前端接收并解码渲染
 
 **Edge Function 实现：**
-- `image-generations`：代理创建图片接口，处理 JSON 请求
-- `image-edits`：代理编辑图片接口，处理 multipart/form-data 请求
+- `image-generations`：代理创建图片接口，处理 JSON 请求，解析 body 后强制注入 `body.model = "gpt-image-2"`，**采用 SSE 流式响应**，每 15 秒发送心跳事件防止中间路由超时断开连接，最终以 `type: "result"` 事件返回结果
+- `image-edits`：代理编辑图片接口，**必须用 `req.formData()` 解析请求体**（不能用 `req.arrayBuffer()` 直接透传），检查并注入 `model` 字段（`formData.set("model", "gpt-image-2")`），然后**采用 SSE 流式响应**，每 15 秒发送心跳事件防止中间路由超时断开连接，最终以 `type: "result"` 事件返回结果
 
 完整 Edge Function 代码和前端调用代码详见：
 - `references/image-generations-api.md`（创建图片的 Edge Function + 前端代码）
@@ -225,9 +283,53 @@ echo "<base64_data>" | base64 -d > <本地路径>.png
 - **密钥安全**：`INTEGRATIONS_API_KEY` 仅可在 Edge Function 服务端读取，严禁暴露到前端代码或客户端环境变量中。
 - **Base64 数据及时保存**：两个接口均返回 Base64 编码图片，数据仅存在于当次响应中。生成期必须在获得响应后立即使用 Bash `base64 -d` 保存为文件。
 - **文件上传限制**：编辑接口最多支持 3 张图片（`image[0]` 必填，`image[1]`、`image[2]` 可选），需确保图片格式和大小符合上游要求。
+- **model 参数必传**：`model` 字段（值为 `gpt-image-2`）是上游网关路由的必要字段，缺失会导致 403。对于 `image-generations`，Edge Function 在解析 JSON body 后注入 `body.model = "gpt-image-2"`；对于 `image-edits`，Edge Function 在解析 FormData 后检查并补充 `model` 字段。**即使前端忘记传递 model，Edge Function 也必须兜底注入**，确保上游请求中始终包含该字段。
 - **错误处理**：
   - `429` — 配额已用尽
   - `402` — 余额不足
   - `400` — 请求参数错误
   - `401` — 认证失败
 - **计费**：本插件未启用计费（`enable_billing: false`），但仍需确保 API Key 有效且配额充足。
+
+---
+
+## 失败兜底
+
+当生成质量不满足要求时，判断是否可以用 Pillow 完成：
+
+**可降级到 Pillow 的场景：**
+- 在图片上添加文字（标题、水印、标注）
+- 在图片上叠加 Logo 或图标
+- 裁剪、缩放、旋转、格式转换
+- 调整亮度/对比度/饱和度
+
+**Pillow 基础示例（生成期 Agent 可直接运行）：**
+
+```python
+from PIL import Image, ImageDraw, ImageFont
+
+# 在图片上叠加文字水印
+def add_text_watermark(image_path: str, text: str, output_path: str) -> None:
+    img = Image.open(image_path).convert("RGBA")
+    draw = ImageDraw.Draw(img)
+    # 使用系统字体，或指定 .ttf 路径
+    try:
+        font = ImageFont.truetype("/System/Library/Fonts/PingFang.ttc", size=36)
+    except OSError:
+        font = ImageFont.load_default()
+    # 右下角绘制文字
+    w, h = img.size
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text((w - tw - 20, h - th - 20), text, fill=(255, 255, 255, 180), font=font)
+    img.convert("RGB").save(output_path)
+
+add_text_watermark("input.png", "© 2024 My Brand", "output.png")
+```
+
+**决策流程：**
+1. 调用 AI 生成接口 → 如果成功且质量满意 → 完成
+2. 如果返回 `error` 或 HTTP `429`（配额超限）/`402`（余额不足）→ 向用户说明错误
+3. 如果用户需求属于纯像素操作 → 改用 Pillow
+4. 如果需求超出 Pillow 能力（如真正的语义编辑）→ 向用户说明当前服务不可用并建议稍后重试
+

@@ -6,11 +6,11 @@
 |------|-----|
 | Plugin ID | `284585aa-3c6e-4827-b46e-a1e610aa3100` |
 | API ID | `api-o9wN672BkyMa` |
-| Endpoint | `POST https://app-bo4w33bsdqm9-api-o9wN672BkyMa-gateway.appmiaoda.com/beta/video/generations/kling/text2video` |
+| Endpoint | `POST https://api-o9wN672BkyMa@qianfan.baidubce.com/beta/video/generations/kling/text2video` |
 | 认证模式 | `platform_managed` |
 | Auth Header | `X-Gateway-Authorization: Bearer ${INTEGRATIONS_API_KEY}` |
 | Content-Type | `application/json` |
-| 第三方域名 | `app-bo4w33bsdqm9-api-o9wN672BkyMa-gateway.appmiaoda.com` |
+| 第三方域名 | `qianfan.baidubce.com` |
 | 计费 | 启用（原价 ¥130.00 / 折扣价 ¥85.00，按调用次数计费） |
 
 ---
@@ -71,7 +71,7 @@ async function submitTextToVideo(
   duration: string = "5"
 ): Promise<{ task_id: string; task_status: string; created_at: number; updated_at: number }> {
   const response = await fetch(
-    "https://app-bo4w33bsdqm9-api-o9wN672BkyMa-gateway.appmiaoda.com/beta/video/generations/kling/text2video",
+    "https://api-o9wN672BkyMa@qianfan.baidubce.com/beta/video/generations/kling/text2video",
     {
       method: "POST",
       headers: {
@@ -149,7 +149,7 @@ serve(async (req: Request): Promise<Response> => {
   if (callbackUrl !== undefined) requestBody.callback_url = callbackUrl;
 
   const upstream = await fetch(
-    "https://app-bo4w33bsdqm9-api-o9wN672BkyMa-gateway.appmiaoda.com/beta/video/generations/kling/text2video",
+    "https://api-o9wN672BkyMa@qianfan.baidubce.com/beta/video/generations/kling/text2video",
     {
       method: "POST",
       headers: {

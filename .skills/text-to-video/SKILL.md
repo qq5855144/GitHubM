@@ -11,7 +11,7 @@ license: MIT
 | 项目 | 说明 |
 |------|------|
 | 认证模式 | `platform_managed`（密钥由平台注入，无需用户配置） |
-| 第三方域名 | `app-bo4w33bsdqm9-api-o9wN672BkyMa-gateway.appmiaoda.com` |
+| 第三方域名 | `qianfan.baidubce.com` |
 | 支持平台 | Web、MiniProgram |
 | 计费 | 原价 ¥130.00 / 折扣价 ¥85.00（仅创建任务接口计费，查询接口不计费） |
 
@@ -64,7 +64,7 @@ async function submitTextToVideo(
   modelName: string = "kling-v1-6"
 ): Promise<string> {
   const response = await fetch(
-    "https://app-bo4w33bsdqm9-api-o9wN672BkyMa-gateway.appmiaoda.com/beta/video/generations/kling/text2video",
+    "https://api-o9wN672BkyMa@qianfan.baidubce.com/beta/video/generations/kling/text2video",
     {
       method: "POST",
       headers: {
@@ -94,7 +94,7 @@ async function queryTextToVideo(taskId: string): Promise<{
   updated_at: number;
 }> {
   const url = new URL(
-    "https://app-bo4w33bsdqm9-api-nYWNozBb5qML-gateway.appmiaoda.com/beta/video/generations/kling/text2video"
+    "https://api-nYWNozBb5qML@qianfan.baidubce.com/beta/video/generations/kling/text2video"
   );
   url.searchParams.set("task_id", taskId);
   const response = await fetch(url.toString(), {

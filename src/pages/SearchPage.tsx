@@ -132,24 +132,24 @@ function SearchRepoContextMenu({ repo, children }: { repo: GitHubRepo; children:
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="bg-popover border-border w-52">
         <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-          onClick={() => navigate(`/repos/${repo.full_name}`)}>
+          onClick={(e) => { e.stopPropagation(); navigate(`/repos/${repo.full_name}`); }}>
           <BookOpen className="w-3.5 h-3.5 mr-2" />{i18n.t('查看仓库详情')}</ContextMenuItem>
         <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-          onClick={() => navigate(`/repos/${repo.full_name}/code`)}>
+          onClick={(e) => { e.stopPropagation(); navigate(`/repos/${repo.full_name}/code`); }}>
           <Code2 className="w-3.5 h-3.5 mr-2" />{i18n.t('浏览代码')}</ContextMenuItem>
         <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-          onClick={() => navigate(`/repos/${repo.full_name}/issues`)}>
+          onClick={(e) => { e.stopPropagation(); navigate(`/repos/${repo.full_name}/issues`); }}>
           <AlertCircle className="w-3.5 h-3.5 mr-2" />{i18n.t('查看 Issues')}</ContextMenuItem>
         <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-          onClick={() => navigate(`/repos/${repo.full_name}/pulls`)}>
+          onClick={(e) => { e.stopPropagation(); navigate(`/repos/${repo.full_name}/pulls`); }}>
           <GitPullRequest className="w-3.5 h-3.5 mr-2" />{i18n.t('查看 Pull Requests')}</ContextMenuItem>
         <ContextMenuSeparator className="bg-border" />
-        <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleToggleStar}>
+        <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={(e) => { e.stopPropagation(); handleToggleStar(); }}>
           <Star className="w-3.5 h-3.5 mr-2" />{i18n.t('Star / 取消 Star')}</ContextMenuItem>
-        <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleFork}>
+        <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={(e) => { e.stopPropagation(); handleFork(); }}>
           <GitFork className="w-3.5 h-3.5 mr-2" />{i18n.t('Fork 仓库')}</ContextMenuItem>
         <ContextMenuSeparator className="bg-border" />
-        <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={handleCopyUrl}>
+        <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={(e) => { e.stopPropagation(); handleCopyUrl(); }}>
           <Copy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制仓库地址')}</ContextMenuItem>
         <ContextMenuItem className="text-foreground cursor-pointer text-sm" asChild>
           <a href={repo.html_url} target="_blank" rel="noopener noreferrer">

@@ -3,7 +3,7 @@
   1. **Mandatory Supabase Storage**
      - All image uploads must use Supabase Storage buckets
      - Buckets must be created using `supabase_apply_migration`
-     - Naming convention: `<APP_ID>_<BUSINESS_NAME>_images`
+     - Naming convention: `<BUSINESS_NAME>_images`
      - CRITICAL: Never use mock URLs or local temp paths as final image URLs
      - In WeChat MiniProgram, `tempFilePath` (e.g., `wxfile://tmp_xxx.jpg`) MUST be passed to `uploadToSupabase` — the underlying `supabase-wechat-js` converts it to `wx.uploadFile` internally. Do NOT read the file into ArrayBuffer first.
   2. **Bucket Policies**

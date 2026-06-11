@@ -75,9 +75,10 @@ jobs:
         run: |
           npm pkg delete dependencies.miaoda-react-devkit || true
           npm pkg delete devDependencies.miaoda-react-devkit || true
+          rm -f pnpm-lock.yaml
 
       - name: 安装依赖
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install
 
       - name: 构建 Web 应用（注入版本号）
         run: |

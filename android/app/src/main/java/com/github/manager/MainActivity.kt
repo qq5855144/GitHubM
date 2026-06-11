@@ -683,6 +683,23 @@ class MainActivity : AppCompatActivity() {
 
         // 6s 硬兜底：防止 notifyReady 永不触发（如 JS 崩溃）时启动画面卡死
         splashHandler.postDelayed({ dismissSplash() }, 6000L)
+
+        intent?.let { handleIntent(it) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent) {
+        if (intent.action == "ACTION_RESUME_DOWNLOAD") {
+            val url = intent.getStringExtra("url") ?: return
+            val fileName = intent.getStringExtra("fileName") ?: return
+            val token = intent.getStringExtra("token") ?: ""
+            checkStoragePermissionAndDownload(url, fileName, token)
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

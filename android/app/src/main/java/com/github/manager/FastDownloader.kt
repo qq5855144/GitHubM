@@ -243,13 +243,18 @@ object FastDownloader {
             val finalUri = moveToDownloads(context, cacheFile, safeFileName)
             cacheFile.delete()
 
-            val ext = File(safeFileName).extension
-            val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+            val ext = File(safeFileName).extension.lowercase()
+            var mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+            if (mimeType == null) {
+                if (ext == "apk") mimeType = "application/vnd.android.package-archive"
+                else mimeType = "*/*"
+            }
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(finalUri, mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            val pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+            val pendingIntent = PendingIntent.getActivity(context, notifyId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
             updateNotification {
                 setContentTitle("下载完成: $safeFileName")
@@ -267,12 +272,24 @@ object FastDownloader {
 
         } catch (e: Exception) {
             e.printStackTrace()
+            
+            val resumeIntent = Intent(context, MainActivity::class.java).apply {
+                action = "ACTION_RESUME_DOWNLOAD"
+                putExtra("url", originalUrl)
+                putExtra("fileName", fileName)
+                putExtra("token", originalToken)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            val resumePendingIntent = PendingIntent.getActivity(context, notifyId, resumeIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
             updateNotification {
                 setContentTitle("下载暂停: $safeFileName")
                 setContentText("网络问题，再次点击下载可继续: ${e.message}")
                 setProgress(0, 0, false)
                 setOngoing(false)
                 setSmallIcon(android.R.drawable.stat_sys_warning)
+                setContentIntent(resumePendingIntent)
+                setAutoCancel(true)
             }
             withContext(Dispatchers.Main) {
                 Toast.makeText(context, "下载异常，已暂停: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -408,10 +425,17 @@ object FastDownloader {
 
     private fun moveToDownloads(context: Context, source: File, fileName: String): Uri {
         val resolver = context.contentResolver
+        val ext = File(fileName).extension.lowercase()
+        var mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+        if (mimeType == null) {
+            if (ext == "apk") mimeType = "application/vnd.android.package-archive"
+            else mimeType = "application/octet-stream"
+        }
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream")
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
             }
             val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)

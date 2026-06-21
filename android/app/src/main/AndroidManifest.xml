@@ -11,6 +11,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- API 34+ 需声明 foregroundServiceType，此处使用 dataSync（网络下载场景） -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- CPU 唤醒锁：防止屏幕关闭后 CPU 休眠导致下载暂停 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- WiFi 唤醒锁：防止屏幕关闭后 WiFi 断联导致下载中断 -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 
     <!-- ── 相机（拍照上传到 GitHub，按需申请） ───────────────────── -->
     <uses-permission android:name="android.permission.CAMERA" />

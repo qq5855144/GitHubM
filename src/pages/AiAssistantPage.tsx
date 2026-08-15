@@ -65,6 +65,10 @@ interface PersistedAiSession {
   selectedBranch: string;
   sessionId: string | null;
   messages: Message[];
+  /** 任务计划步骤（工作流进度面板），退出重进后保持进度显示 */
+  taskPlanSteps?: TaskPlanStep[];
+  /** 步骤状态（工作流进度面板） */
+  stepStatuses?: Record<string, StepStatus>;
 }
 
 interface ConversationMemorySummary {
@@ -105,6 +109,20 @@ function toPersistMessage(message: Message): PersistMessageInput {
   };
 }
 
+/** 提取消息的有效展示文本。
+ *  agent 循环中的 tool/thinking 气泡 content 为空（文本在 toolLabel/toolResult 等字段），
+ *  直接取 content 会生成「1. 助手：」这类无意义空条目，污染摘要与模型上下文。 */
+function messageEffectiveText(m: Message): string {
+  if (m.bubbleType === 'step') return (m.stepTitle || '').trim();
+  if (m.bubbleType === 'tool') {
+    const label = (m.toolLabel || m.toolName || '').trim();
+    const result = (m.toolResult || '').replace(/\s+/g, ' ').trim();
+    const brief = result.length > 120 ? `${result.slice(0, 120)}…` : result;
+    return brief ? `${label}：${brief}` : label;
+  }
+  if (m.bubbleType === 'thinking') return '';
+  return (m.content || '').replace(/\s+/g, ' ').trim();
+}
 function createConversationMemorySummary(messages: Message[]): ConversationMemorySummary | null {
   const visibleMessages = messages.filter(m => !m.streaming && isVisibleConversationMessage(m) && m.id !== 'welcome');
   if (visibleMessages.length < MEMORY_SUMMARY_TRIGGER_COUNT) return null;
@@ -119,15 +137,17 @@ function createConversationMemorySummary(messages: Message[]): ConversationMemor
 
   const candidates = visibleMessages.filter(m => !recentIds.has(m.id) && !existingSummaryIds.has(m.id));
   if (candidates.length < MEMORY_SUMMARY_WINDOW_SIZE) return null;
-
   const window = candidates.slice(-MEMORY_SUMMARY_WINDOW_SIZE);
-  const chunks = window.map((m, index) => {
-    const role = m.role === 'user' ? i18n.t('用户') : i18n.t('助手');
-    const text = m.content.replace(/\s+/g, ' ').trim();
+  // 只保留有实际文本内容的条目：tool/thinking 气泡的 content 为空，
+  // 直接 map content 会产生「1. 助手：」这类无意义条目。
+  const chunks: string[] = [];
+  for (const m of window) {
+    const text = messageEffectiveText(m);
+    if (!text) continue;
     const shortened = text.length > 180 ? `${text.slice(0, 180)}…` : text;
-    return `${index + 1}. ${role}：${shortened}`;
-  });
-
+    const role = m.role === 'user' ? i18n.t('用户') : i18n.t('助手');
+    chunks.push(`${chunks.length + 1}. ${role}：${shortened}`);
+  }
   const summaryText = [
     i18n.t('【历史记忆摘要】'),
     i18n.t('以下是更早对话中的关键上下文，请在后续回答中视为已知事实：'),
@@ -263,10 +283,13 @@ export default function AiAssistantPage() {
         sessionId,
         // 过滤掉 streaming=true 的气泡，避免恢复后出现残留「流式中」气泡
         messages: messages.filter(m => !m.streaming),
+        // 工作流进度面板状态一并持久化，退出重进后进度条/步骤状态不丢失
+        taskPlanSteps,
+        stepStatuses,
       };
       sessionStorage.setItem(AI_SESSION_KEY, JSON.stringify(session));
     } catch { /* 存储满时静默忽略 */ }
-  }, [step, selectedRepo, selectedBranch, sessionId, messages]);
+  }, [step, selectedRepo, selectedBranch, sessionId, messages, taskPlanSteps, stepStatuses]);
 
   // ── 恢复对话时重新加载分支列表 ───────────────────────────────────────────────
   useEffect(() => {
@@ -275,8 +298,21 @@ export default function AiAssistantPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 仅挂载时执行一次
-
-  // Textarea 自动调整高度
+  // ── 恢复工作流进度面板状态：任务计划步骤 + 步骤状态 ──────────────────────────
+  // 退出对话再进入（SPA 内组件重挂载）时，从 sessionStorage 快照还原进度条显示；
+  // 快照缺省（旧版本数据）时尝试从消息里的「任务规划」气泡重建步骤列表。
+  useEffect(() => {
+    if (initialSession?.taskPlanSteps && initialSession.taskPlanSteps.length > 0) {
+      setTaskPlanSteps(initialSession.taskPlanSteps);
+      if (initialSession.stepStatuses) setStepStatuses(initialSession.stepStatuses);
+      return;
+    }
+    const planMsg = (initialSession?.messages ?? []).find(m => Array.isArray(m.inlinePlan) && m.inlinePlan.length > 0);
+    if (planMsg?.inlinePlan) {
+      setTaskPlanSteps(planMsg.inlinePlan.map(s => ({ id: s.id, title: s.title, desc: s.desc })));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 仅挂载时执行一次
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -1092,6 +1128,17 @@ const currentModelDef = getModelDef(modelConfig.type);
           return { ...m, streaming: false };
         }));
         setIsStreaming(false);
+        // 任务成功完成：把仍为 pending/running 的步骤标为 done。
+        // 修复 FC 模式下 LLM 不输出 STEP:N 标记、引擎不发 step_start/step_end，
+        // 导致工作流进度条永远卡在 0/N 的 bug。
+        setStepStatuses(prev => {
+          let changed = false;
+          const next: Record<string, StepStatus> = { ...prev };
+          for (const k of Object.keys(next)) {
+            if (next[k] === 'pending' || next[k] === 'running') { next[k] = 'done'; changed = true; }
+          }
+          return changed ? next : prev;
+        });
         // 消息持久化已由「全量持久化 effect」统一处理（含 step/tool/thinking 气泡），
         // 此处不再增量保存，避免只落库每轮 user+assistant 两条导致重开对话内容缺失。
         pendingMsgsRef.current = [];
@@ -1441,6 +1488,9 @@ const currentModelDef = getModelDef(modelConfig.type);
     let i = 0;
     while (i < messages.length) {
       const m = messages[i];
+      // 记忆摘要消息仅作为模型上下文存在，不在聊天流中渲染：
+      // 避免大块无意义文本（尤其是空条目）打扰用户阅读体验。
+      if (m.messageType === 'memory_summary') { i++; continue; }
       if (m.role === 'user') {
         groups.push({ kind: 'user', msg: m });
         i++;
@@ -1689,7 +1739,7 @@ const currentModelDef = getModelDef(modelConfig.type);
                       : hasError ? 'text-destructive'
                         : 'text-primary'
                   )}>
-                    {allDone ? i18n.t('任务完成') : isStreaming ? i18n.t('执行中') : i18n.t('已完成')}
+                    {allDone ? i18n.t('任务完成') : isStreaming ? i18n.t('执行中') : i18n.t('已暂停')}
                   </span>
                   {/* 进度条 */}
                   <div className="flex-1 h-1.5 rounded-full bg-border/60 overflow-hidden">

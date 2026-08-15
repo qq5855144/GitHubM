@@ -6324,6 +6324,12 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
     const isTaskTimedOut = () => Date.now() - taskStartTime >= TASK_TIMEOUT_MS;
     // 当前正在执行的计划步骤 ID
     let currentStepId: string | null = resumedLastStepId;
+    // ── 工作流步骤自动推进（修复 FC 模式下 LLM 不输出 STEP:N 标记，
+    //    导致工作流进度条永远卡在 0/N 的 bug）────────────────────────────
+    // workflowPlan：缓存 PLAN 提取结果；stepFinalizedIds：记录已结束（done/error）的步骤，
+    // 用于在无 STEP 标记时自动推进步骤、任务完成时把剩余步骤全部标 done。
+    let workflowPlan: PlanStep[] = [];
+    const stepFinalizedIds = new Set<string>();
     // 连续"无工具调用"的 nudge 计数（最多纠正 2 次，防止死循环）
     let nudgeCount = 0;
     const MAX_NUDGE = 2;
@@ -6455,6 +6461,7 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
         const plan = extractPlan(rawText); // 使用原始文本（stripCodeFences 在内部处理）
         if (plan && plan.length > 0) {
           planSent = true; // 标记：后续轮次不再重复提取
+          workflowPlan = plan; // 缓存计划步骤，供步骤自动推进使用
           await sendTyped({ type: "plan", steps: plan });
           // 持久化：创建工作流 + 步骤
           const firstMsg = messages[messages.length - 1]?.content ?? "";
@@ -6470,6 +6477,7 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
         // 结束上一个步骤
         if (currentStepId) {
           await sendTyped({ type: "step_end", stepId: currentStepId, status: "done" });
+          stepFinalizedIds.add(currentStepId);
           if (workflowDbId) {
             await dbUpdateStep(workflowDbId, currentStepId, {
               status: "done", finished_at: new Date().toISOString(),
@@ -6533,12 +6541,28 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
         // ── 真正的最终回答：结束当前步骤 ────────────────────────────────────
         if (currentStepId) {
           await sendTyped({ type: "step_end", stepId: currentStepId, status: "done" });
+          stepFinalizedIds.add(currentStepId);
           if (workflowDbId) {
             await dbUpdateStep(workflowDbId, currentStepId, {
               status: "done", finished_at: new Date().toISOString(),
             });
           }
           currentStepId = null;
+        }
+        // ── 任务完成：把计划中尚未结束的步骤全部标记为 done ──────────────
+        // FC 模式下 LLM 不输出 STEP:N 标记，步骤无法逐条推进；
+        // 任务成功完成即全部完成，前端据此把进度条推进到 N/N。
+        if (workflowPlan.length > 0) {
+          for (const s of workflowPlan) {
+            if (stepFinalizedIds.has(s.id)) continue;
+            stepFinalizedIds.add(s.id);
+            await sendTyped({ type: "step_end", stepId: s.id, status: "done" });
+            if (workflowDbId) {
+              await dbUpdateStep(workflowDbId, s.id, {
+                status: "done", finished_at: new Date().toISOString(),
+              });
+            }
+          }
         }
         // 持久化工作流完成
         if (workflowDbId) await dbFinishWorkflow(workflowDbId);
@@ -6592,7 +6616,21 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
 
       // ── 用户中断：工具执行前最后一次检查 ────────────────────────────────
       if (abortSig.aborted) { batchDone = true; break; }
-
+      // ── 步骤自动推进：FC 模式下 LLM 通常不输出 STEP:N 标记，
+      //    若当前无进行中步骤且计划中还有未结束的步骤，自动把第一个
+      //    未结束步骤置为 running，保证工作流进度条在工具执行期间推进。 ──
+      if (!currentStepId && workflowPlan.length > 0) {
+        const nextStep = workflowPlan.find(s => !stepFinalizedIds.has(s.id));
+        if (nextStep) {
+          currentStepId = nextStep.id;
+          await sendTyped({ type: "step_start", stepId: currentStepId });
+          if (workflowDbId) {
+            await dbUpdateStep(workflowDbId, currentStepId, {
+              status: "running", started_at: new Date().toISOString(),
+            });
+          }
+        }
+      }
       // ── request_file：虚拟工具，向前端发出文件上传请求事件 ────────────────
       if (toolCall.tool === "request_file") {
         const fileReqId = `freq-${Date.now()}`;
@@ -6847,6 +6885,7 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
         // ── 超出重试限制：终止当前步骤，生成修复清单 ────────────────────────
         console.warn(`[smart-retry] step=${failKey} 已达失败上限 ${MAX_SMART_RETRIES}，终止`);
         await sendTyped({ type: "step_end", stepId: currentStepId, status: "error" });
+        if (currentStepId) stepFinalizedIds.add(currentStepId);
         if (workflowDbId) {
           await dbUpdateStep(workflowDbId, currentStepId, {
             status: "error", finished_at: new Date().toISOString(),

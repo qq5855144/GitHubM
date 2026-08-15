@@ -5492,24 +5492,128 @@ function sanitizeToolCallMessages(msgs: Message[]): Message[] {
   return result;
 }
 
-/** 每轮发送给 LLM 的最大消息条数（system 不计入） */
+/** 每轮发送给 LLM 的最近消息窗口（system 与摘要不计入） */
 const LLM_HISTORY_LIMIT = 24;
+/** 滑出窗口的消息累积满 N 条时，触发一次 LLM 摘要更新 */
+const DIGEST_TRIGGER = 8;
+/** 历史摘要总长度上限（字符），超出时保留最新部分 */
+const DIGEST_MAX_CHARS = 1500;
+
+// ── 滚动历史摘要状态（runAiAgent 开始时重置，会话内跨轮累积） ───────────────
+let historyDigest = "";
+let digestPending: Message[] = [];
+
+/** 用当前模型做一次轻量非流式调用，把旧消息片段压缩为要点摘要 */
+async function summarizeHistory(frag: Message[], cfg: ModelConfig, signal?: AbortSignal): Promise<string> {
+  const req = buildLLMRequest(cfg);
+  const lines = frag.map((m) => {
+    let content = typeof m.content === "string" ? m.content : "";
+    if (m.tool_calls?.length) {
+      content = `[工具调用] ${m.tool_calls.map((t) => t.function?.name ?? "").join(", ")}`;
+    }
+    if (m.role === "tool") content = `[工具结果] ${content}`;
+    return `${m.role}: ${content.replace(/\s+/g, " ").slice(0, 180)}`;
+  }).filter(Boolean).join("\n");
+  const body: Record<string, unknown> = {
+    model: (req.bodyExtra.model as string) ?? "deepseek-v4-flash",
+    messages: [
+      {
+        role: "system",
+        content:
+          "你是对话压缩器。把对话片段压缩成紧凑要点摘要（中文，≤300字）：保留用户目标、关键事实与数据、已完成步骤、未完成事项、重要决定与结论。不要客套，直接输出要点。",
+      },
+      { role: "user", content: lines },
+    ],
+    stream: false,
+    max_tokens: 600,
+    temperature: 0.3,
+  };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort("digest-timeout"), 30_000);
+  const onOuterAbort = () => ctrl.abort();
+  signal?.addEventListener("abort", onOuterAbort);
+  try {
+    const resp = await fetch(req.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...req.headers },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) throw new Error(`摘要调用 HTTP ${resp.status}`);
+    const data = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const text = data?.choices?.[0]?.message?.content;
+    if (typeof text !== "string" || !text.trim()) throw new Error("摘要响应为空");
+    return text.trim();
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onOuterAbort);
+  }
+}
+
+/** 摘要失败时的兜底：本地骨架化（截断每条正文，不调用 LLM，绝不阻断主任务） */
+function localSkeleton(frag: Message[]): string {
+  const lines = frag.map((m) => {
+    let content = typeof m.content === "string" ? m.content : "";
+    if (m.tool_calls?.length) content = `[工具调用] ${m.tool_calls.map((t) => t.function?.name ?? "").join(", ")}`;
+    if (m.role === "tool") content = `[工具结果] ${content}`;
+    const who = m.role === "user" ? "用户" : m.role === "assistant" ? "助手" : "工具";
+    return `${who}: ${content.replace(/\s+/g, " ").slice(0, 120)}`;
+  }).filter(Boolean);
+  const shown = lines.slice(0, 20);
+  return shown.join("\n") + (lines.length > shown.length ? `\n…（其余 ${lines.length - shown.length} 条已略）` : "");
+}
+
+function mergeDigest(oldDigest: string, add: string): string {
+  const merged = oldDigest ? `${oldDigest}\n---\n${add}` : add;
+  return merged.length > DIGEST_MAX_CHARS ? merged.slice(-DIGEST_MAX_CHARS) : merged;
+}
 
 /**
- * LLM 请求历史裁剪：保留 system + 最近 limit 条消息。
- * 历史无限累积会让每轮请求 prompt 线性膨胀（实测 TTFT 300s+ 的元凶之一）；
- * 截断时复用 sanitizeToolCallMessages 清理不完整 tool_calls 配对，避免 API 400。
+ * 构建发给 LLM 的上下文：最近窗口原文 + 滚动历史摘要。
+ * 超出窗口的旧消息不丢弃：进入待压缩区，累积满 DIGEST_TRIGGER 条时调用
+ * LLM 压缩并入摘要（失败则用本地骨架兜底）。摘要始终随请求携带，
+ * 保证长任务（探索→修改→多轮修复）不丢失早期关键上下文，同时 prompt 不无限膨胀。
  */
-function trimForLLM(msgs: Message[], limit: number): Message[] {
-  if (msgs.length <= limit) return msgs;
+async function buildLLMContext(
+  msgs: Message[],
+  cfg: ModelConfig,
+  signal?: AbortSignal,
+): Promise<Message[]> {
   const sys = msgs.filter((m) => m.role === "system");
-  const rest = msgs.filter((m) => m.role !== "system");
-  const kept = sanitizeToolCallMessages(rest.slice(-(limit - sys.length)));
-  const truncated = kept.length < rest.length;
-  const head: Message[] = truncated
-    ? [{ role: "user", content: "【系统提示】更早的对话历史已截断以节省上下文，请基于当前内容继续任务。" }]
+  const rest = msgs.filter(
+    (m) =>
+      m.role !== "system" &&
+      !(
+        m.role === "user" &&
+        typeof m.content === "string" &&
+        m.content.startsWith("【历史对话摘要")
+      ),
+  );
+  if (rest.length > LLM_HISTORY_LIMIT) {
+    const overflow = sanitizeToolCallMessages(rest.slice(0, rest.length - LLM_HISTORY_LIMIT));
+    const kept = sanitizeToolCallMessages(rest.slice(-LLM_HISTORY_LIMIT));
+    digestPending.push(...overflow);
+    if (digestPending.length >= DIGEST_TRIGGER) {
+      const pending = digestPending;
+      digestPending = [];
+      try {
+        const add = await summarizeHistory(pending, cfg, signal);
+        historyDigest = mergeDigest(historyDigest, add);
+        console.log(`[ctx] history digest updated: +${pending.length} msgs → ${historyDigest.length} chars`);
+      } catch (e) {
+        console.warn(`[ctx] digest summary failed (${(e as Error).message}), fallback to local skeleton`);
+        historyDigest = mergeDigest(historyDigest, localSkeleton(pending));
+      }
+    }
+    const head: Message[] = historyDigest
+      ? [{ role: "user", content: `【历史对话摘要（早期内容已压缩，视为已知背景）】\n${historyDigest.slice(0, DIGEST_MAX_CHARS)}` }]
+      : [];
+    return [...sys, ...head, ...kept];
+  }
+  const head: Message[] = historyDigest
+    ? [{ role: "user", content: `【历史对话摘要（早期内容已压缩，视为已知背景）】\n${historyDigest.slice(0, DIGEST_MAX_CHARS)}` }]
     : [];
-  return [...sys, ...head, ...kept];
+  return [...sys, ...head, ...rest];
 }
 
 /** 保存 messages 快照（用于批次中断后恢复） */
@@ -6076,6 +6180,10 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
 
   try {
     await (async () => {
+    // ── 会话级状态重置：防跨任务串扰历史摘要（滚动摘要压缩） ──
+    historyDigest = "";
+    digestPending = [];
+
     // ── 官方 GitHub MCP 初始化（可选能力：失败降级为纯本地工具，不阻塞主流程） ──
     try {
       // 第一步：缓存兜底注册（MCP 网络不通时工具面仍可见，调用时返回友好错误）
@@ -6152,7 +6260,11 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       `5. 新依赖先查证真实版本（可用 npm_search 工具），不凭空编造版本号。`,
     ].join("\n");
     systemPromptText += skillsAppendix;
-    let fullMessages: Message[] = [{ role: "system", content: systemPromptText }, ...trimForLLM(messages, LLM_HISTORY_LIMIT)];
+    let fullMessages: Message[] = await buildLLMContext(
+      [{ role: "system", content: systemPromptText }, ...messages],
+      modelConfig,
+      abortSig,
+    );
     console.log(`[main] model=${modelConfig.type} hasApiKey=${!!modelConfig.api_key} owner=${owner} repo=${repo} resume=${isResuming} autoMode=${isAutoMode}`);
     // 检查前端传来的历史消息：如果已有带 reasoning_content 的 assistant 消息，
     // 后续所有 assistant 消息也必须携带该字段（DeepSeek-R1 API 强制要求）
@@ -6277,7 +6389,7 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       };
 
       try {
-        const llmResult = await callLLM(modelConfig, trimForLLM(fullMessages, LLM_HISTORY_LIMIT), onThinkingChunk, heartbeat, onUsageCb);
+        const llmResult = await callLLM(modelConfig, await buildLLMContext(fullMessages, modelConfig, abortSig), onThinkingChunk, heartbeat, onUsageCb);
         assistantText = llmResult.text;
         // FC 模式下，结构化工具调用直接挂到本轮作用域；非 FC 则为 null（后续走 extractToolCall）
         fcToolCall = llmResult.toolCall;

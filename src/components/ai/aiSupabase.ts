@@ -10,6 +10,8 @@ export interface PersistMessageInput {
   content: string;
   messageType?: 'plain' | 'memory_summary';
   meta?: Record<string, unknown>;
+  /** 完整消息结构（含 bubbleType/inlineTools 等），序列化到 full_json，恢复时优先使用 */
+  full?: unknown;
 }
 
 // ── 本地存储键 ──────────────────────────────────────────────────────────────
@@ -93,6 +95,32 @@ export async function insertMessages(
     console.error(i18n.t('保存消息失败'), e);
   }
 }
+/**
+ * 全量覆盖保存会话消息（替代增量 insertMessages 的易丢数据问题）。
+ * 完整持久化 messages 列表（含 step/tool/thinking 等中间气泡），
+ * 修复「退出对话再打开」时只恢复每轮 user+assistant 两条、中间过程全部丢失的问题。
+ */
+export async function replaceSessionMessages(
+  sessionId: string,
+  msgs: PersistMessageInput[]
+): Promise<void> {
+  try {
+    const base = Date.now();
+    const rows: ChatSessionMessage[] = msgs.map((m, i) => ({
+      id: crypto.randomUUID(),
+      session_id: sessionId,
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+      created_at: new Date(base + i).toISOString(), // 递增 1ms，保证恢复排序稳定
+      message_type: m.messageType ?? 'plain',
+      meta_json: m.meta ? JSON.stringify(m.meta) : null,
+      full_json: m.full ? JSON.stringify(m.full) : null,
+    }));
+    writeJson(keyMsgs(sessionId), rows.slice(-MAX_MSGS));
+  } catch (e) {
+    console.error(i18n.t('保存消息失败'), e);
+  }
+}
 
 /** 获取指定用户的会话列表（按更新时间降序，最多 50 条） */
 export async function fetchSessions(login: string): Promise<ChatSession[]> {
@@ -116,6 +144,7 @@ export async function fetchSessionMessages(sessionId: string): Promise<ChatSessi
       created_at: r.created_at,
       message_type: r.message_type,
       meta_json: r.meta_json ?? null,
+      full_json: r.full_json ?? null,
     }));
 }
 

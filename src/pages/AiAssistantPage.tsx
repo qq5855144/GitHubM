@@ -38,7 +38,7 @@ import {
   getModelDef, loadModelConfig, saveModelConfig,
   parseChunk, parseTypedChunk, renderMarkdown, ThinkingBlock, QUICK_PROMPTS, ModelAvatar,
 } from '@/components/ai/aiUtils';
-import { upsertSession, insertMessages, insertToolExecutionLogs, upsertWorkflowSnapshot, fetchLatestSnapshot, type PersistMessageInput } from '@/components/ai/aiSupabase';
+import { upsertSession, replaceSessionMessages, insertToolExecutionLogs, upsertWorkflowSnapshot, fetchLatestSnapshot, type PersistMessageInput } from '@/components/ai/aiSupabase';
 import type { Message, ModelConfig, ChatSession, ChatSessionMessage, ToolHistoryItem, TaskPlanStep, InlineStep, InlineTool, Attachment, FileRequest, StreamMetrics } from '@/components/ai/aiTypes';
 import { appendUsageRecord } from '@/components/ai/usageStats';
 import i18n from "@/i18n";
@@ -99,6 +99,9 @@ function toPersistMessage(message: Message): PersistMessageInput {
     content: message.content,
     messageType: message.messageType ?? 'plain',
     meta: message.meta,
+    // 完整消息结构（含 bubbleType/inlineTools/toolResult 等展示字段），
+    // 恢复历史对话时优先使用，保证中间气泡内容完整还原
+    full: message,
   };
 }
 
@@ -155,16 +158,21 @@ function buildModelHistory(messages: Message[], latestUserText?: string): Array<
   return [...normalized, { role: 'user', content: latestUserText }];
 }
 
-// 模块级缓存，避免多次解析
-const _initialSession = loadPersistedSession();
+// 模块级缓存，避免多次解析（⚠️ 已废弃：SPA 内组件卸载重挂载时模块不会重新求值，
+// 会导致「退出对话再进入」时读到首次进入的旧快照、丢失退出前的对话。
+// 现改为组件内 useState 惰性初始化，每次挂载重新读取 sessionStorage。）
+// const _initialSession = loadPersistedSession();
 
 // ── 主组件 ────────────────────────────────────────────────────────────────────
 
 export default function AiAssistantPage() {
   const { token, user } = useAuth();
-  const [step, setStep] = useState<'repo' | 'chat'>(_initialSession?.step ?? 'repo');
-  const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(_initialSession?.selectedRepo ?? null);
-  const [messages, setMessages] = useState<Message[]>(_initialSession?.messages ?? []);
+  // 每次组件挂载都重新读取 sessionStorage 快照（修复：SPA 内退出对话再进入时
+  // 模块级缓存不会重新求值，导致恢复的是首次进入的旧快照、丢失退出前的对话）
+  const [initialSession] = useState(() => loadPersistedSession());
+  const [step, setStep] = useState<'repo' | 'chat'>(initialSession?.step ?? 'repo');
+  const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(initialSession?.selectedRepo ?? null);
+  const [messages, setMessages] = useState<Message[]>(initialSession?.messages ?? []);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [modelConfig, setModelConfig] = useState<ModelConfig>(loadModelConfig);
@@ -194,14 +202,14 @@ export default function AiAssistantPage() {
   // 超时/停止后的恢复提示信息
   const [pendingResumeInfo, setPendingResumeInfo] = useState<{ workflowId?: string; taskSummary: string } | null>(null);
   // 当前会话 ID（用于持久化）
-  const [sessionId, setSessionId] = useState<string | null>(_initialSession?.sessionId ?? null);
+  const [sessionId, setSessionId] = useState<string | null>(initialSession?.sessionId ?? null);
   const [memorySummary, setMemorySummary] = useState<ConversationMemorySummary | null>(null);
   // 待持久化消息队列（本轮对话新增的）
   const pendingMsgsRef = useRef<PersistMessageInput[]>([]);
   // 分支相关
   const [branches, setBranches] = useState<string[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
-  const [selectedBranch, setSelectedBranch] = useState(_initialSession?.selectedBranch ?? '');
+  const [selectedBranch, setSelectedBranch] = useState(initialSession?.selectedBranch ?? '');
   const [isProtectedBranch, setIsProtectedBranch] = useState(false);
 
   // 自主模式：永久开启，给予最大权限
@@ -262,8 +270,8 @@ export default function AiAssistantPage() {
 
   // ── 恢复对话时重新加载分支列表 ───────────────────────────────────────────────
   useEffect(() => {
-    if (_initialSession?.step === 'chat' && _initialSession.selectedRepo) {
-      loadBranches(_initialSession.selectedRepo);
+    if (initialSession?.step === 'chat' && initialSession.selectedRepo) {
+      loadBranches(initialSession.selectedRepo);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 仅挂载时执行一次
@@ -458,13 +466,24 @@ export default function AiAssistantPage() {
     setSessionId(session.id);
     setIsProtectedBranch(session.branch === 'main' || session.branch === 'master');
     pendingMsgsRef.current = [];
-    const converted: Message[] = histMsgs.map(m => ({
-      id: m.id,
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-      messageType: m.message_type ?? 'plain',
-      meta: m.meta_json ? JSON.parse(m.meta_json) as Record<string, unknown> : undefined,
-    }));
+    const converted: Message[] = histMsgs.map(m => {
+      // 优先用完整结构 JSON 还原（含 bubbleType/inlineTools/toolResult 等展示字段）
+      if (m.full_json) {
+        try {
+          const full = JSON.parse(m.full_json) as Message;
+          if (full && typeof full === 'object' && full.role) {
+            return { ...full, streaming: false };
+          }
+        } catch { /* fallback to legacy conversion */ }
+      }
+      return {
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        messageType: m.message_type ?? 'plain',
+        meta: m.meta_json ? JSON.parse(m.meta_json) as Record<string, unknown> : undefined,
+      };
+    });
     const visibleMessages = converted.filter(isVisibleConversationMessage);
     setMessages(visibleMessages.length > 0 ? converted : [{
       id: 'welcome',
@@ -495,38 +514,8 @@ export default function AiAssistantPage() {
     setModelConfig(cfg);
     saveModelConfig(cfg);
   };
+const currentModelDef = getModelDef(modelConfig.type);
 
-  const currentModelDef = getModelDef(modelConfig.type);
-
-  // 持久化：确保 session 存在，批量保存消息
-  const persistMessages = useCallback(async (
-    newMsgs: PersistMessageInput[],
-    repo: GitHubRepo,
-    branch: string,
-  ) => {
-    if (!user?.login) return;
-    // 仓库未选择时跳过（repo_full_name 为 NOT NULL）
-    if (!repo?.full_name) return;
-    let sid = sessionId;
-    if (!sid) {
-      const firstUser = newMsgs.find(m => m.role === 'user');
-      const title = firstUser
-        ? firstUser.content.slice(0, 40) + (firstUser.content.length > 40 ? '…' : '')
-        : i18n.t('新对话');
-      sid = crypto.randomUUID();
-      setSessionId(sid);
-      await upsertSession({
-        id: sid,
-        github_login: user.login,
-        repo_full_name: repo.full_name,
-        branch,
-        title,
-        model_type: modelConfig.type,
-        model_name: modelConfig.model,
-      });
-    }
-    await insertMessages(sid, newMsgs);
-  }, [sessionId, user?.login, modelConfig.type, modelConfig.model]);
 
   useEffect(() => {
     if (!selectedRepo || !sessionId) return;
@@ -547,8 +536,40 @@ export default function AiAssistantPage() {
 
     setMessages(prev => [...prev, summaryMessage]);
     setMemorySummary(nextSummary);
-    void persistMessages([toPersistMessage(summaryMessage)], selectedRepo, selectedBranch);
-  }, [messages, memorySummary, persistMessages, selectedBranch, selectedRepo, sessionId]);
+  }, [messages, memorySummary, selectedBranch, selectedRepo, sessionId]);
+
+  // ── 全量消息持久化：流式结束后把完整 messages（含 step/tool/thinking 等中间气泡）
+  //    覆盖写入本地 DB。修复「退出对话再打开」时只恢复每轮 user+assistant 两条、
+  //    中间执行过程全部丢失的问题。流式期间跳过，避免频繁覆盖写。 ──
+  useEffect(() => {
+    if (!user?.login || !selectedRepo?.full_name) return;
+    if (messages.some(m => m.streaming)) return;
+    const toSave = messages
+      .filter(m => m.id !== 'welcome')
+      .map(toPersistMessage);
+    if (toSave.length === 0) return;
+    let sid = sessionId;
+    if (!sid) {
+      // 首次持久化时创建会话记录（原 persistMessages 的职责）
+      const firstUser = toSave.find(m => m.role === 'user');
+      const title = firstUser
+        ? firstUser.content.slice(0, 40) + (firstUser.content.length > 40 ? '…' : '')
+        : i18n.t('新对话');
+      sid = crypto.randomUUID();
+      setSessionId(sid);
+      void upsertSession({
+        id: sid,
+        github_login: user.login,
+        repo_full_name: selectedRepo.full_name,
+        branch: selectedBranch,
+        title,
+        model_type: modelConfig.type,
+        model_name: modelConfig.model,
+      });
+    }
+    void replaceSessionMessages(sid, toSave);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, sessionId, selectedRepo, selectedBranch, user?.login, modelConfig.type, modelConfig.model]);
 
   // 重新生成
   const handleRegenerate = useCallback(async () => {
@@ -1071,13 +1092,8 @@ export default function AiAssistantPage() {
           return { ...m, streaming: false };
         }));
         setIsStreaming(false);
-        // 持久化：只保存最终回答文本（answerMsgId 对应的气泡内容）
-        // accumulated 为空时（纯工具任务无最终文字）用占位符替代，确保消息记录完整
-        const assistantContent = accumulated.trim() || i18n.t('（任务已执行完成）');
-        const newMsgs: PersistMessageInput[] = isRegen
-          ? [{ role: 'assistant', content: assistantContent }]
-          : [{ role: 'user', content: userText }, { role: 'assistant', content: assistantContent }];
-        await persistMessages(newMsgs, selectedRepo, selectedBranch);
+        // 消息持久化已由「全量持久化 effect」统一处理（含 step/tool/thinking 气泡），
+        // 此处不再增量保存，避免只落库每轮 user+assistant 两条导致重开对话内容缺失。
         pendingMsgsRef.current = [];
         // ── 持久化工具日志 + workflow 快照 ────────────────────────────────────
         const sid = sessionIdRef.current;
@@ -1134,7 +1150,7 @@ export default function AiAssistantPage() {
         }
       },
     });
-  }, [input, attachments, formatAttachmentsForMessage, isStreaming, messages, selectedRepo, token, modelConfig, selectedBranch, persistMessages]);
+  }, [input, attachments, formatAttachmentsForMessage, isStreaming, messages, selectedRepo, token, modelConfig, selectedBranch]);
 
   // ── 重连：用上次请求的 history + 一条"请继续"提示，重新发起流式请求 ────────────
   const handleReconnect = useCallback(() => {
@@ -1207,10 +1223,7 @@ export default function AiAssistantPage() {
         toast.dismiss('reconnect-backoff');
         setMessages(prev => prev.map(m => m.id === aiMsg.id ? { ...m, streaming: false } : m));
         setIsStreaming(false);
-        await persistMessages(
-          [{ role: 'user', content: userText + i18n.t('[重连续跑]') }, { role: 'assistant', content: accumulated }],
-          selectedRepo, selectedBranch,
-        );
+        // 消息持久化由「全量持久化 effect」统一处理
         // ── 持久化工具日志 + workflow 快照（重连完成） ─────────────────────────
         const sid = sessionIdRef.current;
         const tid = currentTurnIdRef.current;
@@ -1232,7 +1245,7 @@ export default function AiAssistantPage() {
         toast.error(`重连失败：${err.message}`);
       },
     });
-  }, [isStreaming, selectedRepo, token, modelConfig, selectedBranch, persistMessages]);
+  }, [isStreaming, selectedRepo, token, modelConfig, selectedBranch]);
 
   // ── 指数退避重连：重试计数 + 写操作守卫 ──────────────────────────────────────
   /** 当前无写操作重试次数（0 = 还未尝试） */

@@ -25,6 +25,8 @@ export interface ChatSessionMessage {
   created_at: string;
   message_type?: 'plain' | 'memory_summary';
   meta_json?: string | null;
+  /** 完整消息结构 JSON（含 bubbleType/inlineTools/toolResult 等展示字段），恢复时优先使用 */
+  full_json?: string | null;
 }
 
 // ── 消息类型 ────────────────────────────────────────────────────────────────────

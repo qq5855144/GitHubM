@@ -5457,36 +5457,34 @@ async function dbUpdateStep(
 function sanitizeToolCallMessages(msgs: Message[]): Message[] {
   if (msgs.length === 0) return [];
   const result = [...msgs];
-
-  // 1. 扫描整个数组：移除前面没有 assistant(tool_calls) 的孤立 tool 消息
+  // 1. 移除任何 tool_calls 后没有完整紧邻 tool 回复的 assistant 消息（不限位置）。
+  //    修复：旧实现只检查数组末尾，ctx-compress 拼接 [head+summary+tail] 后
+  //    head 尾部残留的 assistant(tool_calls) 位于序列中间，其后紧跟的是摘要 user 消息，
+  //    导致 DeepSeek API HTTP 400（insufficient tool messages following tool_calls）。
+  for (let i = result.length - 1; i >= 0; i--) {
+    const msg = result[i];
+    if (msg.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+      let ok = true;
+      for (let k = 0; k < msg.tool_calls.length; k++) {
+        const next = result[i + 1 + k];
+        if (!next || next.role !== "tool" || next.tool_call_id !== msg.tool_calls[k].id) { ok = false; break; }
+      }
+      if (!ok) result.splice(i, 1);
+    }
+  }
+  // 2. 移除孤立 tool 消息（沿连续 tool 消息链回溯，源头不是对应 assistant tool_calls 即移除）
   for (let i = result.length - 1; i >= 0; i--) {
     const msg = result[i];
     if (msg.role === "tool" && msg.tool_call_id) {
-      const prev = result[i - 1];
-      const hasPrevAssistantWithCall =
+      let j = i - 1;
+      while (j >= 0 && result[j].role === "tool") j--;
+      const prev = j >= 0 ? result[j] : undefined;
+      const ok =
         prev &&
         prev.role === "assistant" &&
-        prev.tool_calls?.some((tc) => tc.id === msg.tool_call_id);
-      if (!hasPrevAssistantWithCall) {
-        result.splice(i, 1);
-      }
-    }
-  }
-
-  // 2. 从末尾移除：没有对应 tool 回复的不完整 assistant(tool_calls)
-  while (result.length > 0) {
-    const last = result[result.length - 1];
-    if (last.role === "assistant" && last.tool_calls && last.tool_calls.length > 0) {
-      const allReplied = last.tool_calls.every((tc) =>
-        result.some((m) => m.role === "tool" && m.tool_call_id === tc.id)
-      );
-      if (!allReplied) {
-        result.pop();
-      } else {
-        break;
-      }
-    } else {
-      break;
+        Array.isArray(prev.tool_calls) &&
+        prev.tool_calls.some((tc) => tc.id === msg.tool_call_id);
+      if (!ok) result.splice(i, 1);
     }
   }
   return result;

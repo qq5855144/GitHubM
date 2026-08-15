@@ -309,7 +309,15 @@ export default function AiAssistantPage() {
     }
     const planMsg = (initialSession?.messages ?? []).find(m => Array.isArray(m.inlinePlan) && m.inlinePlan.length > 0);
     if (planMsg?.inlinePlan) {
-      setTaskPlanSteps(planMsg.inlinePlan.map(s => ({ id: s.id, title: s.title, desc: s.desc })));
+      const steps = planMsg.inlinePlan.map(s => ({ id: s.id, title: s.title, desc: s.desc }));
+      setTaskPlanSteps(steps);
+      // 会话已有最终回答气泡 → 任务已完成：步骤全部标 done，
+      // 避免旧快照（无 stepStatuses 字段）恢复后进度条卡在「已暂停 0/N」。
+      const hasFinalAnswer = (initialSession?.messages ?? []).some(m =>
+        m.role === 'assistant' && (m.bubbleType === 'answer' || (!m.bubbleType && (m.content || '').length > 0)));
+      if (hasFinalAnswer) {
+        setStepStatuses(Object.fromEntries(steps.map(s => [s.id, 'done' as StepStatus])));
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 仅挂载时执行一次

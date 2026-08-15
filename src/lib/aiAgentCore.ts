@@ -5525,7 +5525,9 @@ async function summarizeHistory(frag: Message[], cfg: ModelConfig, signal?: Abor
       { role: "user", content: lines },
     ],
     stream: false,
-    max_tokens: 600,
+    // deepseek-v4-flash 为 reasoning 模型：非流式响应会先输出 reasoning_content，
+    // 需给 content 留足 token 余量，否则长输入时摘要内容被 600 上限挤空。
+    max_tokens: 2000,
     temperature: 0.3,
   };
   const ctrl = new AbortController();
@@ -5540,10 +5542,11 @@ async function summarizeHistory(frag: Message[], cfg: ModelConfig, signal?: Abor
       signal: ctrl.signal,
     });
     if (!resp.ok) throw new Error(`摘要调用 HTTP ${resp.status}`);
-    const data = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    const text = data?.choices?.[0]?.message?.content;
-    if (typeof text !== "string" || !text.trim()) throw new Error("摘要响应为空");
-    return text.trim();
+    const data = (await resp.json()) as { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }> };
+    const msg = data?.choices?.[0]?.message;
+    const text = msg?.content?.trim() || msg?.reasoning_content?.trim() || "";
+    if (!text) throw new Error("摘要响应为空");
+    return text;
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", onOuterAbort);

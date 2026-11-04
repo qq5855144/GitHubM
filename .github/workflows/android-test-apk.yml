@@ -12,6 +12,8 @@ on:
         description: 'versionCode（需大于当前已安装版本，默认 432）'
         required: false
         default: '432'
+  pull_request:
+    types: [opened, synchronize, reopened]
 permissions:
   contents: read
 jobs:
@@ -61,8 +63,8 @@ jobs:
       - name: 构建签名 Release APK
         working-directory: android
         env:
-          VERSION_CODE: ${{ inputs.version_code }}
-          VERSION_NAME: "1.0.${{ inputs.version_code }}-test"
+          VERSION_CODE: ${{ github.event.inputs.version_code || '432' }}
+          VERSION_NAME: "1.0.${{ github.event.inputs.version_code || '432' }}-test"
           KEYSTORE_PATH: ${{ github.workspace }}/android/release.keystore
           STORE_PASSWORD: GithubManager@2024
           KEY_ALIAS: github-manager
@@ -72,12 +74,12 @@ jobs:
       - name: 重命名 APK
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk \
-             "github-manager-test-v1.0.${{ inputs.version_code }}.apk"
-          ls -lh "github-manager-test-v1.0.${{ inputs.version_code }}.apk"
+             "github-manager-test-v1.0.${{ github.event.inputs.version_code || '432' }}.apk"
+          ls -lh "github-manager-test-v1.0.${{ github.event.inputs.version_code || '432' }}.apk"
 
       - name: 上传测试 APK
         uses: actions/upload-artifact@v4
         with:
           name: github-manager-test-apk
-          path: github-manager-test-v1.0.${{ inputs.version_code }}.apk
+          path: github-manager-test-v1.0.${{ github.event.inputs.version_code || '432' }}.apk
           retention-days: 7

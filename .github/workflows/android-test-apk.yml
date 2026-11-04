@@ -1,0 +1,83 @@
+# 仅用于真机验证的测试 APK 构建
+#
+# 与 deploy.yml 的区别：
+#   - 不部署 GitHub Pages、不创建 Release / Tag
+#   - 只上传 Actions Artifact，便于在合并前安装到真机回归
+#   - 使用仓库内 android/release.keystore 签名（与正式版同签名，可覆盖安装）
+name: Android Test APK
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: 'versionCode（需大于当前已安装版本，默认 432）'
+        required: false
+        default: '432'
+permissions:
+  contents: read
+jobs:
+  build-test-apk:
+    name: 构建测试 APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装前端依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建 Web 应用
+        run: pnpm build
+
+      - name: 复制 Web 资源到 Android assets
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp -r dist/. android/app/src/main/assets/
+
+      - name: 设置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: 设置 Gradle 8.7
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: 生成 local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+
+      - name: 构建签名 Release APK
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ inputs.version_code }}
+          VERSION_NAME: "1.0.${{ inputs.version_code }}-test"
+          KEYSTORE_PATH: ${{ github.workspace }}/android/release.keystore
+          STORE_PASSWORD: GithubManager@2024
+          KEY_ALIAS: github-manager
+          KEY_PASSWORD: GithubManager@2024
+        run: gradle assembleRelease --no-daemon
+
+      - name: 重命名 APK
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk \
+             "github-manager-test-v1.0.${{ inputs.version_code }}.apk"
+          ls -lh "github-manager-test-v1.0.${{ inputs.version_code }}.apk"
+
+      - name: 上传测试 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-manager-test-apk
+          path: github-manager-test-v1.0.${{ inputs.version_code }}.apk
+          retention-days: 7

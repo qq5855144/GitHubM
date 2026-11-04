@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserLink } from '@/components/common/UserLink';
 import {
   getIssues,
   createIssue,
@@ -308,7 +309,7 @@ export default function IssuesPage() {
                     </div>
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
                       <span className="text-xs text-muted-foreground">
-                        #{issue.number} · {formatRelativeTime(issue.created_at)} {i18n.t('· 由')}{issue.user.login} {i18n.t('创建')}</span>
+                        #{issue.number} · {formatRelativeTime(issue.created_at)} {i18n.t('· 由')} <UserLink login={issue.user.login} className="hover:text-accent hover:underline">{issue.user.login}</UserLink> {i18n.t('创建')}</span>
                       {issue.assignees.length > 0 && (
                         <div className="flex items-center gap-1">
                           {issue.assignees.slice(0, 3).map((a) => (

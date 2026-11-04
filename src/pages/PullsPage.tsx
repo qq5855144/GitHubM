@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserLink } from '@/components/common/UserLink';
 import { getPullRequests, formatRelativeTime } from '@/services/github';
 import type { GitHubPullRequest, PrState } from '@/types/types';
 import { toast } from 'sonner';
@@ -198,7 +199,7 @@ export default function PullsPage() {
                     </div>
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
                       <span className="text-xs text-muted-foreground">
-                        #{pr.number} · {formatRelativeTime(pr.created_at)} · {pr.user.login}
+                        #{pr.number} · {formatRelativeTime(pr.created_at)} · <UserLink login={pr.user.login} className="hover:text-accent hover:underline">{pr.user.login}</UserLink>
                       </span>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <GitBranch className="w-3 h-3" />

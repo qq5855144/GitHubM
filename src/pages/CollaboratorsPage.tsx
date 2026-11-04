@@ -47,6 +47,7 @@ import {
   updateCollaboratorPermission,
 } from '@/services/github';
 import type { GitHubCollaborator } from '@/types/types';
+import { UserLink } from '@/components/common/UserLink';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import i18n from "@/i18n";
@@ -236,22 +237,17 @@ export default function CollaboratorsPage() {
           <div className="divide-y divide-border">
             {collaborators.map((collaborator) => (
               <div key={collaborator.id} className="p-4 flex items-center gap-3 group">
-                <Avatar className="w-10 h-10 shrink-0">
-                  <AvatarImage src={collaborator.avatar_url} alt={collaborator.login} />
-                  <AvatarFallback className="bg-secondary">
-                    {collaborator.login.substring(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <UserLink login={collaborator.login} className="flex items-center gap-3">
+                  <Avatar className="w-10 h-10 shrink-0">
+                    <AvatarImage src={collaborator.avatar_url} alt={collaborator.login} />
+                    <AvatarFallback className="bg-secondary">
+                      {collaborator.login.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium text-accent hover:underline">{collaborator.login}</span>
+                </UserLink>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <a
-                      href={collaborator.html_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-accent hover:underline"
-                    >
-                      {collaborator.login}
-                    </a>
                     {collaborator.login === user?.login && (
                       <Badge variant="outline" className="text-xs border-border text-muted-foreground">{i18n.t('你')}</Badge>
                     )}

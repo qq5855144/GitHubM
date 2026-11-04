@@ -24,6 +24,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserLink } from '@/components/common/UserLink';
 import {
   getGist,
   updateGist,
@@ -160,7 +161,9 @@ export default function GistDetailPage() {
           </div>
           {gist.description && <p className="text-muted-foreground text-sm mt-1 text-pretty">{gist.description}</p>}
           <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
-            <span>{gist.owner?.login}</span>
+            {gist.owner?.login ? (
+              <UserLink login={gist.owner.login} className="text-accent hover:underline">{gist.owner.login}</UserLink>
+            ) : null}
             <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatRelativeTime(gist.updated_at)}</span>
           </div>
         </div>
@@ -241,13 +244,15 @@ export default function GistDetailPage() {
         </h2>
         {comments.map((comment) => (
           <div key={comment.id} className="flex gap-3">
-            <Avatar className="w-8 h-8 shrink-0">
-              <AvatarImage src={comment.user.avatar_url} />
-              <AvatarFallback className="bg-secondary text-xs">{comment.user.login.substring(0, 2).toUpperCase()}</AvatarFallback>
-            </Avatar>
+            <UserLink login={comment.user.login} className="shrink-0">
+              <Avatar className="w-8 h-8 shrink-0">
+                <AvatarImage src={comment.user.avatar_url} />
+                <AvatarFallback className="bg-secondary text-xs">{comment.user.login.substring(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+            </UserLink>
             <div className="flex-1 bg-card border border-border rounded-lg overflow-hidden">
               <div className="px-3 py-2 bg-secondary/30 border-b border-border flex items-center gap-2">
-                <span className="text-sm font-medium text-accent">{comment.user.login}</span>
+                <UserLink login={comment.user.login} className="text-sm font-medium text-accent hover:underline">{comment.user.login}</UserLink>
                 <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.created_at)}</span>
               </div>
               <p className="p-3 text-sm text-foreground text-pretty">{comment.body}</p>

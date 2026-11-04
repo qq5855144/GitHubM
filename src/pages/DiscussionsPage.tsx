@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserLink } from '@/components/common/UserLink';
 import {
   Dialog,
   DialogContent,
@@ -142,11 +143,15 @@ function DiscussionComments({
       {discussion.body && (
         <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center gap-2 mb-3">
-            <Avatar className="w-6 h-6">
-              <AvatarImage src={discussion.author?.avatarUrl} />
-              <AvatarFallback className="text-xs bg-secondary">{discussion.author?.login?.[0]?.toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <span className="text-sm font-medium text-foreground">{discussion.author?.login}</span>
+            {discussion.author?.login ? (
+              <UserLink login={discussion.author.login} className="flex items-center gap-2">
+                <Avatar className="w-6 h-6">
+                  <AvatarImage src={discussion.author.avatarUrl} />
+                  <AvatarFallback className="text-xs bg-secondary">{discussion.author.login[0]?.toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium text-foreground hover:text-accent">{discussion.author.login}</span>
+              </UserLink>
+            ) : null}
             <span className="text-xs text-muted-foreground">{formatRelativeTime(discussion.createdAt)}</span>
           </div>
           <div className="text-sm text-muted-foreground prose-sm max-w-none">
@@ -178,13 +183,19 @@ function DiscussionComments({
               className={`bg-card border rounded-lg p-4 ${comment.isAnswer ? 'border-success/50 bg-success/5' : 'border-border'}`}
             >
               <div className="flex items-start gap-3">
-                <Avatar className="w-7 h-7 shrink-0 mt-0.5">
-                  <AvatarImage src={comment.author?.avatarUrl} />
-                  <AvatarFallback className="text-xs bg-secondary">{comment.author?.login?.[0]?.toUpperCase()}</AvatarFallback>
-                </Avatar>
+                {comment.author?.login ? (
+                  <UserLink login={comment.author.login} className="shrink-0">
+                    <Avatar className="w-7 h-7 shrink-0 mt-0.5">
+                      <AvatarImage src={comment.author.avatarUrl} />
+                      <AvatarFallback className="text-xs bg-secondary">{comment.author.login[0]?.toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                  </UserLink>
+                ) : null}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-2">
-                    <span className="text-sm font-medium text-foreground">{comment.author?.login}</span>
+                    {comment.author?.login ? (
+                      <UserLink login={comment.author.login} className="text-sm font-medium text-foreground hover:text-accent">{comment.author.login}</UserLink>
+                    ) : null}
                     <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.createdAt)}</span>
                     {comment.isAnswer && (
                       <Badge className="bg-success/10 text-success border-success/30 text-xs flex items-center gap-1">

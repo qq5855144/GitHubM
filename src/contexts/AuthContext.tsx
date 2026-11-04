@@ -15,6 +15,10 @@ interface AuthContextValue {
   logout: () => void;
   switchAccount: (token: string) => Promise<void>;
   removeAccount: (token: string) => void;
+  /** 修改本机保存的 Token 备注名 */
+  renameAccount: (token: string, label: string) => void;
+  /** 更新本机保存的 Token 元信息（作用域 / 过期时间 / 验证时间等） */
+  updateAccountMeta: (token: string, patch: Partial<SavedAccount>) => void;
   refreshRateLimit: () => Promise<void>;
   /** 重新请求 /user 并刷新 user 状态 */
   refreshUser: () => Promise<void>;
@@ -92,6 +96,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const removeAccount = useCallback((removeToken: string) => {
     setSavedAccounts((prev) => {
       const updated = prev.filter((a) => a.token !== removeToken);
+      saveAccounts(updated);
+      return updated;
+    });
+  }, []);
+  const renameAccount = useCallback((targetToken: string, label: string) => {
+    setSavedAccounts((prev) => {
+      const updated = prev.map((a) => (a.token === targetToken ? { ...a, label: label.trim() || undefined } : a));
+      saveAccounts(updated);
+      return updated;
+    });
+  }, []);
+  const updateAccountMeta = useCallback((targetToken: string, patch: Partial<SavedAccount>) => {
+    setSavedAccounts((prev) => {
+      const updated = prev.map((a) => (a.token === targetToken ? { ...a, ...patch } : a));
       saveAccounts(updated);
       return updated;
     });
@@ -174,7 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         token, user, isAuthenticated, rateLimit, loading,
-        savedAccounts, login, logout, switchAccount, removeAccount,
+        savedAccounts, login, logout, switchAccount, removeAccount, renameAccount, updateAccountMeta,
         refreshRateLimit, refreshUser, updateUser,
       }}
     >

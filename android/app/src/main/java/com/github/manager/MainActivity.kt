@@ -616,6 +616,16 @@ class MainActivity : AppCompatActivity() {
         navBarSpacer = findViewById(R.id.navBarSpacer)
         statusBarSpacer = findViewById(R.id.statusBarSpacer)
 
+        // ── 关键修复：阻止 BottomNavigationView 自己消费系统导航条 inset ──
+        // Material 1.12 的 BottomNavigationView 在构造时注册了 WindowInsets listener，
+        // 会把 navigationBars 的 bottom inset 直接加到自身 paddingBottom 上。
+        // 在「三键导航」下该 inset 约 48dp，而本布局的 BottomNavigationView 固定 62dp：
+        //   62dp - 48dp = 14dp 内容高度 → 图标与文字重叠；
+        //   若 ROM 导航条更高（或叠加字体缩放），内容高度归零 → 只剩工具栏背景，图标文字全消失。
+        // 手势导航 / 全屏模式下 inset 为 0，所以此前只在全屏时显示正常。
+        // 这里用空 listener 覆盖 Material 的 listener，导航条高度统一交给 navBarSpacer 承担。
+        ViewCompat.setOnApplyWindowInsetsListener(bottomNav) { _, insets -> insets }
+
         // ── 边到边 Insets 处理 ──────────────────────────────────────
         // 【顶部】将系统状态栏高度同步给 statusBarSpacer，确保 WebView 内容
         //   从状态栏下方开始，不与状态栏时钟/电量图标重叠。
@@ -827,9 +837,17 @@ class MainActivity : AppCompatActivity() {
                 request: WebResourceRequest?,
             ): Boolean {
                 val url = request?.url?.toString() ?: return false
-
-                // 本地资源：让 WebView 自己处理
-                if (url.startsWith("file://")) return false
+                // 本地资源：只允许 SPA 入口文档。
+                // README / Issue 里的相对链接（./docs/a.md、images/x.png）会被 WebView
+                // 解析成 file:///android_asset/...，放行只会得到 ERR_FILE_NOT_FOUND 错误页
+                // （Issue #21）。这里直接拦截，真正的仓库内跳转由前端 MarkdownRenderer 处理。
+                if (url.startsWith("file://")) {
+                    val isAppEntry = url.startsWith("file:///android_asset/index.html")
+                    if (!isAppEntry) {
+                        android.util.Log.w("WebView", "拦截可疑本地跳转: $url")
+                    }
+                    return !isAppEntry
+                }
 
                 // 外部链接（http/https）：一律用系统浏览器打开，避免破坏 React 应用历史栈。
                 // 若允许 WebView 加载外部页面，React Router 的 history.state.idx

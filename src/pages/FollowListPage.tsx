@@ -1,7 +1,7 @@
 // 粉丝 / 关注列表页
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, ExternalLink, ChevronLeft, Loader2, UserPlus, UserMinus, UserCheck, Search, X } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { getFollowers, getFollowing, followUser, unfollowUser, searchUsers } from '@/services/github';
 import type { GitHubUser } from '@/types/types';
+import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
 import i18n from "@/i18n";
 
@@ -19,10 +20,15 @@ type ListType = 'followers' | 'following';
 export default function FollowListPage() {
   const { type } = useParams<{ type: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
-
   const listType = (type === 'following' ? 'following' : 'followers') as ListType;
-  const title = listType === 'followers' ? i18n.t('我的粉丝') : i18n.t('正在关注');
+  // 支持查看任意用户：/follow-list/followers?user=octocat；缺省为当前登录用户
+  const targetLogin = searchParams.get('user')?.trim() || user?.login || '';
+  const isOwnList = !!user && targetLogin.toLowerCase() === user.login.toLowerCase();
+  const title = listType === 'followers'
+    ? (isOwnList ? i18n.t('我的粉丝') : `${targetLogin} ${i18n.t('的粉丝')}`)
+    : (isOwnList ? i18n.t('正在关注') : `${targetLogin} ${i18n.t('正在关注')}`);
   const emptyText = listType === 'followers' ? i18n.t('暂无粉丝') : i18n.t('尚未关注任何人');
 
   const [list, setList] = useState<GitHubUser[]>([]);
@@ -46,14 +52,14 @@ export default function FollowListPage() {
 
   const loadPage = useCallback(
     async (p: number) => {
-      if (!user) return;
+      if (!targetLogin) return;
       const isFirst = p === 1;
       isFirst ? setLoading(true) : setLoadingMore(true);
       try {
         const data =
           listType === 'followers'
-            ? await getFollowers(user.login, p, PER_PAGE)
-            : await getFollowing(user.login, p, PER_PAGE);
+            ? await getFollowers(targetLogin, p, PER_PAGE)
+            : await getFollowing(targetLogin, p, PER_PAGE);
         setList((prev) => (isFirst ? data : [...prev, ...data]));
         setHasMore(data.length === PER_PAGE);
         // following 列表：所有人都在关注中
@@ -70,7 +76,7 @@ export default function FollowListPage() {
         isFirst ? setLoading(false) : setLoadingMore(false);
       }
     },
-    [user, listType, title]
+    [targetLogin, listType, title]
   );
 
   useEffect(() => {
@@ -204,6 +210,7 @@ export default function FollowListPage() {
               const isSelf = isCurrentUser(u.login);
               return (
                 <div key={u.id} className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/40 transition-colors">
+                  <UserLink login={u.login} className="flex items-center gap-3 flex-1 min-w-0">
                   <Avatar className="w-10 h-10 shrink-0">
                     <AvatarImage src={u.avatar_url} alt={u.login} />
                     <AvatarFallback className="bg-secondary text-secondary-foreground text-sm font-semibold">
@@ -216,9 +223,10 @@ export default function FollowListPage() {
                     </p>
                     <p className="text-xs text-muted-foreground truncate">@{u.login}</p>
                   </div>
+                </UserLink>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {/* 查看主页 */}
-                    <a href={u.html_url} target="_blank" rel="noopener noreferrer">
+                    {/* 查看主页（应用内） */}
+                    <UserLink login={u.login}>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -226,7 +234,7 @@ export default function FollowListPage() {
                       >
                         <ExternalLink className="w-3 h-3" />
                         {i18n.t('主页')}</Button>
-                    </a>
+                    </UserLink>
                     {/* 关注 / 取消关注（不显示自己） */}
                     {!isSelf && (
                       <Button

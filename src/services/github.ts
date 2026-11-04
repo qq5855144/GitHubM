@@ -16,6 +16,9 @@ import type {
   GitHubEvent,
   GitHubLabel,
   GitHubMilestone,
+  GitHubEmail,
+  GitHubSshKey,
+  GitHubGpgKey,
   IssueState,
   IssueSortField,
   PrState,
@@ -385,6 +388,94 @@ export async function getCurrentUser(): Promise<GitHubUser> {
 
 export async function getUserByLogin(login: string): Promise<GitHubUser> {
   return request<GitHubUser>(`/users/${login}`);
+}
+
+/** 获取指定用户的公开仓库（用户主页用；按更新时间倒序） */
+export async function getUserPublicRepos(
+  login: string,
+  params: { per_page?: number; page?: number; sort?: 'created' | 'updated' | 'pushed' | 'full_name' } = {}
+): Promise<{ data: GitHubRepo[]; hasNextPage: boolean }> {
+  const { per_page = 30, page = 1, sort = 'updated' } = params;
+  return requestWithPagination<GitHubRepo>(
+    `/users/${encodeURIComponent(login)}/repos?sort=${sort}&direction=desc&type=owner&per_page=${per_page}&page=${page}`
+  );
+}
+
+export type GithubTokenType = 'classic' | 'fine-grained' | 'oauth' | 'unknown';
+
+export interface TokenMetadata {
+  login: string | null;
+  tokenType: GithubTokenType;
+  /** 当前 Token 实际拥有的 scope（classic PAT / OAuth 有效） */
+  scopes: string[];
+  /** 该接口可接受的 scope（GitHub 返回的 x-accepted-oauth-scopes） */
+  acceptedScopes: string[];
+  /** Token 过期时间（fine-grained / 部分 OAuth 会返回） */
+  expiresAt: string | null;
+  /** 距离过期天数；已过期或未知为 null */
+  daysUntilExpiry: number | null;
+  rateLimit: {
+    limit: number;
+    remaining: number;
+    reset: number;
+  } | null;
+}
+
+function parseScopeHeader(value: string | null): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function detectTokenType(token: string): GithubTokenType {
+  if (token.startsWith('github_pat_')) return 'fine-grained';
+  if (token.startsWith('ghp_')) return 'classic';
+  if (token.startsWith('gho_') || token.startsWith('ghu_') || token.startsWith('ghs_')) return 'oauth';
+  return 'unknown';
+}
+
+/**
+ * 读取 Token 元信息：账号、类型、作用域、过期时间、速率限制。
+ *
+ * 注意：GitHub 没有「列出/创建 PAT」的公开 API（这是平台限制，不是本应用缺失）。
+ * 能做的只有：验证当前 Token、读取它自身的作用域/过期时间/额度，并管理本机保存的 Token。
+ */
+export async function getTokenMetadata(tokenOverride?: string): Promise<TokenMetadata> {
+  const token = tokenOverride ?? authToken ?? '';
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${BASE_URL}/user`, { headers });
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}`) as Error & { status: number };
+    error.status = response.status;
+    throw error;
+  }
+
+  const user = (await response.json()) as GitHubUser;
+  const expiresAt = response.headers.get('github-authentication-token-expiration');
+  const expiresMs = expiresAt ? Date.parse(expiresAt) : Number.NaN;
+
+  return {
+    login: user.login,
+    tokenType: detectTokenType(token),
+    scopes: parseScopeHeader(response.headers.get('x-oauth-scopes')),
+    acceptedScopes: parseScopeHeader(response.headers.get('x-accepted-oauth-scopes')),
+    expiresAt: expiresAt || null,
+    daysUntilExpiry: Number.isNaN(expiresMs)
+      ? null
+      : Math.ceil((expiresMs - Date.now()) / (24 * 60 * 60 * 1000)),
+    rateLimit: {
+      limit: Number(response.headers.get('x-ratelimit-limit') || 0),
+      remaining: Number(response.headers.get('x-ratelimit-remaining') || 0),
+      reset: Number(response.headers.get('x-ratelimit-reset') || 0),
+    },
+  };
 }
 
 export async function getRateLimit(): Promise<{ rate: GitHubRateLimit }> {
@@ -1875,4 +1966,97 @@ export async function submitPullRequestReview(
       }),
     }
   );
+}
+
+// ===== 账号级操作（Account）=====
+// 说明：GitHub 官方 API 不提供「列出 / 创建 Personal Access Token」的接口。
+// 因此本应用的 Token 管理 = 本机保存的 Token 管理（验证 / 标签 / 作用域 / 过期 / 删除）
+// + 真正可用的账号级操作（资料、邮箱、SSH/GPG 密钥）。
+
+/** 当前登录用户的邮箱列表（需要 user:email scope） */
+export async function getEmails(): Promise<GitHubEmail[]> {
+  return request<GitHubEmail[]>('/user/emails');
+}
+
+/** 添加邮箱（需要 user:email scope） */
+export async function addEmail(email: string): Promise<GitHubEmail> {
+  return request<GitHubEmail>('/user/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emails: [email] }),
+  });
+}
+
+/** 设置主邮箱 / 可见性（需要 user:email scope） */
+export async function updateEmail(
+  email: string,
+  patch: { primary?: boolean; visibility?: 'public' | 'private' }
+): Promise<GitHubEmail> {
+  return request<GitHubEmail>('/user/emails', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, ...patch }),
+  });
+}
+
+/** 删除邮箱（需要 user:email scope） */
+export async function deleteEmail(email: string): Promise<void> {
+  await request<void>('/user/emails', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emails: [email] }),
+  });
+}
+
+/** SSH 公钥列表（需要 read:public_key scope） */
+export async function getSshKeys(): Promise<GitHubSshKey[]> {
+  return request<GitHubSshKey[]>('/user/keys');
+}
+
+/** 添加 SSH 公钥（需要 write:public_key scope） */
+export async function addSshKey(title: string, key: string): Promise<GitHubSshKey> {
+  return request<GitHubSshKey>('/user/keys', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, key }),
+  });
+}
+
+/** 删除 SSH 公钥（需要 write:public_key scope） */
+export async function deleteSshKey(id: number): Promise<void> {
+  await request<void>(`/user/keys/${id}`, { method: 'DELETE' });
+}
+
+/** GPG 公钥列表（需要 read:gpg_key scope） */
+export async function getGpgKeys(): Promise<GitHubGpgKey[]> {
+  return request<GitHubGpgKey[]>('/user/gpg_keys');
+}
+
+/** 添加 GPG 公钥（需要 write:gpg_key scope） */
+export async function addGpgKey(armoredPublicKey: string): Promise<GitHubGpgKey> {
+  return request<GitHubGpgKey>('/user/gpg_keys', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ armored_public_key: armoredPublicKey }),
+  });
+}
+
+/** 删除 GPG 公钥（需要 write:gpg_key scope） */
+export async function deleteGpgKey(id: number): Promise<void> {
+  await request<void>(`/user/gpg_keys/${id}`, { method: 'DELETE' });
+}
+
+/** 当前用户已屏蔽的用户列表（需要 user scope） */
+export async function getBlockedUsers(): Promise<GitHubUser[]> {
+  return request<GitHubUser[]>('/user/blocks');
+}
+
+/** 屏蔽用户（需要 user scope） */
+export async function blockUser(login: string): Promise<void> {
+  await request<void>(`/user/blocks/${encodeURIComponent(login)}`, { method: 'PUT' });
+}
+
+/** 取消屏蔽用户（需要 user scope） */
+export async function unblockUser(login: string): Promise<void> {
+  await request<void>(`/user/blocks/${encodeURIComponent(login)}`, { method: 'DELETE' });
 }

@@ -30,6 +30,7 @@ import ArtifactsPage from './pages/ArtifactsPage';
 import GraphQLPlaygroundPage from './pages/GraphQLPlaygroundPage';
 import FollowListPage from './pages/FollowListPage';
 import StarredPage from './pages/StarredPage';
+import UserProfilePage from './pages/UserProfilePage';
 import RepoForksPage from './pages/RepoForksPage';
 import StargazersPage from './pages/StargazersPage';
 import PrDiffPage from './pages/PrDiffPage';
@@ -76,6 +77,7 @@ export const routes: RouteConfig[] = [
   { name: 'Gists', path: '/gists', element: <GistsPage /> },
   { name: i18n.t('Gist 详情'), path: '/gists/:gistId', element: <GistDetailPage /> },
   { name: i18n.t('关注列表'), path: '/follow-list/:type', element: <FollowListPage /> },
+  { name: i18n.t('用户主页'), path: '/users/:username', element: <UserProfilePage /> },
   { name: i18n.t('我的收藏'), path: '/starred', element: <StarredPage /> },
   { name: 'Packages', path: '/packages', element: <PackagesPage /> },
   { name: i18n.t('账号管理'), path: '/accounts', element: <AccountsPage /> },

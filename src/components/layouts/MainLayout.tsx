@@ -173,7 +173,7 @@ function SidebarNav({
   };
 
   return (
-    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
+    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border/50">
       {/* Logo 区域 */}
       <div className={cn('flex items-center gap-3 px-4 py-4 border-b border-sidebar-border', collapsed && 'justify-center px-3')}>
         <div className="w-8 h-8 shrink-0 flex items-center justify-center">
@@ -229,7 +229,7 @@ function SidebarNav({
                   className={cn(
                     'flex items-center justify-center w-full h-9 rounded-lg transition-colors',
                     isActive
-                      ? 'bg-primary/20 text-primary'
+                      ? 'bg-primary/10 text-primary shadow-neu-inset'
                       : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                   )}
                 >
@@ -246,7 +246,7 @@ function SidebarNav({
               className={cn(
                 'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
                 isActive
-                  ? 'bg-primary/20 text-primary font-medium'
+                  ? 'bg-primary/10 text-primary font-medium shadow-neu-inset'
                   : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
               )}
             >
@@ -292,7 +292,7 @@ function SidebarNav({
                 className={cn(
                   'flex items-center justify-center w-full h-9 rounded-lg transition-colors',
                   location.pathname === '/settings'
-                    ? 'bg-primary/20 text-primary'
+                    ? 'bg-primary/10 text-primary shadow-neu-inset'
                     : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                 )}
               >
@@ -308,7 +308,7 @@ function SidebarNav({
             className={cn(
               'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
               location.pathname === '/settings'
-                ? 'bg-primary/20 text-primary font-medium'
+                ? 'bg-primary/10 text-primary font-medium shadow-neu-inset'
                 : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
             )}
           >
@@ -392,7 +392,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       {/* 主内容区 */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* 顶部导航栏 */}
-        <header className="sticky top-0 z-40 flex items-center h-14 px-4 gap-3 bg-card/95 backdrop-blur-sm border-b border-border">
+        <header className="sticky top-0 z-40 flex items-center h-14 px-4 gap-3 bg-background/80 backdrop-blur-xl border-b border-border/35">
           {/* 移动端菜单按钮 */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>

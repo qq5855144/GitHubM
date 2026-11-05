@@ -4,15 +4,15 @@
       ══ 主界面颜色语义化 token（深色模式）══
       与 Web 端 index.css 深色 HSL 变量完全对应，确保冷启动零闪烁
     -->
-    <color name="main_bg">#111117</color>              <!-- WebView 背景色（深色模式 background 变量） -->
-    <color name="sidebar_bg">#0d0d11</color>           <!-- BottomNav 背景色（深色模式 sidebar-background 变量） -->
+    <color name="main_bg">#191d23</color>              <!-- WebView 背景色（深色模式 background 变量） -->
+    <color name="sidebar_bg">#171b21</color>           <!-- BottomNav 背景色（深色模式 sidebar-background 变量） -->
     <color name="nav_unselected">#9292A8</color>       <!-- 底部导航未选中色（深色模式 muted-foreground 变量） -->
 
     <!-- 底部导航栏颜色（深色模式覆盖） -->
     <color name="bottom_nav_background">@color/sidebar_bg</color>
     <color name="bottom_nav_selected">#8B4CF8</color>     <!-- 选中色：深色主题紫色 -->
     <color name="bottom_nav_unselected">@color/nav_unselected</color>
-    <color name="bottom_nav_divider">#21212b</color>      <!-- 分割线：dark border -->
+    <color name="bottom_nav_divider">#262b33</color>      <!-- 分割线：dark border -->
     <!-- M3 Active Indicator 背景色：primaryContainer 深色（深紫） -->
     <color name="bottom_nav_indicator_bg">#3D2B6B</color>
 
@@ -21,7 +21,7 @@
       极客终端风格：深黑紫底 + 明显紫色辉光（4层叠加增强层次感）
     -->
     <!-- 背景底色：深紫黑，有色温不死黑 -->
-    <color name="splash_bg_solid">#0D0B1A</color>
+    <color name="splash_bg_solid">#191D23</color>
     <!-- 光晕中心：55% 透明度深紫，肉眼可见的发光感 -->
     <color name="splash_glow_center">#8C3D1B69</color>
     <!-- 光晕边缘：完全透明 -->

@@ -10,63 +10,57 @@
 
   /* 浅色模式（默认/跟随系统时若系统为浅色） */
   :root {
-    --radius: 0.5rem;
-
-    /* 背景层 */
-    --background: 250 30% 98%;        /* #F9F8FD 浅紫白 */
-    --foreground: 240 15% 12%;        /* #1A1A2E 深蓝黑 */
-
-    /* 卡片/面板 */
-    --card: 0 0% 100%;                /* 纯白卡片 */
-    --card-foreground: 240 15% 12%;
-
+    --radius: 0.875rem;
+    /* 背景层 - 柔和冷灰，新拟态基底 */
+    --background: 220 24% 95%;        /* #EEF1F7 */
+    --foreground: 222 24% 16%;        /* #1F2633 */
+    /* 卡片/面板 - 与背景同色系，仅靠光影分层 */
+    --card: 220 26% 96%;              /* #F0F3F9 */
+    --card-foreground: 222 24% 16%;
     /* 弹出层 */
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 15% 12%;
-
+    --popover: 220 28% 98%;
+    --popover-foreground: 222 24% 16%;
     /* 主色 - 紫罗兰 #7c3aed */
     --primary: 263 70% 58%;
     --primary-foreground: 0 0% 100%;
 
     /* 次要色 */
-    --secondary: 250 20% 93%;         /* 浅紫灰 */
-    --secondary-foreground: 240 15% 20%;
-
+    --secondary: 220 18% 91%;         /* #E4E9F1 */
+    --secondary-foreground: 222 22% 22%;
     /* 静音色 */
-    --muted: 250 20% 93%;
-    --muted-foreground: 240 8% 50%;   /* 中灰 ≥4.5:1 */
-
+    --muted: 220 18% 91%;
+    --muted-foreground: 220 10% 45%;  /* #68707F ≥4.5:1 */
     /* 强调色 - 亮紫蓝 */
-    --accent: 258 88% 66%;            /* #8B5CF6 */
+    --accent: 258 88% 66%;
     --accent-foreground: 0 0% 100%;
-
     /* 危险色 */
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-
     /* 边框/输入 */
-    --border: 250 15% 87%;
-    --input: 250 15% 87%;
+    --border: 220 15% 85%;
+    --input: 220 15% 85%;
     --ring: 263 70% 58%;
-
+    /* 新拟态光影 token */
+    --shadow-neu-sm: 4px 4px 10px rgba(163, 177, 198, 0.35), -4px -4px 10px rgba(255, 255, 255, 0.72);
+    --shadow-neu: 8px 8px 20px rgba(163, 177, 198, 0.42), -8px -8px 20px rgba(255, 255, 255, 0.82);
+    --shadow-neu-inset: inset 2px 2px 5px rgba(163, 177, 198, 0.38), inset -2px -2px 5px rgba(255, 255, 255, 0.78);
+    --shadow-primary: 0 8px 18px -10px hsl(var(--primary) / 0.65);
     /* 图表 */
-    --chart-1: 263 70% 58%;           /* 紫 */
-    --chart-2: 196 80% 48%;           /* 青 */
-    --chart-3: 27 90% 56%;            /* 橙 */
-    --chart-4: 142 65% 42%;           /* 绿 */
-    --chart-5: 0 72% 51%;             /* 红 */
-
-    /* 侧边栏 - 浅色模式使用浅紫白背景 */
-    --sidebar: 258 35% 97%;
-    --sidebar-background: 258 35% 97%;
-    --sidebar-foreground: 258 35% 18%;
+    --chart-1: 263 70% 58%;
+    --chart-2: 196 80% 48%;
+    --chart-3: 27 90% 56%;
+    --chart-4: 142 65% 42%;
+    --chart-5: 0 72% 51%;
+    /* 侧边栏 */
+    --sidebar: 220 24% 94%;
+    --sidebar-background: 220 24% 94%;
+    --sidebar-foreground: 222 24% 20%;
     --sidebar-primary: 263 70% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 258 30% 91%;
-    --sidebar-accent-foreground: 258 35% 16%;
-    --sidebar-border: 258 20% 87%;
+    --sidebar-accent: 220 18% 89%;
+    --sidebar-accent-foreground: 222 24% 18%;
+    --sidebar-border: 220 15% 84%;
     --sidebar-ring: 263 70% 58%;
-
     /* 状态色 */
     --success: 142 65% 42%;
     --success-foreground: 0 0% 100%;
@@ -74,71 +68,66 @@
     --warning-foreground: 0 0% 100%;
     --info: 196 80% 48%;
     --info-foreground: 0 0% 100%;
-
     /* 代码 */
-    --code-bg: 250 25% 95%;
-    --code-border: 250 15% 87%;
+    --code-bg: 220 20% 92%;
+    --code-border: 220 15% 85%;
   }
 
   /* 深色模式 */
   .dark {
-    --radius: 0.5rem;
-
-    /* 背景层 */
-    --background: 240 14% 8%;         /* #0D0D16 极深紫黑 */
-    --foreground: 240 20% 92%;        /* #E8E8F0 浅蓝白 */
+    --radius: 0.875rem;
+    /* 背景层 - 深冷灰，低对比新拟态 */
+    --background: 222 16% 11%;        /* #191D23 */
+    --foreground: 215 24% 92%;        /* #E4EAF3 */
 
     /* 卡片/面板 */
-    --card: 240 12% 12%;              /* #181821 */
-    --card-foreground: 240 20% 92%;
-
+    --card: 222 15% 13%;              /* #1D222A */
+    --card-foreground: 215 24% 92%;
     /* 弹出层 */
-    --popover: 240 12% 15%;           /* #1D1D2B */
-    --popover-foreground: 240 20% 92%;
-
+    --popover: 222 15% 15%;
+    --popover-foreground: 215 24% 92%;
     /* 主色 - 紫罗兰（深色稍亮） */
-    --primary: 263 72% 62%;           /* #8B4CF8 */
+    --primary: 263 72% 64%;
     --primary-foreground: 0 0% 100%;
-
     /* 次要色 */
-    --secondary: 240 12% 18%;         /* #252535 */
-    --secondary-foreground: 240 20% 88%;
-
+    --secondary: 222 12% 18%;
+    --secondary-foreground: 215 20% 88%;
     /* 静音色 */
-    --muted: 240 10% 18%;
-    --muted-foreground: 240 10% 62%;  /* #9292A8 ≥4.5:1 */
+    --muted: 222 12% 18%;
+    --muted-foreground: 218 10% 64%;
 
     /* 强调色 */
-    --accent: 258 88% 70%;            /* #9B77F9 */
+    --accent: 258 88% 72%;
     --accent-foreground: 0 0% 100%;
-
     /* 危险色 */
-    --destructive: 0 72% 56%;
+    --destructive: 0 72% 58%;
     --destructive-foreground: 0 0% 100%;
-
     /* 边框/输入 */
-    --border: 240 10% 24%;            /* #343448 */
-    --input: 240 10% 22%;
-    --ring: 263 72% 62%;
-
+    --border: 220 10% 23%;
+    --input: 220 10% 21%;
+    --ring: 263 72% 64%;
+    /* 新拟态光影 token - 深色仅靠极弱高光塑造体积 */
+    --shadow-neu-sm: 4px 4px 10px rgba(0, 0, 0, 0.48), -4px -4px 10px rgba(255, 255, 255, 0.035);
+    --shadow-neu: 8px 8px 20px rgba(0, 0, 0, 0.58), -8px -8px 20px rgba(255, 255, 255, 0.04);
+    --shadow-neu-inset: inset 2px 2px 5px rgba(0, 0, 0, 0.55), inset -2px -2px 5px rgba(255, 255, 255, 0.04);
+    --shadow-primary: 0 8px 18px -10px hsl(var(--primary) / 0.7);
     /* 图表 */
-    --chart-1: 263 72% 62%;
+    --chart-1: 263 72% 64%;
     --chart-2: 196 80% 55%;
     --chart-3: 27 90% 62%;
     --chart-4: 142 65% 48%;
-    --chart-5: 0 72% 56%;
+    --chart-5: 0 72% 58%;
 
-    /* 侧边栏 - 更深紫黑 */
-    --sidebar: 240 14% 6%;
-    --sidebar-background: 240 14% 6%;
-    --sidebar-foreground: 240 20% 88%;
-    --sidebar-primary: 263 72% 65%;
+    /* 侧边栏 */
+    --sidebar: 222 16% 10%;
+    --sidebar-background: 222 16% 10%;
+    --sidebar-foreground: 215 22% 88%;
+    --sidebar-primary: 263 72% 66%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 12% 14%;
-    --sidebar-accent-foreground: 240 20% 92%;
-    --sidebar-border: 240 10% 16%;
-    --sidebar-ring: 263 72% 62%;
-
+    --sidebar-accent: 222 12% 16%;
+    --sidebar-accent-foreground: 215 22% 92%;
+    --sidebar-border: 220 10% 18%;
+    --sidebar-ring: 263 72% 64%;
     /* 状态色 */
     --success: 142 65% 48%;
     --success-foreground: 0 0% 100%;
@@ -146,10 +135,9 @@
     --warning-foreground: 0 0% 100%;
     --info: 196 80% 55%;
     --info-foreground: 0 0% 100%;
-
     /* 代码 */
-    --code-bg: 240 14% 8%;
-    --code-border: 240 10% 24%;
+    --code-bg: 222 14% 10%;
+    --code-border: 220 10% 22%;
   }
 }
 
@@ -223,6 +211,11 @@
   body {
     @apply bg-background text-foreground;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    /* 极淡的环境光，避免大面积纯色显得平板；不参与内容层布局 */
+    background-image:
+      radial-gradient(1100px circle at 0% 0%, hsl(var(--primary) / 0.055), transparent 46%),
+      radial-gradient(900px circle at 100% 100%, hsl(var(--accent) / 0.045), transparent 42%);
+    background-attachment: fixed;
   }
 
   /* 移动端安全边界：禁止超长文件名/URL/分支名把整页撑出视口 */
@@ -262,6 +255,74 @@
   .break-anywhere {
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  /*
+   * ── 简约新拟态（Neumorphism）────────────────────────────────
+   * 原则：只给「大块可交互表面」加光影，不给徽章、表格、代码块、
+   * 密集列表项强行加浮雕，避免整页像塑料模具。
+   */
+  .neu-card {
+    border: 1px solid hsl(var(--border) / 0.38);
+    background: hsl(var(--card) / 0.94);
+    box-shadow: var(--shadow-neu-sm);
+  }
+
+  .neu-raised {
+    box-shadow: var(--shadow-neu);
+  }
+
+  .neu-inset {
+    border-color: transparent;
+    background: hsl(var(--secondary) / 0.68);
+    box-shadow: var(--shadow-neu-inset);
+  }
+
+  .neu-press {
+    transition: box-shadow 180ms ease, transform 180ms ease;
+  }
+
+  .neu-press:active {
+    box-shadow: var(--shadow-neu-inset);
+    transform: translateY(1px);
+  }
+
+  /*
+   * 旧页面里大量卡片是 `bg-card border border-border rounded-*`。
+   * 这里只提升「卡片级」表面，不动 chip / badge / 表格单元格。
+   */
+  [class~='bg-card'][class~='border-border'] {
+    border-color: hsl(var(--border) / 0.38);
+  }
+
+  [class~='bg-card'][class~='border-border'][class~='rounded-lg'],
+  [class~='bg-card'][class~='border-border'][class~='rounded-xl'],
+  [class~='bg-card'][class~='border-border'][class~='rounded-2xl'] {
+    box-shadow: var(--shadow-neu-sm);
+  }
+
+  /* 输入类控件统一做「内凹」，这是新拟态最值得保留的部分 */
+  input[class~='bg-secondary'],
+  textarea[class~='bg-secondary'],
+  select[class~='bg-secondary'] {
+    border-color: transparent;
+    box-shadow: var(--shadow-neu-inset);
+  }
+
+  input[class~='bg-secondary']:focus-visible,
+  textarea[class~='bg-secondary']:focus-visible,
+  select[class~='bg-secondary']:focus-visible {
+    box-shadow: var(--shadow-neu-inset), 0 0 0 2px hsl(var(--ring) / 0.22);
+  }
+
+  /* Tabs 分段控件：凹陷轨道 + 凸起选中项，不污染其他元素 */
+  [role='tablist'] {
+    border-color: hsl(var(--border) / 0.35) !important;
+    box-shadow: var(--shadow-neu-inset);
+  }
+
+  [role='tablist'] [role='tab'][data-state='active'] {
+    box-shadow: var(--shadow-neu-sm);
   }
 
   .gradient-text {

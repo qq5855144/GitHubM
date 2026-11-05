@@ -7,24 +7,23 @@
       ══ 主界面颜色语义化 token（浅色模式）══
       与 Web 端 index.css HSL 变量对应，确保 Native/WebView 背景一致无闪烁
     -->
-    <color name="main_bg">#f8f8fb</color>              <!-- WebView 背景色（对应 Web 端 background 变量） -->
-    <color name="sidebar_bg">#f6f4fa</color>           <!-- BottomNav 背景色（对应 Web 端 sidebar-background 变量） -->
+    <color name="main_bg">#eef1f7</color>              <!-- WebView 背景色（对应 Web 端 background 变量） -->
+    <color name="sidebar_bg">#e9edf5</color>           <!-- BottomNav 背景色（对应 Web 端 sidebar-background 变量） -->
     <color name="nav_unselected">#64748b</color>       <!-- 底部导航未选中色（对应 Web 端 muted-foreground 变量） -->
 
     <!-- 底部导航栏颜色 -->
     <color name="bottom_nav_background">@color/sidebar_bg</color>
     <color name="bottom_nav_selected">#7c3aed</color>     <!-- 选中色：主题紫色 primary -->
     <color name="bottom_nav_unselected">@color/nav_unselected</color>
-    <color name="bottom_nav_divider">#e2ddf5</color>      <!-- 分割线：浅紫灰 border -->
+    <color name="bottom_nav_divider">#dde3ee</color>      <!-- 分割线：冷灰 border -->
     <!-- M3 Active Indicator 背景色：primaryContainer（浅色模式 = 淡紫） -->
     <color name="bottom_nav_indicator_bg">#EDE9FE</color>
-
     <!--
       ══ 启动画面 · 浅色模式配色 ══
-      纯白背景，光晕/渐变层全部透明
+      与主界面同色系，柔和不刺眼
     -->
-    <!-- 背景层：纯白 -->
-    <color name="splash_bg_solid">#FFFFFF</color>
+    <!-- 背景层 -->
+    <color name="splash_bg_solid">#EEF1F7</color>
     <!-- 光晕中心：透明（无光晕） -->
     <color name="splash_glow_center">#00FFFFFF</color>
     <!-- 光晕边缘：透明 -->

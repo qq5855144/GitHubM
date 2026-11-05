@@ -89,7 +89,9 @@ export default {
             borderRadius: {
                 lg: 'var(--radius)',
                 md: 'calc(var(--radius) - 2px)',
-                sm: 'calc(var(--radius) - 4px)'
+                sm: 'calc(var(--radius) - 4px)',
+                xl: 'calc(var(--radius) + 4px)',
+                '2xl': 'calc(var(--radius) + 8px)'
             },
             backgroundImage: {
                 'gradient-primary': 'var(--gradient-primary)',
@@ -98,7 +100,11 @@ export default {
             },
             boxShadow: {
                 card: 'var(--shadow-card)',
-                hover: 'var(--shadow-hover)'
+                hover: 'var(--shadow-hover)',
+                neu: 'var(--shadow-neu)',
+                'neu-sm': 'var(--shadow-neu-sm)',
+                'neu-inset': 'var(--shadow-neu-inset)',
+                primary: 'var(--shadow-primary)'
             },
             keyframes: {
                 'accordion-down': {

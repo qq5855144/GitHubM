@@ -561,6 +561,29 @@ export async function forkRepo(owner: string, repo: string): Promise<GitHubRepo>
   return request<GitHubRepo>(`/repos/${owner}/${repo}/forks`, { method: 'POST' });
 }
 
+export interface MergeUpstreamResult {
+  message: string;
+  merge_type: 'merge' | 'fast-forward' | 'none';
+  base_branch: string;
+}
+
+/**
+ * 同步 Fork 上游（Sync Fork）
+ * 对应 GitHub「Fetch upstream」：把上游默认分支合并到当前 Fork 的指定分支。
+ * 409 表示存在合并冲突，需要到 GitHub 网页端处理。
+ */
+export async function syncFork(
+  owner: string,
+  repo: string,
+  branch: string
+): Promise<MergeUpstreamResult> {
+  return request<MergeUpstreamResult>(`/repos/${owner}/${repo}/merge-upstream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ branch }),
+  });
+}
+
 export async function getRepoLanguages(
   owner: string,
   repo: string

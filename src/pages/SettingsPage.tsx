@@ -48,6 +48,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { MODEL_DEFS, loadProviderKey, saveProviderKey } from '@/components/ai/aiUtils';
 import { getProviderStats, getTotalRequestCount, clearAllUsage, type ProviderStats } from '@/components/ai/usageStats';
+import AgentDiagnosticsPanel from '@/components/ai/AgentDiagnosticsPanel';
 import { formatCostUsd, getModelPrice, SOURCES } from '@/components/ai/modelPricing';
 import { fetchVisitStats, type DailyStats, type VisitSummary } from '@/lib/visitStats';
 import {
@@ -988,8 +989,8 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
+        <AgentDiagnosticsPanel />
       </SectionGroup>
-
       {/* ── 分组 4：访问统计 ────────────────────────────────────────────── */}
       <SectionGroup
         id="visit"

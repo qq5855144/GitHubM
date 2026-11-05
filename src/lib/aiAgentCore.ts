@@ -14,6 +14,9 @@ import {
   saveCachedInstructions,
   type McpToolSchema,
 } from './mcpClient';
+import { repairToolCallPairs, compressMessages, type MessageLike } from './agent/messageIntegrity';
+import { validateRequiredArguments, clampToolResult } from './agent/toolPolicy';
+import { startAgentTrace, recordAgentTraceEvent, endAgentTrace } from './agent/runTrace';
 
 // ── 官方 GitHub MCP 集成状态（模块级，会话内复用） ─────────────────────────
 let mcpClient: GitHubMcpClient | null = null;
@@ -5148,6 +5151,16 @@ function executeTool(
   call: Record<string, unknown>,
   targetBranch?: string,
 ): Promise<string> {
+  // 工具必填参数校验：把「模型漏参数」变成明确的工具错误，避免无效 API 请求和重试风暴。
+  const toolName = coerceStr(call.tool);
+  const definition = getAllToolDefinitions().find((t) => t.function.name === toolName);
+  const missing = validateRequiredArguments(
+    definition?.function.parameters as Record<string, unknown> | undefined,
+    call
+  );
+  if (missing.length > 0) {
+    return Promise.resolve(`❌ 工具参数校验失败（${toolName}）：${missing.join('；')}`);
+  }
   // 规范化参数：LLM 可能输出数字/布尔值，统一转为字符串再处理
   const p = (k: string, fb = "") => coerceStr(call[k], fb);
   switch (call.tool) {
@@ -5455,39 +5468,8 @@ async function dbUpdateStep(
  * 这三种情况都会触发 LLM API 的 HTTP 400 错误。
  */
 function sanitizeToolCallMessages(msgs: Message[]): Message[] {
-  if (msgs.length === 0) return [];
-  const result = [...msgs];
-  // 1. 移除任何 tool_calls 后没有完整紧邻 tool 回复的 assistant 消息（不限位置）。
-  //    修复：旧实现只检查数组末尾，ctx-compress 拼接 [head+summary+tail] 后
-  //    head 尾部残留的 assistant(tool_calls) 位于序列中间，其后紧跟的是摘要 user 消息，
-  //    导致 DeepSeek API HTTP 400（insufficient tool messages following tool_calls）。
-  for (let i = result.length - 1; i >= 0; i--) {
-    const msg = result[i];
-    if (msg.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
-      let ok = true;
-      for (let k = 0; k < msg.tool_calls.length; k++) {
-        const next = result[i + 1 + k];
-        if (!next || next.role !== "tool" || next.tool_call_id !== msg.tool_calls[k].id) { ok = false; break; }
-      }
-      if (!ok) result.splice(i, 1);
-    }
-  }
-  // 2. 移除孤立 tool 消息（沿连续 tool 消息链回溯，源头不是对应 assistant tool_calls 即移除）
-  for (let i = result.length - 1; i >= 0; i--) {
-    const msg = result[i];
-    if (msg.role === "tool" && msg.tool_call_id) {
-      let j = i - 1;
-      while (j >= 0 && result[j].role === "tool") j--;
-      const prev = j >= 0 ? result[j] : undefined;
-      const ok =
-        prev &&
-        prev.role === "assistant" &&
-        Array.isArray(prev.tool_calls) &&
-        prev.tool_calls.some((tc) => tc.id === msg.tool_call_id);
-      if (!ok) result.splice(i, 1);
-    }
-  }
-  return result;
+  // 统一走已测试的 messageIntegrity 模块，避免这里与压缩逻辑各维护一份修复算法。
+  return repairToolCallPairs(msgs as unknown as MessageLike[]) as unknown as Message[];
 }
 
 /** 每轮发送给 LLM 的最近消息窗口（system 与摘要不计入） */
@@ -6154,6 +6136,11 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
   }
 
   const ctx: GithubContext = { token: githubToken, owner, repo };
+  const traceId = startAgentTrace({
+    model: modelConfig.model ?? modelConfig.type,
+    repo: `${owner}/${repo}`,
+    userId,
+  });
 
   // 生成本次流的唯一标识：stream_id 每次新请求生成；turn_id 复用幂等键（有则用，无则新建）
   const streamId = `s_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
@@ -6396,7 +6383,18 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       };
 
       try {
+        recordAgentTraceEvent(traceId, 'model_request', {
+          batch,
+          round,
+          messageCount: fullMessages.length,
+        });
         const llmResult = await callLLM(modelConfig, await buildLLMContext(fullMessages, modelConfig, abortSig), onThinkingChunk, heartbeat, onUsageCb);
+        recordAgentTraceEvent(traceId, 'model_response', {
+          batch,
+          round,
+          textChars: llmResult.text.length,
+          toolCall: llmResult.toolCall?.name ?? null,
+        });
         assistantText = llmResult.text;
         // FC 模式下，结构化工具调用直接挂到本轮作用域；非 FC 则为 null（后续走 extractToolCall）
         fcToolCall = llmResult.toolCall;
@@ -6776,6 +6774,10 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
             await sendTyped({ type: "tool_start", id: toolCallId, tool: toolCall.tool, label, hint });
           }
 
+          recordAgentTraceEvent(traceId, 'tool_start', {
+            name: String(toolCall.tool),
+            argsChars: JSON.stringify(toolCall).length,
+          });
           try {
             toolResult = await executeTool(ctx, toolCall, targetBranch);
           } finally {
@@ -6821,6 +6823,13 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
         elapsedMs,
         cached: isCached,
         errorMsg: toolFailed ? toolResult.slice(0, 200) : undefined
+      });
+      recordAgentTraceEvent(traceId, 'tool_end', {
+        name: toolName,
+        status: toolStatus,
+        elapsedMs,
+        cached: isCached,
+        resultChars: toolResult.length,
       });
 
       // 【网关策略 6】协议封箱：对传回给大模型的内容使用统一协议，便于它稳定解析
@@ -6928,9 +6937,8 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       // 工具结果注入截断：文件内容类工具允许 30000 字符（约 600 行代码），其他工具 4000 字符
       const fileContentTools = ["read_file", "batch_read", "grep_in_file", "get_file_info", "get_code_outline", "read_function"];
       const resultLimit = fileContentTools.includes(String(toolCall.tool)) ? 30000 : 4000;
-      const truncatedRaw = toolResult.length > resultLimit
-        ? toolResult.slice(0, resultLimit) + `\n…（内容已截断，原始长度 ${toolResult.length} 字符，如需完整内容请重新调用工具并缩小查询范围）`
-        : toolResult;
+      const clamped = clampToolResult(toolResult, resultLimit);
+      const truncatedRaw = clamped.text;
         
       // 优化：统一工具返回协议（规范化结构输出，提高 LLM 多步推理稳定性）
       const normalizedResult = JSON.stringify({
@@ -6957,24 +6965,22 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       }
 
       // ── 上下文滑动窗口压缩：消息超过 60 条时，压缩中间的工具交互历史 ──────────
-      // 保留：[0]=system、[1..4]=前4条用户/助手消息（任务背景）、[-20..]=最近20条
-      // 压缩：中间的工具结果消息折叠为一条摘要，减少 token 消耗
+      // 保留：system、前4条任务背景、最近20条；中间插入摘要。
+      // compressMessages 内部会保证 assistant(tool_calls) 与 tool(result) 不被拆散。
       if (fullMessages.length > 60) {
-        const system = fullMessages[0];
-        const head   = fullMessages.slice(1, 5);    // 前4条（任务上下文）
-        const tail   = fullMessages.slice(-20);     // 最近20条（当前进展）
-        const mid    = fullMessages.slice(5, fullMessages.length - 20);
-        // 统计压缩掉的工具调用数量，生成摘要
-        const toolCallCount = mid.filter(m => m.role === "assistant").length;
-        const summary: Message = {
-          role: "user",
-          content: `[系统摘要] 上面已省略 ${mid.length} 条中间过程消息（约 ${toolCallCount} 次工具调用）。` +
-            `任务仍在继续，请根据最近上下文继续执行剩余步骤。`,
-        };
-        fullMessages.splice(0, fullMessages.length, system, ...head, summary, ...tail);
-        // ⚠️ 截断后必须清理不完整的 tool_calls 对，否则会出现 summary(user)→tool 的非法序列
-        fullMessages = sanitizeToolCallMessages(fullMessages);
-        console.log(`[ctx-compress] 压缩后 messages=${fullMessages.length}，省略了 ${mid.length} 条中间消息`);
+        const compressed = compressMessages(fullMessages as unknown as MessageLike[], {
+          maxMessages: 60,
+          headCount: 4,
+          tailCount: 20,
+        });
+        fullMessages = compressed.messages as unknown as Message[];
+        recordAgentTraceEvent(traceId, 'context_compress', {
+          omitted: compressed.omitted,
+          before: compressed.messages.length + compressed.omitted,
+          after: compressed.messages.length,
+          toolResultTruncated: clamped.truncated,
+        });
+        console.log(`[ctx-compress] 压缩后 messages=${fullMessages.length}，省略了 ${compressed.omitted} 条中间消息`);
       }
 
       // ── 每 5 轮自动保存快照：页面意外关闭时任务进度不丢失 ─────────────────
@@ -7042,6 +7048,10 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
     } catch (fatalErr) {
       // 顶层兜底：未预期的异常，写入流后关闭，防止代理层因未处理的 rejection 返回 500
       console.error("[IIFE fatal]", (fatalErr as Error).message);
+      recordAgentTraceEvent(traceId, 'error', {
+        scope: 'agent_loop',
+        message: (fatalErr as Error).message,
+      });
       // @ts-ignore: heartbeatTimer is defined in outer scope
       if (typeof heartbeatTimer !== 'undefined') clearInterval(heartbeatTimer);
       try { await streamAnswer(`❌ 内部错误：${(fatalErr as Error).message}`, sendChunk); } catch { /* ignore */ }
@@ -7061,10 +7071,15 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       streamId,
       interruptReason: abortSig.aborted ? "user_stop" : "completed",
     });
+    endAgentTrace(traceId, abortSig.aborted ? 'aborted' : 'success', {
+      chars: totalChars,
+      durationMs: finishedAt - startedAt,
+    });
     onComplete();
   } catch (fatalErr) {
     // runAiAgent 顶层兜底：IIFE 内部已吞掉 Agent 异常，此处主要防回调异常
     console.error("[runAiAgent fatal]", (fatalErr as Error).message);
+    try { endAgentTrace(traceId, 'error', { message: (fatalErr as Error).message }); } catch { /* ignore */ }
     try { onError(fatalErr as Error); } catch { /* ignore */ }
   }
 }

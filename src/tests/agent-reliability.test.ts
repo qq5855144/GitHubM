@@ -21,6 +21,14 @@ import {
   recordAgentTraceEvent,
   startAgentTrace,
 } from '@/lib/agent/runTrace';
+import {
+  buildVerificationNudge,
+  extractChangedPaths,
+  formatCheckSummary,
+  requiresVerification,
+  summarizeCheckRuns,
+  summarizeCommitStatus,
+} from '@/lib/agent/verification';
 
 function assistantWithCalls(...ids: string[]): MessageLike {
   return {
@@ -148,6 +156,67 @@ describe('toolPolicy', () => {
     expect(result.truncated).toBe(true);
     expect(result.text.length).toBeLessThan(160);
     expect(result.originalLength).toBe(100);
+  });
+});
+
+describe('verification', () => {
+  it('汇总 check-runs：通过 / 失败 / 进行中 / 空', () => {
+    expect(summarizeCheckRuns([
+      { name: 'build', status: 'completed', conclusion: 'success' },
+      { name: 'test', status: 'completed', conclusion: 'skipped' },
+    ]).state).toBe('passed');
+
+    const failed = summarizeCheckRuns([
+      { name: 'build', status: 'completed', conclusion: 'success' },
+      { name: 'test', status: 'completed', conclusion: 'failure' },
+    ]);
+    expect(failed.state).toBe('failed');
+    expect(failed.failedNames).toEqual(['test']);
+
+    expect(summarizeCheckRuns([
+      { name: 'build', status: 'in_progress', conclusion: null },
+    ]).state).toBe('pending');
+    expect(summarizeCheckRuns([]).state).toBe('none');
+  });
+
+  it('汇总旧版 commit status', () => {
+    expect(summarizeCommitStatus({ state: 'success', statuses: [{ context: 'ci', state: 'success' }] }).state).toBe('passed');
+    expect(summarizeCommitStatus({ state: 'failure', statuses: [{ context: 'ci', state: 'failure' }] }).state).toBe('failed');
+    expect(summarizeCommitStatus({ state: 'pending', statuses: [{ context: 'ci', state: 'pending' }] }).state).toBe('pending');
+  });
+
+  it('报告包含明确 token', () => {
+    const text = formatCheckSummary(
+      { state: 'failed', total: 1, passed: 0, failed: 1, pending: 0, failedNames: ['PR Check'], pendingNames: [] },
+      { ref: 'feat/x', sha: 'abcdef123456', elapsedMs: 5000 },
+    );
+    expect(text).toContain('VERIFY_FAILED');
+    expect(text).toContain('PR Check');
+  });
+
+  it('文档修改不强制验证，代码修改强制', () => {
+    expect(requiresVerification(['README.md'])).toBe(false);
+    expect(requiresVerification(['docs/a.mdx'])).toBe(false);
+    expect(requiresVerification(['src/App.tsx'])).toBe(true);
+    expect(requiresVerification(['Dockerfile'])).toBe(true);
+  });
+
+  it('从 patch/batch/files 参数提取路径', () => {
+    expect(extractChangedPaths('patch_file', { path: 'src/a.ts' })).toEqual(['src/a.ts']);
+    expect(extractChangedPaths('batch_patch', {
+      patches: JSON.stringify([{ path: 'a.ts' }, { path: 'b.ts' }]),
+    })).toEqual(['a.ts', 'b.ts']);
+    expect(extractChangedPaths('push_files', {
+      files: [{ path: 'x/y.ts' }, { path: 'x/z.ts' }],
+    })).toEqual(['x/y.ts', 'x/z.ts']);
+    expect(extractChangedPaths('write_file', {})).toEqual(['<batch>']);
+  });
+
+  it('验证提醒包含分支与工具调用示例', () => {
+    const text = buildVerificationNudge(['src/a.ts'], 'feat/x', 1);
+    expect(text).toContain('feat/x');
+    expect(text).toContain('verify_changes');
+    expect(text).toContain('TASK_DONE');
   });
 });
 

@@ -339,8 +339,9 @@ jobs:
           COMMIT_SHA="${{ github.sha }}"
           SHORT_SHA="${COMMIT_SHA:0:7}"
 
-          # 根据是否使用了稳定 Secret Keystore 生成不同的签名说明
-          if [ -n "${RELEASE_KEYSTORE_BASE64}" ]; then
+          # 根据 keystore 配置步骤的实际结果生成签名说明：
+          # Secret / 仓库内置 keystore 都是稳定证书，只有自动生成才是临时证书
+          if [ "${{ steps.keystore.outputs.was_generated }}" = "false" ]; then
             SIGN_NOTE="✅ **稳定 Release 签名**（可跨版本覆盖安装，正式分发）"
           else
             SIGN_NOTE="⚠️ **临时 Release 签名**（keytool 自动生成，本次构建可安装，但无法覆盖安装其他构建版本；配置 RELEASE_KEYSTORE_BASE64 Secret 后升级为稳定签名）"

@@ -6469,6 +6469,7 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
         isResuming = true;
         // 标记工作流重新运行
         dbMarkRunning(resumeWorkflowId);
+        await sendTyped({ type: "workflow_created", workflow_id: resumeWorkflowId });
         console.log(`[resume] workflow=${resumeWorkflowId} lastStep=${resumedLastStepId} msgs=${messages.length}`);
       }
     }
@@ -6725,6 +6726,9 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
           // 持久化：创建工作流 + 步骤
           const firstMsg = messages[messages.length - 1]?.content ?? "";
           workflowDbId = await dbCreateWorkflow(userId, `${owner}/${repo}`, firstMsg, plan);
+          if (workflowDbId) {
+            await sendTyped({ type: "workflow_created", workflow_id: workflowDbId });
+          }
         }
         // 从显示文本中移除 PLAN:{...} 块（宽松匹配，支持多行 JSON）
         assistantText = assistantText.replace(/\bPLAN\s*:\s*\{[\s\S]*?\}\s*/i, "").trim();
@@ -7316,8 +7320,8 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
         console.log(`[ctx-compress] 压缩后 messages=${fullMessages.length}，省略了 ${compressed.omitted} 条中间消息`);
       }
 
-      // ── 每 5 轮自动保存快照：页面意外关闭时任务进度不丢失 ─────────────────
-      if (workflowDbId && totalRound > 0 && totalRound % 5 === 0) {
+      // ── 每 2 轮自动保存快照：页面意外关闭时任务进度不丢失 ─────────────────
+      if (workflowDbId && totalRound > 0 && totalRound % 2 === 0) {
         await dbSaveSnapshot(workflowDbId, fullMessages, currentStepId, false);
         console.log(`[auto-snapshot] totalRound=${totalRound} workflowId=${workflowDbId} 自动保存快照`);
       }

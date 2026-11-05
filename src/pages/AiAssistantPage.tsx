@@ -40,6 +40,7 @@ import {
 } from '@/components/ai/aiUtils';
 import { upsertSession, replaceSessionMessages, insertToolExecutionLogs, upsertWorkflowSnapshot, fetchLatestSnapshot, type PersistMessageInput } from '@/components/ai/aiSupabase';
 import type { Message, ModelConfig, ChatSession, ChatSessionMessage, ToolHistoryItem, TaskPlanStep, InlineStep, InlineTool, Attachment, FileRequest, StreamMetrics } from '@/components/ai/aiTypes';
+import { buildModelHistory, compactMessageForStorage } from '@/lib/agent/conversationMemory';
 import { appendUsageRecord } from '@/components/ai/usageStats';
 import i18n from "@/i18n";
 
@@ -55,9 +56,11 @@ const WRITE_TOOLS = new Set([
   'create_release', 'update_release',
 ]);
 
-// ── 会话持久化（sessionStorage）─────────────────────────────────────────────
-// 使用 sessionStorage（标签页级）：关闭 APP 自动清除，切换页面不丢失
-const AI_SESSION_KEY = 'ai_chat_session_v1';
+// ── 会话持久化（localStorage）──────────────────────────────────────────────
+// 必须用 localStorage：sessionStorage 会在 APP 被杀掉/重新进入时清空，
+// 导致用户看到“重进 APP 就忘了上次对话和任务”。
+const AI_SESSION_KEY = 'ai_chat_session_v2';
+const LEGACY_SESSION_KEY = 'ai_chat_session_v1';
 
 interface PersistedAiSession {
   step: 'repo' | 'chat';
@@ -69,6 +72,17 @@ interface PersistedAiSession {
   taskPlanSteps?: TaskPlanStep[];
   /** 步骤状态（工作流进度面板） */
   stepStatuses?: Record<string, StepStatus>;
+  /** 当前正在执行的步骤 */
+  currentStepId?: string | null;
+  /** 最近创建的 workflow id，用于重新进入 APP 后从断点恢复 */
+  workflowId?: string | null;
+  /** 上次任务是否仍在流式执行（被杀进程时用于提示继续） */
+  wasStreaming?: boolean;
+  /** 上次未完成任务的摘要 */
+  pendingResumeInfo?: { workflowId?: string; taskSummary: string } | null;
+  /** 会话所属用户，避免切换账号后看到别人的本地对话 */
+  github_login?: string;
+  savedAt?: string;
 }
 
 interface ConversationMemorySummary {
@@ -82,13 +96,23 @@ const MEMORY_SUMMARY_TRIGGER_COUNT = 24;
 const MEMORY_SUMMARY_WINDOW_SIZE = 16;
 const MEMORY_SUMMARY_KEEP_RECENT = 8;
 
-function loadPersistedSession(): PersistedAiSession | null {
+function loadPersistedSession(login?: string): PersistedAiSession | null {
   try {
-    const raw = sessionStorage.getItem(AI_SESSION_KEY);
+    // v2 在 localStorage；旧版 v1 可能还在 sessionStorage/localStorage，做一次迁移
+    let raw = localStorage.getItem(AI_SESSION_KEY);
+    if (!raw) {
+      raw = sessionStorage.getItem(LEGACY_SESSION_KEY) ?? localStorage.getItem(LEGACY_SESSION_KEY);
+      if (raw) {
+        localStorage.setItem(AI_SESSION_KEY, raw);
+        sessionStorage.removeItem(LEGACY_SESSION_KEY);
+      }
+    }
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PersistedAiSession;
     // 只恢复 chat 步骤且有仓库信息时才算有效
     if (parsed.step !== 'chat' || !parsed.selectedRepo?.full_name) return null;
+    // 切换 GitHub 账号后不要恢复上一个账号的对话
+    if (login && parsed.github_login && parsed.github_login !== login) return null;
     return parsed;
   } catch { return null; }
 }
@@ -97,15 +121,17 @@ function isVisibleConversationMessage(message: Message): boolean {
   return message.messageType !== 'memory_summary';
 }
 
+
 function toPersistMessage(message: Message): PersistMessageInput {
+  const compact = compactMessageForStorage(message);
   return {
     role: message.role,
-    content: message.content,
+    content: compact.content,
     messageType: message.messageType ?? 'plain',
     meta: message.meta,
     // 完整消息结构（含 bubbleType/inlineTools/toolResult 等展示字段），
     // 恢复历史对话时优先使用，保证中间气泡内容完整还原
-    full: message,
+    full: compact,
   };
 }
 
@@ -162,34 +188,19 @@ function createConversationMemorySummary(messages: Message[]): ConversationMemor
   };
 }
 
-function buildModelHistory(messages: Message[], latestUserText?: string): Array<{ role: 'user' | 'assistant'; content: string }> {
-  const normalized = messages
-    .filter(m => m.id !== 'welcome')
-    .filter(m => !m.streaming)
-    .map(m => ({ role: m.role, content: m.content }));
-
-  if (!latestUserText) return normalized;
-  if (normalized.length === 0) return [{ role: 'user', content: latestUserText }];
-
-  const last = normalized[normalized.length - 1];
-  if (last.role === 'user') {
-    return [...normalized.slice(0, -1), { role: 'user', content: latestUserText }];
-  }
-  return [...normalized, { role: 'user', content: latestUserText }];
-}
 
 // 模块级缓存，避免多次解析（⚠️ 已废弃：SPA 内组件卸载重挂载时模块不会重新求值，
 // 会导致「退出对话再进入」时读到首次进入的旧快照、丢失退出前的对话。
-// 现改为组件内 useState 惰性初始化，每次挂载重新读取 sessionStorage。）
+// 现改为组件内 useState 惰性初始化，每次挂载重新读取 localStorage。）
 // const _initialSession = loadPersistedSession();
 
 // ── 主组件 ────────────────────────────────────────────────────────────────────
 
 export default function AiAssistantPage() {
   const { token, user } = useAuth();
-  // 每次组件挂载都重新读取 sessionStorage 快照（修复：SPA 内退出对话再进入时
+  // 每次组件挂载都重新读取 localStorage 快照（修复：SPA 内退出对话再进入时
   // 模块级缓存不会重新求值，导致恢复的是首次进入的旧快照、丢失退出前的对话）
-  const [initialSession] = useState(() => loadPersistedSession());
+  const [initialSession] = useState(() => loadPersistedSession(user?.login));
   const [step, setStep] = useState<'repo' | 'chat'>(initialSession?.step ?? 'repo');
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(initialSession?.selectedRepo ?? null);
   const [messages, setMessages] = useState<Message[]>(initialSession?.messages ?? []);
@@ -208,7 +219,7 @@ export default function AiAssistantPage() {
   const [taskPlanSteps, setTaskPlanSteps] = useState<TaskPlanStep[]>([]);
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus>>({});
   const [stepRetryCounts, setStepRetryCounts] = useState<Record<string, number>>({});
-  const [currentStepId, setCurrentStepId] = useState<string | null>(null);
+  const [currentStepId, setCurrentStepId] = useState<string | null>(initialSession?.currentStepId ?? null);
   // 侧边面板 Tab：'tools' | 'plan' | 'history' | 'workshop'
   const [sidePanelTab, setSidePanelTab] = useState<'tools' | 'plan' | 'history' | 'workshop' | 'runlog'>('plan');
   // 任务历史 Tab 自动刷新触发（切换到该 tab 时递增）
@@ -219,10 +230,23 @@ export default function AiAssistantPage() {
   const [pendingProposalCount, setPendingProposalCount] = useState(0);
   // 工具改进面板刷新触发（AI 上报新问题时递增）
   const [workshopRefreshTrigger, setWorkshopRefreshTrigger] = useState(0);
-  // 超时/停止后的恢复提示信息
-  const [pendingResumeInfo, setPendingResumeInfo] = useState<{ workflowId?: string; taskSummary: string } | null>(null);
+  // 上次未完成任务的恢复提示（APP 被杀/网络中断/超时后重新进入）
+  const [pendingResumeInfo, setPendingResumeInfo] = useState<{ workflowId?: string; taskSummary: string } | null>(() => {
+    if (initialSession?.pendingResumeInfo) return initialSession.pendingResumeInfo;
+    if (!initialSession?.wasStreaming) return null;
+    const lastUser = [...(initialSession.messages ?? [])]
+      .reverse()
+      .find(m => m.role === 'user' && !m.messageType);
+    return {
+      workflowId: initialSession.workflowId ?? undefined,
+      taskSummary: (lastUser?.content || i18n.t('上次任务')).slice(0, 60),
+    };
+  });
   // 当前会话 ID（用于持久化）
   const [sessionId, setSessionId] = useState<string | null>(initialSession?.sessionId ?? null);
+  // 当前 workflow id（用于重新进入 APP 后恢复断点）
+  const [activeWorkflowId, setActiveWorkflowId] = useState<string | null>(initialSession?.workflowId ?? null);
+  const activeWorkflowIdRef = useRef<string | null>(initialSession?.workflowId ?? null);
   const [memorySummary, setMemorySummary] = useState<ConversationMemorySummary | null>(null);
   // 待持久化消息队列（本轮对话新增的）
   const pendingMsgsRef = useRef<PersistMessageInput[]>([]);
@@ -273,23 +297,37 @@ export default function AiAssistantPage() {
   /** 镜像 messages state，供 onComplete 闭包读取最新快照 */
   const messagesRef = useRef<Message[]>([]);
 
-  // ── sessionStorage 持久化：state 变化时同步保存，切换页面不丢失对话 ────────
+  // ── localStorage 持久化：APP 被杀/重新进入后恢复上次对话与任务 ───────────────
+  // 之前用 sessionStorage，关闭 WebView 就清空，导致“重进 APP 全忘了”。
+  // 这里做 300ms 防抖，流式过程中也能保存最近一次完整快照。
   useEffect(() => {
-    try {
-      const session: PersistedAiSession = {
-        step,
-        selectedRepo,
-        selectedBranch,
-        sessionId,
-        // 过滤掉 streaming=true 的气泡，避免恢复后出现残留「流式中」气泡
-        messages: messages.filter(m => !m.streaming),
-        // 工作流进度面板状态一并持久化，退出重进后进度条/步骤状态不丢失
-        taskPlanSteps,
-        stepStatuses,
-      };
-      sessionStorage.setItem(AI_SESSION_KEY, JSON.stringify(session));
-    } catch { /* 存储满时静默忽略 */ }
-  }, [step, selectedRepo, selectedBranch, sessionId, messages, taskPlanSteps, stepStatuses]);
+    const timer = setTimeout(() => {
+      try {
+        const session: PersistedAiSession = {
+          step,
+          selectedRepo,
+          selectedBranch,
+          sessionId,
+          // 恢复时不能带 streaming=true，否则会留下转圈气泡
+          messages: messages.slice(-160).map(m => compactMessageForStorage({ ...m, streaming: false })),
+          taskPlanSteps,
+          stepStatuses,
+          currentStepId,
+          workflowId: activeWorkflowId,
+          wasStreaming: isStreaming,
+          pendingResumeInfo,
+          github_login: user?.login,
+          savedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(AI_SESSION_KEY, JSON.stringify(session));
+        // 旧版 sessionStorage 键清理掉，避免下次又读到旧快照
+        sessionStorage.removeItem(LEGACY_SESSION_KEY);
+      } catch { /* 存储满时静默忽略 */ }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [step, selectedRepo, selectedBranch, sessionId, messages, taskPlanSteps, stepStatuses, currentStepId, activeWorkflowId, isStreaming, pendingResumeInfo, user?.login]);
+
+  useEffect(() => { activeWorkflowIdRef.current = activeWorkflowId; }, [activeWorkflowId]);
 
   // ── 恢复对话时重新加载分支列表 ───────────────────────────────────────────────
   useEffect(() => {
@@ -299,7 +337,7 @@ export default function AiAssistantPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 仅挂载时执行一次
   // ── 恢复工作流进度面板状态：任务计划步骤 + 步骤状态 ──────────────────────────
-  // 退出对话再进入（SPA 内组件重挂载）时，从 sessionStorage 快照还原进度条显示；
+  // 退出对话再进入（SPA 内组件重挂载）时，从 localStorage 快照还原进度条显示；
   // 快照缺省（旧版本数据）时尝试从消息里的「任务规划」气泡重建步骤列表。
   useEffect(() => {
     if (initialSession?.taskPlanSteps && initialSession.taskPlanSteps.length > 0) {
@@ -453,6 +491,9 @@ export default function AiAssistantPage() {
     setSelectedRepo(repo);
     setSelectedBranch(repo.default_branch || 'main');
     setSessionId(null);
+    setActiveWorkflowId(null);
+    activeWorkflowIdRef.current = null;
+    setPendingResumeInfo(null);
     pendingMsgsRef.current = [];
     const welcome: Message = {
       id: 'welcome',
@@ -469,7 +510,6 @@ export default function AiAssistantPage() {
     loadBranches(repo);
     setStep('chat');
   }, [loadBranches]);
-
   // 加载历史对话
   const handleLoadHistory = useCallback((session: ChatSession, histMsgs: ChatSessionMessage[]) => {
     // 找到对应仓库信息（只设置必要字段）
@@ -508,6 +548,9 @@ export default function AiAssistantPage() {
     setSelectedRepo(fakeRepo);
     setSelectedBranch(session.branch);
     setSessionId(session.id);
+    setActiveWorkflowId(null);
+    activeWorkflowIdRef.current = null;
+    setPendingResumeInfo(null);
     setIsProtectedBranch(session.branch === 'main' || session.branch === 'master');
     pendingMsgsRef.current = [];
     const converted: Message[] = histMsgs.map(m => {
@@ -584,34 +627,38 @@ const currentModelDef = getModelDef(modelConfig.type);
 
   // ── 全量消息持久化：流式结束后把完整 messages（含 step/tool/thinking 等中间气泡）
   //    覆盖写入本地 DB。修复「退出对话再打开」时只恢复每轮 user+assistant 两条、
-  //    中间执行过程全部丢失的问题。流式期间跳过，避免频繁覆盖写。 ──
+  //    中间执行过程全部丢失的问题。流式期间做防抖保存，避免频繁覆盖写。 ──
   useEffect(() => {
-    if (!user?.login || !selectedRepo?.full_name) return;
-    if (messages.some(m => m.streaming)) return;
-    const toSave = messages
-      .filter(m => m.id !== 'welcome')
-      .map(toPersistMessage);
-    if (toSave.length === 0) return;
-    let sid = sessionId;
-    if (!sid) {
-      // 首次持久化时创建会话记录（原 persistMessages 的职责）
-      const firstUser = toSave.find(m => m.role === 'user');
-      const title = firstUser
-        ? firstUser.content.slice(0, 40) + (firstUser.content.length > 40 ? '…' : '')
-        : i18n.t('新对话');
-      sid = crypto.randomUUID();
-      setSessionId(sid);
-      void upsertSession({
-        id: sid,
-        github_login: user.login,
-        repo_full_name: selectedRepo.full_name,
-        branch: selectedBranch,
-        title,
-        model_type: modelConfig.type,
-        model_name: modelConfig.model,
-      });
-    }
-    void replaceSessionMessages(sid, toSave);
+    const timer = setTimeout(() => {
+      if (!user?.login || !selectedRepo?.full_name) return;
+      // 流式期间也要保存：旧逻辑在 streaming 时直接 return，APP 被杀后
+      // 会话可能根本不存在。这里保存“去 streaming 标记”的快照。
+      const toSave = messages
+        .filter(m => m.id !== 'welcome')
+        .map(m => toPersistMessage(m.streaming ? { ...m, streaming: false } : m));
+      if (toSave.length === 0) return;
+      let sid = sessionId;
+      if (!sid) {
+        // 首次持久化时创建会话记录（原 persistMessages 的职责）
+        const firstUser = toSave.find(m => m.role === 'user');
+        const title = firstUser
+          ? firstUser.content.slice(0, 40) + (firstUser.content.length > 40 ? '…' : '')
+          : i18n.t('新对话');
+        sid = crypto.randomUUID();
+        setSessionId(sid);
+        void upsertSession({
+          id: sid,
+          github_login: user.login,
+          repo_full_name: selectedRepo.full_name,
+          branch: selectedBranch,
+          title,
+          model_type: modelConfig.type,
+          model_name: modelConfig.model,
+        });
+      }
+      void replaceSessionMessages(sid, toSave);
+    }, 600);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, sessionId, selectedRepo, selectedBranch, user?.login, modelConfig.type, modelConfig.model]);
 
@@ -704,6 +751,58 @@ const currentModelDef = getModelDef(modelConfig.type);
     const aiMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: '', streaming: true };
     setMessages(prev => isRegen ? [...prev, aiMsg] : [...prev, userMsg, aiMsg]);
     setIsStreaming(true);
+
+    // ── 立即创建/更新会话，保证任务还在流式执行时也有历史记录 ────────────────
+    // 旧逻辑等 onComplete 才落库，APP 中途被杀就什么都不剩。
+    let sid = sessionId;
+    if (!sid) {
+      sid = crypto.randomUUID();
+      setSessionId(sid);
+    }
+    sessionIdRef.current = sid;
+    const firstUserText = messages.find(m => m.role === 'user' && !m.messageType)?.content || userText;
+    void upsertSession({
+      id: sid,
+      github_login: user?.login || 'anonymous',
+      repo_full_name: selectedRepo.full_name,
+      branch: selectedBranch,
+      title: firstUserText.slice(0, 40) + (firstUserText.length > 40 ? '…' : ''),
+      model_type: modelConfig.type,
+      model_name: modelConfig.model,
+    });
+    const seedMessages = isRegen
+      ? [...messages.filter(m => m.id !== 'welcome'), { ...aiMsg, streaming: false }]
+      : [...messages.filter(m => m.id !== 'welcome'), userMsg, { ...aiMsg, streaming: false }];
+    void replaceSessionMessages(sid, seedMessages.map(toPersistMessage));
+
+    // 同步写一次活动会话：即使用户在流式刚开始时杀进程，也能恢复“上次任务”
+    try {
+      const nowSession: PersistedAiSession = {
+        step: 'chat',
+        selectedRepo,
+        selectedBranch,
+        sessionId: sid,
+        messages: seedMessages.slice(-160).map(m => compactMessageForStorage({ ...m, streaming: false })),
+        taskPlanSteps: isRegen ? taskPlanSteps : [],
+        stepStatuses: isRegen ? stepStatuses : {},
+        currentStepId: isRegen ? currentStepId : null,
+        workflowId: resumeWorkflowId ?? null,
+        wasStreaming: true,
+        pendingResumeInfo: null,
+        github_login: user?.login,
+        savedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(AI_SESSION_KEY, JSON.stringify(nowSession));
+    } catch { /* ignore quota */ }
+
+    // 新任务清空旧 workflow；断点恢复则立即记录 workflow id
+    if (resumeWorkflowId) {
+      setActiveWorkflowId(resumeWorkflowId);
+      activeWorkflowIdRef.current = resumeWorkflowId;
+    } else if (!isRegen) {
+      setActiveWorkflowId(null);
+      activeWorkflowIdRef.current = null;
+    }
 
     const baseHistory = messages.filter(m => m.id !== 'welcome');
     // history 用 fullUserText（含附件内容）替换最后一条用户消息，确保 AI 看到完整内容
@@ -1059,9 +1158,21 @@ const currentModelDef = getModelDef(modelConfig.type);
             setPendingProposalCount(v => v + 1);
             break;
           }
+          case 'workflow_created': {
+            const wfId = chunk.workflow_id;
+            if (wfId) {
+              setActiveWorkflowId(wfId);
+              activeWorkflowIdRef.current = wfId;
+            }
+            break;
+          }
           case 'timeout': {
             // 任务超时：弹出提示，同时在输入区上方显示可恢复提示条
             const wfId = chunk.workflow_id;
+            if (wfId) {
+              setActiveWorkflowId(wfId);
+              activeWorkflowIdRef.current = wfId;
+            }
             const summary = lastUserTextRef.current.slice(0, 60) || i18n.t('上次任务');
             setPendingResumeInfo({ workflowId: wfId, taskSummary: summary });
             toast.warning(i18n.t('任务执行超时（超过 8 分钟），已自动暂停'), {
@@ -1129,6 +1240,8 @@ const currentModelDef = getModelDef(modelConfig.type);
         // 流式成功完成 → 重置重连计数
         reconnectAttemptsRef.current = 0;
         toast.dismiss('reconnect-backoff');
+        // 任务正常完成：清除“上次未完成”提示
+        setPendingResumeInfo(null);
         // 关闭所有仍在 streaming 的 AI 气泡；thinking 气泡同时标记 thinkingDone，确保转圈消失
         setMessages(prev => prev.map(m => {
           if (m.role !== 'assistant' || !m.streaming) return m;
@@ -1179,6 +1292,12 @@ const currentModelDef = getModelDef(modelConfig.type);
         if (isNetworkDrop) {
           networkInterruptedRef.current = true;
           setIsNetworkInterrupted(true);
+          if (!isUserAbort) {
+            setPendingResumeInfo({
+              workflowId: activeWorkflowIdRef.current ?? undefined,
+              taskSummary: lastUserTextRef.current.slice(0, 60) || i18n.t('上次任务'),
+            });
+          }
           setMessages(prev => prev.map(m =>
             m.id === errTargetId
               ? { ...m, content: accumulated + (accumulated ? '\n\n' : '') + `⚠️ 连接中断：${err.message}`, streaming: false }
@@ -1205,7 +1324,7 @@ const currentModelDef = getModelDef(modelConfig.type);
         }
       },
     });
-  }, [input, attachments, formatAttachmentsForMessage, isStreaming, messages, selectedRepo, token, modelConfig, selectedBranch]);
+  }, [input, attachments, formatAttachmentsForMessage, isStreaming, messages, selectedRepo, token, modelConfig, selectedBranch, sessionId, user?.login]);
 
   // ── 重连：用上次请求的 history + 一条"请继续"提示，重新发起流式请求 ────────────
   const handleReconnect = useCallback(() => {
@@ -1380,7 +1499,7 @@ const currentModelDef = getModelDef(modelConfig.type);
       });
       if (!allDone) {
         const summary = lastUserTextRef.current.slice(0, 60) || i18n.t('上次任务');
-        setPendingResumeInfo({ taskSummary: summary });
+        setPendingResumeInfo({ workflowId: activeWorkflowIdRef.current ?? undefined, taskSummary: summary });
       }
     }
   };
@@ -1390,14 +1509,20 @@ const currentModelDef = getModelDef(modelConfig.type);
   };
 
   const handleBack = () => {
-    // 返回仓库选择页时清除持久化，让下次进入从头开始
-    try { sessionStorage.removeItem(AI_SESSION_KEY); } catch { /* ignore */ }
+    // 返回仓库选择页时清除当前活动会话；历史记录仍保留在 ai_local_sessions
+    try {
+      localStorage.removeItem(AI_SESSION_KEY);
+      sessionStorage.removeItem(LEGACY_SESSION_KEY);
+    } catch { /* ignore */ }
     setStep('repo');
     setSelectedRepo(null);
     setMessages([]);
     setBranches([]);
     setSelectedBranch('');
     setSessionId(null);
+    setActiveWorkflowId(null);
+    activeWorkflowIdRef.current = null;
+    setPendingResumeInfo(null);
     setShowFileBrowser(false);
     pendingMsgsRef.current = [];
   };
@@ -1405,6 +1530,8 @@ const currentModelDef = getModelDef(modelConfig.type);
   const handleClearChat = () => {
     if (!selectedRepo) return;
     setSessionId(null);
+    setActiveWorkflowId(null);
+    activeWorkflowIdRef.current = null;
     pendingMsgsRef.current = [];
     setPendingResumeInfo(null);
     const welcomeMsg: Message = {
@@ -1413,10 +1540,11 @@ const currentModelDef = getModelDef(modelConfig.type);
       content: `对话已清空。当前目标分支：\`${selectedBranch}\`。有什么可以帮你？`,
     };
     setMessages([welcomeMsg]);
-    // 清空后立即更新 sessionStorage
+    // 清空后立即更新 localStorage（不能再用 sessionStorage，否则重启会丢）
     try {
-      sessionStorage.setItem(AI_SESSION_KEY, JSON.stringify({
+      localStorage.setItem(AI_SESSION_KEY, JSON.stringify({
         step: 'chat', selectedRepo, selectedBranch, sessionId: null, messages: [welcomeMsg],
+        github_login: user?.login, savedAt: new Date().toISOString(),
       }));
     } catch { /* ignore */ }
   };
@@ -2050,37 +2178,35 @@ const currentModelDef = getModelDef(modelConfig.type);
               {pendingResumeInfo && !isStreaming && !isNetworkInterrupted && (
                 <div className="mx-3 mt-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
                   <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span className="flex-1 min-w-0 text-xs text-amber-700 dark:text-amber-300 truncate">
-                    {pendingResumeInfo.workflowId ? i18n.t('任务已超时暂停，可从断点处继续') : i18n.t('任务已停止，可继续执行剩余步骤')}
-                  </span>
-                  {pendingResumeInfo.workflowId ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2.5 text-xs shrink-0 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
-                      onClick={() => {
-                        const { workflowId, taskSummary } = pendingResumeInfo;
-                        setPendingResumeInfo(null);
-                        handleSend(`继续上次未完成的任务：${taskSummary}`, false, workflowId);
-                      }}
-                    >
-                      <RotateCcw className="w-3 h-3 mr-1" />
-                      {i18n.t('立即恢复')}</Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2.5 text-xs shrink-0 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
-                      onClick={() => {
-                        setShowToolHistory(true);
-                        setSidePanelTab('history');
-                        setHistoryRefreshTrigger(v => v + 1);
-                        setPendingResumeInfo(null);
-                      }}
-                    >
-                      <ClipboardList className="w-3 h-3 mr-1" />
-                      {i18n.t('查看历史')}</Button>
-                  )}
+ <span className="flex-1 min-w-0 text-xs text-amber-700 dark:text-amber-300 truncate">
+                     {pendingResumeInfo.workflowId ? i18n.t('上次任务未完成，可从断点继续') : i18n.t('上次任务被中断，可继续执行')}
+                   </span>
+                   <Button
+                     size="sm"
+                     variant="outline"
+                     className="h-7 px-2.5 text-xs shrink-0 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
+                     onClick={() => {
+                       const { workflowId, taskSummary } = pendingResumeInfo;
+                       setPendingResumeInfo(null);
+                       handleSend(`继续上次未完成的任务：${taskSummary}`, false, workflowId);
+                     }}
+                   >
+                     <RotateCcw className="w-3 h-3 mr-1" />
+                     {i18n.t('继续执行')}</Button>
+                   {!pendingResumeInfo.workflowId && (
+                     <Button
+                       size="sm"
+                       variant="ghost"
+                       className="h-7 px-2 text-xs shrink-0 text-amber-700 dark:text-amber-300"
+                       onClick={() => {
+                         setShowToolHistory(true);
+                         setSidePanelTab('history');
+                         setHistoryRefreshTrigger(v => v + 1);
+                       }}
+                     >
+                       <ClipboardList className="w-3 h-3 mr-1" />
+                       {i18n.t('历史')}</Button>
+                   )}
                   <button
                     className="text-amber-500/60 hover:text-amber-600 dark:hover:text-amber-400 text-xs shrink-0"
                     onClick={() => setPendingResumeInfo(null)}

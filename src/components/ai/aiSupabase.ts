@@ -20,8 +20,8 @@ const keyMsgs = (sid: string) => `ai_local_msgs_${sid}`;
 const keyTools = (sid: string) => `ai_local_tools_${sid}`;
 const keySnaps = (sid: string) => `ai_local_snaps_${sid}`;
 
-const MAX_SESSIONS = 50;      // 会话数量上限（同旧版 DB limit 50）
-const MAX_MSGS = 1000;        // 每会话消息上限（超出丢弃最旧）
+const MAX_SESSIONS = 30;      // 会话数量上限（localStorage 容量有限）
+const MAX_MSGS = 300;         // 每会话消息上限（超出丢弃最旧，避免 5MB 配额）
 const MAX_TOOLS = 500;        // 每会话工具日志上限（同旧版 DB limit 500）
 const MAX_SNAPS = 20;         // 每会话快照上限
 
@@ -36,7 +36,24 @@ function readJson<T>(key: string, fallback: T): T {
 function writeJson(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return;
   } catch (e) {
+    // 配额不足：优先淘汰最旧的本地会话（含消息/工具/快照），再重试一次
+    try {
+      if (key !== KEY_SESSIONS) {
+        const sessions = readJson<ChatSession[]>(KEY_SESSIONS, []);
+        if (sessions.length > 1) {
+          const oldest = sessions[sessions.length - 1];
+          localStorage.removeItem(keyMsgs(oldest.id));
+          localStorage.removeItem(keyTools(oldest.id));
+          localStorage.removeItem(keySnaps(oldest.id));
+          localStorage.setItem(KEY_SESSIONS, JSON.stringify(sessions.slice(0, -1)));
+          localStorage.setItem(key, JSON.stringify(value));
+          console.warn('[aiLocal] localStorage 配额不足，已淘汰最旧会话', oldest.id);
+          return;
+        }
+      }
+    } catch { /* fall through */ }
     console.error('[aiLocal] 本地存储写入失败（空间不足？）', e);
   }
 }
@@ -126,9 +143,10 @@ export async function replaceSessionMessages(
 export async function fetchSessions(login: string): Promise<ChatSession[]> {
   const sessions = readJson<ChatSession[]>(KEY_SESSIONS, []);
   return sessions
-    .filter(s => s.github_login === login)
+    // 兼容旧版本没有写入 github_login 的本地会话，避免历史记录“消失”
+    .filter(s => !s.github_login || s.github_login === login)
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-    .slice(0, 50);
+    .slice(0, MAX_SESSIONS);
 }
 
 /** 获取会话下所有消息（按时间升序） */

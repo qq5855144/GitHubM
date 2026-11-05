@@ -253,11 +253,18 @@
     box-shadow: none;
   }
 
-  input[class~='bg-secondary']:focus-visible,
-  textarea[class~='bg-secondary']:focus-visible,
-  select[class~='bg-secondary']:focus-visible {
-    border-color: hsl(var(--ring));
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12);
+  /* 所有输入框：聚焦不做任何高亮，保持普通描边 */
+  input:focus,
+  input:focus-visible,
+  textarea:focus,
+  textarea:focus-visible,
+  select:focus,
+  select:focus-visible,
+  [role='combobox']:focus,
+  [role='combobox']:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    border-color: hsl(var(--border)) !important;
   }
 /* Tabs：浅灰轨道 + 白色选中项 */
   [role='tablist'] {

@@ -102,8 +102,14 @@ export function validateRequiredArguments(
 ): string[] {
   if (!schema || schema.type !== 'object') return [];
   const required = Array.isArray(schema.required) ? (schema.required as string[]) : [];
+  // path 允许空字符串：GitHubM 用 "" 表示仓库根目录（file_tree / list_files）。
+  const allowEmpty = new Set(['path']);
   return required
-    .filter((key) => args[key] === undefined || args[key] === null || args[key] === '')
+    .filter((key) => {
+      if (args[key] === undefined || args[key] === null) return true;
+      if (args[key] === '' && !allowEmpty.has(key)) return true;
+      return false;
+    })
     .map((key) => `缺少必填参数：${key}`);
 }
 

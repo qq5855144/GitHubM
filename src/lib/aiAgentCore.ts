@@ -128,7 +128,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       description: "列出仓库指定目录下的文件和子目录",
       parameters: { type: "object", properties: {
         path: { type: "string", description: "目录路径，根目录传空字符串 \"\"" },
-      }, required: ["path"] },
+      } },
     },
   },
   {
@@ -138,7 +138,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       parameters: { type: "object", properties: {
         path: { type: "string", description: "起始路径，根目录传空字符串 \"\"" },
         depth: { type: "string", description: "最大递归深度，默认 \"3\"" },
-      }, required: ["path"] },
+      } },
     },
   },
   {
@@ -878,23 +878,47 @@ async function githubRequest(ctx: GithubContext, apiPath: string, options: Reque
   if (!isWrite) {
     finalPath += apiPath.includes("?") ? `&_t=${Date.now()}` : `?_t=${Date.now()}`;
   }
-  const res = await fetch(`https://api.github.com${finalPath}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${ctx.token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "Content-Type": "application/json",
-      ...((options.headers as Record<string, string>) || {}),
-    },
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new GithubApiError(res.status, body, apiPath);
+
+  const maxAttempts = isWrite ? 1 : 3;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const res = await fetch(`https://api.github.com${finalPath}`, {
+        ...options,
+        headers: {
+          Authorization: `Bearer ${ctx.token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
+          ...((options.headers as Record<string, string>) || {}),
+        },
+      });
+      // GET 遇到网关类 5xx 时短暂重试；写操作绝不自动重试，避免重复提交
+      if (!isWrite && res.status >= 500 && attempt < maxAttempts - 1) {
+        lastError = new Error(`GitHub API ${res.status}`);
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      if (!res.ok) {
+        const body = await res.text();
+        throw new GithubApiError(res.status, body, apiPath);
+      }
+      // 204 No Content 时不解析 JSON
+      if (res.status === 204) return {};
+      return res.json();
+    } catch (err) {
+      lastError = err;
+      // 4xx/业务错误不重试，直接交给上层诊断
+      if (err instanceof GithubApiError) throw err;
+      // 只对只读请求的 fetch 网络错误重试；写请求交给上层提示，避免重复写入
+      if (!isWrite && attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
   }
-  // 204 No Content 时不解析 JSON
-  if (res.status === 204) return {};
-  return res.json();
+  throw lastError ?? new Error("GitHub API 请求失败");
 }
 
 /**
@@ -969,7 +993,15 @@ class GithubApiError extends Error {
  */
 function diagnose4xx(err: unknown, context?: string): string {
   if (!(err instanceof GithubApiError)) {
-    return `操作失败：${(err as Error).message}`;
+    const msg = (err as Error)?.message ?? String(err);
+    const ctx2 = context ? `【${context}】` : "";
+    if (/failed to fetch|networkerror|load failed|network request failed|ERR_NETWORK/i.test(msg)) {
+      return `${ctx2}网络请求失败（Failed to fetch）：GitHub API 暂时无法连接。\n` +
+        `• 请检查手机网络 / VPN / 代理是否拦截了 api.github.com\n` +
+        `• 已自动重试 3 次仍失败；如果只是搜索 API 不稳定，可改用 file_tree + read_file\n` +
+        `• 原始错误：${msg}`;
+    }
+    return `${ctx2}操作失败：${msg}`;
   }
   const { status, body, apiPath } = err;
   let bodyMsg = body;
@@ -1983,6 +2015,35 @@ async function writeFile(
   }
 }
 
+/**
+ * Search API 不可用时的兜底：用 Git Trees API 按“文件路径”匹配关键词。
+ * 不读取文件内容，但能帮助模型继续定位 src/ 等目录，而不是直接卡死。
+ */
+async function fallbackPathSearch(ctx: GithubContext, query: string): Promise<string | null> {
+  try {
+    const repoInfo = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}`) as { default_branch?: string };
+    const branch = repoInfo.default_branch || "main";
+    const tree = await githubRequest(
+      ctx,
+      `/repos/${ctx.owner}/${ctx.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+    ) as { tree?: Array<{ path?: string; type?: string }> };
+    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const matches = (tree.tree ?? [])
+      .filter((item) => item.type === "blob" && item.path)
+      .map((item) => item.path as string)
+      .filter((path) => tokens.every((token) => path.toLowerCase().includes(token)))
+      .slice(0, 20);
+
+    if (matches.length === 0) return null;
+    return `⚠️ GitHub 代码搜索接口暂时不可用，已回退到文件路径匹配（不是内容搜索）。\n` +
+      `关键词 "${query}" 匹配到 ${matches.length} 个文件：\n` +
+      matches.map((path) => `• ${path}`).join("\n") +
+      `\n\n如需内容匹配，请对上述文件调用 grep_in_file 或 read_file。`;
+  } catch {
+    return null;
+  }
+}
+
 async function searchCode(ctx: GithubContext, query: string): Promise<string> {
   try {
     const data = await githubRequest(
@@ -1992,7 +2053,11 @@ async function searchCode(ctx: GithubContext, query: string): Promise<string> {
     return `搜索 "${query}" 找到 ${data.total_count} 个结果（前10）：\n${
       data.items.map((item: { path: string }) => `• ${item.path}`).join("\n")
     }`;
-  } catch (e) { return diagnose4xx(e, "search_code"); }
+  } catch (e) {
+    const fallback = await fallbackPathSearch(ctx, query);
+    if (fallback) return fallback;
+    return diagnose4xx(e, "search_code");
+  }
 }
 
 /**
@@ -2086,7 +2151,13 @@ async function grepInRepo(
       : "";
 
     return header + fileResults.join("\n\n") + truncHint;
-  } catch (e) { return diagnose4xx(e, "grep_in_repo"); }
+  } catch (e) {
+    const fallback = await fallbackPathSearch(ctx, query);
+    if (fallback) {
+      return `全仓库内容搜索失败，已回退到文件路径匹配（仅路径，不是内容结果）。\n\n${fallback}`;
+    }
+    return diagnose4xx(e, "grep_in_repo");
+  }
 }
 
 /**

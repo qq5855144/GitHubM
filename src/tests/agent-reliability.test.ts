@@ -132,6 +132,13 @@ describe('toolPolicy', () => {
     };
     expect(validateRequiredArguments(schema, {})).toEqual(['缺少必填参数：path']);
     expect(validateRequiredArguments(schema, { path: 'a.md' })).toEqual([]);
+    // 根目录用空字符串表示，不能判定为“缺少参数”
+    expect(validateRequiredArguments(schema, { path: '' })).toEqual([]);
+    // 其它必填字段为空仍应报错
+    expect(validateRequiredArguments(
+      { type: 'object', required: ['query'], properties: { query: { type: 'string' } } },
+      { query: '' }
+    )).toEqual(['缺少必填参数：query']);
   });
 
   it('类型与枚举校验', () => {

@@ -173,6 +173,7 @@ export type SSEChunk = SSEEnvelope & (
   | { type: 'status_warning'; message: string }
   | { type: 'file_request'; id: string; filename: string; description: string; mime_types?: string }
   | { type: 'timeout'; workflow_id?: string }
+  | { type: 'task_interrupted'; reason: 'max_rounds' | 'timeout' | 'network'; workflow_id?: string }
   | { type: 'usage'; prompt_tokens: number; completion_tokens: number; total_tokens: number; model: string; providerType: string }
   | { type: 'tool_issue_reported'; tool_name: string; severity: string; proposal_id: string | null }
   | { type: 'tool_fix_proposed'; tool_name: string; proposal_id: string | null }

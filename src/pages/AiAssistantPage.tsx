@@ -265,6 +265,8 @@ export default function AiAssistantPage() {
   const scrollContentRef = useRef<HTMLDivElement>(null);
   /** 用户是否仍在底部；向上翻阅历史时不再强制拉回底部 */
   const autoFollowRef = useRef(true);
+  /** 本轮是否因超时/轮次耗尽/断网而暂停；onComplete 不能把这种任务当成正常完成 */
+  const taskInterruptedRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   /** 聊天页根容器 ref，用于 Android 软键盘弹起时动态修正高度 */
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -761,6 +763,7 @@ const currentModelDef = getModelDef(modelConfig.type);
 
     // 用户发送新消息时重置重连计数
     reconnectAttemptsRef.current = 0;
+    taskInterruptedRef.current = false;
     toast.dismiss('reconnect-backoff');
     toast.dismiss('reconnect-max-retry');
 
@@ -1204,8 +1207,31 @@ const currentModelDef = getModelDef(modelConfig.type);
             }
             break;
           }
+          case 'task_interrupted': {
+            taskInterruptedRef.current = true;
+            const wfId = chunk.workflow_id;
+            if (wfId) {
+              setActiveWorkflowId(wfId);
+              activeWorkflowIdRef.current = wfId;
+            }
+            const summary = lastUserTextRef.current.slice(0, 60) || i18n.t('上次任务');
+            setPendingResumeInfo({ workflowId: wfId, taskSummary: summary });
+            toast.warning(
+              chunk.reason === 'max_rounds'
+                ? i18n.t('已达到最大工具调用轮次，任务已暂停')
+                : i18n.t('任务已暂停，可稍后继续'),
+              {
+                description: wfId
+                  ? i18n.t('进度已保存，点击「继续执行」从断点恢复。')
+                  : i18n.t('进度已保存，可在「任务历史」中恢复。'),
+                duration: 10000,
+              },
+            );
+            break;
+          }
           case 'timeout': {
             // 任务超时：弹出提示，同时在输入区上方显示可恢复提示条
+            taskInterruptedRef.current = true;
             const wfId = chunk.workflow_id;
             if (wfId) {
               setActiveWorkflowId(wfId);
@@ -1278,8 +1304,8 @@ const currentModelDef = getModelDef(modelConfig.type);
         // 流式成功完成 → 重置重连计数
         reconnectAttemptsRef.current = 0;
         toast.dismiss('reconnect-backoff');
-        // 任务正常完成：清除“上次未完成”提示
-        setPendingResumeInfo(null);
+        // 任务正常完成：清除“上次未完成”提示；中断任务必须保留
+        if (!taskInterruptedRef.current) setPendingResumeInfo(null);
         // 关闭所有仍在 streaming 的 AI 气泡；thinking 气泡同时标记 thinkingDone，确保转圈消失
         setMessages(prev => prev.map(m => {
           if (m.role !== 'assistant' || !m.streaming) return m;
@@ -1331,6 +1357,7 @@ const currentModelDef = getModelDef(modelConfig.type);
           networkInterruptedRef.current = true;
           setIsNetworkInterrupted(true);
           if (!isUserAbort) {
+            taskInterruptedRef.current = true;
             setPendingResumeInfo({
               workflowId: activeWorkflowIdRef.current ?? undefined,
               taskSummary: lastUserTextRef.current.slice(0, 60) || i18n.t('上次任务'),
@@ -1536,6 +1563,7 @@ const currentModelDef = getModelDef(modelConfig.type);
         return st === 'done' || st === 'error';
       });
       if (!allDone) {
+        taskInterruptedRef.current = true;
         const summary = lastUserTextRef.current.slice(0, 60) || i18n.t('上次任务');
         setPendingResumeInfo({ workflowId: activeWorkflowIdRef.current ?? undefined, taskSummary: summary });
       }

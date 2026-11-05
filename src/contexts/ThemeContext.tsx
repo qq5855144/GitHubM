@@ -380,7 +380,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [resolvedTheme, setResolvedTheme] = useState<'dark' | 'light'>(() => {
     const mode = (localStorage.getItem(STORAGE_KEY) as ThemeMode | null) || 'system';
     const resolved = applyTheme(mode);
-    const savedId = localStorage.getItem(ACCENT_STORAGE_KEY) || 'purple';
+    const savedId = localStorage.getItem(ACCENT_STORAGE_KEY) || 'blue';
     const scheme = ACCENT_SCHEMES.find(s => s.id === savedId) ?? ACCENT_SCHEMES[0];
     applyAccentScheme(scheme, resolved);
     return resolved;
@@ -388,7 +388,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // ── 主题色方案 ──────────────────────────────────────────────────────────
   const [accentSchemeId, setAccentSchemeIdState] = useState<string>(() => {
-    return localStorage.getItem(ACCENT_STORAGE_KEY) || 'purple';
+    return localStorage.getItem(ACCENT_STORAGE_KEY) || 'blue';
   });
 
   const setAccentScheme = useCallback((id: string) => {
@@ -405,7 +405,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const resolved = applyTheme(t);
       setResolvedTheme(resolved);
       // 切换明暗时重新应用当前色方案，确保色值对应正确的明暗变体
-      const savedId = localStorage.getItem(ACCENT_STORAGE_KEY) || 'purple';
+      const savedId = localStorage.getItem(ACCENT_STORAGE_KEY) || 'blue';
       const scheme = ACCENT_SCHEMES.find(s => s.id === savedId) ?? ACCENT_SCHEMES[0];
       applyAccentScheme(scheme, resolved);
     });
@@ -419,7 +419,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       triggerThemeTransition(() => {
         const resolved = applyTheme('system');
         setResolvedTheme(resolved);
-        const savedId = localStorage.getItem(ACCENT_STORAGE_KEY) || 'purple';
+        const savedId = localStorage.getItem(ACCENT_STORAGE_KEY) || 'blue';
         const scheme = ACCENT_SCHEMES.find(s => s.id === savedId) ?? ACCENT_SCHEMES[0];
         applyAccentScheme(scheme, resolved);
       });

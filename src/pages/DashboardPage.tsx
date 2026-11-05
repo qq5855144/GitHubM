@@ -333,7 +333,7 @@ export default function DashboardPage() {
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
       {/* 用户信息卡片 */}
-      <div className="neu-card rounded-2xl p-6">
+      <div className="surface-card rounded-xl p-6">
         {/* 顶部：头像 + 核心信息 */}
         <div className="flex items-center gap-4">
           <UserLink login={user.login} className="shrink-0">
@@ -421,7 +421,7 @@ export default function DashboardPage() {
             <button
               key={stat.label}
               type="button"
-              className="text-left bg-card border border-border rounded-2xl p-4 hover:border-primary/25 hover:shadow-neu active:scale-[0.98] transition-all group"
+              className="text-left bg-card border border-border rounded-2xl p-4 hover:border-primary/25 hover:shadow-soft-md active:scale-[0.98] transition-all group"
               onClick={() => navigate(stat.to)}
             >
               <div className="flex items-center gap-2 mb-2">

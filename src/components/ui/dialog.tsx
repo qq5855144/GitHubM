@@ -38,7 +38,7 @@ const DialogContent = React.forwardRef<
       className={cn(
         // pointer-events-auto：body.pointerEvents 被 Radix 设为 none 时，Content 区域必须
         // 显式恢复，否则所有点击穿透到背景 DOM（仓库卡片 onClick 被误触）
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border border-border/45 bg-card p-6 shadow-neu duration-200 pointer-events-auto [touch-action:pan-y] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border border-border bg-card p-6 shadow-soft-md duration-200 pointer-events-auto [touch-action:pan-y] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
         className
       )}
       // {...props} 在 handlers 前展开，确保我们的 handlers 不被外部调用方覆盖（缺陷②修复）

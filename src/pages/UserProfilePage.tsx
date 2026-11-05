@@ -245,7 +245,7 @@ export default function UserProfilePage() {
     return (
       <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-4">
         <Skeleton className="h-8 w-24" />
-        <div className="neu-card rounded-2xl p-5 flex gap-4">
+        <div className="surface-card rounded-xl p-5 flex gap-4">
           <Skeleton className="w-20 h-20 rounded-full shrink-0" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-6 w-40" />
@@ -461,7 +461,7 @@ export default function UserProfilePage() {
         </TabsContent>
 
         <TabsContent value="about">
-          <div className="neu-card rounded-2xl p-5 space-y-3 text-sm">
+          <div className="surface-card rounded-xl p-5 space-y-3 text-sm">
             <div className="grid grid-cols-[100px_1fr] gap-y-3">
               <span className="text-muted-foreground">{i18n.t('用户名')}</span>
               <span className="text-foreground font-mono">@{profile.login}</span>

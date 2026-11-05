@@ -17,6 +17,7 @@ import {
   Code2,
   Clock,
   X,
+  CornerDownLeft,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -411,8 +412,18 @@ export default function SearchPage() {
             onKeyDown={handleKeyDown}
             onFocus={() => setShowHistory(true)}
             placeholder={i18n.t('搜索 GitHub…')}
-            className="pl-9 bg-secondary border-border text-foreground placeholder:text-muted-foreground text-base"
+            className="pl-9 pr-11 h-10 rounded-lg text-foreground placeholder:text-muted-foreground text-base"
           />
+          {/* 回车搜索：置于输入框内部，不再使用外置搜索按钮 */}
+          <button
+            type="button"
+            aria-label={i18n.t('搜索')}
+            onClick={() => handleSearch(query, searchType, 1)}
+            disabled={loading || !query.trim()}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-secondary transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <CornerDownLeft className="w-4 h-4" />
+          </button>
           {/* 搜索历史下拉 */}
           {showHistory && history.length > 0 && (
             <div
@@ -459,12 +470,6 @@ export default function SearchPage() {
             </div>
           )}
         </div>
-        <Button
-          className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
-          onClick={() => handleSearch(query, searchType, 1)}
-          disabled={loading || !query.trim()}
-        >
-          {i18n.t('搜索')}</Button>
       </div>
 
       {/* 搜索类型选项卡 */}

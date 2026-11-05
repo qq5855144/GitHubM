@@ -81,7 +81,7 @@
         }
 
         // 读取已保存的强调色，更新 theme-color meta
-        var accentId = localStorage.getItem('github_manager_accent') || 'purple';
+        var accentId = localStorage.getItem('github_manager_accent') || 'blue';
         var accentEntry = ACCENT_COLORS[accentId] || ACCENT_COLORS.purple;
         var accentHex = isDark ? accentEntry.dark : accentEntry.light;
 

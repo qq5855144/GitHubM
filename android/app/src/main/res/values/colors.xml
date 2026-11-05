@@ -1,29 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- 启动图标背景：紫色（与 Web 端主题色一致） -->
-    <color name="ic_launcher_background">#7c3aed</color>
+    <color name="ic_launcher_background">#1677FF</color>
 
     <!--
       ══ 主界面颜色语义化 token（浅色模式）══
       与 Web 端 index.css HSL 变量对应，确保 Native/WebView 背景一致无闪烁
     -->
-    <color name="main_bg">#eef1f7</color>              <!-- WebView 背景色（对应 Web 端 background 变量） -->
-    <color name="sidebar_bg">#e9edf5</color>           <!-- BottomNav 背景色（对应 Web 端 sidebar-background 变量） -->
-    <color name="nav_unselected">#64748b</color>       <!-- 底部导航未选中色（对应 Web 端 muted-foreground 变量） -->
+    <color name="main_bg">#F4F5F7</color>              <!-- WebView 背景色（对应 Web 端 background 变量） -->
+    <color name="sidebar_bg">#FFFFFF</color>           <!-- BottomNav 背景色（对应 Web 端 sidebar-background 变量） -->
+    <color name="nav_unselected">#666666</color>       <!-- 底部导航未选中色（对应 Web 端 muted-foreground 变量） -->
 
     <!-- 底部导航栏颜色 -->
     <color name="bottom_nav_background">@color/sidebar_bg</color>
-    <color name="bottom_nav_selected">#7c3aed</color>     <!-- 选中色：主题紫色 primary -->
+    <color name="bottom_nav_selected">#1677FF</color>     <!-- 选中色：主题紫色 primary -->
     <color name="bottom_nav_unselected">@color/nav_unselected</color>
-    <color name="bottom_nav_divider">#dde3ee</color>      <!-- 分割线：冷灰 border -->
+    <color name="bottom_nav_divider">#E8E8E8</color>      <!-- 分割线：冷灰 border -->
     <!-- M3 Active Indicator 背景色：primaryContainer（浅色模式 = 淡紫） -->
-    <color name="bottom_nav_indicator_bg">#EDE9FE</color>
+    <color name="bottom_nav_indicator_bg">#EAF2FF</color>
     <!--
       ══ 启动画面 · 浅色模式配色 ══
       与主界面同色系，柔和不刺眼
     -->
     <!-- 背景层 -->
-    <color name="splash_bg_solid">#EEF1F7</color>
+    <color name="splash_bg_solid">#F4F5F7</color>
     <!-- 光晕中心：透明（无光晕） -->
     <color name="splash_glow_center">#00FFFFFF</color>
     <!-- 光晕边缘：透明 -->
@@ -34,14 +34,14 @@
     <color name="splash_bottom_vignette">#00FFFFFF</color>
 
     <!-- Logo（无光圈，直接展示） -->
-    <color name="splash_icon_tint">#7C3AED</color>        <!-- Octocat：主题紫，清晰醒目 -->
+    <color name="splash_icon_tint">#1677FF</color>        <!-- Octocat：主题紫，清晰醒目 -->
 
     <!-- 文字与装饰 -->
-    <color name="splash_corner_line">#3C7C3AED</color>    <!-- 角落线：48% 透明紫色 -->
-    <color name="splash_title">#1F2328</color>            <!-- 主标题：深灰近黑 -->
-    <color name="splash_subtitle">#656D76</color>         <!-- 副标题：中性灰 -->
-    <color name="splash_prompt">#7C3AED</color>           <!-- 终端提示符 $ -->
-    <color name="splash_terminal">#8C959F</color>         <!-- 终端命令文字 -->
-    <color name="splash_cursor">#7C3AED</color>           <!-- 光标块 -->
-    <color name="splash_accent">#7C3AED</color>           <!-- 进度条 -->
+    <color name="splash_corner_line">#331677FF</color>    <!-- 角落线：48% 透明紫色 -->
+    <color name="splash_title">#1A1A1A</color>            <!-- 主标题：深灰近黑 -->
+    <color name="splash_subtitle">#666666</color>         <!-- 副标题：中性灰 -->
+    <color name="splash_prompt">#1677FF</color>           <!-- 终端提示符 $ -->
+    <color name="splash_terminal">#8C8C8C</color>         <!-- 终端命令文字 -->
+    <color name="splash_cursor">#1677FF</color>           <!-- 光标块 -->
+    <color name="splash_accent">#1677FF</color>           <!-- 进度条 -->
 </resources>

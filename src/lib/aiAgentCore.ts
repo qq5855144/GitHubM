@@ -5670,6 +5670,14 @@ async function dbCreateWorkflow(
   try {
     const id = `wf_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
     const rows = readWorkflows();
+    // 同一仓库上一次未正常收尾的任务先标记为可恢复，避免历史里出现多个“执行中”
+    for (const old of rows) {
+      if (old.user_id === userId && old.repo === repo && old.status === "running" && !old.interrupted) {
+        old.status = "partial_fail";
+        old.interrupted = true;
+        old.finished_at = new Date().toISOString();
+      }
+    }
     rows.push({
       id,
       user_id: userId,
@@ -5904,6 +5912,8 @@ async function dbFinishWorkflow(
     const rows = readWorkflows();
     const row = rows.find(r => r.id === workflowId);
     if (row) {
+      // 已被标记中断的工作流不能被后续收尾覆盖成 done
+      if (row.interrupted) return;
       row.status = status;
       row.done_steps = done;
       row.fail_steps = fail;
@@ -6455,6 +6465,8 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
     try {
     // 工作流 DB id（首轮收到 plan 后写入）
     let workflowDbId: string | null = null;
+    /** 本次运行是否因超时/轮次耗尽/中断而暂停；暂停时绝不能把 workflow 标记为 done */
+    let workflowInterrupted = false;
 
     // ── 断点恢复：若传入 resume_workflow_id，加载历史 messages 快照 ──────────
     let isResuming = false;
@@ -6554,9 +6566,9 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       // 工具自我改进
       report_tool_issue: "上报工具问题", propose_tool_fix: "提交改进方案",
     };
-    // 每批最多 20 轮工具调用；最多自动续跑 3 批，总上限 60 轮
+    // 每批最多 20 轮工具调用；最多自动续跑 5 批，总上限 100 轮
     const MAX_ROUNDS_PER_BATCH = 20;
-    const MAX_BATCHES = 3;
+    const MAX_BATCHES = 5;
     // 整体任务超时：8 分钟（480000ms），超时后自动保存快照并通知用户
     const TASK_TIMEOUT_MS = 480_000;
     const taskStartTime = Date.now();
@@ -6618,7 +6630,9 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
         console.warn(`[timeout] 任务超时（已运行 ${Math.round((Date.now() - taskStartTime) / 1000)}s），自动中断`);
         if (workflowDbId) {
           await dbSaveSnapshot(workflowDbId, fullMessages, currentStepId, true);
+          dbMarkInterrupted(workflowDbId);
         }
+        workflowInterrupted = true;
         await sendTyped({ type: "status_info", message: "⏱️ 任务执行超时（超过 8 分钟），已自动暂停。您可以在「任务历史」中点击「恢复执行」继续。" });
         await sendTyped({ type: "timeout", workflow_id: workflowDbId ?? undefined });
         batchDone = true;
@@ -7359,8 +7373,14 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
             await dbSaveSnapshot(workflowDbId, fullMessages, currentStepId, true);
             dbMarkInterrupted(workflowDbId);
           }
+          workflowInterrupted = true;
+          await sendTyped({
+            type: "task_interrupted",
+            reason: "max_rounds",
+            workflow_id: workflowDbId ?? undefined,
+          });
           await streamAnswer(
-            `⚠️ 已达到最大工具调用轮次（${totalRound + 1} 轮），任务可能未完全完成。\n` +
+            `⚠️ 已达到本轮最大工具调用轮次（${totalRound + 1} 轮），任务可能未完全完成。\n` +
             `💾 进度已自动保存，可在「任务历史」中点击「恢复执行」继续未完成的步骤。`,
             sendChunk
           );
@@ -7374,12 +7394,13 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
 
     // 用户主动中断：保存快照，标记为可恢复
     if (abortSig.aborted && workflowDbId) {
+      workflowInterrupted = true;
       await dbSaveSnapshot(workflowDbId, fullMessages, currentStepId, true);
       dbMarkInterrupted(workflowDbId);
     }
 
-    // 非用户中断时才标记完成（abort 时已在上方标记为 interrupted）
-    if (!abortSig.aborted && workflowDbId) await dbFinishWorkflow(workflowDbId);
+    // 只有真正完成的任务才标记 done；超时/轮次耗尽/用户中断必须保持可恢复
+    if (!abortSig.aborted && !workflowInterrupted && workflowDbId) await dbFinishWorkflow(workflowDbId);
     clearInterval(heartbeatTimer);
     await sendDone();
     } catch (fatalErr) {

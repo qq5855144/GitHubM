@@ -569,7 +569,7 @@ export default function ReposPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={i18n.t('搜索仓库...')}
-            className="pl-9 bg-secondary border-border text-foreground placeholder:text-muted-foreground"
+            className="search-input pl-9 text-foreground placeholder:text-muted-foreground"
           />
         </div>
         <div className="flex gap-2 shrink-0">

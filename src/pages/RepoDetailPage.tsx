@@ -27,6 +27,7 @@ import {
   BookOpen,
   LayoutGrid,
   Network,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +56,8 @@ import {
   getLanguageColor,
   deleteRepo,
   updateRepo,
+  syncFork,
+  invalidateCache,
 } from '@/services/github';
 import type { GitHubRepo, GitHubCommit } from '@/types/types';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer';
@@ -91,6 +94,7 @@ export default function RepoDetailPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [syncingFork, setSyncingFork] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editDesc, setEditDesc] = useState('');
   const [editPrivate, setEditPrivate] = useState(false);
@@ -218,6 +222,33 @@ export default function RepoDetailPage() {
       toast.error(err instanceof Error ? err.message : i18n.t('Fork 失败'));
     } finally {
       setForking(false);
+    }
+  };
+
+  // 同步 Fork 上游（Issue #20：支持 sync fork）
+  const handleSyncFork = async () => {
+    if (!owner || !repoName || !repo || syncingFork) return;
+    setSyncingFork(true);
+    try {
+      const result = await syncFork(owner, repoName, repo.default_branch);
+      if (result.merge_type === 'none') {
+        toast.info(i18n.t('已是最新，无需同步'));
+      } else {
+        toast.success(i18n.t('已同步上游最新代码'));
+      }
+      invalidateCache(`/repos/${owner}/${repoName}`);
+      pageCache.invalidate(`repodetail:${owner}/${repoName}`);
+      const updated = await getRepo(owner, repoName);
+      setRepo(updated);
+    } catch (err) {
+      const status = (err as Error & { status?: number }).status;
+      if (status === 409) {
+        toast.error(i18n.t('存在合并冲突，请到 GitHub 网页端处理'));
+      } else {
+        toast.error(err instanceof Error ? err.message : i18n.t('同步失败'));
+      }
+    } finally {
+      setSyncingFork(false);
     }
   };
 
@@ -383,6 +414,19 @@ export default function RepoDetailPage() {
 
       {/* 统计行 —— 根据 isOwner 显示不同操作 */}
       <div className="flex flex-wrap items-center gap-2">
+        {/* 自己的 Fork 仓库：同步上游 */}
+        {isOwner && repo.fork && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-border h-8"
+            onClick={handleSyncFork}
+            disabled={syncingFork}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${syncingFork ? 'animate-spin' : ''}`} />
+            {syncingFork ? i18n.t('同步中...') : i18n.t('同步上游')}
+          </Button>
+        )}
         {/* 他人仓库：显示 Star 和 Fork 操作按钮 */}
         {!isOwner && (
           <>

@@ -9,147 +9,103 @@
 
 
   /* 浅色模式（默认/跟随系统时若系统为浅色） */
-  :root {
-    --radius: 0.5rem;
-
-    /* 背景层 */
-    --background: 250 30% 98%;        /* #F9F8FD 浅紫白 */
-    --foreground: 240 15% 12%;        /* #1A1A2E 深蓝黑 */
-
-    /* 卡片/面板 */
-    --card: 0 0% 100%;                /* 纯白卡片 */
-    --card-foreground: 240 15% 12%;
-
-    /* 弹出层 */
+    :root {
+    --radius: 0.75rem;
+    /* App-Search 风格：浅灰底 + 纯白卡片 + 蓝色强调 */
+    --background: 220 14% 96%;        /* #F4F5F7 */
+    --foreground: 0 0% 10%;           /* #1A1A1A */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 15% 12%;
-
-    /* 主色 - 紫罗兰 #7c3aed */
-    --primary: 263 70% 58%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 211 100% 54%;          /* #1677FF */
     --primary-foreground: 0 0% 100%;
-
-    /* 次要色 */
-    --secondary: 250 20% 93%;         /* 浅紫灰 */
-    --secondary-foreground: 240 15% 20%;
-
-    /* 静音色 */
-    --muted: 250 20% 93%;
-    --muted-foreground: 240 8% 50%;   /* 中灰 ≥4.5:1 */
-
-    /* 强调色 - 亮紫蓝 */
-    --accent: 258 88% 66%;            /* #8B5CF6 */
+    --secondary: 220 9% 96%;          /* #F2F3F5 */
+    --secondary-foreground: 0 0% 10%;
+    --muted: 220 9% 96%;
+    --muted-foreground: 0 0% 42%;     /* #6B6B6B */
+    --accent: 211 100% 54%;           /* 与主色一致的蓝色，保证链接对比度 */
     --accent-foreground: 0 0% 100%;
-
-    /* 危险色 */
-    --destructive: 0 72% 51%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-
-    /* 边框/输入 */
-    --border: 250 15% 87%;
-    --input: 250 15% 87%;
-    --ring: 263 70% 58%;
-
-    /* 图表 */
-    --chart-1: 263 70% 58%;           /* 紫 */
-    --chart-2: 196 80% 48%;           /* 青 */
-    --chart-3: 27 90% 56%;            /* 橙 */
-    --chart-4: 142 65% 42%;           /* 绿 */
-    --chart-5: 0 72% 51%;             /* 红 */
-
-    /* 侧边栏 - 浅色模式使用浅紫白背景 */
-    --sidebar: 258 35% 97%;
-    --sidebar-background: 258 35% 97%;
-    --sidebar-foreground: 258 35% 18%;
-    --sidebar-primary: 263 70% 52%;
+    --border: 0 0% 91%;               /* #E8E8E8 */
+    --input: 0 0% 91%;
+    --ring: 211 100% 54%;
+    /* 轻量阴影：只做层次，不做拟态浮雕 */
+    --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.03);
+    --shadow-soft-md: 0 4px 16px rgba(15, 23, 42, 0.06);
+    --shadow-primary: 0 2px 8px rgba(22, 119, 255, 0.18);
+    --chart-1: 211 100% 54%;
+    --chart-2: 196 80% 48%;
+    --chart-3: 43 95% 52%;
+    --chart-4: 152 100% 36%;
+    --chart-5: 0 84% 60%;
+    --sidebar: 0 0% 100%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 10%;
+    --sidebar-primary: 211 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 258 30% 91%;
-    --sidebar-accent-foreground: 258 35% 16%;
-    --sidebar-border: 258 20% 87%;
-    --sidebar-ring: 263 70% 58%;
-
-    /* 状态色 */
-    --success: 142 65% 42%;
+    --sidebar-accent: 211 100% 96%;   /* #EAF2FF */
+    --sidebar-accent-foreground: 211 100% 40%;
+    --sidebar-border: 0 0% 91%;
+    --sidebar-ring: 211 100% 54%;
+    --success: 152 100% 36%;
     --success-foreground: 0 0% 100%;
-    --warning: 35 91% 55%;
+    --warning: 0 84% 60%;
     --warning-foreground: 0 0% 100%;
-    --info: 196 80% 48%;
+    --info: 211 100% 54%;
     --info-foreground: 0 0% 100%;
-
-    /* 代码 */
-    --code-bg: 250 25% 95%;
-    --code-border: 250 15% 87%;
+    --code-bg: 220 14% 96%;
+    --code-border: 0 0% 91%;
   }
 
   /* 深色模式 */
-  .dark {
-    --radius: 0.5rem;
-
-    /* 背景层 */
-    --background: 240 14% 8%;         /* #0D0D16 极深紫黑 */
-    --foreground: 240 20% 92%;        /* #E8E8F0 浅蓝白 */
-
-    /* 卡片/面板 */
-    --card: 240 12% 12%;              /* #181821 */
-    --card-foreground: 240 20% 92%;
-
-    /* 弹出层 */
-    --popover: 240 12% 15%;           /* #1D1D2B */
-    --popover-foreground: 240 20% 92%;
-
-    /* 主色 - 紫罗兰（深色稍亮） */
-    --primary: 263 72% 62%;           /* #8B4CF8 */
+    .dark {
+    --radius: 0.75rem;
+    --background: 0 0% 8%;            /* #141414 */
+    --foreground: 0 0% 95%;
+    --card: 0 0% 12%;                 /* #1F1F1F */
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 211 100% 62%;          /* #3D9BFF */
     --primary-foreground: 0 0% 100%;
-
-    /* 次要色 */
-    --secondary: 240 12% 18%;         /* #252535 */
-    --secondary-foreground: 240 20% 88%;
-
-    /* 静音色 */
-    --muted: 240 10% 18%;
-    --muted-foreground: 240 10% 62%;  /* #9292A8 ≥4.5:1 */
-
-    /* 强调色 */
-    --accent: 258 88% 70%;            /* #9B77F9 */
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 62%;
+    --accent: 211 100% 62%;
     --accent-foreground: 0 0% 100%;
-
-    /* 危险色 */
-    --destructive: 0 72% 56%;
+    --destructive: 0 84% 62%;
     --destructive-foreground: 0 0% 100%;
-
-    /* 边框/输入 */
-    --border: 240 10% 24%;            /* #343448 */
-    --input: 240 10% 22%;
-    --ring: 263 72% 62%;
-
-    /* 图表 */
-    --chart-1: 263 72% 62%;
+    --border: 0 0% 20%;               /* #333333 */
+    --input: 0 0% 20%;
+    --ring: 211 100% 62%;
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.50);
+    --shadow-soft-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+    --shadow-primary: 0 2px 10px rgba(61, 155, 255, 0.22);
+    --chart-1: 211 100% 62%;
     --chart-2: 196 80% 55%;
-    --chart-3: 27 90% 62%;
-    --chart-4: 142 65% 48%;
-    --chart-5: 0 72% 56%;
-
-    /* 侧边栏 - 更深紫黑 */
-    --sidebar: 240 14% 6%;
-    --sidebar-background: 240 14% 6%;
-    --sidebar-foreground: 240 20% 88%;
-    --sidebar-primary: 263 72% 65%;
+    --chart-3: 43 95% 58%;
+    --chart-4: 152 100% 42%;
+    --chart-5: 0 84% 62%;
+    --sidebar: 0 0% 10%;
+    --sidebar-background: 0 0% 10%;
+    --sidebar-foreground: 0 0% 92%;
+    --sidebar-primary: 211 100% 66%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 12% 14%;
-    --sidebar-accent-foreground: 240 20% 92%;
-    --sidebar-border: 240 10% 16%;
-    --sidebar-ring: 263 72% 62%;
-
-    /* 状态色 */
-    --success: 142 65% 48%;
+    --sidebar-accent: 211 40% 18%;
+    --sidebar-accent-foreground: 211 100% 80%;
+    --sidebar-border: 0 0% 18%;
+    --sidebar-ring: 211 100% 62%;
+    --success: 152 100% 42%;
     --success-foreground: 0 0% 100%;
-    --warning: 35 91% 58%;
+    --warning: 0 84% 62%;
     --warning-foreground: 0 0% 100%;
-    --info: 196 80% 55%;
+    --info: 211 100% 62%;
     --info-foreground: 0 0% 100%;
-
-    /* 代码 */
-    --code-bg: 240 14% 8%;
-    --code-border: 240 10% 24%;
+    --code-bg: 0 0% 9%;
+    --code-border: 0 0% 20%;
   }
 }
 
@@ -263,6 +219,72 @@
     overflow-wrap: anywhere;
     word-break: break-word;
   }
+
+  /*
+   * App-Search 风格：白卡片 + 细边框 + 轻阴影。
+   * 不使用浮雕/内凹，只在需要层次的地方给极轻投影。
+   */
+  .surface-card {
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    box-shadow: var(--shadow-soft);
+  }
+
+  .surface-elevated {
+    box-shadow: var(--shadow-soft-md);
+  }
+
+  [class~='bg-card'][class~='border-border'] {
+    border-color: hsl(var(--border));
+  }
+
+  [class~='bg-card'][class~='border-border'][class~='rounded-lg'],
+  [class~='bg-card'][class~='border-border'][class~='rounded-xl'],
+  [class~='bg-card'][class~='border-border'][class~='rounded-2xl'] {
+    box-shadow: var(--shadow-soft);
+  }
+
+  /* 输入类控件统一「线条描边」：白底、细边框，不做填充/内凹 */
+  input[class~='bg-secondary'],
+  textarea[class~='bg-secondary'],
+  select[class~='bg-secondary'] {
+    border-color: hsl(var(--border));
+    background: hsl(var(--card));
+    box-shadow: none;
+  }
+
+  input[class~='bg-secondary']:focus-visible,
+  textarea[class~='bg-secondary']:focus-visible,
+  select[class~='bg-secondary']:focus-visible {
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12);
+  }
+/* Tabs：浅灰轨道 + 白色选中项 */
+  [role='tablist'] {
+    border-color: hsl(var(--border)) !important;
+    background: hsl(var(--secondary));
+    box-shadow: none;
+  }
+
+  [role='tablist'] [role='tab'][data-state='active'] {
+    background: hsl(var(--card));
+    box-shadow: var(--shadow-soft);
+  }
+
+  /* 搜索框：只保留线条描边，不填充底色；避免 WebView autofill 覆盖 */
+  .search-input {
+    background: transparent !important;
+    border: 1px solid hsl(var(--border)) !important;
+    box-shadow: none !important;
+  }
+
+  .search-input:focus,
+  .search-input:focus-visible {
+    border-color: hsl(var(--border)) !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+
 
   .gradient-text {
     @apply bg-clip-text text-transparent;

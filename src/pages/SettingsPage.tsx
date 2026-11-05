@@ -425,7 +425,7 @@ export default function SettingsPage() {
 
       {/* 用户信息（不折叠，始终显示） */}
       {user && (
-        <div className="bg-card border border-border rounded-xl p-5">
+        <div className="surface-card rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-foreground">{t('settings.accountInfo')}</h2>
             <Button

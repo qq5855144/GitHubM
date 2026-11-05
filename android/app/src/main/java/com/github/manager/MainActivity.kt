@@ -96,7 +96,7 @@ class MainActivity : AppCompatActivity() {
     /** 当前激活的菜单项，避免重复导航 */
     private var currentNavItemId: Int = R.id.nav_home
     /** 当前底部导航栏选中色（由 notifyAccent 更新，随主题色方案变化） */
-    private var currentAccentColor: Int = Color.parseColor("#7c3aed")  // 默认与 Web 端浅色主题 primary 一致
+    private var currentAccentColor: Int = Color.parseColor("#1677FF")  // 默认与 Web 端浅色主题 primary 一致
     /** 当前是否为深色模式（用于 notifyAccent 确定未选中色；默认浅色） */
     private var darkTheme: Boolean = false
     /** 广播接收器是否已注册（防止 onDestroy 中 unregisterReceiver 二次崩溃） */
@@ -512,7 +512,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun applySavedAccentToSplash() {
         val hex = getSharedPreferences("gm_prefs", MODE_PRIVATE)
-            .getString("accent_hex", "#7c3aed") ?: "#7c3aed"  // 默认值与 Web 端浅色主题 primary 一致
+            .getString("accent_hex", "#1677FF") ?: "#1677FF"  // 默认值与 Web 端浅色主题 primary 一致
         try {
             val color = Color.parseColor(hex)
             val tintList = android.content.res.ColorStateList.valueOf(color)
@@ -702,7 +702,7 @@ class MainActivity : AppCompatActivity() {
         applySavedAccentToSplash()
         // 冷启动时同步最近任务栏卡片颜色（与主题色方案保持一致）
         val savedHexForTask = getSharedPreferences("gm_prefs", MODE_PRIVATE)
-            .getString("accent_hex", "#7c3aed") ?: "#7c3aed"
+            .getString("accent_hex", "#1677FF") ?: "#1677FF"
         applyTaskDescriptionColor(savedHexForTask)
         // 启动画面：冷启动播放打字动画；热启动只静态展示，React 就绪后立即淡出
         if (warmStart) {
@@ -899,6 +899,11 @@ class MainActivity : AppCompatActivity() {
                 request: WebResourceRequest?,
             ): Boolean {
                 val url = request?.url?.toString() ?: return false
+
+                // GitHub 站内链接优先在应用内路由：README 语言切换 / 文件 / Issue / PR
+                // 不再交给系统浏览器，保证「一站式」体验。
+                if (routeGithubUrlInApp(url)) return true
+
                 // 本地资源：只允许 SPA 入口文档。
                 // README / Issue 里的相对链接（./docs/a.md、images/x.png）会被 WebView
                 // 解析成 file:///android_asset/...，放行只会得到 ERR_FILE_NOT_FOUND 错误页
@@ -941,6 +946,63 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // 其他协议（tel:、mailto: 等）：交系统处理
+                return true
+            }
+
+            /**
+             * 将 GitHub 网页链接映射到应用内 HashRouter 路由。
+             * 返回 true 表示已处理，应阻止 WebView 继续加载/跳转外部浏览器。
+             */
+            private fun routeGithubUrlInApp(url: String): Boolean {
+                val uri = Uri.parse(url)
+                val host = uri.host ?: return false
+                if (host != "github.com" && host != "www.github.com") return false
+                val segments = uri.pathSegments
+                if (segments.size < 2) return false
+                val reserved = setOf(
+                    "settings", "marketplace", "explore", "topics", "trending",
+                    "login", "join", "sponsors", "notifications", "new",
+                    "organizations", "apps", "features", "pricing", "collections"
+                )
+                if (segments[0].lowercase() in reserved) return false
+
+                val owner = Uri.encode(segments[0])
+                val repo = Uri.encode(segments[1])
+                val prefix = "/repos/$owner/$repo"
+
+                fun encodePath(parts: List<String>): String =
+                    parts.joinToString("/") { Uri.encode(it) }
+
+                val route = when {
+                    segments.size == 2 -> prefix
+                    segments[2] == "blob" || segments[2] == "tree" -> {
+                        if (segments.size < 5) null else {
+                            val pathParts = segments.subList(4, segments.size)
+                            val path = pathParts.joinToString("/")
+                            val lowerPath = path.lowercase()
+                            val isBinary = Regex(".*\\.(apk|zip|rar|7z|tar|gz|exe|dmg|iso|bin|msi|deb|pdf|docx?|xlsx?|pptx?|png|jpe?g|gif|webp|svg|ico|mp3|mp4|mov|avi|mkv|woff2?|ttf|otf)$").matches(lowerPath)
+                            if (path.isBlank() || isBinary) null
+                            else {
+                                val base = pathParts.last().lowercase()
+                                val isReadme = base.startsWith("readme") &&
+                                    (base.endsWith(".md") || base.endsWith(".markdown") ||
+                                        base.endsWith(".mdown") || base.endsWith(".mkd") || base.endsWith(".mdx"))
+                                if (isReadme) "$prefix?readme=${encodePath(pathParts)}"
+                                else "$prefix/code/${encodePath(pathParts)}"
+                            }
+                        }
+                    }
+                    segments[2] == "issues" && segments.size == 3 -> "$prefix/issues"
+                    segments[2] == "issues" && segments.size >= 4 -> "$prefix/issues/${Uri.encode(segments[3])}"
+                    segments[2] == "pulls" && segments.size == 3 -> "$prefix/pulls"
+                    segments[2] == "pull" && segments.size >= 4 -> "$prefix/pulls/${Uri.encode(segments[3])}"
+                    segments[2] == "branches" -> "$prefix/branches"
+                    segments[2] == "commits" -> "$prefix/commits"
+                    else -> null
+                } ?: return false
+
+                val jsHash = "#$route".replace("\\", "\\\\").replace("'", "\\'")
+                webView.evaluateJavascript("window.location.hash = '$jsHash';", null)
                 return true
             }
 
@@ -1025,7 +1087,7 @@ class MainActivity : AppCompatActivity() {
                                 "coral"   to "#f0572a",
                                 "lime"    to "#65a30d",
                             )
-                            val hex = accentMap[accentId] ?: "#7c3aed"
+                            val hex = accentMap[accentId] ?: "#1677FF"
                             // 持久化，下次冷启动直接读取
                             getSharedPreferences("gm_prefs", MODE_PRIVATE)
                                 .edit().putString("accent_hex", hex).apply()

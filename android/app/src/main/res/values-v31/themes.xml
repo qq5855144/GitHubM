@@ -11,11 +11,11 @@
         <item name="android:windowSplashScreenBackground">@color/splash_bg_solid</item>
         <item name="android:windowBackground">@color/splash_bg_solid</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
-        <item name="colorPrimary">#7c3aed</item>
-        <item name="colorPrimaryVariant">#6d28d9</item>
+        <item name="colorPrimary">#1677FF</item>
+        <item name="colorPrimaryVariant">#0F5FD7</item>
         <item name="colorOnPrimary">#ffffff</item>
         <!-- M3 Active Indicator 填充色（API 31+ 浅色模式） -->
-        <item name="colorSecondaryContainer">#EDE9FE</item>
-        <item name="colorOnSecondaryContainer">#5B21B6</item>
+        <item name="colorSecondaryContainer">#EAF2FF</item>
+        <item name="colorOnSecondaryContainer">#0B4FA8</item>
     </style>
 </resources>

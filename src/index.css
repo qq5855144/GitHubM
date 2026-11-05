@@ -259,8 +259,7 @@
     border-color: hsl(var(--ring));
     box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12);
   }
-
-  /* Tabs：浅灰轨道 + 白色选中项 */
+/* Tabs：浅灰轨道 + 白色选中项 */
   [role='tablist'] {
     border-color: hsl(var(--border)) !important;
     background: hsl(var(--secondary));
@@ -271,6 +270,19 @@
     background: hsl(var(--card));
     box-shadow: var(--shadow-soft);
   }
+
+  /* 搜索框：只保留线条描边，不填充底色；避免 WebView autofill 覆盖 */
+  .search-input {
+    background: transparent !important;
+    border: 1px solid hsl(var(--border)) !important;
+    box-shadow: none !important;
+  }
+
+  .search-input:focus-visible {
+    border-color: hsl(var(--ring)) !important;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12) !important;
+  }
+
 
   .gradient-text {
     @apply bg-clip-text text-transparent;

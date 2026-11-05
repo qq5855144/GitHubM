@@ -412,7 +412,7 @@ export default function SearchPage() {
             onKeyDown={handleKeyDown}
             onFocus={() => setShowHistory(true)}
             placeholder={i18n.t('搜索 GitHub…')}
-            className="pl-9 pr-11 h-10 rounded-lg text-foreground placeholder:text-muted-foreground text-base"
+            className="search-input pl-9 pr-11 h-10 rounded-lg text-foreground placeholder:text-muted-foreground text-base"
           />
           {/* 回车搜索：置于输入框内部，不再使用外置搜索按钮 */}
           <button

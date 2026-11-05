@@ -215,7 +215,6 @@
     background-image:
       radial-gradient(1100px circle at 0% 0%, hsl(var(--primary) / 0.055), transparent 46%),
       radial-gradient(900px circle at 100% 100%, hsl(var(--accent) / 0.045), transparent 42%);
-    background-attachment: fixed;
   }
 
   /* 移动端安全边界：禁止超长文件名/URL/分支名把整页撑出视口 */

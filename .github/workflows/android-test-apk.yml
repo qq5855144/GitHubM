@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       version_code:
-        description: 'versionCode（需大于当前已安装版本，默认 433）'
+        description: 'versionCode（需大于当前已安装版本，默认 434）'
         required: false
-        default: '433'
+        default: '434'
   pull_request:
     types: [opened, synchronize, reopened]
 permissions:
@@ -63,8 +63,8 @@ jobs:
       - name: 构建签名 Release APK
         working-directory: android
         env:
-          VERSION_CODE: ${{ github.event.inputs.version_code || '433' }}
-          VERSION_NAME: "1.0.${{ github.event.inputs.version_code || '433' }}-test"
+          VERSION_CODE: ${{ github.event.inputs.version_code || '434' }}
+          VERSION_NAME: "1.0.${{ github.event.inputs.version_code || '434' }}-test"
           KEYSTORE_PATH: ${{ github.workspace }}/android/release.keystore
           STORE_PASSWORD: GithubManager@2024
           KEY_ALIAS: github-manager
@@ -74,12 +74,12 @@ jobs:
       - name: 重命名 APK
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk \
-             "github-manager-test-v1.0.${{ github.event.inputs.version_code || '433' }}.apk"
-          ls -lh "github-manager-test-v1.0.${{ github.event.inputs.version_code || '433' }}.apk"
+             "github-manager-test-v1.0.${{ github.event.inputs.version_code || '434' }}.apk"
+          ls -lh "github-manager-test-v1.0.${{ github.event.inputs.version_code || '434' }}.apk"
 
       - name: 上传测试 APK
         uses: actions/upload-artifact@v4
         with:
           name: github-manager-test-apk
-          path: github-manager-test-v1.0.${{ github.event.inputs.version_code || '433' }}.apk
+          path: github-manager-test-v1.0.${{ github.event.inputs.version_code || '434' }}.apk
           retention-days: 7

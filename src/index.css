@@ -231,6 +231,17 @@
     overflow-x: hidden;
   }
 
+  /*
+   * 移动端 flex/grid 子项默认允许收缩（min-width:auto 会让长内容拒绝收缩）。
+   * 仅在小屏生效，避免影响桌面端布局。
+   */
+  @media (max-width: 768px) {
+    .flex > *,
+    .grid > * {
+      min-width: 0;
+    }
+  }
+
   code, pre, .font-mono {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
   }

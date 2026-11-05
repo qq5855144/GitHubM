@@ -278,9 +278,11 @@
     box-shadow: none !important;
   }
 
+  .search-input:focus,
   .search-input:focus-visible {
-    border-color: hsl(var(--ring)) !important;
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12) !important;
+    border-color: hsl(var(--border)) !important;
+    box-shadow: none !important;
+    outline: none !important;
   }
 
 

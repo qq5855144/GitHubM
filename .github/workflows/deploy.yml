@@ -267,11 +267,21 @@ jobs:
           fi
 
       # ── 构建签名 Release APK ───────────────────────────────────
+      - name: 生成版本号
+        id: version
+        run: |
+          # versionCode 使用 Unix 时间戳（秒），保证「始终递增」：
+          # 1) 避免 PR 测试包 versionCode 领先正式包导致降级安装失败；
+          # 2) 每次发布都必然大于历史版本，支持跨版本覆盖安装。
+          # versionName 仍保持人类可读的 1.0.<run_number>。
+          echo "code=$(date +%s)" >> "$GITHUB_OUTPUT"
+          echo "name=1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
       - name: 构建签名 Release APK
         working-directory: android
         env:
-          VERSION_CODE:    ${{ github.run_number }}
-          VERSION_NAME:    "1.0.${{ github.run_number }}"
+          VERSION_CODE:    ${{ steps.version.outputs.code }}
+          VERSION_NAME:    ${{ steps.version.outputs.name }}
           KEYSTORE_PATH:   ${{ steps.keystore.outputs.keystore_path }}
           STORE_PASSWORD:  ${{ steps.keystore.outputs.store_password }}
           KEY_ALIAS:       ${{ steps.keystore.outputs.key_alias }}
@@ -282,7 +292,7 @@ jobs:
       - name: 重命名 APK
         id: rename_apk
         run: |
-          VERSION_NAME="1.0.${{ github.run_number }}"
+          VERSION_NAME="${{ steps.version.outputs.name }}"
           APK_NAME="github-manager-v${VERSION_NAME}.apk"
           # 始终使用 Release APK（两种签名方案均走 assembleRelease）
           cp "android/app/build/outputs/apk/release/app-release.apk" "${APK_NAME}"
@@ -339,7 +349,7 @@ jobs:
           NOTES="## GitHub Manager ${TAG}
 
           **构建信息**
-          - 版本号：\`${VERSION_NAME}\`（versionCode: \`${{ github.run_number }}\`）
+          - 版本号：\`${VERSION_NAME}\`（versionCode: \`${{ steps.version.outputs.code }}\`）
           - 提交：[\`${SHORT_SHA}\`](${{ github.server_url }}/${{ github.repository }}/commit/${COMMIT_SHA})
           - 构建时间：$(date -u '+%Y-%m-%d %H:%M UTC')
           - ${SIGN_NOTE}

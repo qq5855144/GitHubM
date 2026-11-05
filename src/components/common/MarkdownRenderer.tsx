@@ -203,9 +203,7 @@ export default function MarkdownRenderer({ content, className, repoContext }: Ma
               // README 内的语言切换（README.md / README.zh-CN.md 等）应切换 README 渲染，
               // 而不是进入代码浏览查看原始 Markdown 文件。
               const isReadmeSwitch =
-                !!repoContext &&
-                isReadmeFilePath(repoContext.path) &&
-                isReadmeFilePath(target.path);
+                !!repoContext && isReadmeFilePath(target.path);
               const to = isReadmeSwitch
                 ? `/repos/${repoContext!.owner}/${repoContext!.repo}?readme=${encodeURIComponent(target.path || 'README.md')}${target.hash}`
                 : `/repos/${repoContext!.owner}/${repoContext!.repo}/code${target.path ? `/${target.path}` : ''}${target.hash}`;
@@ -214,7 +212,7 @@ export default function MarkdownRenderer({ content, className, repoContext }: Ma
                   href={`#${to}`}
                   {...props}
                   onClick={(e) => {
-                    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                     e.preventDefault();
                     navigate(to);
                   }}

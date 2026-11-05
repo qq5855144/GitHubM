@@ -167,7 +167,7 @@ export default function StarredPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={i18n.t('搜索收藏的仓库…')}
-            className="pl-9 h-9 bg-secondary border-border text-foreground placeholder:text-muted-foreground text-sm"
+            className="search-input pl-9 h-9 text-foreground placeholder:text-muted-foreground text-sm"
           />
         </div>
         <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>

@@ -262,6 +262,9 @@ export default function AiAssistantPage() {
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const scrollContentRef = useRef<HTMLDivElement>(null);
+  /** 用户是否仍在底部；向上翻阅历史时不再强制拉回底部 */
+  const autoFollowRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   /** 聊天页根容器 ref，用于 Android 软键盘弹起时动态修正高度 */
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -403,16 +406,47 @@ export default function AiAssistantPage() {
     };
   }, []);
 
-  // 自动滚动到底部
-  // 直接操作原生 div（不再经过 Radix ScrollArea 的 viewport 选择器）
-  useEffect(() => {
+  // 自动跟随底部：仅当用户本来就在底部时才滚动。
+  // 旧实现每次 messages 变化都 smooth scroll，流式高频更新时会和折叠/展开
+  // 互相抢滚动，表现为“第一条和最新一条之间反复跳”。
+  const scrollRafRef = useRef(0);
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = scrollAreaRef.current;
-    if (el) {
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-    } else {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
+    if (!el || !autoFollowRef.current) return;
+    cancelAnimationFrame(scrollRafRef.current);
+    scrollRafRef.current = requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior });
+    });
+  }, []);
+
+  const handleChatScroll = useCallback(() => {
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    // 距离底部 96px 内视为“仍在底部”；用户向上翻阅时暂停自动跟随
+    autoFollowRef.current = distance < 96;
+  }, []);
+
+  useEffect(() => {
+    if (step !== 'chat') return;
+    const area = scrollAreaRef.current;
+    const content = scrollContentRef.current;
+    if (!area || !content) return;
+
+    const sync = () => scrollToBottom('auto');
+    sync();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(sync);
+    observer.observe(content);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(scrollRafRef.current);
+    };
+  }, [step, scrollToBottom]);
+
+  useEffect(() => {
+    if (step === 'chat') scrollToBottom('auto');
+  }, [messages, step, scrollToBottom]);
 
   // ── 后台恢复检测：页面从后台切回时，若任务被网络中断则提示重连 ─────────────────
   useEffect(() => {
@@ -507,6 +541,7 @@ export default function AiAssistantPage() {
 你可以在顶部切换目标分支、新建分支，AI 可帮你写文件并提交 PR。告诉我需要什么帮助！`,
     };
     setMessages([welcome]);
+    autoFollowRef.current = true;
     loadBranches(repo);
     setStep('chat');
   }, [loadBranches]);
@@ -577,6 +612,7 @@ export default function AiAssistantPage() {
       role: 'assistant',
       content: `已加载历史对话：**${session.repo_full_name}** 分支 \`${session.branch}\``,
     }]);
+    autoFollowRef.current = true;
     loadBranches(fakeRepo);
     setStep('chat');
   }, [loadBranches]);
@@ -751,6 +787,8 @@ const currentModelDef = getModelDef(modelConfig.type);
     const aiMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: '', streaming: true };
     setMessages(prev => isRegen ? [...prev, aiMsg] : [...prev, userMsg, aiMsg]);
     setIsStreaming(true);
+    autoFollowRef.current = true;
+    scrollToBottom('auto');
 
     // ── 立即创建/更新会话，保证任务还在流式执行时也有历史记录 ────────────────
     // 旧逻辑等 onComplete 才落库，APP 中途被杀就什么都不剩。
@@ -1650,6 +1688,24 @@ const currentModelDef = getModelDef(modelConfig.type);
     return groups;
   }, [messages]);
 
+  // 当前任务最后一段执行组：任务进行中始终保持展开，历史执行组保持折叠
+  const activeExecGroupIndex = useMemo(() => {
+    let taskStart = 0;
+    for (let i = messageGroups.length - 1; i >= 0; i--) {
+      if (messageGroups[i].kind === 'user') { taskStart = i; break; }
+    }
+    for (let i = messageGroups.length - 1; i > taskStart; i--) {
+      if (messageGroups[i].kind === 'exec') return i;
+    }
+    return -1;
+  }, [messageGroups]);
+  // 执行完成、最终回答已经开始输出后，当前执行组也应折叠
+  const activeExecHasAnswer = useMemo(
+    () => activeExecGroupIndex >= 0 &&
+      messageGroups.slice(activeExecGroupIndex + 1).some(g => g.kind === 'answer'),
+    [messageGroups, activeExecGroupIndex],
+  );
+
   // ── 慢响应提示：isStreaming 时是否展示"仍在处理"弱标注 ──────────────────────
   // 条件：streaming 进行中 + 收到过 heartbeat + 距最后 content 超过 15s
   const showSlowHint = isStreaming &&
@@ -1901,10 +1957,11 @@ const currentModelDef = getModelDef(modelConfig.type);
           {/* 消息列表：原生 div 替代 ScrollArea，避免 Android WebView 中 Radix 内部宽度偏差截断文字 */}
           <div
             ref={scrollAreaRef}
+            onScroll={handleChatScroll}
             className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
-            <div className="flex flex-col p-4 pb-2">
+            <div ref={scrollContentRef} className="flex flex-col p-4 pb-2">
               {messageGroups.map((group, gIdx) => {
                 const marginClass = gIdx === 0 ? '' : group.kind === 'user' ? 'mt-5' : 'mt-3';
 
@@ -1941,7 +1998,7 @@ const currentModelDef = getModelDef(modelConfig.type);
                 if (group.kind === 'exec') {
                   return (
                     <div key={group.msgs[0].id} className={marginClass}>
-                      <ExecutionBlock msgs={group.msgs} streaming={group.streaming} />
+                      <ExecutionBlock msgs={group.msgs} streaming={group.streaming} active={isStreaming && gIdx === activeExecGroupIndex && !activeExecHasAnswer} />
                     </div>
                   );
                 }

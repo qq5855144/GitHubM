@@ -7037,7 +7037,10 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       const toolFailed = !isBusinessResult && (
         toolResult.startsWith("工具执行出错：") || toolResult.startsWith("❌")
       );
-      const toolStatus = toolFailed ? "fail" : "success";
+      const verificationFailedResult =
+        toolName === "verify_changes" &&
+        (toolResult.includes("VERIFY_FAILED") || toolResult.includes("VERIFY_PENDING"));
+      const toolStatus = toolFailed || verificationFailedResult ? "fail" : "success";
 
       // ── 代码验证状态机：写代码 → 待验证 → 通过/失败 → 修复后再验证 ─────────
       if (toolName === "verify_changes") {
@@ -7092,7 +7095,7 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       });
 
       // 【网关策略 6】协议封箱：对传回给大模型的内容使用统一协议，便于它稳定解析
-      const toolProtocolOutput = normalizeResultProtocol(toolResult, toolFailed);
+      const toolProtocolOutput = normalizeResultProtocol(toolResult, toolStatus === "fail");
       
       await sendTyped({ 
         type: "tool_end", 

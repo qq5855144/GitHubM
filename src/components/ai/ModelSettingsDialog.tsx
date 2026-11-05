@@ -244,7 +244,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
                   {i18n.t('✓ 已获取')}{fetchedModels[draft.type].length} {i18n.t('个可用模型')}</p>
               )}
               <p className="text-xs text-muted-foreground">
-                {i18n.t('Key 仅保存在本地，由浏览器直连官方 API，不会上传至任何服务器')}</p>
+                {i18n.t('Key 仅保存在本地；配置代理后由无状态 Worker 转发，不会保存 Key')}</p>
               {/* 测试连接按钮 */}
               <div className="flex flex-col gap-1.5">
                   <Button
@@ -275,6 +275,20 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
                 </div>
             </div>
           )}
+
+          {/* 无状态模型代理（Cloudflare Worker） */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-sm font-normal">{i18n.t('模型代理（可选）')}</Label>
+            <Input
+              className="px-3"
+              placeholder="https://githubm-llm-proxy.xxx.workers.dev"
+              value={draft.proxy_url || ''}
+              onChange={e => setDraft(prev => ({ ...prev, proxy_url: e.target.value }))}
+            />
+            <p className="text-xs text-muted-foreground">
+              {i18n.t('解决 Android WebView CORS / network error；留空则直连模型 API。代理不保存会话和 Key。')}
+            </p>
+          </div>
 
           {/* 模型选择 */}
           {availableModels.length > 0 && (

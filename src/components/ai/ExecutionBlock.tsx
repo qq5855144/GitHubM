@@ -185,26 +185,34 @@ function StepRow({ msg, toolMsgs }: { msg: Message; toolMsgs: Message[] }) {
 export interface ExecutionBlockProps {
   /** 属于同一执行块的消息（step / tool / thinking） */
   msgs: Message[];
-  /** 最终状态：是否仍在流式中 */
+  /** 组内是否还有 streaming 消息 */
   streaming: boolean;
+  /** 是否是当前正在执行的任务段（任务进行中即使短暂无 streaming 消息也保持展开） */
+  active?: boolean;
 }
 
-export default function ExecutionBlock({ msgs, streaming }: ExecutionBlockProps) {
+export default function ExecutionBlock({ msgs, streaming, active = false }: ExecutionBlockProps) {
   const hasError = msgs.some(m => m.toolStatus === 'fail');
 
-  // 流式中默认展开；完成后 600ms 自动折叠
-  const [expanded, setExpanded] = useState(streaming);
-  const prevStreamingRef = useRef(streaming);
+  // 当前执行段默认展开；任务结束后延迟 600ms 自动折叠。
+  // 注意：只在 active/streaming 的“状态切换”时自动展开，
+  // 不再依赖 expanded，避免用户手动折叠后被 effect 立刻重新展开。
+  const isCurrent = streaming || active;
+  const [expanded, setExpanded] = useState(isCurrent);
+  const prevCurrentRef = useRef(isCurrent);
 
   useEffect(() => {
-    if (streaming && !expanded) setExpanded(true); // 新事件到来 → 展开
-    if (prevStreamingRef.current && !streaming) {
-      prevStreamingRef.current = false;
+    const prev = prevCurrentRef.current;
+    prevCurrentRef.current = isCurrent;
+    if (isCurrent && !prev) {
+      setExpanded(true);
+      return;
+    }
+    if (!isCurrent && prev) {
       const t = setTimeout(() => setExpanded(false), 600);
       return () => clearTimeout(t);
     }
-    prevStreamingRef.current = streaming;
-  }, [streaming, expanded]);
+  }, [isCurrent]);
 
   // ── 摘要行文本 ────────────────────────────────────────────────────────────
   const stepCount = msgs.filter(m => m.bubbleType === 'step').length;

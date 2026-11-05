@@ -47,6 +47,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** 启动画面是否已完成（用于 Activity 重建时跳过动画） */
+private const val KEY_SPLASH_DISMISSED = "splash_dismissed"
+/** 最近一次进入后台的时间戳（用于 OEM 杀进程后的热启动判定） */
+private const val PREF_LAST_STOP_AT = "last_stop_at"
+/** 10 分钟内从后台回到前台视为热启动 */
+private const val WARM_START_WINDOW_MS = 10 * 60 * 1000L
+
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
@@ -57,6 +64,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var navBarSpacer: View
     private lateinit var statusBarSpacer: View
     private var splashDismissed = false
+    /**
+     * 热启动标记：从后台返回 / Activity 被系统重建时为 true。
+     * 此时跳过 3 秒启动动画，React 就绪后立即淡出，避免每次切回前台都重走启动页。
+     */
+    private var warmStart = false
 
     // ── 启动画面双条件门禁 ──────────────────────────────────────────
     /** true = 3s 最小展示时间已到 */
@@ -557,6 +569,20 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // ── 热启动判定 ────────────────────────────────────────────────
+        // 1) savedInstanceState 非空：Activity 被系统重建（配置变化 / 进程回收后恢复）
+        // 2) 最近 10 分钟内从后台离开过：进程被 OEM 杀掉后重新冷启动
+        // 两种场景都不应再完整播放 3 秒启动动画。
+        val prefs = getSharedPreferences("gm_prefs", MODE_PRIVATE)
+        val savedSplashDismissed = savedInstanceState?.getBoolean(KEY_SPLASH_DISMISSED, false) == true
+        val lastStopAt = prefs.getLong(PREF_LAST_STOP_AT, 0L)
+        val elapsedSinceStop = System.currentTimeMillis() - lastStopAt
+        val recentlyBackgrounded = lastStopAt > 0L &&
+            elapsedSinceStop > 0L && elapsedSinceStop <= WARM_START_WINDOW_MS
+        warmStart = savedSplashDismissed || recentlyBackgrounded
+        // 热启动不再等待 3 秒最短展示时间，React 就绪即淡出
+        if (warmStart) splashMinTimeReached = true
+
         // 冷启动时读取上次保存的主题，默认浅色（light 模式）
         val savedTheme = getSharedPreferences("gm_prefs", MODE_PRIVATE)
             .getString("theme_mode", "light") ?: "light"
@@ -602,7 +628,12 @@ class MainActivity : AppCompatActivity() {
         // ── 启动画面沉浸全屏：隐藏状态栏 ────────────────────────────
         // shortEdges 模式 + 状态栏隐藏 = 内容延伸至刘海区域，视觉完全全屏。
         // dismissSplash 时自动恢复，避免主界面也无状态栏。
-        insetsController.hide(WindowInsetsCompat.Type.statusBars())
+        // 热启动不展示完整启动动画，直接恢复状态栏，避免界面高度跳变。
+        if (warmStart) {
+            insetsController.show(WindowInsetsCompat.Type.statusBars())
+        } else {
+            insetsController.hide(WindowInsetsCompat.Type.statusBars())
+        }
         insetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
@@ -673,8 +704,12 @@ class MainActivity : AppCompatActivity() {
         val savedHexForTask = getSharedPreferences("gm_prefs", MODE_PRIVATE)
             .getString("accent_hex", "#7c3aed") ?: "#7c3aed"
         applyTaskDescriptionColor(savedHexForTask)
-        // 启动打字动画（与 WebView 加载并行进行）
-        startSplashTypingAnimation()
+        // 启动画面：冷启动播放打字动画；热启动只静态展示，React 就绪后立即淡出
+        if (warmStart) {
+            splashOverlay.findViewById<TextView>(R.id.splashTerminalText)?.text = "git clone your_future"
+        } else {
+            startSplashTypingAnimation()
+        }
 
         // ── WebView 预加载优化 ───────────────────────────────────────
         // 先完成所有 WebView 配置，再尽早调用 loadUrl，
@@ -685,9 +720,12 @@ class MainActivity : AppCompatActivity() {
         setupDownloadListener()
         webView.addJavascriptInterface(WebAppBridge(), "AndroidBridge")
 
-        // WebView 最早时机开始加载，充分利用 3s 启动时间预热 React
+        // WebView 最早时机开始加载，充分利用启动时间预热 React
+        // restoreState 在部分 ROM / 进程回收场景会返回 null，此时回退到正常加载，避免白屏
         if (savedInstanceState != null) {
-            webView.restoreState(savedInstanceState)
+            if (webView.restoreState(savedInstanceState) == null) {
+                webView.loadUrl("file:///android_asset/index.html")
+            }
         } else {
             webView.loadUrl("file:///android_asset/index.html")
         }
@@ -710,14 +748,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 3s 最小展示时间到达后更新门禁状态，与 notifyReady 共同决定是否消除启动画面
-        splashHandler.postDelayed({
-            splashMinTimeReached = true
-            tryDismissSplash()
-        }, 3000L)
+        if (warmStart) {
+            // 热启动：不等待 3 秒，notifyReady 到达即淡出；2.5s 兜底防止 notifyReady 丢失
+            splashHandler.postDelayed({ dismissSplash() }, 2500L)
+        } else {
+            // 3s 最小展示时间到达后更新门禁状态，与 notifyReady 共同决定是否消除启动画面
+            splashHandler.postDelayed({
+                splashMinTimeReached = true
+                tryDismissSplash()
+            }, 3000L)
 
-        // 6s 硬兜底：防止 notifyReady 永不触发（如 JS 崩溃）时启动画面卡死
-        splashHandler.postDelayed({ dismissSplash() }, 6000L)
+            // 6s 硬兜底：防止 notifyReady 永不触发（如 JS 崩溃）时启动画面卡死
+            splashHandler.postDelayed({ dismissSplash() }, 6000L)
+        }
 
         intent?.let { handleIntent(it) }
     }
@@ -739,11 +782,30 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_SPLASH_DISMISSED, splashDismissed)
         webView.saveState(outState)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 记录进入后台时间：进程若被 OEM 回收，下次启动可按热启动处理，跳过完整启动动画
+        if (!isFinishing) {
+            getSharedPreferences("gm_prefs", MODE_PRIVATE)
+                .edit()
+                .putLong(PREF_LAST_STOP_AT, System.currentTimeMillis())
+                .apply()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        // 用户主动退出（返回键/从最近任务划掉）时清除热启动时间，下次仍是完整冷启动
+        if (isFinishing) {
+            getSharedPreferences("gm_prefs", MODE_PRIVATE)
+                .edit()
+                .remove(PREF_LAST_STOP_AT)
+                .apply()
+        }
         splashHandler.removeCallbacksAndMessages(null)
         // webView 为 lateinit，若 onCreate 未完成初始化需防止 NPE
         if (::webView.isInitialized) {

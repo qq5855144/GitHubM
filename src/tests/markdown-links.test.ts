@@ -1,6 +1,7 @@
 // Markdown 仓库相对链接解析单元测试（Issue #21 回归）
 import { describe, it, expect } from 'vitest';
 import {
+  isReadmeFilePath,
   normalizeRepoPath,
   resolveMarkdownHref,
   resolveMarkdownImage,
@@ -70,6 +71,23 @@ describe('resolveMarkdownHref（仓库上下文）', () => {
 
   it('没有仓库上下文时相对路径不误判为内部路由', () => {
     expect(resolveMarkdownHref('./a.md')).toEqual({ kind: 'external', href: './a.md' });
+  });
+});
+
+describe('isReadmeFilePath', () => {
+  it('识别默认 README', () => {
+    expect(isReadmeFilePath('README.md')).toBe(true);
+  });
+
+  it('识别语言变体 README', () => {
+    expect(isReadmeFilePath('README.zh-CN.md')).toBe(true);
+    expect(isReadmeFilePath('docs/readme_ja.md')).toBe(true);
+    expect(isReadmeFilePath('README-en.markdown')).toBe(true);
+  });
+
+  it('普通 Markdown 不误判', () => {
+    expect(isReadmeFilePath('docs/guide.md')).toBe(false);
+    expect(isReadmeFilePath('README')).toBe(false);
   });
 });
 

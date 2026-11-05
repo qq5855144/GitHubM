@@ -1,7 +1,7 @@
 // 仓库详情页
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Star,
   GitFork,
@@ -43,6 +43,7 @@ import {
 import {
   getRepo,
   getReadme,
+  getFileContent,
   getCommits,
   checkStarred,
   starRepo,
@@ -71,6 +72,9 @@ import i18n from "@/i18n";
 
 export default function RepoDetailPage() {
   const { owner, repo: repoName } = useParams<{ owner: string; repo: string }>();
+  // README 语言切换：?readme=README.zh-CN.md 时加载对应文件并作为 README 渲染
+  const [searchParams] = useSearchParams();
+  const readmeParam = searchParams.get('readme') || '';
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
 
@@ -99,7 +103,7 @@ export default function RepoDetailPage() {
   useEffect(() => {
     if (!owner || !repoName) return;
 
-    const cacheKey = `repodetail:${owner}/${repoName}`;
+    const cacheKey = `repodetail:${owner}/${repoName}:${readmeParam || 'default'}`;
 
     // 命中缓存：立即恢复所有数据，不展示 loading
     const cached = pageCache.get<{
@@ -140,7 +144,12 @@ export default function RepoDetailPage() {
 
         // 加载 README 和提交记录（不阻塞主内容）
         Promise.all([
-          getReadme(owner, repoName).catch(() => null),
+          (readmeParam
+            ? getFileContent(owner, repoName, readmeParam)
+                .then((file) => ({ content: file.content, path: readmeParam }))
+                .catch(() => getReadme(owner, repoName))
+            : getReadme(owner, repoName)
+          ).catch(() => null),
           getCommits(owner, repoName, { per_page: 10 }).catch(() => ({ data: [], hasNextPage: false })),
         ]).then(([readmeData, commitsResult]) => {
           const decoded = readmeData?.content ? decodeBase64Content(readmeData.content) : '';
@@ -166,13 +175,13 @@ export default function RepoDetailPage() {
     };
 
     load();
-  }, [owner, repoName, isOwner]);
+  }, [owner, repoName, isOwner, readmeParam]);
 
   const handleStar = async () => {
     if (!owner || !repoName) return;
     setStarring(true);
     try {
-      const cacheKey = `repodetail:${owner}/${repoName}`;
+      const cacheKey = `repodetail:${owner}/${repoName}:${readmeParam || 'default'}`;
       if (starred) {
         await unstarRepo(owner, repoName);
         setStarred(false);
@@ -219,7 +228,7 @@ export default function RepoDetailPage() {
     setDeleting(true);
     try {
       await deleteRepo(owner, repoName);
-      pageCache.delete(`repodetail:${owner}/${repoName}`);
+      pageCache.invalidate(`repodetail:${owner}/${repoName}`);
       pageCache.invalidate('repos:'); // 使仓库列表缓存失效
       toast.success(`已删除仓库 ${repoName}`);
       navigate('/repos');
@@ -235,7 +244,7 @@ export default function RepoDetailPage() {
       const updated = await updateRepo(owner, repoName, { name: editRepoName.trim() || repoName, description: editDesc, private: editPrivate });
       setRepo(updated);
       // 更新缓存中的仓库信息
-      const cacheKey = `repodetail:${owner}/${repoName}`;
+      const cacheKey = `repodetail:${owner}/${repoName}:${readmeParam || 'default'}`;
       const cached = pageCache.get<{ repo: GitHubRepo; languages: Record<string, number>; readme: string; readmePath?: string; commits: GitHubCommit[]; starred: boolean }>(cacheKey);
       if (cached) pageCache.set(cacheKey, { ...cached, repo: updated });
       pageCache.invalidate('repos:');

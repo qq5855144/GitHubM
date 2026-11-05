@@ -50,6 +50,16 @@ function dirname(path: string): string {
   return idx < 0 ? '' : path.slice(0, idx);
 }
 
+/**
+ * 判断是否为 README 文件（含语言变体）。
+ * 例：README.md、README.zh-CN.md、README_CN.md、readme-ja.md
+ */
+export function isReadmeFilePath(path: string | undefined): boolean {
+  if (!path) return false;
+  const base = path.split('/').pop() || '';
+  return /^readme([._-].*)?\.(md|markdown|mdown|mkd|mdx)$/i.test(base);
+}
+
 /** 拆分 URL 的 path / query / hash，避免 hash 被当作文件名的一部分 */
 function splitHref(href: string): { pathPart: string; query: string; hash: string } {
   let rest = href;
@@ -190,7 +200,15 @@ export default function MarkdownRenderer({ content, className, repoContext }: Ma
             const target = resolveMarkdownHref(typeof href === 'string' ? href : undefined, repoContext);
 
             if (target?.kind === 'internal') {
-              const to = `/repos/${repoContext!.owner}/${repoContext!.repo}/code${target.path ? `/${target.path}` : ''}${target.hash}`;
+              // README 内的语言切换（README.md / README.zh-CN.md 等）应切换 README 渲染，
+              // 而不是进入代码浏览查看原始 Markdown 文件。
+              const isReadmeSwitch =
+                !!repoContext &&
+                isReadmeFilePath(repoContext.path) &&
+                isReadmeFilePath(target.path);
+              const to = isReadmeSwitch
+                ? `/repos/${repoContext!.owner}/${repoContext!.repo}?readme=${encodeURIComponent(target.path || 'README.md')}${target.hash}`
+                : `/repos/${repoContext!.owner}/${repoContext!.repo}/code${target.path ? `/${target.path}` : ''}${target.hash}`;
               return (
                 <a
                   href={`#${to}`}

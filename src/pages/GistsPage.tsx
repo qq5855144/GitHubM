@@ -22,6 +22,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserLink } from '@/components/common/UserLink';
 import {
   Dialog,
   DialogContent,
@@ -208,10 +209,18 @@ export default function GistsPage() {
               return (
                 <div key={gist.id} className="p-4 group hover:bg-secondary/30 transition-colors">
                   <div className="flex items-start gap-3">
-                    <Avatar className="w-8 h-8 shrink-0 mt-0.5">
-                      <AvatarImage src={gist.owner?.avatar_url} />
-                      <AvatarFallback className="bg-secondary text-xs">{gist.owner?.login?.substring(0, 2).toUpperCase()}</AvatarFallback>
-                    </Avatar>
+                    {gist.owner?.login ? (
+                      <UserLink login={gist.owner.login} className="shrink-0">
+                        <Avatar className="w-8 h-8 shrink-0 mt-0.5">
+                          <AvatarImage src={gist.owner.avatar_url} />
+                          <AvatarFallback className="bg-secondary text-xs">{gist.owner.login.substring(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                      </UserLink>
+                    ) : (
+                      <Avatar className="w-8 h-8 shrink-0 mt-0.5">
+                        <AvatarFallback className="bg-secondary text-xs">?</AvatarFallback>
+                      </Avatar>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <button

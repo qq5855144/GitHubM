@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserEvents, formatRelativeTime } from '@/services/github';
 import type { GitHubEvent } from '@/types/types';
+import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
 import i18n from "@/i18n";
 
@@ -187,14 +188,16 @@ export default function ActivityPage() {
               const typeInfo = getEventTypeInfo(event.type);
               return (
                 <div key={event.id} className="flex items-start gap-4">
-                  {/* 头像 */}
+                  {/* 头像：进入用户主页 */}
                   <div className="relative z-10 shrink-0">
-                    <Avatar className="w-8 h-8 ring-2 ring-background">
-                      <AvatarImage src={event.actor.avatar_url} />
-                      <AvatarFallback className="bg-secondary text-xs">
-                        {event.actor.login.substring(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserLink login={event.actor.login}>
+                      <Avatar className="w-8 h-8 ring-2 ring-background">
+                        <AvatarImage src={event.actor.avatar_url} />
+                        <AvatarFallback className="bg-secondary text-xs">
+                          {event.actor.login.substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </UserLink>
                   </div>
                   {/* 内容 */}
                   <div

@@ -225,12 +225,45 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   }
 
+  /* 移动端安全边界：禁止超长文件名/URL/分支名把整页撑出视口 */
+  html, body, #root {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  /*
+   * 移动端 flex/grid 子项默认允许收缩（min-width:auto 会让长内容拒绝收缩）。
+   * 仅在小屏生效，避免影响桌面端布局。
+   */
+  @media (max-width: 768px) {
+    .flex > *,
+    .grid > * {
+      min-width: 0;
+    }
+  }
+
   code, pre, .font-mono {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
   }
 }
 
 @layer utilities {
+  /*
+   * 长文本收缩工具：
+   * Tailwind 的 truncate 只设置 overflow/ellipsis，不会把 flex 子项的 min-width:auto
+   * 改成 0。移动端遇到超长文件名（尤其无空格）时，元素仍会按内容宽度撑开，
+   * 最终把整行/整页推出视口。这里统一允许截断元素收缩。
+   */
+  .truncate {
+    min-width: 0;
+  }
+
+  /* 允许任意位置换行：用于错误信息、URL、Token、路径等无空格长串 */
+  .break-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   .gradient-text {
     @apply bg-clip-text text-transparent;
     background-image: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
@@ -240,6 +273,9 @@
   .markdown-body {
     color: hsl(var(--foreground));
     line-height: 1.6;
+    /* README 里的长 URL / 长路径不应撑破移动端视口 */
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .markdown-body h1,
@@ -279,6 +315,7 @@
     padding: 0.2em 0.4em;
     font-size: 0.85em;
     font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    overflow-wrap: anywhere;
   }
 
   .markdown-body pre {
@@ -315,6 +352,9 @@
 
   .markdown-body table {
     width: 100%;
+    max-width: 100%;
+    display: block;
+    overflow-x: auto;
     border-collapse: collapse;
     margin-bottom: 1rem;
     font-size: 0.875rem;

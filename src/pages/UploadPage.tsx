@@ -347,8 +347,8 @@ export default function UploadPage() {
                 </div>
                 {/* 文件信息 & 路径编辑 */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-foreground truncate">{f.file.name}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-mono text-foreground truncate min-w-0 flex-1">{f.file.name}</span>
                     <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(f.file.size)}</span>
                   </div>
                   <input
@@ -359,7 +359,7 @@ export default function UploadPage() {
                     className="w-full mt-0.5 text-xs font-mono bg-transparent border-0 border-b border-dashed border-border/60 focus:outline-none focus:border-primary text-muted-foreground disabled:opacity-50 px-0"
                     placeholder={i18n.t('目标路径...')}
                   />
-                  {f.error && <p className="text-xs text-destructive mt-0.5">{f.error}</p>}
+                  {f.error && <p className="text-xs text-destructive mt-0.5 break-anywhere">{f.error}</p>}
                   {f.status === 'skipped' && <p className="text-xs text-muted-foreground mt-0.5">{i18n.t('文件已存在，已跳过')}</p>}
                 </div>
                 {/* 移除按钮 */}

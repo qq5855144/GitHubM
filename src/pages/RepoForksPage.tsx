@@ -30,6 +30,7 @@ import {
   getLanguageColor,
 } from '@/services/github';
 import type { GitHubRepo } from '@/types/types';
+import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
 import i18n from "@/i18n";
 
@@ -153,19 +154,21 @@ export default function RepoForksPage() {
                   className="p-4 hover:bg-secondary/30 transition-colors group"
                 >
                   <div className="flex items-start gap-3">
-                    {/* 头像 */}
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/repos/${fork.full_name}`)}
-                      className="shrink-0"
-                    >
+                    {/* 头像：进入 Fork 作者主页 */}
+                    {forkOwner?.login ? (
+                      <UserLink login={forkOwner.login} className="shrink-0">
+                        <Avatar className="w-9 h-9 ring-1 ring-border">
+                          <AvatarImage src={forkOwner.avatar_url} alt={forkOwner.login} />
+                          <AvatarFallback className="bg-secondary text-xs">
+                            {forkOwner.login.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      </UserLink>
+                    ) : (
                       <Avatar className="w-9 h-9 ring-1 ring-border">
-                        <AvatarImage src={forkOwner?.avatar_url} alt={forkOwner?.login} />
-                        <AvatarFallback className="bg-secondary text-xs">
-                          {(forkOwner?.login || '?').substring(0, 2).toUpperCase()}
-                        </AvatarFallback>
+                        <AvatarFallback className="bg-secondary text-xs">?</AvatarFallback>
                       </Avatar>
-                    </button>
+                    )}
 
                     {/* 仓库信息 */}
                     <button

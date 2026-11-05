@@ -27,6 +27,7 @@ import {
 } from '@/services/github';
 import type { GitHubIssue, GitHubComment } from '@/types/types';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer';
+import { UserLink } from '@/components/common/UserLink';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import i18n from "@/i18n";
@@ -198,17 +199,19 @@ export default function IssueDetailPage() {
       {/* Issue 正文 */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-secondary/30">
-          <Avatar className="w-6 h-6">
-            <AvatarImage src={issue.user.avatar_url} />
-            <AvatarFallback className="bg-secondary text-xs">{issue.user.login[0]}</AvatarFallback>
-          </Avatar>
-          <span className="text-sm font-medium text-foreground">{issue.user.login}</span>
+          <UserLink login={issue.user.login} className="flex items-center gap-2">
+            <Avatar className="w-6 h-6">
+              <AvatarImage src={issue.user.avatar_url} />
+              <AvatarFallback className="bg-secondary text-xs">{issue.user.login[0]}</AvatarFallback>
+            </Avatar>
+            <span className="text-sm font-medium text-foreground hover:text-accent">{issue.user.login}</span>
+          </UserLink>
           <span className="text-xs text-muted-foreground">{formatRelativeTime(issue.created_at)}</span>
           <Badge variant="outline" className="ml-auto text-xs border-border text-muted-foreground">{i18n.t('作者')}</Badge>
         </div>
         <div className="p-4">
           {issue.body ? (
-            <MarkdownRenderer content={issue.body} />
+            <MarkdownRenderer content={issue.body} repoContext={owner && repo ? { owner, repo } : undefined} />
           ) : (
             <p className="text-muted-foreground text-sm italic">{i18n.t('无描述')}</p>
           )}
@@ -219,18 +222,20 @@ export default function IssueDetailPage() {
       {comments.map((comment) => (
         <div key={comment.id} className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-secondary/30">
-            <Avatar className="w-6 h-6">
-              <AvatarImage src={comment.user.avatar_url} />
-              <AvatarFallback className="bg-secondary text-xs">{comment.user.login[0]}</AvatarFallback>
-            </Avatar>
-            <span className="text-sm font-medium text-foreground">{comment.user.login}</span>
+            <UserLink login={comment.user.login} className="flex items-center gap-2">
+              <Avatar className="w-6 h-6">
+                <AvatarImage src={comment.user.avatar_url} />
+                <AvatarFallback className="bg-secondary text-xs">{comment.user.login[0]}</AvatarFallback>
+              </Avatar>
+              <span className="text-sm font-medium text-foreground hover:text-accent">{comment.user.login}</span>
+            </UserLink>
             <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.created_at)}</span>
             {user?.login === comment.user.login && (
               <Badge variant="outline" className="ml-auto text-xs border-border text-muted-foreground">{i18n.t('你')}</Badge>
             )}
           </div>
           <div className="p-4">
-            <MarkdownRenderer content={comment.body} />
+            <MarkdownRenderer content={comment.body} repoContext={owner && repo ? { owner, repo } : undefined} />
           </div>
         </div>
       ))}

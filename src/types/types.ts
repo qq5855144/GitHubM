@@ -610,6 +610,62 @@ export interface SavedAccount {
   token: string;
   user: GitHubUser;
   addedAt: string;
+  /** 用户自定义备注，例如「工作号」「只读 Token」 */
+  label?: string;
+  /** 最近一次验证得到的作用域（classic PAT / OAuth） */
+  scopes?: string[];
+  /** Token 类型（按前缀识别，仅用于 UI 展示） */
+  tokenType?: 'classic' | 'fine-grained' | 'oauth' | 'unknown';
+  /** Token 过期时间（GitHub 返回时才有） */
+  expiresAt?: string | null;
+  /** 最近一次验证时间 */
+  lastVerifiedAt?: string;
+}
+
+// ===== 账号安全 =====
+export interface GitHubEmail {
+  email: string;
+  primary: boolean;
+  verified: boolean;
+  visibility: 'public' | 'private' | null;
+}
+
+export interface GitHubSshKey {
+  id: number;
+  key: string;
+  title: string;
+  created_at: string;
+  read_only?: boolean;
+  verified?: boolean;
+}
+
+export interface GitHubGpgKey {
+  id: number;
+  primary_key_id: number | null;
+  key_id: string;
+  raw_key: string | null;
+  public_key: string;
+  emails: Array<{ email: string; verified: boolean }>;
+  subkeys: Array<{
+    id: number;
+    primary_key_id: number;
+    key_id: string;
+    raw_key: string | null;
+    public_key: string;
+    emails: Array<{ email: string; verified: boolean }>;
+    can_sign: boolean;
+    can_encrypt_comms: boolean;
+    can_encrypt_storage: boolean;
+    can_certify: boolean;
+    created_at: string;
+    expires_at: string | null;
+  }>;
+  can_sign: boolean;
+  can_encrypt_comms: boolean;
+  can_encrypt_storage: boolean;
+  can_certify: boolean;
+  created_at: string;
+  expires_at: string | null;
 }
 
 // ===== Deployments =====

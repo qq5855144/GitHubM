@@ -47,6 +47,7 @@ import type {
   GQL_ReviewDecision,
 } from '@/types/types';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer';
+import { UserLink } from '@/components/common/UserLink';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import {
@@ -373,17 +374,19 @@ export default function PullDetailPage() {
           {/* PR 正文 */}
           <div className="bg-card border border-border rounded-lg overflow-hidden">
             <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-secondary/30">
-              <Avatar className="w-6 h-6">
-                <AvatarImage src={pr.user.avatar_url} />
-                <AvatarFallback className="bg-secondary text-xs">{pr.user.login[0]}</AvatarFallback>
-              </Avatar>
-              <span className="text-sm font-medium text-foreground">{pr.user.login}</span>
+              <UserLink login={pr.user.login} className="flex items-center gap-2">
+                <Avatar className="w-6 h-6">
+                  <AvatarImage src={pr.user.avatar_url} />
+                  <AvatarFallback className="bg-secondary text-xs">{pr.user.login[0]}</AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium text-foreground hover:text-accent">{pr.user.login}</span>
+              </UserLink>
               <span className="text-xs text-muted-foreground">{formatRelativeTime(pr.created_at)}</span>
               <Badge variant="outline" className="ml-auto text-xs border-border text-muted-foreground">{i18n.t('作者')}</Badge>
             </div>
             <div className="p-4">
               {pr.body ? (
-                <MarkdownRenderer content={pr.body} />
+                <MarkdownRenderer content={pr.body} repoContext={owner && repo ? { owner, repo } : undefined} />
               ) : (
                 <p className="text-muted-foreground text-sm italic">{i18n.t('无描述')}</p>
               )}
@@ -394,15 +397,17 @@ export default function PullDetailPage() {
           {comments.map((comment) => (
             <div key={comment.id} className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-secondary/30">
-                <Avatar className="w-6 h-6">
-                  <AvatarImage src={comment.user.avatar_url} />
-                  <AvatarFallback className="bg-secondary text-xs">{comment.user.login[0]}</AvatarFallback>
-                </Avatar>
-                <span className="text-sm font-medium text-foreground">{comment.user.login}</span>
+                <UserLink login={comment.user.login} className="flex items-center gap-2">
+                  <Avatar className="w-6 h-6">
+                    <AvatarImage src={comment.user.avatar_url} />
+                    <AvatarFallback className="bg-secondary text-xs">{comment.user.login[0]}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium text-foreground hover:text-accent">{comment.user.login}</span>
+                </UserLink>
                 <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.created_at)}</span>
               </div>
               <div className="p-4">
-                <MarkdownRenderer content={comment.body} />
+                <MarkdownRenderer content={comment.body} repoContext={owner && repo ? { owner, repo } : undefined} />
               </div>
             </div>
           ))}
@@ -461,11 +466,13 @@ export default function PullDetailPage() {
                   <div className="flex flex-wrap gap-3">
                     {requestedReviewers.map((r) => (
                       <div key={r.login} className="flex items-center gap-2 bg-secondary/50 rounded-lg px-3 py-2">
-                        <Avatar className="w-5 h-5">
-                          <AvatarImage src={r.avatarUrl} />
-                          <AvatarFallback className="text-[10px] bg-muted">{r.login[0]}</AvatarFallback>
-                        </Avatar>
-                        <span className="text-xs text-foreground">{r.login}</span>
+                        <UserLink login={r.login} className="flex items-center gap-2">
+                          <Avatar className="w-5 h-5">
+                            <AvatarImage src={r.avatarUrl} />
+                            <AvatarFallback className="text-[10px] bg-muted">{r.login[0]}</AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs text-foreground hover:text-accent">{r.login}</span>
+                        </UserLink>
                         <Clock className="w-3 h-3 text-muted-foreground" />
                       </div>
                     ))}
@@ -490,11 +497,13 @@ export default function PullDetailPage() {
                     }`}
                   >
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-secondary/30">
-                      <Avatar className="w-6 h-6">
-                        <AvatarImage src={review.author?.avatarUrl} />
-                        <AvatarFallback className="text-xs bg-muted">{review.author?.login?.[0] || '?'}</AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm font-medium text-foreground">{review.author?.login}</span>
+                      <UserLink login={review.author?.login || ''} className="flex items-center gap-2">
+                        <Avatar className="w-6 h-6">
+                          <AvatarImage src={review.author?.avatarUrl} />
+                          <AvatarFallback className="text-xs bg-muted">{review.author?.login?.[0] || '?'}</AvatarFallback>
+                        </Avatar>
+                        <span className="text-sm font-medium text-foreground hover:text-accent">{review.author?.login}</span>
+                      </UserLink>
                       <span className="text-xs text-muted-foreground">{formatRelativeTime(review.submittedAt)}</span>
                       <div className="ml-auto flex items-center gap-1.5">
                         <ReviewStateIcon state={review.state} />
@@ -507,7 +516,7 @@ export default function PullDetailPage() {
                     </div>
                     {review.body && (
                       <div className="p-4">
-                        <MarkdownRenderer content={review.body} />
+                        <MarkdownRenderer content={review.body} repoContext={owner && repo ? { owner, repo } : undefined} />
                       </div>
                     )}
                   </div>

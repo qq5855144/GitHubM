@@ -25,6 +25,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getUserRepos, getUserEvents, formatRelativeTime, formatNumber, getLanguageColor, getStarredCount } from '@/services/github';
 import { gqlGetContributions, gqlGetPinnedRepos } from '@/services/github-graphql';
 import type { GitHubRepo, GitHubEvent, ContributionCalendar, GQL_PinnedRepo } from '@/types/types';
+import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
 import i18n from "@/i18n";
@@ -335,12 +336,14 @@ export default function DashboardPage() {
       <div className="bg-card border border-border rounded-xl p-5">
         {/* 顶部：头像 + 核心信息 */}
         <div className="flex items-center gap-4">
-          <Avatar className="w-16 h-16 shrink-0 ring-2 ring-border">
-            <AvatarImage src={user.avatar_url} alt={user.login} />
-            <AvatarFallback className="bg-secondary text-secondary-foreground text-xl font-bold">
-              {user.login.substring(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <UserLink login={user.login} className="shrink-0">
+            <Avatar className="w-16 h-16 shrink-0 ring-2 ring-border">
+              <AvatarImage src={user.avatar_url} alt={user.login} />
+              <AvatarFallback className="bg-secondary text-secondary-foreground text-xl font-bold">
+                {user.login.substring(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          </UserLink>
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <h1 className="text-lg font-bold text-foreground text-balance leading-tight">

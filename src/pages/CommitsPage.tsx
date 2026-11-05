@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { getCommits, getCommit, getBranches, formatRelativeTime } from '@/services/github';
 import type { GitHubCommit, GitHubBranch } from '@/types/types';
+import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
 import i18n from "@/i18n";
@@ -165,12 +166,22 @@ export default function CommitsPage() {
                 className="p-4 hover:bg-secondary/50 transition-colors group"
               >
                 <div className="flex items-start gap-3">
-                  <Avatar className="w-8 h-8 shrink-0">
-                    <AvatarImage src={commit.author?.avatar_url} />
-                    <AvatarFallback className="bg-secondary text-xs">
-                      {commit.commit.author.name.substring(0, 1)}
-                    </AvatarFallback>
-                  </Avatar>
+                  {commit.author ? (
+                    <UserLink login={commit.author.login} className="shrink-0">
+                      <Avatar className="w-8 h-8 shrink-0">
+                        <AvatarImage src={commit.author.avatar_url} />
+                        <AvatarFallback className="bg-secondary text-xs">
+                          {commit.commit.author.name.substring(0, 1)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </UserLink>
+                  ) : (
+                    <Avatar className="w-8 h-8 shrink-0">
+                      <AvatarFallback className="bg-secondary text-xs">
+                        {commit.commit.author.name.substring(0, 1)}
+                      </AvatarFallback>
+                    </Avatar>
+                  )}
                   <div className="flex-1 min-w-0">
                     <button
                       type="button"

@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getRepoStargazers, formatNumber } from '@/services/github';
 import type { GitHubUser } from '@/types/types';
+import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
 import i18n from "@/i18n";
 
@@ -109,19 +110,15 @@ export default function StargazersPage() {
                 key={user.id}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/40 transition-colors group"
               >
-                {/* 头像 */}
-                <button
-                  type="button"
-                  className="shrink-0"
-                  onClick={() => window.open(user.html_url, '_blank', 'noopener,noreferrer')}
-                >
+                {/* 头像：进入应用内用户主页 */}
+                <UserLink login={user.login} className="shrink-0">
                   <Avatar className="w-9 h-9 ring-1 ring-border">
                     <AvatarImage src={user.avatar_url} alt={user.login} />
                     <AvatarFallback className="bg-secondary text-xs font-semibold">
                       {user.login.substring(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                </button>
+                </UserLink>
 
                 {/* 用户信息 */}
                 <div className="flex-1 min-w-0">
@@ -131,13 +128,8 @@ export default function StargazersPage() {
                   <p className="text-xs text-muted-foreground truncate">@{user.login}</p>
                 </div>
 
-                {/* 查看 GitHub 主页 */}
-                <a
-                  href={user.html_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0"
-                >
+                {/* 查看用户主页（应用内） */}
+                <UserLink login={user.login} className="shrink-0">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -145,7 +137,7 @@ export default function StargazersPage() {
                   >
                     <ExternalLink className="w-3 h-3" />
                     {i18n.t('主页')}</Button>
-                </a>
+                </UserLink>
               </div>
             ))}
           </div>

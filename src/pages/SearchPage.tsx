@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { UserLink } from '@/components/common/UserLink';
 import {
   searchRepositories,
   searchIssues,
@@ -595,7 +596,7 @@ export default function SearchPage() {
                         {issue.title}
                       </a>
                       <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
-                        <span>{issue.user.login}</span>
+                        <UserLink login={issue.user.login} className="hover:text-accent hover:underline">{issue.user.login}</UserLink>
                         <span>{formatRelativeTime(issue.created_at)}</span>
                         <span className="text-primary">{issue.state === 'open' ? i18n.t('开放') : i18n.t('已关闭')}</span>
                       </div>
@@ -626,11 +627,9 @@ export default function SearchPage() {
               <div className="py-12 text-center text-muted-foreground">{i18n.t('无搜索结果')}</div>
             ) : (
               users.map((user) => (
-                <a
+                <UserLink
                   key={user.id}
-                  href={user.html_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  login={user.login}
                   className="flex items-center gap-3 p-4 border-b border-border last:border-0 hover:bg-secondary/50 transition-colors group"
                 >
                   <Avatar className="w-10 h-10 shrink-0">
@@ -648,7 +647,7 @@ export default function SearchPage() {
                       <span>{user.public_repos} {i18n.t('个仓库')}</span>
                     </div>
                   </div>
-                </a>
+                </UserLink>
               ))
             )
           )}

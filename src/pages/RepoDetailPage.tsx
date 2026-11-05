@@ -1,7 +1,7 @@
 // 仓库详情页
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Star,
   GitFork,
@@ -43,6 +43,7 @@ import {
 import {
   getRepo,
   getReadme,
+  getFileContent,
   getCommits,
   checkStarred,
   starRepo,
@@ -57,6 +58,7 @@ import {
 } from '@/services/github';
 import type { GitHubRepo, GitHubCommit } from '@/types/types';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer';
+import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
 import { decodeBase64Content } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -70,11 +72,16 @@ import i18n from "@/i18n";
 
 export default function RepoDetailPage() {
   const { owner, repo: repoName } = useParams<{ owner: string; repo: string }>();
+  // README 语言切换：?readme=README.zh-CN.md 时加载对应文件并作为 README 渲染
+  const [searchParams] = useSearchParams();
+  const readmeParam = searchParams.get('readme') || '';
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
 
   const [repo, setRepo] = useState<GitHubRepo | null>(null);
   const [readme, setReadme] = useState<string>('');
+  // README 在仓库中的真实路径（Issue #21：用于解析正文里的相对链接/图片）
+  const [readmePath, setReadmePath] = useState<string>('');
   const [commits, setCommits] = useState<GitHubCommit[]>([]);
   const [languages, setLanguages] = useState<Record<string, number>>({});
   const [starred, setStarred] = useState(false);
@@ -96,13 +103,14 @@ export default function RepoDetailPage() {
   useEffect(() => {
     if (!owner || !repoName) return;
 
-    const cacheKey = `repodetail:${owner}/${repoName}`;
+    const cacheKey = `repodetail:${owner}/${repoName}:${readmeParam || 'default'}`;
 
     // 命中缓存：立即恢复所有数据，不展示 loading
     const cached = pageCache.get<{
       repo: GitHubRepo;
       languages: Record<string, number>;
       readme: string;
+      readmePath?: string;
       commits: GitHubCommit[];
       starred: boolean;
     }>(cacheKey);
@@ -110,6 +118,7 @@ export default function RepoDetailPage() {
       setRepo(cached.repo);
       setLanguages(cached.languages);
       setReadme(cached.readme);
+      setReadmePath(cached.readmePath || '');
       setCommits(cached.commits);
       setStarred(cached.starred);
       setLoading(false);
@@ -135,17 +144,24 @@ export default function RepoDetailPage() {
 
         // 加载 README 和提交记录（不阻塞主内容）
         Promise.all([
-          getReadme(owner, repoName).catch(() => null),
+          (readmeParam
+            ? getFileContent(owner, repoName, readmeParam)
+                .then((file) => ({ content: file.content, path: readmeParam }))
+                .catch(() => getReadme(owner, repoName))
+            : getReadme(owner, repoName)
+          ).catch(() => null),
           getCommits(owner, repoName, { per_page: 10 }).catch(() => ({ data: [], hasNextPage: false })),
         ]).then(([readmeData, commitsResult]) => {
           const decoded = readmeData?.content ? decodeBase64Content(readmeData.content) : '';
           setReadme(decoded);
+          setReadmePath(readmeData?.path || '');
           setCommits(commitsResult.data);
           // 所有数据就绪后写入缓存
           pageCache.set(cacheKey, {
             repo: repoData,
             languages: langData,
             readme: decoded,
+            readmePath: readmeData?.path || '',
             commits: commitsResult.data,
             starred: starredVal,
           });
@@ -159,19 +175,19 @@ export default function RepoDetailPage() {
     };
 
     load();
-  }, [owner, repoName, isOwner]);
+  }, [owner, repoName, isOwner, readmeParam]);
 
   const handleStar = async () => {
     if (!owner || !repoName) return;
     setStarring(true);
     try {
-      const cacheKey = `repodetail:${owner}/${repoName}`;
+      const cacheKey = `repodetail:${owner}/${repoName}:${readmeParam || 'default'}`;
       if (starred) {
         await unstarRepo(owner, repoName);
         setStarred(false);
         setRepo((prev) => {
           const updated = prev ? { ...prev, stargazers_count: prev.stargazers_count - 1 } : prev;
-          if (updated) pageCache.set(cacheKey, { repo: updated, languages, readme, commits, starred: false });
+          if (updated) pageCache.set(cacheKey, { repo: updated, languages, readme, readmePath, commits, starred: false });
           return updated;
         });
         toast.success(i18n.t('已取消收藏'));
@@ -180,7 +196,7 @@ export default function RepoDetailPage() {
         setStarred(true);
         setRepo((prev) => {
           const updated = prev ? { ...prev, stargazers_count: prev.stargazers_count + 1 } : prev;
-          if (updated) pageCache.set(cacheKey, { repo: updated, languages, readme, commits, starred: true });
+          if (updated) pageCache.set(cacheKey, { repo: updated, languages, readme, readmePath, commits, starred: true });
           return updated;
         });
         toast.success(i18n.t('已收藏仓库'));
@@ -212,7 +228,7 @@ export default function RepoDetailPage() {
     setDeleting(true);
     try {
       await deleteRepo(owner, repoName);
-      pageCache.delete(`repodetail:${owner}/${repoName}`);
+      pageCache.invalidate(`repodetail:${owner}/${repoName}`);
       pageCache.invalidate('repos:'); // 使仓库列表缓存失效
       toast.success(`已删除仓库 ${repoName}`);
       navigate('/repos');
@@ -228,8 +244,8 @@ export default function RepoDetailPage() {
       const updated = await updateRepo(owner, repoName, { name: editRepoName.trim() || repoName, description: editDesc, private: editPrivate });
       setRepo(updated);
       // 更新缓存中的仓库信息
-      const cacheKey = `repodetail:${owner}/${repoName}`;
-      const cached = pageCache.get<{ repo: GitHubRepo; languages: Record<string, number>; readme: string; commits: GitHubCommit[]; starred: boolean }>(cacheKey);
+      const cacheKey = `repodetail:${owner}/${repoName}:${readmeParam || 'default'}`;
+      const cached = pageCache.get<{ repo: GitHubRepo; languages: Record<string, number>; readme: string; readmePath?: string; commits: GitHubCommit[]; starred: boolean }>(cacheKey);
       if (cached) pageCache.set(cacheKey, { ...cached, repo: updated });
       pageCache.invalidate('repos:');
       toast.success(i18n.t('仓库信息已更新'));
@@ -313,6 +329,19 @@ export default function RepoDetailPage() {
             {repo.description && (
               <p className="text-sm text-muted-foreground mt-1 text-pretty">{repo.description}</p>
             )}
+            {/* 仓库所有者：点击头像/用户名进入用户主页（查看其所有仓库） */}
+            <UserLink
+              login={repo.owner.login}
+              className="inline-flex items-center gap-1.5 mt-2 text-xs text-muted-foreground hover:text-accent transition-colors"
+            >
+              <Avatar className="w-5 h-5 shrink-0">
+                <AvatarImage src={repo.owner.avatar_url} alt={repo.owner.login} />
+                <AvatarFallback className="bg-secondary text-[10px]">
+                  {repo.owner.login.substring(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <span>{repo.owner.login}</span>
+            </UserLink>
           </div>
 
           {/* 右侧操作按钮区 —— 根据 isOwner 动态显示 */}
@@ -500,7 +529,15 @@ export default function RepoDetailPage() {
           <Card className="bg-card border-border">
             <CardContent className="p-6">
               {readme ? (
-                <MarkdownRenderer content={readme} />
+                <MarkdownRenderer
+                  content={readme}
+                  repoContext={{
+                    owner: owner!,
+                    repo: repoName!,
+                    ref: repo?.default_branch,
+                    path: readmePath || 'README.md',
+                  }}
+                />
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   <Code className="w-10 h-10 mx-auto mb-3" />

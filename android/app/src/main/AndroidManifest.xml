@@ -64,7 +64,9 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|uiMode"
+            android:launchMode="singleTask"
+            android:alwaysRetainTaskState="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|uiMode|smallestScreenSize|density|fontScale|layoutDirection|locale"
             android:windowSoftInputMode="adjustPan">
             <!--
               adjustPan：Android 15 强制边到边后，adjustResize 不再可靠，

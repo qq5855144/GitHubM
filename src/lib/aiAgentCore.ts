@@ -14,6 +14,18 @@ import {
   saveCachedInstructions,
   type McpToolSchema,
 } from './mcpClient';
+import { repairToolCallPairs, compressMessages, type MessageLike } from './agent/messageIntegrity';
+import { validateRequiredArguments, clampToolResult } from './agent/toolPolicy';
+import { startAgentTrace, recordAgentTraceEvent, endAgentTrace } from './agent/runTrace';
+import {
+  summarizeCheckRuns,
+  summarizeCommitStatus,
+  formatCheckSummary,
+  requiresVerification,
+  extractChangedPaths,
+  buildVerificationNudge,
+  type CheckRunLike,
+} from './agent/verification';
 
 // ── 官方 GitHub MCP 集成状态（模块级，会话内复用） ─────────────────────────
 let mcpClient: GitHubMcpClient | null = null;
@@ -603,6 +615,16 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       parameters: { type: "object", properties: {
         run_id: { type: "string", description: "运行 ID" },
       }, required: ["run_id"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "verify_changes",
+      description: "代码修改后必须调用：检查目标分支最新提交的 GitHub Checks / Actions 结果，失败时自动附带日志摘要。返回 VERIFY_PASSED / VERIFY_FAILED / VERIFY_PENDING / VERIFY_NO_CHECKS",
+      parameters: { type: "object", properties: {
+        branch: { type: "string", description: "要验证的分支（默认当前目标分支）" },
+        wait_seconds: { type: "string", description: "等待检查完成的最长秒数（默认 60，最大 180）" },
+      } },
     },
   },
   {
@@ -3767,6 +3789,164 @@ async function undoLastCommit(ctx: GithubContext, branch?: string): Promise<stri
 }
 
 /**
+ * verify_changes：检查分支最新提交的 GitHub Checks / Actions 结果。
+ * 这是 GitHubM 版的“代码验证”：修改代码后由 CI 真实执行类型检查、测试和构建，
+ * 失败时把 job 日志摘要回传给模型继续修复。
+ */
+async function verifyChanges(
+  ctx: GithubContext,
+  branch?: string,
+  waitSeconds?: string,
+): Promise<string> {
+  const ref = branch || "main";
+  const parsedWait = parseInt(waitSeconds || "60", 10);
+  const waitMs = Math.min(180, Math.max(10, Number.isFinite(parsedWait) ? parsedWait : 60)) * 1000;
+  const startedAt = Date.now();
+
+  try {
+    const branchInfo = await githubRequest(
+      ctx,
+      `/repos/${ctx.owner}/${ctx.repo}/branches/${encodeURIComponent(ref)}`,
+    ) as { commit?: { sha?: string } };
+    const sha = branchInfo.commit?.sha;
+    if (!sha) return `❌ VERIFY_FAILED\n无法获取分支 ${ref} 的最新提交`;
+
+    let checks: CheckRunLike[] = [];
+    let summary = summarizeCheckRuns(checks);
+    let dispatchedRun:
+      | { id: number; name: string; status: string; conclusion: string | null; html_url?: string }
+      | null = null;
+
+    while (true) {
+      const response = await githubRequest(
+        ctx,
+        `/repos/${ctx.owner}/${ctx.repo}/commits/${sha}/check-runs?per_page=100`,
+      ) as { check_runs?: CheckRunLike[] };
+      checks = response.check_runs ?? [];
+      summary = summarizeCheckRuns(checks);
+
+      // 有结论就立即返回；没有 Checks 时给 CI 一点注册时间
+      if (summary.state === "passed" || summary.state === "failed") break;
+      if (summary.state === "none" && Date.now() - startedAt > 12_000) break;
+      if (Date.now() - startedAt >= waitMs) break;
+      await new Promise((r) => setTimeout(r, 5_000));
+    }
+
+    // 有些仓库只配置旧版 commit status，没有 check-runs
+    if (summary.state === "none") {
+      const legacy = await githubRequest(
+        ctx,
+        `/repos/${ctx.owner}/${ctx.repo}/commits/${sha}/status`,
+      ) as { state?: string; statuses?: Array<{ context?: string; state?: string; description?: string }> };
+      summary = summarizeCommitStatus(legacy);
+    }
+
+    // 功能分支可能还没有 PR，因此没有 pull_request Checks。
+    // 若存在可手动触发的质量工作流（PR Check / Verify / Lint），自动触发一次真实验证。
+    if (summary.state === "none") {
+      try {
+        const workflowList = await githubRequest(
+          ctx,
+          `/repos/${ctx.owner}/${ctx.repo}/actions/workflows`,
+        ) as { workflows?: Array<{ id: number; name: string; path: string; state: string }> };
+        const candidate = workflowList.workflows?.find(
+          (w) => w.state === "active" && /pr.?check|verify|lint|test|quality|ci/i.test(`${w.name} ${w.path}`),
+        );
+        if (candidate) {
+          await githubRequest(
+            ctx,
+            `/repos/${ctx.owner}/${ctx.repo}/actions/workflows/${candidate.id}/dispatches`,
+            { method: "POST", body: JSON.stringify({ ref }) },
+          );
+          const dispatchedAt = Date.now() - 5000;
+          await new Promise((r) => setTimeout(r, 5_000));
+
+          while (Date.now() - startedAt < waitMs) {
+            const runs = await githubRequest(
+              ctx,
+              `/repos/${ctx.owner}/${ctx.repo}/actions/workflows/${candidate.id}/runs?branch=${encodeURIComponent(ref)}&event=workflow_dispatch&per_page=5`,
+            ) as { workflow_runs?: Array<{ id: number; name: string; status: string; conclusion: string | null; created_at: string; html_url?: string }> };
+            const run = runs.workflow_runs?.find(
+              (r) => new Date(r.created_at).getTime() >= dispatchedAt,
+            );
+            if (run) {
+              if (run.status === "completed") {
+                dispatchedRun = {
+                  id: run.id,
+                  name: run.name,
+                  status: run.status,
+                  conclusion: run.conclusion,
+                  html_url: run.html_url,
+                };
+                summary = summarizeCheckRuns([{
+                  name: run.name,
+                  status: "completed",
+                  conclusion: run.conclusion,
+                }]);
+                break;
+              }
+              if (Date.now() - startedAt >= waitMs) {
+                return `⏳ VERIFY_PENDING\n分支：${ref}\n提交：${sha.slice(0, 7)}\n已自动触发工作流「${run.name}」，仍在运行：${run.html_url ?? ""}\n请稍后再次调用 verify_changes。`;
+              }
+            }
+            await new Promise((r) => setTimeout(r, 5_000));
+          }
+        }
+      } catch (dispatchErr) {
+        // 工作流不支持 workflow_dispatch 或没有权限时，保留 NO_CHECKS 结论
+        console.warn("[verify_changes] 自动触发验证工作流失败：", (dispatchErr as Error).message);
+      }
+    }
+
+    let report = formatCheckSummary(summary, {
+      ref,
+      sha,
+      elapsedMs: Date.now() - startedAt,
+    });
+    if (dispatchedRun) {
+      report += `\n工作流：${dispatchedRun.name}${dispatchedRun.html_url ? `（${dispatchedRun.html_url}）` : ""}`;
+    }
+
+    if (summary.state === "failed") {
+      // 1) Check 自带的错误摘要（很多 Action 会把关键错误写进 output.summary）
+      const failedChecks = checks.filter(
+        (c) => c.status === "completed" && c.conclusion && c.conclusion !== "success" && c.conclusion !== "neutral" && c.conclusion !== "skipped",
+      );
+      for (const check of failedChecks.slice(0, 3)) {
+        const detail = [check.output?.title, check.output?.summary].filter(Boolean).join("\n").trim();
+        if (detail) report += `\n\n### ${check.name}\n${clampToolResult(detail, 1200).text}`;
+      }
+
+      // 2) 找到失败 job，回传日志摘要，让模型能直接修复
+      try {
+        const runs = await githubRequest(
+          ctx,
+          `/repos/${ctx.owner}/${ctx.repo}/actions/runs?head_sha=${sha}&per_page=10`,
+        ) as { workflow_runs?: Array<{ id: number; name: string; conclusion: string | null }> };
+        const failedRun = runs.workflow_runs?.find((r) => r.conclusion === "failure");
+        if (failedRun) {
+          const jobs = await githubRequest(
+            ctx,
+            `/repos/${ctx.owner}/${ctx.repo}/actions/runs/${failedRun.id}/jobs?per_page=20`,
+          ) as { jobs?: Array<{ id: number; name: string; conclusion: string | null }> };
+          const failedJob = jobs.jobs?.find((j) => j.conclusion === "failure");
+          if (failedJob) {
+            const log = await getJobLogs(ctx, String(failedJob.id));
+            report += `\n\n### 失败日志（${failedRun.name} / ${failedJob.name}）\n${clampToolResult(log, 3500).text}`;
+          }
+        }
+      } catch (logErr) {
+        report += `\n\n（失败日志获取失败：${(logErr as Error).message}）`;
+      }
+    }
+
+    return report;
+  } catch (e) {
+    return diagnose4xx(e, `verify_changes(${ref})`);
+  }
+}
+
+/**
  * run_lint：触发仓库中的 lint 工作流（如有），并等待结果。
  * 如无专用 lint workflow，则尝试触发 CI 并筛选 lint 相关 job 的日志。
  */
@@ -4050,7 +4230,8 @@ ${branchNote}
 3. **ReAct 模式**：每轮只调用一个工具，工具 JSON 单独成行，**绝对不加 markdown 代码围栏（反引号）**。
 4. **禁止伪造**：不要用文字模仿工具执行过程，只输出 JSON。
 5. **自主执行**：禁止询问用户是否继续，禁止提前结束，工具报错时自行修正后继续。
-6. **格式强制**：工具调用 JSON 中的每个键值必须是字符串，不允许嵌套对象作为值（除 inputs 字段外）。正确示例：
+6. **代码验证（强制）**：任何 patch_file / write_file / batch_patch / delete_file 成功后，必须先调用 \`verify_changes\` 检查该分支最新提交的 GitHub Checks / Actions；失败时读取日志修复并重新验证；只有 \`VERIFY_PASSED\`（或仓库无 Checks 的 \`VERIFY_NO_CHECKS\`）才允许输出 TASK_DONE。
+7. **格式强制**：工具调用 JSON 中的每个键值必须是字符串，不允许嵌套对象作为值（除 inputs 字段外）。正确示例：
    {"tool":"patch_file","path":"src/a.ts","start_line":"10","end_line":"12","content":"新内容","message":"fix: xxx","branch":"main"}
    错误示例（值嵌套对象）：{"tool":"patch_file","range":{"start":10}}
 
@@ -4143,8 +4324,10 @@ ${branchNote}
 43. 触发构建并全程自动监控（自动轮询，失败时返回日志供分析修复，循环直到成功）：
     {"tool":"trigger_and_monitor_build","workflow_id":"build.yml","ref":"main","max_fix_attempts":"3"}
 44. 触发并运行 Lint 检查（找到 lint 工作流自动触发并等待结果）：
-    {"tool":"run_lint","branch":"main"}
-45. 安全扫描（扫描硬编码密钥/eval/SQL注入/XSS等常见安全隐患）：
+     {"tool":"run_lint","branch":"main"}
+45. **代码验证（修改代码后强制）**：检查分支最新提交的 GitHub Checks / Actions，失败自动附带日志：
+     {"tool":"verify_changes","branch":"feature/xxx","wait_seconds":"90"}
+46. 安全扫描（扫描硬编码密钥/eval/SQL注入/XSS等常见安全隐患）：
     {"tool":"check_security","path":"src/"}
 46. 查询某次运行产生的 Artifacts（构建产物列表、大小、有效期）：
     {"tool":"get_run_artifacts","run_id":"12345678"}
@@ -4528,6 +4711,7 @@ ${branchNote}
 - **对比两个分支/tag/commit 差异用 compare_commits（含 diff 片段）；查看单个 commit 详情用 get_commit_diff**
 - **代码审查用 auto_review；不要手动逐行分析变更文件，auto_review 会自动读取文件并输出结构化报告**
 - **触发工作流后必须用 check_run_status 等待结果，不要用 get_workflow_runs 手动轮询；build_apk 类型若超时需再调一次；startup_failure 说明工作流文件有语法问题，直接修复**
+- **修改代码后必须调用 verify_changes 验证 GitHub Checks / Actions；验证失败必须根据返回日志修复并重新验证，不得直接宣布完成**
 - **trigger_workflow 已内置自动修复**：若缺少 workflow_dispatch，系统会自动添加并重试，无需手动干预
 - **构建成功必须验证产物**：构建任务成功后，必须按"构建成功后验证产物"工作流完成 Artifacts + Release 确认，并输出固定格式任务总结，然后才能结束任务
 - **Release 自动化**：收到发版/生成changelog指令时，必须按「Release 自动化工作流」五步完整执行，不得跳步或提前结束
@@ -5148,6 +5332,16 @@ function executeTool(
   call: Record<string, unknown>,
   targetBranch?: string,
 ): Promise<string> {
+  // 工具必填参数校验：把「模型漏参数」变成明确的工具错误，避免无效 API 请求和重试风暴。
+  const toolName = coerceStr(call.tool);
+  const definition = getAllToolDefinitions().find((t) => t.function.name === toolName);
+  const missing = validateRequiredArguments(
+    definition?.function.parameters as Record<string, unknown> | undefined,
+    call
+  );
+  if (missing.length > 0) {
+    return Promise.resolve(`❌ 工具参数校验失败（${toolName}）：${missing.join('；')}`);
+  }
   // 规范化参数：LLM 可能输出数字/布尔值，统一转为字符串再处理
   const p = (k: string, fb = "") => coerceStr(call[k], fb);
   switch (call.tool) {
@@ -5267,6 +5461,7 @@ function executeTool(
     // ── 新增工具 ─────────────────────────────────────────────────────────────
     case "preview_diff":         return previewDiff(ctx, p("path"), parseInt(p("start_line"), 10), parseInt(p("end_line"), 10), p("content"));
     case "undo_last_commit":     return undoLastCommit(ctx, p("branch") || targetBranch);
+    case "verify_changes": return verifyChanges(ctx, p("branch") || targetBranch, p("wait_seconds"));
     case "run_lint":             return runLint(ctx, p("branch") || targetBranch);
     case "check_security":       return checkSecurity(ctx, p("path") || "");
     case "trigger_and_monitor_build": return triggerAndMonitorBuild(
@@ -5455,39 +5650,8 @@ async function dbUpdateStep(
  * 这三种情况都会触发 LLM API 的 HTTP 400 错误。
  */
 function sanitizeToolCallMessages(msgs: Message[]): Message[] {
-  if (msgs.length === 0) return [];
-  const result = [...msgs];
-  // 1. 移除任何 tool_calls 后没有完整紧邻 tool 回复的 assistant 消息（不限位置）。
-  //    修复：旧实现只检查数组末尾，ctx-compress 拼接 [head+summary+tail] 后
-  //    head 尾部残留的 assistant(tool_calls) 位于序列中间，其后紧跟的是摘要 user 消息，
-  //    导致 DeepSeek API HTTP 400（insufficient tool messages following tool_calls）。
-  for (let i = result.length - 1; i >= 0; i--) {
-    const msg = result[i];
-    if (msg.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
-      let ok = true;
-      for (let k = 0; k < msg.tool_calls.length; k++) {
-        const next = result[i + 1 + k];
-        if (!next || next.role !== "tool" || next.tool_call_id !== msg.tool_calls[k].id) { ok = false; break; }
-      }
-      if (!ok) result.splice(i, 1);
-    }
-  }
-  // 2. 移除孤立 tool 消息（沿连续 tool 消息链回溯，源头不是对应 assistant tool_calls 即移除）
-  for (let i = result.length - 1; i >= 0; i--) {
-    const msg = result[i];
-    if (msg.role === "tool" && msg.tool_call_id) {
-      let j = i - 1;
-      while (j >= 0 && result[j].role === "tool") j--;
-      const prev = j >= 0 ? result[j] : undefined;
-      const ok =
-        prev &&
-        prev.role === "assistant" &&
-        Array.isArray(prev.tool_calls) &&
-        prev.tool_calls.some((tc) => tc.id === msg.tool_call_id);
-      if (!ok) result.splice(i, 1);
-    }
-  }
-  return result;
+  // 统一走已测试的 messageIntegrity 模块，避免这里与压缩逻辑各维护一份修复算法。
+  return repairToolCallPairs(msgs as unknown as MessageLike[]) as unknown as Message[];
 }
 
 /** 每轮发送给 LLM 的最近消息窗口（system 与摘要不计入） */
@@ -6154,6 +6318,11 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
   }
 
   const ctx: GithubContext = { token: githubToken, owner, repo };
+  const traceId = startAgentTrace({
+    model: modelConfig.model ?? modelConfig.type,
+    repo: `${owner}/${repo}`,
+    userId,
+  });
 
   // 生成本次流的唯一标识：stream_id 每次新请求生成；turn_id 复用幂等键（有则用，无则新建）
   const streamId = `s_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
@@ -6295,6 +6464,7 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       list_workflows: "列出工作流", get_workflow_runs: "查看运行记录",
       get_run_jobs: "查看 Jobs", get_job_logs: "下载/分段读取日志",
       trigger_workflow: "触发工作流", check_run_status: "等待运行完成",
+      verify_changes: "验证代码检查",
       cancel_workflow_run: "取消运行",
       rerun_workflow_run: "重新运行", list_actions_secrets: "查看 Secrets",
       list_actions_variables: "查看 Variables", set_actions_variable: "设置 Variable",
@@ -6331,6 +6501,15 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
     // 连续"无工具调用"的 nudge 计数（最多纠正 2 次，防止死循环）
     let nudgeCount = 0;
     const MAX_NUDGE = 2;
+    // ── 代码验证闸门：写代码后必须通过 verify_changes 才能正常收尾 ────────────
+    // pendingVerifyFiles：本次任务中修改过的代码文件；verificationState：
+    // none=尚未验证 / passed=通过 / failed=失败待修复 / unavailable=仓库没有 Checks。
+    // 文档类修改由 requiresVerification 自动跳过。
+    const pendingVerifyFiles = new Set<string>();
+    let pendingVerifyBranch = targetBranch || "main";
+    let verificationState: "none" | "passed" | "failed" | "unavailable" = "none";
+    let verificationNudges = 0;
+    const MAX_VERIFY_NUDGES = 3;
     // 总轮次计数（跨批次）
     let totalRound = 0;
     // 任务计划是否已成功提取并发送（用于替代 totalRound===0 的一次性判断，
@@ -6396,7 +6575,18 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       };
 
       try {
+        recordAgentTraceEvent(traceId, 'model_request', {
+          batch,
+          round,
+          messageCount: fullMessages.length,
+        });
         const llmResult = await callLLM(modelConfig, await buildLLMContext(fullMessages, modelConfig, abortSig), onThinkingChunk, heartbeat, onUsageCb);
+        recordAgentTraceEvent(traceId, 'model_response', {
+          batch,
+          round,
+          textChars: llmResult.text.length,
+          toolCall: llmResult.toolCall?.name ?? null,
+        });
         assistantText = llmResult.text;
         // FC 模式下，结构化工具调用直接挂到本轮作用域；非 FC 则为 null（后续走 extractToolCall）
         fcToolCall = llmResult.toolCall;
@@ -6506,6 +6696,34 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
           }
         : extractToolCall(assistantText);
       if (!toolCall) {
+        // ── 代码验证闸门：改过代码但还没通过 verify_changes，不允许直接收尾 ──────
+        // 这是 GitHubM 版“开发助手”的关键差异：不是写完文件就结束，而是等 CI 真实验证。
+        const verifyPaths = [...pendingVerifyFiles];
+        const verificationNeeded =
+          requiresVerification(verifyPaths) &&
+          verificationState !== "passed" &&
+          verificationState !== "unavailable" &&
+          verificationNudges < MAX_VERIFY_NUDGES;
+
+        if (verificationNeeded) {
+          verificationNudges++;
+          console.log(`[verify-gate] 拦截收尾，要求验证 ${pendingVerifyBranch}（第 ${verificationNudges} 次）`);
+          await sendTyped({
+            type: "status_warning",
+            message: `代码已修改，正在要求 AI 执行 CI 验证（${verificationNudges}/${MAX_VERIFY_NUDGES}）…`,
+          });
+          fullMessages.push({
+            role: "assistant",
+            content: rawText,
+            ...(reasoningContentEverSeen ? { reasoning_content: lastReasoningContent ?? "" } : {}),
+          });
+          fullMessages.push({
+            role: "user",
+            content: buildVerificationNudge(verifyPaths, pendingVerifyBranch, verificationNudges),
+          });
+          continue;
+        }
+
         // ── 任务完成检测：AI 输出了 TASK_DONE 标记 或 明确的完成性语句 ──────────
         // 优先于 nudge 检查：若 AI 已确认任务完成，直接跳到最终回答，不催促工具调用
         const isTaskDone =
@@ -6566,8 +6784,19 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
         if (workflowDbId) await dbFinishWorkflow(workflowDbId);
         // 去除 TASK_DONE 标记再展示给用户（用户不需要看到内部标记）
         const finalDisplayText = assistantText.replace(/\bTASK_DONE\b\s*/g, "").trim();
+        // 把验证结论写进最终回答，避免“写完就说完成”的误导
+        let verificationNote = "";
+        if (pendingVerifyFiles.size > 0 && requiresVerification([...pendingVerifyFiles])) {
+          if (verificationState === "passed") {
+            verificationNote = `\n\n> ✅ 已通过 CI 验证（分支 ${pendingVerifyBranch}）`;
+          } else if (verificationState === "unavailable") {
+            verificationNote = "\n\n> ⚠️ 仓库未配置可用的 GitHub Checks，本次未执行 CI 验证";
+          } else {
+            verificationNote = `\n\n> ⚠️ 代码验证未通过或未完成（分支 ${pendingVerifyBranch}），请查看上方验证日志`;
+          }
+        }
         // 逐词流式输出最终回答，模拟打字机效果
-        await streamAnswer(finalDisplayText, sendChunk, 10, () => abortSig.aborted);
+        await streamAnswer(finalDisplayText + verificationNote, sendChunk, 10, () => abortSig.aborted);
         batchDone = true; // 任务已完成，退出外层批次循环
         break;
       }
@@ -6776,6 +7005,10 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
             await sendTyped({ type: "tool_start", id: toolCallId, tool: toolCall.tool, label, hint });
           }
 
+          recordAgentTraceEvent(traceId, 'tool_start', {
+            name: String(toolCall.tool),
+            argsChars: JSON.stringify(toolCall).length,
+          });
           try {
             toolResult = await executeTool(ctx, toolCall, targetBranch);
           } finally {
@@ -6798,12 +7031,43 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       const businessResultTools = new Set([
         "trigger_and_monitor_build",
         "check_run_status",
+        "verify_changes",
       ]);
       const isBusinessResult = businessResultTools.has(String(toolCall.tool));
       const toolFailed = !isBusinessResult && (
         toolResult.startsWith("工具执行出错：") || toolResult.startsWith("❌")
       );
-      const toolStatus = toolFailed ? "fail" : "success";
+      const verificationFailedResult =
+        toolName === "verify_changes" &&
+        (toolResult.includes("VERIFY_FAILED") || toolResult.includes("VERIFY_PENDING"));
+      const toolStatus = toolFailed || verificationFailedResult ? "fail" : "success";
+
+      // ── 代码验证状态机：写代码 → 待验证 → 通过/失败 → 修复后再验证 ─────────
+      if (toolName === "verify_changes") {
+        if (toolResult.includes("VERIFY_PASSED")) verificationState = "passed";
+        else if (toolResult.includes("VERIFY_NO_CHECKS")) verificationState = "unavailable";
+        else if (toolResult.includes("VERIFY_FAILED")) verificationState = "failed";
+        else if (toolResult.includes("VERIFY_PENDING")) verificationState = "failed";
+        else verificationState = "failed";
+        recordAgentTraceEvent(traceId, "tool_end", {
+          name: "verify_changes",
+          state: verificationState,
+          branch: pendingVerifyBranch,
+        });
+      }
+
+      const codeWriteTools = new Set([
+        "write_file", "patch_file", "batch_patch", "delete_file",
+        "search_and_replace", "create_or_update_file", "push_files",
+      ]);
+      if (codeWriteTools.has(toolName) && !toolFailed) {
+        const changed = extractChangedPaths(toolName, toolCall);
+        if (requiresVerification(changed)) {
+          for (const path of changed) pendingVerifyFiles.add(path);
+          pendingVerifyBranch = String(toolCall.branch || targetBranch || pendingVerifyBranch || "main");
+          verificationState = "none";
+        }
+      }
 
       // 【网关策略 4】更新熔断器状态，并流转异步任务状态机
       if (toolFailed) {
@@ -6822,9 +7086,16 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
         cached: isCached,
         errorMsg: toolFailed ? toolResult.slice(0, 200) : undefined
       });
+      recordAgentTraceEvent(traceId, 'tool_end', {
+        name: toolName,
+        status: toolStatus,
+        elapsedMs,
+        cached: isCached,
+        resultChars: toolResult.length,
+      });
 
       // 【网关策略 6】协议封箱：对传回给大模型的内容使用统一协议，便于它稳定解析
-      const toolProtocolOutput = normalizeResultProtocol(toolResult, toolFailed);
+      const toolProtocolOutput = normalizeResultProtocol(toolResult, toolStatus === "fail");
       
       await sendTyped({ 
         type: "tool_end", 
@@ -6928,9 +7199,8 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       // 工具结果注入截断：文件内容类工具允许 30000 字符（约 600 行代码），其他工具 4000 字符
       const fileContentTools = ["read_file", "batch_read", "grep_in_file", "get_file_info", "get_code_outline", "read_function"];
       const resultLimit = fileContentTools.includes(String(toolCall.tool)) ? 30000 : 4000;
-      const truncatedRaw = toolResult.length > resultLimit
-        ? toolResult.slice(0, resultLimit) + `\n…（内容已截断，原始长度 ${toolResult.length} 字符，如需完整内容请重新调用工具并缩小查询范围）`
-        : toolResult;
+      const clamped = clampToolResult(toolResult, resultLimit);
+      const truncatedRaw = clamped.text;
         
       // 优化：统一工具返回协议（规范化结构输出，提高 LLM 多步推理稳定性）
       const normalizedResult = JSON.stringify({
@@ -6957,24 +7227,22 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       }
 
       // ── 上下文滑动窗口压缩：消息超过 60 条时，压缩中间的工具交互历史 ──────────
-      // 保留：[0]=system、[1..4]=前4条用户/助手消息（任务背景）、[-20..]=最近20条
-      // 压缩：中间的工具结果消息折叠为一条摘要，减少 token 消耗
+      // 保留：system、前4条任务背景、最近20条；中间插入摘要。
+      // compressMessages 内部会保证 assistant(tool_calls) 与 tool(result) 不被拆散。
       if (fullMessages.length > 60) {
-        const system = fullMessages[0];
-        const head   = fullMessages.slice(1, 5);    // 前4条（任务上下文）
-        const tail   = fullMessages.slice(-20);     // 最近20条（当前进展）
-        const mid    = fullMessages.slice(5, fullMessages.length - 20);
-        // 统计压缩掉的工具调用数量，生成摘要
-        const toolCallCount = mid.filter(m => m.role === "assistant").length;
-        const summary: Message = {
-          role: "user",
-          content: `[系统摘要] 上面已省略 ${mid.length} 条中间过程消息（约 ${toolCallCount} 次工具调用）。` +
-            `任务仍在继续，请根据最近上下文继续执行剩余步骤。`,
-        };
-        fullMessages.splice(0, fullMessages.length, system, ...head, summary, ...tail);
-        // ⚠️ 截断后必须清理不完整的 tool_calls 对，否则会出现 summary(user)→tool 的非法序列
-        fullMessages = sanitizeToolCallMessages(fullMessages);
-        console.log(`[ctx-compress] 压缩后 messages=${fullMessages.length}，省略了 ${mid.length} 条中间消息`);
+        const compressed = compressMessages(fullMessages as unknown as MessageLike[], {
+          maxMessages: 60,
+          headCount: 4,
+          tailCount: 20,
+        });
+        fullMessages = compressed.messages as unknown as Message[];
+        recordAgentTraceEvent(traceId, 'context_compress', {
+          omitted: compressed.omitted,
+          before: compressed.messages.length + compressed.omitted,
+          after: compressed.messages.length,
+          toolResultTruncated: clamped.truncated,
+        });
+        console.log(`[ctx-compress] 压缩后 messages=${fullMessages.length}，省略了 ${compressed.omitted} 条中间消息`);
       }
 
       // ── 每 5 轮自动保存快照：页面意外关闭时任务进度不丢失 ─────────────────
@@ -7042,6 +7310,10 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
     } catch (fatalErr) {
       // 顶层兜底：未预期的异常，写入流后关闭，防止代理层因未处理的 rejection 返回 500
       console.error("[IIFE fatal]", (fatalErr as Error).message);
+      recordAgentTraceEvent(traceId, 'error', {
+        scope: 'agent_loop',
+        message: (fatalErr as Error).message,
+      });
       // @ts-ignore: heartbeatTimer is defined in outer scope
       if (typeof heartbeatTimer !== 'undefined') clearInterval(heartbeatTimer);
       try { await streamAnswer(`❌ 内部错误：${(fatalErr as Error).message}`, sendChunk); } catch { /* ignore */ }
@@ -7061,10 +7333,15 @@ export async function runAiAgent(options: RunAgentOptions): Promise<void> {
       streamId,
       interruptReason: abortSig.aborted ? "user_stop" : "completed",
     });
+    endAgentTrace(traceId, abortSig.aborted ? 'aborted' : 'success', {
+      chars: totalChars,
+      durationMs: finishedAt - startedAt,
+    });
     onComplete();
   } catch (fatalErr) {
     // runAiAgent 顶层兜底：IIFE 内部已吞掉 Agent 异常，此处主要防回调异常
     console.error("[runAiAgent fatal]", (fatalErr as Error).message);
+    try { endAgentTrace(traceId, 'error', { message: (fatalErr as Error).message }); } catch { /* ignore */ }
     try { onError(fatalErr as Error); } catch { /* ignore */ }
   }
 }

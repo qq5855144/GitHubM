@@ -9,10 +9,15 @@
 #
 # 所有检查必须全部通过，PR 才允许合并（需在仓库分支保护规则中勾选本工作流）
 name: PR Check
-
 on:
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "要验证的分支 / tag（留空则使用触发分支）"
+        required: false
+        default: ""
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -26,6 +31,9 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4

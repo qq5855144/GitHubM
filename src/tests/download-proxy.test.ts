@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_DOWNLOAD_PROXY_URL,
   downloadGithubFile,
+  isAutoDownloadProxyEnabled,
+  resolveDownloadProxyUrl,
+  setAutoDownloadProxyEnabled,
+  testFastestDownloadProxy,
   getDownloadProxyUrl,
   isDownloadProxyEnabled,
   setDownloadProxyEnabled,
@@ -17,11 +21,13 @@ describe('global download proxy', () => {
 
   afterEach(() => {
     delete (window as unknown as { AndroidBridge?: unknown }).AndroidBridge;
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
   it('defaults to disabled with wget.la as the fallback proxy', () => {
     expect(isDownloadProxyEnabled()).toBe(false);
+    expect(isAutoDownloadProxyEnabled()).toBe(true);
     expect(getDownloadProxyUrl()).toBe(DEFAULT_DOWNLOAD_PROXY_URL);
   });
 
@@ -42,10 +48,48 @@ describe('global download proxy', () => {
     );
   });
 
+
+  it('auto-tests candidates and uses the fastest cached proxy', async () => {
+    setDownloadProxyEnabled(true);
+    setAutoDownloadProxyEnabled(true);
+
+    vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+      const url = String(input);
+      const delay = url.includes('gh-proxy.com') ? 5 : url.includes('ghproxy.net') ? 20 : 40;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return {
+        ok: true,
+        status: 200,
+        text: async () => 'Hello World',
+      } as Response;
+    }));
+
+    const { selected, results } = await testFastestDownloadProxy({ timeoutMs: 1000 });
+    expect(results).toHaveLength(3);
+    expect(selected.baseUrl).toBe('https://gh-proxy.com/');
+
+    const resolved = await resolveDownloadProxyUrl('https://github.com/a/b/releases/download/v1/app.apk');
+    expect(resolved).toBe('https://gh-proxy.com/https://github.com/a/b/releases/download/v1/app.apk');
+  });
+
+
+  it('falls back to direct download when every candidate fails', async () => {
+    setDownloadProxyEnabled(true);
+    setAutoDownloadProxyEnabled(true);
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+
+    const { selected } = await testFastestDownloadProxy({ timeoutMs: 50 });
+    expect(selected.latencyMs).toBe(-1);
+
+    const source = 'https://github.com/a/b/releases/download/v1/app.apk';
+    await expect(resolveDownloadProxyUrl(source)).resolves.toBe(source);
+  });
+
   it('uses the global proxy for GitHub downloads without leaking token', async () => {
     const downloadFile = vi.fn();
     (window as unknown as { AndroidBridge?: { downloadFile: typeof downloadFile } }).AndroidBridge = { downloadFile };
     setDownloadProxyEnabled(true);
+    setAutoDownloadProxyEnabled(false);
 
     await downloadGithubFile('https://github.com/a/b/releases/download/v1/app.apk', 'app.apk', 'secret-token');
 
@@ -60,6 +104,7 @@ describe('global download proxy', () => {
     const downloadFile = vi.fn();
     (window as unknown as { AndroidBridge?: { downloadFile: typeof downloadFile } }).AndroidBridge = { downloadFile };
     setDownloadProxyEnabled(false);
+    setAutoDownloadProxyEnabled(false);
 
     await downloadGithubFile('https://github.com/a/b/releases/download/v1/app.apk', 'app.apk', 'secret-token');
 

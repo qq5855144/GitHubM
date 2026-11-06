@@ -55,10 +55,17 @@ import { formatCostUsd, getModelPrice, SOURCES } from '@/components/ai/modelPric
 import { fetchVisitStats, type DailyStats, type VisitSummary } from '@/lib/visitStats';
 import {
   DEFAULT_DOWNLOAD_PROXY_URL,
+  getCachedFastestDownloadProxy,
+  getDownloadProxyCandidates,
   getDownloadProxyUrl,
+  isAutoDownloadProxyEnabled,
   isDownloadProxyEnabled,
+  setAutoDownloadProxyEnabled,
   setDownloadProxyEnabled,
   setDownloadProxyUrl,
+  testFastestDownloadProxy,
+  type DownloadProxyTestResult,
+  type FastestDownloadProxy,
 } from '@/lib/githubDownload';
 import {
   XAxis,
@@ -257,6 +264,10 @@ export default function SettingsPage() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => loadCollapsed());
   const [downloadProxyEnabled, setDownloadProxyEnabledState] = useState(() => isDownloadProxyEnabled());
   const [downloadProxyUrlDraft, setDownloadProxyUrlDraft] = useState(() => getDownloadProxyUrl());
+  const [autoDownloadProxy, setAutoDownloadProxyState] = useState(() => isAutoDownloadProxyEnabled());
+  const [proxyTesting, setProxyTesting] = useState(false);
+  const [proxyTestResults, setProxyTestResults] = useState<DownloadProxyTestResult[]>([]);
+  const [selectedProxy, setSelectedProxy] = useState<FastestDownloadProxy | null>(() => getCachedFastestDownloadProxy());
 
   const toggleSection = (id: string) => {
     setCollapsed(prev => {
@@ -428,22 +439,54 @@ export default function SettingsPage() {
     localStorage.setItem('app_language', lng);
   };
 
+  const handleTestDownloadProxy = async () => {
+    setProxyTesting(true);
+    try {
+      const { results, selected } = await testFastestDownloadProxy();
+      const sorted = [...results].sort((a, b) => {
+        if (a.ok !== b.ok) return a.ok ? -1 : 1;
+        return a.latencyMs - b.latencyMs;
+      });
+      setProxyTestResults(sorted);
+      setSelectedProxy(selected);
+      if (selected.latencyMs > 0) {
+        toast.success(`最快代理：${selected.name}（${selected.latencyMs} ms）`);
+      } else {
+        toast.error('代理测速全部失败，已回退直连下载');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? `代理测速失败：${err.message}` : '代理测速失败');
+    } finally {
+      setProxyTesting(false);
+    }
+  };
+
+  const handleToggleAutoDownloadProxy = (checked: boolean) => {
+    setAutoDownloadProxyState(checked);
+    setAutoDownloadProxyEnabled(checked);
+    toast.success(checked ? '已开启自动选择最快代理' : '已切换为固定代理');
+    if (checked) void handleTestDownloadProxy();
+  };
+
   const handleToggleDownloadProxy = (checked: boolean) => {
     setDownloadProxyEnabledState(checked);
     setDownloadProxyEnabled(checked);
     toast.success(checked ? '全局下载代理已开启' : '全局下载代理已关闭');
+    if (checked && autoDownloadProxy) void handleTestDownloadProxy();
   };
 
   const handleSaveDownloadProxy = () => {
     setDownloadProxyUrl(downloadProxyUrlDraft);
     setDownloadProxyUrlDraft(getDownloadProxyUrl());
     toast.success('下载代理地址已保存');
+    if (autoDownloadProxy) void handleTestDownloadProxy();
   };
 
   const handleResetDownloadProxy = () => {
     setDownloadProxyUrl('');
     setDownloadProxyUrlDraft(DEFAULT_DOWNLOAD_PROXY_URL);
     toast.success('已恢复默认下载代理');
+    if (autoDownloadProxy) void handleTestDownloadProxy();
   };
 
   return (
@@ -708,10 +751,76 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-border/60 bg-secondary/30 p-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">自动选择最快代理</p>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+              下载前自动测试候选代理并选择延迟最低的一个，结果缓存 10 分钟。
+            </p>
+          </div>
+          <Switch
+            checked={autoDownloadProxy}
+            onCheckedChange={handleToggleAutoDownloadProxy}
+            aria-label="自动选择最快下载代理"
+          />
+        </div>
+
+        {autoDownloadProxy && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs text-muted-foreground min-w-0">
+                当前选择：
+                <span className="text-foreground font-medium">
+                  {selectedProxy
+                    ? `${selectedProxy.name}${selectedProxy.latencyMs > 0 ? ` · ${selectedProxy.latencyMs} ms` : ' · 直连回退'}`
+                    : proxyTesting ? '测速中…' : '尚未测速（下载时自动测速）'}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-border hover:bg-secondary h-7 text-xs shrink-0"
+                onClick={() => void handleTestDownloadProxy()}
+                disabled={proxyTesting}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${proxyTesting ? 'animate-spin' : ''}`} />
+                {proxyTesting ? '测速中…' : '测速'}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              候选：{getDownloadProxyCandidates().map((item) => item.name).join(' / ')}
+            </p>
+            {proxyTestResults.length > 0 && (
+              <div className="space-y-1">
+                {proxyTestResults.map((result) => {
+                  const isBest = selectedProxy?.baseUrl === result.baseUrl && result.ok;
+                  return (
+                    <div
+                      key={result.baseUrl}
+                      className={cn(
+                        'flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs',
+                        isBest ? 'border-success/30 bg-success/10' : 'border-border/60 bg-secondary/20'
+                      )}
+                      title={result.error}
+                    >
+                      <span className="font-mono truncate">{result.name}</span>
+                      <span className={isBest ? 'text-success font-medium' : result.ok ? 'text-muted-foreground' : 'text-destructive'}>
+                        {result.ok ? `${result.latencyMs} ms` : '失败'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="border-t border-border/60" />
 
         <div className="space-y-2">
-          <Label className="text-xs font-medium text-muted-foreground">代理地址或模板</Label>
+          <Label className="text-xs font-medium text-muted-foreground">
+            {autoDownloadProxy ? '自定义候选代理（参与自动测速）' : '固定代理地址或模板'}
+          </Label>
           <Input
             value={downloadProxyUrlDraft}
             onChange={(e) => setDownloadProxyUrlDraft(e.target.value)}
@@ -747,6 +856,10 @@ export default function SettingsPage() {
           <p className="flex items-start gap-1.5">
             <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             代理只对公开 GitHub 资源生效；私有仓库仍携带 Token 直连，不向代理发送 Token。
+          </p>
+          <p className="flex items-start gap-1.5">
+            <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            自动测速只请求公开测试文件，不会携带 Token；测速全部失败时自动回退直连。
           </p>
           <p className="flex items-start gap-1.5">
             <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />

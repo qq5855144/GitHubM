@@ -852,9 +852,8 @@ const currentModelDef = getModelDef(modelConfig.type);
     const history = buildModelHistory(historySource, fullUserText);
 
     abortRef.current = new AbortController();
-    let accumulated = '';
+    let answerBuffer = '';
     let currentThinking = '';
-
     // 发起新一轮对话前，如果是新问题，清空旧的工具记录
     if (!isRegen) {
       setToolHistory([]);
@@ -949,6 +948,46 @@ const currentModelDef = getModelDef(modelConfig.type);
       }
     };
 
+    // ── 消息时间线：回答、思考、工具严格按事件发生顺序插入 ──────────────────
+    // 关键点：一旦工具/思考/步骤开始，上一段回答必须封口；
+    // 后续 content 必须新建气泡，绝不能再回填到工具之前的气泡。
+    const finalizeAnswer = () => {
+      if (!answerMsgId) return;
+      const id = answerMsgId;
+      answerMsgId = null;
+      answerBuffer = '';
+      queueMsg(prev => prev.map(m => m.id === id ? { ...m, streaming: false } : m));
+    };
+
+    const finalizeThinking = () => {
+      if (!thinkingBubbleId) return;
+      const id = thinkingBubbleId;
+      thinkingBubbleId = null;
+      currentThinking = '';
+      queueMsg(prev => prev.map(m => m.id === id ? { ...m, streaming: false, thinkingDone: true } : m));
+    };
+
+    const ensureAnswerBubble = (): string => {
+      if (answerMsgId) return answerMsgId;
+      if (!hasSteps) {
+        answerMsgId = initMsgId;
+        answerBuffer = '';
+        return initMsgId;
+      }
+      const newId = `ans-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+      answerMsgId = newId;
+      answerBuffer = '';
+      streamingAiMsgIdRef.current = newId;
+      queueMsg(prev => [...prev, {
+        id: newId,
+        role: 'assistant' as const,
+        content: '',
+        streaming: true,
+        bubbleType: 'answer' as const,
+      }]);
+      return newId;
+    };
+
     // 流结束（complete / error）时取消未执行的 rAF 并立即同步 flush，确保最终状态正确
     const cancelAndFlush = () => {
       cancelAnimationFrame(rafId);
@@ -982,32 +1021,24 @@ const currentModelDef = getModelDef(modelConfig.type);
 
         switch (chunk.type) {
           case 'content': {
-            // ── 首次 content：若已有步骤气泡则新建 answer 气泡，否则复用初始气泡 ──
-            if (answerMsgId === null) {
-              if (hasSteps) {
-                // 新建 answer 气泡，追加到消息列表末尾（同步 append，rAF 对追加也安全）
-                const newId = `ans-${Date.now()}`;
-                answerMsgId = newId;
-                streamingAiMsgIdRef.current = newId;
-                const answerMsg: Message = { id: newId, role: 'assistant', content: '', streaming: true, bubbleType: 'answer' };
-                queueMsg(prev => [...prev, answerMsg]);
-              } else {
-                // 没有步骤时直接复用初始气泡
-                answerMsgId = initMsgId;
-              }
-            }
+            // 若思考流没有正常收到 think_end，内容开始前强制封口
+            finalizeThinking();
+            // 第一段回答复用占位气泡；工具/思考/步骤之后的回答必须新建气泡
+            const aid = ensureAnswerBubble();
             // 更新最近收到 content 的时间（用于慢响应 hint 判断）
             lastContentAtRef.current = Date.now();
             // 高频路径：仅追加文字，入队合并，避免每个 token 都触发 re-render
-            accumulated += chunk.content;
-            const aid = answerMsgId;
-            const snapshot = accumulated; // 闭包快照，防止 rAF 延迟时 accumulated 已变化
+            answerBuffer += chunk.content;
+            const snapshot = answerBuffer; // 闭包快照，防止 rAF 延迟时 buffer 已变化
             queueMsg(prev => prev.map(m => m.id === aid ? { ...m, content: snapshot } : m));
             break;
           }
           case 'think_start': {
-            // 思考气泡：低频，直接 append（仍走队列保持顺序）
-            const tbId = `think-${Date.now()}`;
+            // 新一段思考开始：先封口上一段回答/思考，再按时间顺序追加思考气泡
+            finalizeAnswer();
+            finalizeThinking();
+            hasSteps = true;
+            const tbId = `think-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
             thinkingBubbleId = tbId;
             const thinkMsg: Message = {
               id: tbId, role: 'assistant', content: '',
@@ -1037,6 +1068,9 @@ const currentModelDef = getModelDef(modelConfig.type);
             break;
           }
           case 'tool_queued': {
+            finalizeAnswer();
+            finalizeThinking();
+            hasSteps = true;
             queueTool(prev => [...prev, {
               id: chunk.id, tool: chunk.tool,
               label: chunk.label, hint: chunk.hint,
@@ -1055,6 +1089,10 @@ const currentModelDef = getModelDef(modelConfig.type);
             break;
           }
           case 'tool_start': {
+            // 工具开始前封口上一段回答/思考，后续模型文本必须排在工具之后
+            finalizeAnswer();
+            finalizeThinking();
+            hasSteps = true;
             // 后端可能直接发 tool_start，或者先发 queued 再发 start
             const existing = toolBubbleMap.get(chunk.id);
             if (existing) {
@@ -1124,6 +1162,8 @@ const currentModelDef = getModelDef(modelConfig.type);
             break;
           }
           case 'step_start': {
+            // 新步骤开始：上一段回答/步骤不能继续接收后续文本
+            finalizeAnswer();
             hasSteps = true;
             localCurrentStepId = chunk.stepId;
             setCurrentStepId(chunk.stepId);
@@ -1165,6 +1205,7 @@ const currentModelDef = getModelDef(modelConfig.type);
             break;
           }
           case 'step_end': {
+            finalizeAnswer();
             setStepStatuses(prev => ({ ...prev, [chunk.stepId]: chunk.status === 'error' ? 'error' : 'done' }));
             if (chunk.status !== 'error') {
               setCurrentStepId(null);
@@ -1366,7 +1407,7 @@ const currentModelDef = getModelDef(modelConfig.type);
           }
           setMessages(prev => prev.map(m =>
             m.id === errTargetId
-              ? { ...m, content: accumulated + (accumulated ? '\n\n' : '') + `⚠️ 连接中断：${err.message}`, streaming: false }
+              ? { ...m, content: answerBuffer + (answerBuffer ? '\n\n' : '') + `⚠️ 连接中断：${err.message}`, streaming: false }
               : (m.role === 'assistant' && m.streaming
                   ? (m.bubbleType === 'thinking' ? { ...m, streaming: false, thinkingDone: true } : { ...m, streaming: false })
                   : m)

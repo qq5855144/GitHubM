@@ -1315,26 +1315,36 @@ export default function CodeBrowserPage() {
             {/* 目录操作按钮（仅目录页显示） */}
             {!currentFile && !loading && (
               <div className="flex items-center gap-1 shrink-0">
-                <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1 px-2"
-                  onClick={() => void handleDownloadDirectory()} disabled={dirDownloading}>
-                  {dirDownloading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
-                  <span className="hidden sm:inline">
-                    {dirDownloading && dirProgress
-                      ? `${dirProgress.done}/${dirProgress.total}`
-                      : i18n.t('下载目录')}
-                  </span>
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1 px-2"
-                  title={i18n.t('wget.la 下载加速（仅公开仓库）')}
-                  onClick={() => {
-                    const next = !wgetAccel;
-                    setWgetAccel(next);
-                    setWgetLaEnabled(next);
-                    toast.success(next ? i18n.t('已开启 wget.la 加速') : i18n.t('已关闭 wget.la 加速'));
-                  }}>
-                  <CheckCircle2 className={`w-3 h-3 ${wgetAccel ? 'text-success' : ''}`} />
-                  <span className="hidden lg:inline">{wgetAccel ? i18n.t('加速开') : i18n.t('加速关')}</span>
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1 px-2"
+                      disabled={dirDownloading}>
+                      {dirDownloading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                      <span>
+                        {dirDownloading && dirProgress
+                          ? `${dirProgress.done}/${dirProgress.total}`
+                          : i18n.t('下载')}
+                      </span>
+                      <ChevronDown className="w-3 h-3 opacity-60" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem onClick={() => void handleDownloadDirectory()}>
+                      <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('下载当前目录 ZIP')}</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void handleDownloadDirectory('')}>
+                      <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('下载整个仓库 ZIP')}</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => {
+                      const next = !wgetAccel;
+                      setWgetAccel(next);
+                      setWgetLaEnabled(next);
+                      toast.success(next ? i18n.t('已开启 wget.la 加速') : i18n.t('已关闭 wget.la 加速'));
+                    }}>
+                      <CheckCircle2 className={`w-3.5 h-3.5 mr-2 ${wgetAccel ? 'text-success' : 'text-muted-foreground'}`} />
+                      {wgetAccel ? i18n.t('wget.la 加速：开') : i18n.t('wget.la 加速：关')}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1 px-2"
                   onClick={() => openAction('new-file')}>
                   <FilePlus className="w-3 h-3" /><span className="hidden sm:inline">{i18n.t('新建文件')}</span>
@@ -1352,16 +1362,43 @@ export default function CodeBrowserPage() {
             {/* 文件查看时的操作栏 */}
             {currentFile && !loading && (
               <div className="flex items-center gap-1 shrink-0">
-                {currentFile.download_url && (
-                  <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 px-2"
-                    title={i18n.t('下载文件')}
-                    onClick={async () => {
-                      try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); }
-                      catch { toast.error(i18n.t('下载失败')); }
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 px-2"
+                      title={i18n.t('下载')}>
+                      <Download className="w-3.5 h-3.5" /><span>{i18n.t('下载')}</span>
+                      <ChevronDown className="w-3 h-3 opacity-60" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    {currentFile.download_url && (
+                      <DropdownMenuItem onClick={async () => {
+                        try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); }
+                        catch { toast.error(i18n.t('下载失败')); }
+                      }}>
+                        <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('下载文件')}</DropdownMenuItem>
+                    )}
+                    {currentFile.download_url && (
+                      <DropdownMenuItem onClick={async () => {
+                        try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? '', true); }
+                        catch { toast.error(i18n.t('加速下载失败，公开仓库才可使用代理')); }
+                      }}>
+                        <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('通过 wget.la 下载')}</DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => void handleDownloadDirectory(currentFile.path.split('/').slice(0, -1).join('/'))}>
+                      <FolderOpen className="w-3.5 h-3.5 mr-2" />{i18n.t('下载所在目录 ZIP')}</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => {
+                      const next = !wgetAccel;
+                      setWgetAccel(next);
+                      setWgetLaEnabled(next);
+                      toast.success(next ? i18n.t('已开启 wget.la 加速') : i18n.t('已关闭 wget.la 加速'));
                     }}>
-                    <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">{i18n.t('下载')}</span>
-                  </Button>
-                )}
+                      <CheckCircle2 className={`w-3.5 h-3.5 mr-2 ${wgetAccel ? 'text-success' : 'text-muted-foreground'}`} />
+                      {wgetAccel ? i18n.t('wget.la 加速：开') : i18n.t('wget.la 加速：关')}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 px-2"
                   title={i18n.t('复制路径')}
                   onClick={() => { copyToClipboard(currentFile.path); toast.success(i18n.t('路径已复制')); }}>
@@ -1381,21 +1418,6 @@ export default function CodeBrowserPage() {
                   <DropdownMenuContent align="end" className="w-44">
                     <DropdownMenuItem onClick={() => { const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${currentBranch}/${currentFile.path}`; copyToClipboard(rawUrl); toast.success(i18n.t('Raw 链接已复制')); }}>
                       <Link className="w-3.5 h-3.5 mr-2" />{i18n.t('复制 Raw 链接')}</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => {
-                      const next = !wgetAccel;
-                      setWgetAccel(next);
-                      setWgetLaEnabled(next);
-                      toast.success(next ? i18n.t('已开启 wget.la 加速') : i18n.t('已关闭 wget.la 加速'));
-                    }}>
-                      <CheckCircle2 className={`w-3.5 h-3.5 mr-2 ${wgetAccel ? 'text-success' : 'text-muted-foreground'}`} />
-                      {wgetAccel ? i18n.t('wget.la 加速：开') : i18n.t('wget.la 加速：关')}</DropdownMenuItem>
-                    {currentFile.download_url && (
-                      <DropdownMenuItem onClick={async () => {
-                        try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? '', true); }
-                        catch { toast.error(i18n.t('加速下载失败，公开仓库才可使用代理')); }
-                      }}>
-                        <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('通过 wget.la 下载')}</DropdownMenuItem>
-                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => openAction('rename', currentFile)}>
                       <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</DropdownMenuItem>

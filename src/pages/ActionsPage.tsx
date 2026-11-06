@@ -440,7 +440,15 @@ export default function ActionsPage() {
         required: !!def?.required,
         type: def?.type || 'string',
         options: Array.isArray(def?.options) ? def.options.map(String) : undefined,
-        defaultValue: def?.default === undefined ? '' : String(def.default),
+        // choice 没有显式 default 时，默认选中第一个 options；
+        // boolean 没有 default 时与 GitHub 行为保持一致，默认 false。
+        defaultValue: def?.default !== undefined
+          ? String(def.default)
+          : def?.type === 'choice' && Array.isArray(def?.options) && def.options.length > 0
+            ? String(def.options[0])
+            : def?.type === 'boolean'
+              ? 'false'
+              : '',
       }));
       setWorkflowInputs(defs);
       setWorkflowInputValues(Object.fromEntries(defs

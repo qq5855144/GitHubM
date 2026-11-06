@@ -262,7 +262,8 @@ export default function SearchPage() {
       setSearchParams({ q: searchQuery, type, page: String(page) }, { replace: true });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
-      toast.error(i18n.t('搜索失败'));
+      const message = err instanceof Error ? err.message : '';
+      toast.error(message ? `${i18n.t('搜索失败')}：${message}` : i18n.t('搜索失败'));
       console.error(err);
     } finally {
       setLoading(false);

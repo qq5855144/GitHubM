@@ -1,11 +1,25 @@
-import React, { useRef, useMemo, forwardRef, useImperativeHandle, useEffect, useState, useCallback } from 'react';
-import CodeMirror from '@uiw/react-codemirror';
-import { EditorView, keymap, ViewUpdate } from '@codemirror/view';
-import { Extension } from '@codemirror/state';
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import CodeMirror, { basicSetup } from '@uiw/react-codemirror';
+import {
+  Decoration,
+  DecorationSet,
+  EditorView,
+  keymap,
+  ViewUpdate,
+} from '@codemirror/view';
+import { EditorState, Extension, StateField } from '@codemirror/state';
 import { githubLight, githubDark } from '@uiw/codemirror-theme-github';
 import { undo, redo } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
-import { typescriptLanguage } from '@codemirror/lang-javascript';
 import { json } from '@codemirror/lang-json';
 import { html } from '@codemirror/lang-html';
 import { css } from '@codemirror/lang-css';
@@ -19,7 +33,6 @@ import { php } from '@codemirror/lang-php';
 import { xml } from '@codemirror/lang-xml';
 import { yaml } from '@codemirror/lang-yaml';
 import { sql } from '@codemirror/lang-sql';
-import { basicSetup } from '@uiw/react-codemirror';
 import { searchHighlightField, searchTheme } from './codemirror-search';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -44,6 +57,11 @@ interface CodeEditorProps {
   onFontSizeChange?: (newSize: number) => void;
   wordWrap?: 'on' | 'off';
 }
+
+const CODE_FONT_FAMILY =
+  "ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', Menlo, Monaco, Consolas, monospace";
+const CODE_LINE_HEIGHT = '1.6';
+const ACTIVE_LINE_CLASS = 'cm-activeCodeLine';
 
 function getLanguageExtension(fileName: string): Extension | null {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
@@ -103,27 +121,99 @@ function getLanguageExtension(fileName: string): Extension | null {
   }
 }
 
+// 当前代码行下划线用行装饰实现：
+// 只作用于代码行，不依赖 gutter，也不会影响行号宽度。
+const activeCodeLineDecoration = Decoration.line({ class: ACTIVE_LINE_CLASS });
+
+function activeLineDecorations(state: EditorState): DecorationSet {
+  const line = state.doc.lineAt(state.selection.main.head);
+  return Decoration.set([activeCodeLineDecoration.range(line.from)]);
+}
+
+const activeLineUnderlineField = StateField.define<DecorationSet>({
+  create(state) {
+    return activeLineDecorations(state);
+  },
+  update(decorations, tr) {
+    if (!tr.selection && !tr.docChanged) return decorations;
+    return activeLineDecorations(tr.state);
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+// 字体、字号、行高只在编辑器根节点设置一次。
+// gutter 和代码区都继承同一套排版参数，避免两套 line-height 逐行错位。
+const editorBaseTheme = EditorView.theme({
+  '&': {
+    height: '100%',
+    width: '100%',
+    fontFamily: CODE_FONT_FAMILY,
+    fontSize: 'inherit',
+    lineHeight: CODE_LINE_HEIGHT,
+  },
+  '.cm-scroller': {
+    overflow: 'auto',
+    fontFamily: 'inherit',
+    lineHeight: 'inherit',
+  },
+  '.cm-content': {
+    minHeight: '100%',
+  },
+  '.cm-gutters': {
+    fontFamily: 'inherit',
+    fontSize: 'inherit',
+    lineHeight: 'inherit',
+    fontVariantNumeric: 'tabular-nums',
+    borderRight: '1px solid rgba(127, 127, 127, 0.14)',
+    backgroundColor: 'transparent',
+  },
+  '.cm-lineNumbers .cm-gutterElement': {
+    padding: '0 10px 0 8px',
+    textAlign: 'right',
+    whiteSpace: 'nowrap',
+  },
+  '.cm-activeLine': {
+    backgroundColor: 'rgba(127, 127, 127, 0.06)',
+  },
+  '.cm-activeCodeLine': {
+    boxShadow: 'inset 0 -1px 0 rgba(127, 127, 127, 0.24)',
+  },
+  '.cm-activeLineGutter': {
+    backgroundColor: 'rgba(127, 127, 127, 0.10)',
+    color: 'hsl(var(--primary))',
+    // 不加粗，避免行号宽度变化导致左右跳动
+    fontWeight: 'inherit',
+  },
+});
+
 export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
-  ({
-    value,
-    onChange,
-    fileName = '',
-    readOnly = false,
-    fontSize = 14,
-    autoFocus = false,
-    onMount,
-    onSearch,
-    onCursorChange,
-    onFontSizeChange,
-    wordWrap = 'off',
-  }, ref) => {
+  (
+    {
+      value,
+      onChange,
+      fileName = '',
+      readOnly = false,
+      fontSize = 14,
+      autoFocus = false,
+      onMount,
+      onSearch,
+      onCursorChange,
+      onFontSizeChange,
+      wordWrap = 'off',
+    },
+    ref
+  ) => {
     const { theme } = useTheme();
     const isDark = theme === 'dark';
-    const [isMobile, setIsMobile] = useState(false);
+    const [isMobile, setIsMobile] = useState(
+      () => typeof window !== 'undefined' && window.innerWidth < 768
+    );
     const viewRef = useRef<EditorView | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const onSearchRef = useRef(onSearch);
     const onCursorChangeRef = useRef(onCursorChange);
+    const onFontSizeChangeRef = useRef(onFontSizeChange);
+    const fontSizeRef = useRef(fontSize);
 
     useEffect(() => {
       onSearchRef.current = onSearch;
@@ -132,6 +222,10 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
     useEffect(() => {
       onCursorChangeRef.current = onCursorChange;
     }, [onCursorChange]);
+
+    useEffect(() => {
+      onFontSizeChangeRef.current = onFontSizeChange;
+    }, [onFontSizeChange]);
 
     useEffect(() => {
       const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -154,13 +248,22 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
       getView: () => viewRef.current,
     }));
 
-    // 移动端双指捏合缩放字号
+    // 字号由外层容器 CSS 继承给编辑器，不重建 CodeMirror 扩展。
+    // 捏合缩放时只触发一次重新测量，避免每级字号都重配整个编辑器。
+    useLayoutEffect(() => {
+      fontSizeRef.current = fontSize;
+      viewRef.current?.requestMeasure();
+    }, [fontSize]);
+
+    // 移动端双指捏合缩放字号。
+    // 监听器只注册一次；回调与字号通过 ref 读取，捏合过程中不会反复解绑/绑定。
     useEffect(() => {
       const container = containerRef.current;
-      if (!container || !onFontSizeChange) return;
+      if (!container) return;
 
       let initialDistance: number | null = null;
-      let initialFontSize = fontSize;
+      let initialFontSize = fontSizeRef.current;
+      let lastAppliedSize = fontSizeRef.current;
 
       const getDistance = (touches: TouchList) => {
         if (touches.length < 2) return 0;
@@ -170,26 +273,32 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
       };
 
       const handleTouchMove = (e: TouchEvent) => {
-        if (e.touches.length === 2 && initialDistance !== null) {
-          e.preventDefault();
-          const currentDistance = getDistance(e.touches);
-          const scale = currentDistance / initialDistance;
-          let newSize = Math.round(initialFontSize * scale);
-          newSize = Math.max(10, Math.min(30, newSize));
-          if (newSize !== fontSize) {
-            onFontSizeChange(newSize);
-          }
-        }
+        if (e.touches.length !== 2 || initialDistance === null) return;
+        e.preventDefault();
+        const currentDistance = getDistance(e.touches);
+        if (!initialDistance) return;
+
+        const scale = currentDistance / initialDistance;
+        const newSize = Math.max(
+          10,
+          Math.min(30, Math.round(initialFontSize * scale))
+        );
+        if (newSize === lastAppliedSize) return;
+
+        lastAppliedSize = newSize;
+        onFontSizeChangeRef.current?.(newSize);
       };
 
       const handleTouchStart = (e: TouchEvent) => {
-        if (e.touches.length === 2) {
-          initialDistance = getDistance(e.touches);
-          initialFontSize = fontSize;
-          // 仅在双指触摸时动态添加阻止默认行为的 touchmove 监听器，
-          // 避免单指操作（滚动、文本选择）被非 passive 监听器拖慢导致卡顿
-          container.addEventListener('touchmove', handleTouchMove, { passive: false });
-        }
+        if (e.touches.length !== 2) return;
+        initialDistance = getDistance(e.touches);
+        initialFontSize = fontSizeRef.current;
+        lastAppliedSize = fontSizeRef.current;
+        // 仅在双指触摸时动态添加非 passive 监听器，
+        // 避免单指滚动、文本选择被非 passive 监听器拖慢。
+        container.addEventListener('touchmove', handleTouchMove, {
+          passive: false,
+        });
       };
 
       const handleTouchEnd = (e: TouchEvent) => {
@@ -199,7 +308,9 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
         }
       };
 
-      container.addEventListener('touchstart', handleTouchStart, { passive: true });
+      container.addEventListener('touchstart', handleTouchStart, {
+        passive: true,
+      });
       container.addEventListener('touchend', handleTouchEnd);
       container.addEventListener('touchcancel', handleTouchEnd);
 
@@ -209,7 +320,12 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
         container.removeEventListener('touchend', handleTouchEnd);
         container.removeEventListener('touchcancel', handleTouchEnd);
       };
-    }, [fontSize, onFontSizeChange]);
+    }, []);
+
+    const languageExtension = useMemo(
+      () => getLanguageExtension(fileName),
+      [fileName]
+    );
 
     const extensions = useMemo(() => {
       const exts: Extension[] = [
@@ -222,43 +338,12 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
           searchKeymap: false, // 自定义搜索快捷键
           tabSize: 2,
         }),
-        EditorView.theme({
-          '&': { fontSize: `${fontSize}px`, height: '100%', width: '100%' },
-          '.cm-scroller': { overflow: 'auto' },
-          '.cm-content': {
-            fontFamily: "ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', Menlo, Monaco, Consolas, monospace",
-            lineHeight: '1.6',
-            minHeight: '100%',
-          },
-          '.cm-gutters': {
-            fontFamily: "ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', Menlo, Monaco, Consolas, monospace",
-            fontSize: `${fontSize}px`,
-            // 与代码区保持同一行高，否则行号和代码会逐行错位
-            lineHeight: '1.6',
-            fontVariantNumeric: 'tabular-nums',
-            borderRight: '1px solid rgba(127, 127, 127, 0.14)',
-            backgroundColor: 'transparent',
-          },
-          '.cm-lineNumbers .cm-gutterElement': {
-            padding: '0 8px 0 6px',
-            minWidth: '2.8em',
-            textAlign: 'right',
-            lineHeight: '1.6',
-          },
-          '.cm-activeLine': {
-            backgroundColor: 'rgba(127, 127, 127, 0.06)',
-            // 下划线画在当前代码行，而不是行号数字
-            boxShadow: 'inset 0 -1px 0 rgba(127, 127, 127, 0.24)',
-          },
-          '.cm-activeLineGutter': {
-            backgroundColor: 'rgba(127, 127, 127, 0.10)',
-            color: 'hsl(var(--primary))',
-            // 不加粗，避免行号宽度变化导致左右跳动
-          },
-        }),
         searchHighlightField,
         searchTheme,
         isDark ? githubDark : githubLight,
+        // 基础主题放在配色主题之后，确保 gutter/行高样式最后生效
+        editorBaseTheme,
+        activeLineUnderlineField,
         keymap.of([
           {
             key: 'Mod-f',
@@ -270,18 +355,18 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
           },
         ]),
       ];
-
-      const langExt = getLanguageExtension(fileName);
-      if (langExt) exts.push(langExt);
+      if (languageExtension) exts.push(languageExtension);
       if (wordWrap === 'on') exts.push(EditorView.lineWrapping);
-
       return exts;
-    }, [isMobile, fontSize, isDark, fileName, wordWrap]);
+    }, [isMobile, isDark, wordWrap, languageExtension]);
 
-    const handleCreateEditor = useCallback((view: EditorView) => {
-      viewRef.current = view;
-      if (onMount) onMount();
-    }, [onMount]);
+    const handleCreateEditor = useCallback(
+      (view: EditorView) => {
+        viewRef.current = view;
+        onMount?.();
+      },
+      [onMount]
+    );
 
     const throttleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastCursorRef = useRef<string>('');
@@ -299,7 +384,7 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
         const { head } = update.state.selection.main;
         const line = update.state.doc.lineAt(head);
         const newPos = `${line.number}:${head - line.from + 1}`;
-        
+
         if (newPos !== lastCursorRef.current) {
           lastCursorRef.current = newPos;
           if (!throttleTimer.current) {
@@ -312,8 +397,19 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
       }
     }, []);
 
+    const handleChange = useCallback(
+      (nextValue: string) => {
+        onChange?.(nextValue);
+      },
+      [onChange]
+    );
+
     return (
-      <div ref={containerRef} className="w-full h-full bg-background overflow-hidden">
+      <div
+        ref={containerRef}
+        className="w-full h-full bg-background overflow-hidden"
+        style={{ fontSize: `${fontSize}px` }}
+      >
         <CodeMirror
           className="h-full w-full [&>div.cm-theme]:h-full"
           value={value}
@@ -323,7 +419,7 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
           editable={!readOnly}
           readOnly={readOnly}
           autoFocus={autoFocus}
-          onChange={(v) => onChange && onChange(v)}
+          onChange={handleChange}
           onCreateEditor={handleCreateEditor}
           onUpdate={handleUpdate}
           basicSetup={false}

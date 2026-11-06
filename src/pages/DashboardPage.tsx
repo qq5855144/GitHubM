@@ -25,6 +25,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getUserRepos, getUserEvents, formatRelativeTime, formatNumber, getLanguageColor, getStarredCount } from '@/services/github';
 import { gqlGetContributions, gqlGetPinnedRepos } from '@/services/github-graphql';
 import type { GitHubRepo, GitHubEvent, ContributionCalendar, GQL_PinnedRepo } from '@/types/types';
+import RepoCard from '@/components/repo/RepoCard';
 import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
@@ -465,50 +466,9 @@ export default function DashboardPage() {
               <div className="px-4 pb-4 text-center text-muted-foreground text-sm py-8">
                 {i18n.t('暂无仓库')}</div>
             ) : (
-              <div className="divide-y divide-border">
+              <div className="p-3 space-y-2">
                 {repos.map((repo) => (
-                  <button
-                    key={repo.id}
-                    type="button"
-                    className="w-full px-4 py-3 hover:bg-secondary/50 transition-colors text-left"
-                    onClick={() => navigate(`/repos/${repo.full_name}`)}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-accent truncate">{repo.name}</span>
-                          {repo.private && (
-                            <Badge variant="outline" className="text-xs border-border text-muted-foreground h-4 px-1">{i18n.t('私有')}</Badge>
-                          )}
-                          {repo.fork && (
-                            <GitFork className="w-3 h-3 text-muted-foreground shrink-0" />
-                          )}
-                        </div>
-                        {repo.description && (
-                          <p className="text-xs text-muted-foreground mt-0.5 truncate text-pretty">{repo.description}</p>
-                        )}
-                        <div className="flex items-center gap-3 mt-1">
-                          {repo.language && (
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <span
-                                className="w-2 h-2 rounded-full"
-                                style={{ backgroundColor: getLanguageColor(repo.language) }}
-                              />
-                              {repo.language}
-                            </span>
-                          )}
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Star className="w-3 h-3" />
-                            {formatNumber(repo.stargazers_count)}
-                          </span>
-                        </div>
-                      </div>
-                      <span className="text-xs text-muted-foreground shrink-0 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatRelativeTime(repo.pushed_at)}
-                      </span>
-                    </div>
-                  </button>
+                  <RepoCard key={repo.id} repo={repo} compact />
                 ))}
               </div>
             )}

@@ -218,6 +218,7 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
           lineNumbers: true,
           foldGutter: !isMobile,
           highlightActiveLineGutter: true,
+          highlightActiveLine: true,
           searchKeymap: false, // 自定义搜索快捷键
           tabSize: 2,
         }),
@@ -236,8 +237,11 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
           '.cm-lineNumbers .cm-gutterElement': {
             padding: '0 8px 0 6px',
             minWidth: '2.6em',
-            // 用内阴影画下划线，避免 border 改变行高
-            boxShadow: 'inset 0 -1px 0 rgba(127, 127, 127, 0.16)',
+          },
+          '.cm-activeLine': {
+            backgroundColor: 'rgba(127, 127, 127, 0.06)',
+            // 下划线画在当前代码行，而不是行号数字
+            boxShadow: 'inset 0 -1px 0 rgba(127, 127, 127, 0.24)',
           },
           '.cm-activeLineGutter': {
             backgroundColor: 'rgba(127, 127, 127, 0.10)',

@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { UserLink } from '@/components/common/UserLink';
+import RepoCard from '@/components/repo/RepoCard';
 import {
   searchRepositories,
   searchIssues,
@@ -550,50 +551,19 @@ export default function SearchPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-0 bg-card border border-border rounded-lg overflow-hidden">
+        <div className={searchType === 'repositories' ? 'space-y-2' : 'space-y-0 bg-card border border-border rounded-lg overflow-hidden'}>
           {/* 仓库结果 */}
           {searchType === 'repositories' && (
             repos.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground">{i18n.t('无搜索结果')}</div>
             ) : (
-              repos.map((repo) => (
-                <SearchRepoContextMenu key={repo.id} repo={repo}>
-                  <button
-                    type="button"
-                    className="w-full p-4 hover:bg-secondary/50 transition-colors text-left border-b border-border last:border-0 group"
-                    onClick={() => navigate(`/repos/${repo.full_name}`)}
-                  >
-                    <div className="flex items-start gap-3">
-                      <BookOpen className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm font-medium text-accent group-hover:underline">
-                          {repo.name}
-                        </span>
-                        {repo.description && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 text-pretty">{repo.description}</p>
-                        )}
-                        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                          {repo.language && (
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getLanguageColor(repo.language) }} />
-                              {repo.language}
-                            </span>
-                          )}
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Star className="w-3 h-3" />{formatNumber(repo.stargazers_count)}
-                          </span>
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <GitFork className="w-3 h-3" />{formatNumber(repo.forks_count)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {formatRelativeTime(repo.updated_at)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                </SearchRepoContextMenu>
-              ))
+              <div className="space-y-2">
+                {repos.map((repo) => (
+                  <SearchRepoContextMenu key={repo.id} repo={repo}>
+                    <RepoCard repo={repo} showOwner />
+                  </SearchRepoContextMenu>
+                ))}
+              </div>
             )
           )}
 

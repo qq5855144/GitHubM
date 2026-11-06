@@ -37,6 +37,7 @@ import {
   unfollowUser,
 } from '@/services/github';
 import type { GitHubRepo, GitHubUser } from '@/types/types';
+import RepoCard from '@/components/repo/RepoCard';
 import { toast } from 'sonner';
 import i18n from '@/i18n';
 
@@ -63,59 +64,6 @@ function StatButton({
       <Icon className="w-4 h-4" />
       <span className="font-semibold text-foreground">{formatNumber(value)}</span>
       <span>{label}</span>
-    </button>
-  );
-}
-
-function RepoCard({ repo }: { repo: GitHubRepo }) {
-  const navigate = useNavigate();
-  return (
-    <button
-      type="button"
-      onClick={() => navigate(`/repos/${repo.full_name}`)}
-      className="text-left w-full bg-card border border-border rounded-xl p-4 hover:border-primary/50 hover:bg-secondary/30 active:scale-[0.99] transition-all"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <BookOpen className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <span className="text-sm font-semibold text-accent truncate">{repo.name}</span>
-            {repo.private && (
-              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-border text-muted-foreground">
-                {i18n.t('私有')}
-              </Badge>
-            )}
-            {repo.fork && (
-              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-border text-muted-foreground">
-                Fork
-              </Badge>
-            )}
-          </div>
-          {repo.description && (
-            <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{repo.description}</p>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground flex-wrap">
-        {repo.language && (
-          <span className="flex items-center gap-1">
-            <span
-              className="w-2.5 h-2.5 rounded-full shrink-0"
-              style={{ backgroundColor: getLanguageColor(repo.language) }}
-            />
-            {repo.language}
-          </span>
-        )}
-        <span className="flex items-center gap-1">
-          <Star className="w-3.5 h-3.5" />
-          {formatNumber(repo.stargazers_count)}
-        </span>
-        <span className="flex items-center gap-1">
-          <GitFork className="w-3.5 h-3.5" />
-          {formatNumber(repo.forks_count)}
-        </span>
-        <span className="ml-auto">{formatRelativeTime(repo.updated_at)}</span>
-      </div>
     </button>
   );
 }

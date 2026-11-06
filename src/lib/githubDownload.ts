@@ -14,8 +14,19 @@ export const DEFAULT_DOWNLOAD_PROXY_URL = 'https://wget.la/';
 /** 自动测速的内置候选；自定义地址也会加入候选列表。 */
 export const DOWNLOAD_PROXY_PRESETS = [
   { name: 'wget.la', baseUrl: 'https://wget.la/' },
+  // Operit 代理池
   { name: 'gh-proxy.com', baseUrl: 'https://gh-proxy.com/' },
+  { name: 'gh-proxy.net', baseUrl: 'https://gh-proxy.net/' },
+  { name: 'ghfast.top', baseUrl: 'https://ghfast.top/' },
+  { name: 'ghproxy.1888866.xyz', baseUrl: 'https://ghproxy.1888866.xyz/' },
+  { name: 'ghproxy.cfd', baseUrl: 'https://ghproxy.cfd/' },
+  { name: 'ghproxy.com', baseUrl: 'https://ghproxy.com/' },
+  { name: 'ghproxy.cxkpro.top', baseUrl: 'https://ghproxy.cxkpro.top/' },
+  { name: 'ghproxy.monkeyray.net', baseUrl: 'https://ghproxy.monkeyray.net/' },
   { name: 'ghproxy.net', baseUrl: 'https://ghproxy.net/' },
+  { name: 'gitproxy.mrhjx.cn', baseUrl: 'https://gitproxy.mrhjx.cn/' },
+  { name: 'hub.gitmirror.com', baseUrl: 'https://hub.gitmirror.com/' },
+  { name: 'mirror.ghproxy.com', baseUrl: 'https://mirror.ghproxy.com/' },
 ] as const;
 
 export interface DownloadProxyTestResult {
@@ -164,6 +175,7 @@ export function testFastestDownloadProxy(options: { timeoutMs?: number } = {}): 
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
         if (!text.trim()) throw new Error('空响应');
+        if (!text.includes('Hello World')) throw new Error('代理返回内容异常');
         return {
           ...candidate,
           ok: true,

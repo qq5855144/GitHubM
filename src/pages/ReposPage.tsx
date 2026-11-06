@@ -608,12 +608,12 @@ export default function ReposPage() {
         </div>
       </div>
 
-      {/* 仓库列表 */}
-      <div className="space-y-0 bg-card border border-border rounded-lg overflow-hidden">
+      {/* 仓库列表：卡片式布局（对齐用户主页仓库列表） */}
+      <div className="space-y-2">
         {loading ? (
-          <div className="divide-y divide-border">
+          <div className="space-y-2">
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="p-4">
+              <div key={i} className="bg-card border border-border rounded-xl p-4">
                 <Skeleton className="h-5 w-48 bg-muted mb-2" />
                 <Skeleton className="h-4 w-full bg-muted mb-2" />
                 <Skeleton className="h-4 w-32 bg-muted" />
@@ -621,7 +621,7 @@ export default function ReposPage() {
             ))}
           </div>
         ) : filteredRepos.length === 0 ? (
-          <div className="py-16 text-center">
+          <div className="bg-card border border-border rounded-xl py-16 text-center">
             <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
             <p className="text-foreground font-medium">{i18n.t('暂无仓库')}</p>
             <p className="text-muted-foreground text-sm mt-1">
@@ -629,20 +629,21 @@ export default function ReposPage() {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="space-y-2">
             {filteredRepos.map((repo) => (
               <ContextMenu key={repo.id}>
                 <ContextMenuTrigger asChild>
                   <div
                     role="button"
                     tabIndex={0}
-                    className="w-full p-4 hover:bg-secondary/50 transition-colors text-left group cursor-pointer"
+                    className="w-full bg-card border border-border rounded-xl p-4 hover:border-primary/50 hover:bg-secondary/30 active:scale-[0.99] transition-all text-left group cursor-pointer"
                     onClick={() => navigate(`/repos/${repo.full_name}`)}
                     onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/repos/${repo.full_name}`); }}
                   >
                     <div className="flex items-start gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
+                          <BookOpen className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                           <span className="text-sm font-semibold text-accent group-hover:underline">
                             {repo.name}
                           </span>
@@ -671,7 +672,7 @@ export default function ReposPage() {
                             {repo.description}
                           </p>
                         )}
-                        <div className="flex items-center gap-4 mt-2 flex-wrap">
+                        <div className="flex items-center gap-3 mt-3 flex-wrap">
                           {repo.language && (
                             <span className="flex items-center gap-1 text-xs text-muted-foreground">
                               <span

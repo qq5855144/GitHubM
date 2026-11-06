@@ -231,6 +231,18 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
           },
           '.cm-gutters': {
             fontFamily: "ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', Menlo, Monaco, Consolas, monospace",
+            borderRight: '1px solid rgba(127, 127, 127, 0.14)',
+          },
+          '.cm-lineNumbers .cm-gutterElement': {
+            padding: '0 8px 0 6px',
+            minWidth: '2.6em',
+            // 用内阴影画下划线，避免 border 改变行高
+            boxShadow: 'inset 0 -1px 0 rgba(127, 127, 127, 0.16)',
+          },
+          '.cm-activeLineGutter': {
+            backgroundColor: 'rgba(127, 127, 127, 0.10)',
+            color: 'hsl(var(--primary))',
+            fontWeight: '600',
           },
         }),
         searchHighlightField,

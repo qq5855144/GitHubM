@@ -59,6 +59,9 @@ export interface GraphEvent {
     | 'checkpoint'
     | 'verify_start'
     | 'verify_end'
+    | 'deliverable_start'
+    | 'deliverable_end'
+    | 'paused'
     | 'final'
     | 'error';
   step?: number;
@@ -66,6 +69,8 @@ export interface GraphEvent {
   toolCallId?: string;
   content?: string;
   error?: string;
+  /** 工具执行耗时（毫秒） */
+  elapsedMs?: number;
   plan?: GraphPlanStep[];
   verification?: GraphVerificationResult;
 }
@@ -92,17 +97,34 @@ export type GraphVerifier = (
   signal?: AbortSignal
 ) => Promise<GraphVerificationResult>;
 
+/** 交付检查：由模型判断当前结果是否已经可交付 */
+export interface GraphDeliverableResult {
+  deliverable: boolean;
+  missing?: string;
+}
+
+export type GraphDeliverableAssessor = (
+  messages: GraphMessage[],
+  finalText: string,
+  signal?: AbortSignal
+) => Promise<GraphDeliverableResult>;
+
 export interface RunLangGraphOptions {
   model: GraphModel;
   executeTool: GraphToolExecutor;
   messages: GraphMessage[];
   signal?: AbortSignal;
-  maxSteps?: number;
   maxVerifyAttempts?: number;
+  /** 交付检查最多追问次数，避免检查器自身死循环；默认 3 */
+  maxDeliverableChecks?: number;
+  /** 框架级防死循环上限，不是产品层“工具轮数”；默认 1000 */
+  recursionLimit?: number;
   /** START → plan → model */
   planner?: GraphPlanner;
   /** 写操作后的验证节点 */
   verifier?: GraphVerifier;
+  /** 交付检查器；不传则模型输出最终答案即结束 */
+  assessDeliverable?: GraphDeliverableAssessor;
   /** 工具风险分类；默认按工具名推断 */
   classifyTool?: (name: string) => GraphToolRisk;
   /** 每次工具执行 / 验证后调用，用于持久化 checkpoint */
@@ -161,6 +183,18 @@ const AgentStateAnnotation = Annotation.Root({
     reducer: (_current, update) => update,
     default: () => '',
   }),
+  paused: Annotation<boolean>({
+    reducer: (_current, update) => update,
+    default: () => false,
+  }),
+  deliverable: Annotation<boolean>({
+    reducer: (_current, update) => update,
+    default: () => false,
+  }),
+  deliverableChecks: Annotation<number>({
+    reducer: (_current, update) => update,
+    default: () => 0,
+  }),
 });
 
 /**
@@ -168,15 +202,17 @@ const AgentStateAnnotation = Annotation.Root({
  *
  *   START → plan → model ──(toolCall)──→ tools → checkpoint → model
  *                    ├──(需要验证)──────→ verify → model
- *                    └──(完成)──────────→ END
+ *                    ├──(交付检查未过)──→ model
+ *                    └──(可交付)────────→ END
  */
 export function createAgentGraph(options: {
   model: GraphModel;
   executeTool: GraphToolExecutor;
-  maxSteps: number;
   maxVerifyAttempts: number;
+  maxDeliverableChecks: number;
   planner?: GraphPlanner;
   verifier?: GraphVerifier;
+  assessDeliverable?: GraphDeliverableAssessor;
   classifyTool: (name: string) => GraphToolRisk;
   onCheckpoint?: RunLangGraphOptions['onCheckpoint'];
   signal?: AbortSignal;
@@ -185,10 +221,11 @@ export function createAgentGraph(options: {
   const {
     model,
     executeTool,
-    maxSteps,
     maxVerifyAttempts,
+    maxDeliverableChecks,
     planner,
     verifier,
+    assessDeliverable,
     classifyTool,
     onCheckpoint,
     signal,
@@ -222,11 +259,6 @@ export function createAgentGraph(options: {
     })
     .addNode('model', async (state) => {
       if (signal?.aborted) return { error: 'aborted', finalText: '' };
-      if (state.steps >= maxSteps) {
-        const error = `已达到最大工具调用轮次（${maxSteps} 轮）`;
-        onEvent?.({ type: 'error', step: state.steps, error });
-        return { error, finalText: '' };
-      }
 
       onEvent?.({ type: 'model_start', step: state.steps });
       const result = await model(state.messages, signal);
@@ -244,11 +276,11 @@ export function createAgentGraph(options: {
       });
 
       if (!toolCall) {
-        onEvent?.({ type: 'final', step: state.steps, content: result.content });
         return {
           messages: [assistantMessage],
           pendingToolCall: null,
           finalText: result.content,
+          deliverable: false,
         };
       }
 
@@ -263,6 +295,7 @@ export function createAgentGraph(options: {
       if (!call) return { pendingToolCall: null };
 
       const risk = classifyTool(call.name);
+      const toolStartedAt = Date.now();
       onEvent?.({ type: 'tool_start', step: state.steps, tool: call.name, toolCallId: call.id });
       let output: string;
       try {
@@ -277,6 +310,7 @@ export function createAgentGraph(options: {
         tool: call.name,
         toolCallId: call.id,
         content: output,
+        elapsedMs: Date.now() - toolStartedAt,
       });
 
       return {
@@ -293,6 +327,43 @@ export function createAgentGraph(options: {
     .addNode('checkpoint', async (state) => {
       await callCheckpoint(state);
       return {};
+    })
+    .addNode('deliverable_check', async (state) => {
+      // 没有执行过工具，或没有配置检查器：模型输出最终答案即视为可交付
+      if (!assessDeliverable || state.steps === 0 || state.deliverableChecks >= maxDeliverableChecks) {
+        onEvent?.({ type: 'final', step: state.steps, content: state.finalText });
+        return { deliverable: true };
+      }
+
+      onEvent?.({ type: 'deliverable_start', step: state.steps });
+      let result: GraphDeliverableResult;
+      try {
+        result = await assessDeliverable(state.messages, state.finalText, signal);
+      } catch {
+        // 检查器异常不应阻塞任务交付
+        result = { deliverable: true };
+      }
+      onEvent?.({
+        type: 'deliverable_end',
+        step: state.steps,
+        content: result.missing ?? '',
+        ...(result.deliverable ? {} : { error: result.missing ?? '当前结果还不可交付' }),
+      });
+
+      if (result.deliverable) {
+        onEvent?.({ type: 'final', step: state.steps, content: state.finalText });
+        return { deliverable: true };
+      }
+
+      return {
+        messages: [{
+          role: 'user' as const,
+          content: `[交付检查] 当前结果还不能交付：${result.missing || '任务尚未完成'}\n请继续完成剩余工作并验证，不要提前结束。`,
+        }],
+        finalText: '',
+        deliverable: false,
+        deliverableChecks: state.deliverableChecks + 1,
+      };
     })
     .addNode('verify', async (state) => {
       if (!verifier) return {};
@@ -341,9 +412,14 @@ export function createAgentGraph(options: {
         ) {
           return 'verify';
         }
-        return END;
+        return 'deliverable_check';
       },
-      { tools: 'tools', verify: 'verify', [END]: END }
+      { tools: 'tools', verify: 'verify', deliverable_check: 'deliverable_check' }
+    )
+    .addConditionalEdges(
+      'deliverable_check',
+      (state) => (state.deliverable ? END : 'model'),
+      { [END]: END, model: 'model' }
     )
     .addEdge('tools', 'checkpoint')
     .addEdge('checkpoint', 'model')
@@ -359,40 +435,64 @@ export interface LangGraphRunResult {
   steps: number;
   verification?: GraphVerificationResult;
   error: string;
+  paused?: boolean;
 }
 
 /** 执行一次图，返回完整状态与最终回答 */
 export async function runLangGraphAgent(
   options: RunLangGraphOptions
 ): Promise<LangGraphRunResult> {
-  const maxSteps = options.maxSteps ?? 20;
   const graph = createAgentGraph({
     model: options.model,
     executeTool: options.executeTool,
-    maxSteps,
     maxVerifyAttempts: options.maxVerifyAttempts ?? 2,
+    maxDeliverableChecks: options.maxDeliverableChecks ?? 3,
     planner: options.planner,
     verifier: options.verifier,
+    assessDeliverable: options.assessDeliverable,
     classifyTool: options.classifyTool ?? defaultClassifyTool,
     onCheckpoint: options.onCheckpoint,
     signal: options.signal,
     onEvent: options.onEvent,
   });
 
-  const result = await graph.invoke(
-    {
-      messages: options.messages,
-      plan: [],
-      pendingToolCall: null,
-      steps: 0,
-      verificationAttempts: 0,
-      needsVerification: false,
-      verification: undefined,
-      finalText: '',
-      error: '',
-    },
-    { recursionLimit: maxSteps * 3 + (options.verifier ? 8 : 0) + 8 }
-  );
+  const initialState = {
+    messages: options.messages,
+    plan: [],
+    pendingToolCall: null,
+    steps: 0,
+    verificationAttempts: 0,
+    needsVerification: false,
+    verification: undefined,
+    finalText: '',
+    error: '',
+    paused: false,
+    deliverable: false,
+    deliverableChecks: 0,
+  };
+
+  let result: Awaited<ReturnType<typeof graph.invoke>>;
+  try {
+    result = await graph.invoke(initialState, {
+      // 框架级防死循环，不是产品层的工具轮数限制
+      recursionLimit: options.recursionLimit ?? 1000,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/recursion|GRAPH_RECURSION_LIMIT/i.test(message)) {
+      const pauseMessage = '⚠️ 任务执行步数超过框架安全上限，已保存当前进度。回复「继续」可接着执行。';
+      options.onEvent?.({ type: 'paused', step: 0, content: pauseMessage });
+      return {
+        messages: options.messages,
+        plan: [],
+        finalText: pauseMessage,
+        steps: 0,
+        error: '',
+        paused: true,
+      };
+    }
+    throw err;
+  }
 
   return {
     messages: result.messages,
@@ -401,5 +501,6 @@ export async function runLangGraphAgent(
     steps: result.steps,
     verification: result.verification,
     error: result.error,
+    paused: result.paused,
   };
 }

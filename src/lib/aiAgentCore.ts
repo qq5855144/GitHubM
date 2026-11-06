@@ -26,6 +26,7 @@ import {
   type GraphToolResult,
   type GraphToolRisk,
   type GraphVerificationResult,
+  type GraphDeliverableResult,
 } from './agent/langgraph/runtime';
 import {
   summarizeCheckRuns,
@@ -6493,11 +6494,55 @@ export function createLangGraphAdapters(options: LangGraphAdapterOptions) {
     return { passed, summary: report };
   };
 
+  /**
+   * 交付检查：不再用固定工具轮数决定结束，而是让模型判断
+   * “当前结果是否已经能满足用户目标、是否可交付”。
+   * 返回 NO 时附带缺口，运行时会把缺口作为下一轮输入继续执行。
+   */
+  const assessDeliverable = async (
+    messages: GraphMessage[],
+    finalText: string,
+  ): Promise<GraphDeliverableResult> => {
+    const checkMessages = [
+      ...messages.map(toInternalGraphMessage),
+      {
+        role: 'user' as const,
+        content: [
+          '[交付检查] 你是任务验收员，只判断当前结果是否已经可交付。',
+          '请对照用户目标和已执行工具结果，检查：',
+          '1. 用户要求的功能/修改是否已经完成；',
+          '2. 是否还有未处理的报错、缺失文件或未验证的写操作；',
+          '3. 当前答复是否足以让用户直接使用或验收。',
+          '',
+          '候选交付内容：',
+          finalText.slice(0, 4000),
+          '',
+          '只输出两行：',
+          'DELIVERABLE:YES 或 DELIVERABLE:NO',
+          'MISSING:若为 NO，写一句具体缺口；若为 YES，留空',
+        ].join('\n'),
+      },
+    ];
+    try {
+      const result = await callLLM({ ...cfg, temperature: 0.1 }, checkMessages);
+      const text = result.text ?? '';
+      const verdict = text.match(/DELIVERABLE\s*:\s*(YES|NO)/i)?.[1]?.toUpperCase();
+      const missing = text.match(/MISSING\s*:\s*([^\n]*)/i)?.[1]?.trim();
+      if (verdict === 'NO') {
+        return { deliverable: false, missing: missing || '任务仍有未完成项' };
+      }
+    } catch {
+      // 检查器异常时不阻塞主流程
+    }
+    return { deliverable: true };
+  };
+
   return {
     model,
     executeTool: executeGraphTool,
     planner,
     verifier,
+    assessDeliverable,
     classifyTool: (name: string) => getToolRisk(name) as GraphToolRisk,
   };
 }
@@ -6534,6 +6579,7 @@ export async function runAiAgentLangGraph(options: RunAgentOptions): Promise<voi
   let firstTokenAt: number | undefined;
   let totalChars = 0;
   let streamedChars = 0;
+  let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
 
   try {
     const body = requestBody;
@@ -6562,6 +6608,10 @@ export async function runAiAgentLangGraph(options: RunAgentOptions): Promise<voi
     };
     const { sendTyped, sendChunk, sendDone, sendError } = createSSEStream(streamId, turnId, emit);
 
+    // 长工具调用 / 规划阶段保持 SSE 活跃，避免 WebView、代理判定空闲断开
+    const heartbeat = async () => { await sendTyped({ type: "heartbeat" }); };
+    heartbeatTimer = setInterval(() => { void heartbeat(); }, 15_000);
+
     const systemPrompt = buildSystemPrompt(targetBranch, true, cfg.type, cfg);
     const requestMessages = (body.messages as Array<{ role?: string; content?: string }> | undefined) ?? [];
     const graphMessages: GraphMessage[] = [
@@ -6584,6 +6634,7 @@ export async function runAiAgentLangGraph(options: RunAgentOptions): Promise<voi
       onThinkingChunk: async (chunk) => {
         await sendTyped({ type: "think_chunk", content: chunk });
       },
+      onHeartbeat: heartbeat,
     });
 
     const { runLangGraphAgent } = await import('./agent/langgraph/runtime');
@@ -6593,8 +6644,8 @@ export async function runAiAgentLangGraph(options: RunAgentOptions): Promise<voi
       executeTool: adapters.executeTool,
       planner: adapters.planner,
       verifier: adapters.verifier,
+      assessDeliverable: adapters.assessDeliverable,
       classifyTool: adapters.classifyTool,
-      maxSteps: 20,
       maxVerifyAttempts: 2,
       signal,
       onCheckpoint: (snapshot) => {
@@ -6622,7 +6673,7 @@ export async function runAiAgentLangGraph(options: RunAgentOptions): Promise<voi
             id: event.toolCallId ?? `g_${Date.now()}`,
             status: (event.content ?? "").startsWith("❌") ? "fail" : "success",
             result: (event.content ?? "").slice(0, 2000),
-            elapsedMs: 0,
+            elapsedMs: event.elapsedMs ?? 0,
           });
         } else if (event.type === "verify_start") {
           void sendTyped({ type: "status_info", message: "正在执行 CI 验证…" });
@@ -6640,7 +6691,8 @@ export async function runAiAgentLangGraph(options: RunAgentOptions): Promise<voi
     });
 
     if (result.error) throw new Error(result.error);
-    const remaining = result.finalText.slice(streamedChars);
+    // 暂停提示没有经过模型流式输出，必须完整发送；正常回答只补发尚未流出的部分
+    const remaining = result.paused ? result.finalText : result.finalText.slice(streamedChars);
     if (remaining) await sendChunk(remaining);
 
     const finishedAt = Date.now();
@@ -6657,6 +6709,8 @@ export async function runAiAgentLangGraph(options: RunAgentOptions): Promise<voi
     onComplete();
   } catch (err) {
     try { onError(err as Error); } catch { /* ignore */ }
+  } finally {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
   }
 }
 

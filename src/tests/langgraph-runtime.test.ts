@@ -36,7 +36,6 @@ describe('LangGraph agent runtime', () => {
         return 'hello from README';
       },
       onEvent: e => events.push(e),
-      maxSteps: 5,
     });
 
     expect(calls).toHaveLength(1);
@@ -69,7 +68,6 @@ describe('LangGraph agent runtime', () => {
         return { content: '已处理工具错误' };
       },
       executeTool: async () => { throw new Error('boom'); },
-      maxSteps: 5,
     });
     expect(result.finalText).toBe('已处理工具错误');
   });
@@ -87,7 +85,6 @@ describe('LangGraph agent runtime', () => {
       executeTool: async () => 'ok',
       onCheckpoint: s => { checkpoints.push(s.plan.length); },
       onEvent: e => events.push(e),
-      maxSteps: 3,
     });
     expect(result.plan).toHaveLength(2);
     expect(events.map(e => e.type)).toContain('plan');
@@ -113,7 +110,6 @@ describe('LangGraph agent runtime', () => {
       executeTool: async () => ({ output: 'patched', risk: 'write' as const }),
       verifier: async () => ({ passed: true, summary: 'CI passed' }),
       onEvent: e => events.push(e),
-      maxSteps: 5,
     });
     expect(events.map(e => e.type)).toContain('verify_start');
     expect(events.map(e => e.type)).toContain('verify_end');
@@ -121,18 +117,39 @@ describe('LangGraph agent runtime', () => {
     expect(result.finalText).toBe('修改完成');
   });
 
-  it('最大轮次后停止', async () => {
+  it('交付检查未通过时继续执行，直到可交付', async () => {
+    const events: GraphEvent[] = [];
+    let turn = 0;
+    let checks = 0;
     const result = await runLangGraphAgent({
-      messages: [{ role: 'user', content: '无限调用' }],
-      model: async () => ({
-        content: '',
-        toolCall: { id: `c-${Date.now()}`, name: 'read_file', arguments: {} },
-      }),
-      executeTool: async () => 'ok',
-      maxSteps: 2,
+      messages: [{ role: 'user', content: '修好构建并确认可交付' }],
+      model: async () => {
+        turn++;
+        if (turn === 1) {
+          return {
+            content: '',
+            toolCall: { id: 'c1', name: 'run_build', arguments: {} },
+          };
+        }
+        if (turn === 2) return { content: '已修复，应该可以了' };
+        return { content: '构建已通过，可以交付' };
+      },
+      executeTool: async () => 'build passed',
+      assessDeliverable: async () => {
+        checks++;
+        return checks === 1
+          ? { deliverable: false, missing: '还没有实际验证构建结果' }
+          : { deliverable: true };
+      },
+      onEvent: e => events.push(e),
     });
-    expect(result.steps).toBe(2);
-    expect(result.error).toContain('最大工具调用轮次');
-    expect(result.finalText).toBe('');
+
+    expect(turn).toBe(3);
+    expect(checks).toBe(2);
+    expect(result.finalText).toBe('构建已通过，可以交付');
+    expect(result.error).toBe('');
+    expect(events.map(e => e.type)).toContain('deliverable_start');
+    expect(events.map(e => e.type)).toContain('deliverable_end');
+    expect(events.map(e => e.type)).toContain('final');
   });
 });

@@ -51,6 +51,7 @@ import {
   WrapText,
   MessageSquare,
   Rocket,
+  Settings2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -117,7 +118,7 @@ import type { GitHubContent, GitHubBranch } from '@/types/types';
 import { toast } from 'sonner';
 import { decodeBase64Content, copyToClipboard } from '@/lib/utils';
 import { getFileIconInfo, isImageFile } from '@/components/common/FileIcon';
-import { downloadGithubFile, downloadRepoDirectoryZip, isWgetLaEnabled, setWgetLaEnabled } from '@/lib/githubDownload';
+import { DEFAULT_ACCEL_URL, downloadGithubFile, downloadRepoDirectoryZip, getAccelBaseUrl, isWgetLaEnabled, setAccelBaseUrl, setWgetLaEnabled } from '@/lib/githubDownload';
 import i18n from "@/i18n";
 
 /**
@@ -293,6 +294,8 @@ export default function CodeBrowserPage() {
   const [wgetAccel, setWgetAccel] = useState(() => isWgetLaEnabled());
   const [dirDownloading, setDirDownloading] = useState(false);
   const [dirProgress, setDirProgress] = useState<{ done: number; total: number } | null>(null);
+  const [accelDialogOpen, setAccelDialogOpen] = useState(false);
+  const [accelUrlDraft, setAccelUrlDraft] = useState(() => getAccelBaseUrl());
 
   // 判断当前文件是否是图片
   const currentIsImage = currentFile ? isImageFile(currentFile.name) : false;
@@ -377,6 +380,19 @@ export default function CodeBrowserPage() {
       setDirProgress(null);
     }
   }, [owner, repo, currentBranch, filePath, token, dirDownloading, wgetAccel]);
+  const openAccelSettings = useCallback(() => {
+    setAccelUrlDraft(getAccelBaseUrl());
+    setAccelDialogOpen(true);
+  }, []);
+
+  const saveAccelSettings = useCallback(() => {
+    const next = accelUrlDraft.trim() || DEFAULT_ACCEL_URL;
+    setAccelBaseUrl(next);
+    setAccelUrlDraft(getAccelBaseUrl());
+    setAccelDialogOpen(false);
+    toast.success(i18n.t('下载加速地址已保存'));
+  }, [accelUrlDraft]);
+
 
   // ── 导航栈同步：每次 filePath 变化时更新 sessionStorage 导航栈 ───────────────
   // 这样面包屑点击时可以通过 navigate(-n) 回溯，而不是 push 新条目
@@ -1334,16 +1350,19 @@ export default function CodeBrowserPage() {
                       <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('下载当前目录 ZIP')}</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => void handleDownloadDirectory('')}>
                       <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('下载整个仓库 ZIP')}</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={openAccelSettings}>
+                      <Settings2 className="w-3.5 h-3.5 mr-2" />{i18n.t('下载加速设置…')}</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button variant="ghost" size="icon"
                   className={`h-7 w-7 border border-border shrink-0 ${wgetAccel ? 'text-primary bg-primary/10 border-primary/30' : 'text-muted-foreground hover:bg-secondary'}`}
-                  title={wgetAccel ? i18n.t('wget.la 加速已开启') : i18n.t('wget.la 加速已关闭')}
+                  title={wgetAccel ? i18n.t('下载加速已开启') : i18n.t('下载加速已关闭')}
                   onClick={() => {
                     const next = !wgetAccel;
                     setWgetAccel(next);
                     setWgetLaEnabled(next);
-                    toast.success(next ? i18n.t('已开启 wget.la 加速') : i18n.t('已关闭 wget.la 加速'));
+                    toast.success(next ? i18n.t('已开启下载加速') : i18n.t('已关闭下载加速'));
                   }}>
                   <Rocket className="w-3.5 h-3.5" />
                 </Button>
@@ -1383,16 +1402,19 @@ export default function CodeBrowserPage() {
                     )}
                     <DropdownMenuItem onClick={() => void handleDownloadDirectory(currentFile.path.split('/').slice(0, -1).join('/'))}>
                       <FolderOpen className="w-3.5 h-3.5 mr-2" />{i18n.t('下载所在目录 ZIP')}</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={openAccelSettings}>
+                      <Settings2 className="w-3.5 h-3.5 mr-2" />{i18n.t('下载加速设置…')}</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button variant="ghost" size="icon"
                   className={`h-7 w-7 border border-border shrink-0 ${wgetAccel ? 'text-primary bg-primary/10 border-primary/30' : 'text-muted-foreground hover:bg-secondary'}`}
-                  title={wgetAccel ? i18n.t('wget.la 加速已开启') : i18n.t('wget.la 加速已关闭')}
+                  title={wgetAccel ? i18n.t('下载加速已开启') : i18n.t('下载加速已关闭')}
                   onClick={() => {
                     const next = !wgetAccel;
                     setWgetAccel(next);
                     setWgetLaEnabled(next);
-                    toast.success(next ? i18n.t('已开启 wget.la 加速') : i18n.t('已关闭 wget.la 加速'));
+                    toast.success(next ? i18n.t('已开启下载加速') : i18n.t('已关闭下载加速'));
                   }}>
                   <Rocket className="w-3.5 h-3.5" />
                 </Button>
@@ -1901,6 +1923,41 @@ export default function CodeBrowserPage() {
       </div>
       </div>
       
+      <Dialog open={accelDialogOpen} onOpenChange={setAccelDialogOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              <Rocket className="w-4 h-4 text-primary" />{i18n.t('下载加速设置')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-sm text-muted-foreground">{i18n.t('加速地址或模板')}</Label>
+              <Input
+                value={accelUrlDraft}
+                onChange={(e) => setAccelUrlDraft(e.target.value)}
+                placeholder={DEFAULT_ACCEL_URL}
+                className="bg-secondary border-border text-foreground font-mono text-sm"
+              />
+            </div>
+            <div className="text-xs text-muted-foreground space-y-1 leading-relaxed">
+              <p>{i18n.t('前缀模式：')}<code className="font-mono">https://wget.la/</code></p>
+              <p>{i18n.t('模板模式：')}<code className="font-mono">{'https://proxy.example/?url={url}'}</code></p>
+              <p>{i18n.t('也支持 {url_encoded} 占位符；留空恢复默认。')}</p>
+              <p>{i18n.t('加速仅对公开 GitHub 资源生效，私有仓库仍走 Token 直连。')}</p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="border-border" onClick={() => {
+              setAccelUrlDraft(DEFAULT_ACCEL_URL);
+              setAccelBaseUrl('');
+              toast.success(i18n.t('已恢复默认加速地址'));
+            }}>{i18n.t('恢复默认')}</Button>
+            <Button onClick={saveAccelSettings}>{i18n.t('保存')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* 桌面端 Status Bar */}
       <div className="hidden md:flex items-center justify-between px-3 h-6 border-t border-border bg-[#007acc] text-white text-[10px] shrink-0 font-mono z-20 select-none">
         <div className="flex items-center gap-4">

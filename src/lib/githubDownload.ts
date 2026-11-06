@@ -1,7 +1,9 @@
 import { zipSync } from 'fflate';
-import { getBranch, getGitTree } from '@/services/github';
+import { getBranch, getGitBlob, getGitTree } from '@/services/github';
 
 const ACCEL_KEY = 'github_download_wget_la';
+const ACCEL_URL_KEY = 'github_download_accel_url';
+export const DEFAULT_ACCEL_URL = 'https://wget.la/';
 
 export function isWgetLaEnabled(): boolean {
   try {
@@ -18,9 +20,29 @@ export function setWgetLaEnabled(enabled: boolean): void {
 }
 
 /** https://wget.la/https://github.com/... —— 只对公开 GitHub 资源有效 */
+export function getAccelBaseUrl(): string {
+  try {
+    return localStorage.getItem(ACCEL_URL_KEY) || DEFAULT_ACCEL_URL;
+  } catch {
+    return DEFAULT_ACCEL_URL;
+  }
+}
+
+export function setAccelBaseUrl(value: string): void {
+  try {
+    const clean = value.trim();
+    if (!clean) localStorage.removeItem(ACCEL_URL_KEY);
+    else localStorage.setItem(ACCEL_URL_KEY, clean);
+  } catch { /* ignore */ }
+}
+
+/** 支持前缀或模板：https://proxy/、https://proxy/?url={url}、...?url={url_encoded} */
 export function toWgetLaUrl(url: string): string {
   if (!/^https?:\/\//i.test(url)) return url;
-  return `https://wget.la/${url}`;
+  const template = getAccelBaseUrl();
+  if (template.includes('{url_encoded}')) return template.replace('{url_encoded}', encodeURIComponent(url));
+  if (template.includes('{url}')) return template.replace('{url}', url);
+  return `${template.replace(/\/+$/, '')}/${url}`;
 }
 
 function isGitHubDownloadUrl(url: string): boolean {
@@ -66,6 +88,14 @@ export async function downloadGithubFile(
   triggerBlobDownload(await res.blob(), filename);
 }
 
+function base64ToBytes(base64: string): Uint8Array {
+  const clean = base64.replace(/\s/g, '');
+  const binary = atob(clean);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 function encodePath(path: string): string {
   return path.split('/').map(encodeURIComponent).join('/');
 }
@@ -104,11 +134,10 @@ export async function downloadRepoDirectoryZip(params: {
   async function worker() {
     while (cursor < blobs.length) {
       const blob = blobs[cursor++];
-      const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${commitSha}/${encodePath(blob.path)}`;
-      const res = await fetch(rawUrl, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
-      if (!res.ok) throw new Error(`下载 ${blob.path} 失败：HTTP ${res.status}`);
+      // 走 Git Blob API，避免 raw.githubusercontent.com 对 Authorization 的 CORS 预检失败
+      const data = await getGitBlob(owner, repo, blob.sha);
       const relative = basePrefix ? blob.path.slice(basePrefix.length) : blob.path;
-      entries[`${rootName}/${relative}`] = new Uint8Array(await res.arrayBuffer());
+      entries[`${rootName}/${relative}`] = base64ToBytes(data.content);
       done++;
       onProgress?.(done, blobs.length);
     }

@@ -79,7 +79,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
     setTestState('testing');
     setTestResult({});
     try {
-      const data = await testProviderConnection(draft.type, draft.api_key, draft.endpoint, draft.model);
+      const data = await testProviderConnection(draft.type, draft.api_key, draft.endpoint, draft.model, draft.proxy_url);
       if (data.success) {
         setTestState('success');
         setTestResult({ elapsedMs: data.elapsedMs });

@@ -160,12 +160,17 @@ function ReleaseItem({
   onDelete: (id: number) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [dlZip, setDlZip] = useState(false);
   const [dlTar, setDlTar] = useState(false);
   const totalSize = release.assets.reduce((sum, a) => sum + a.size, 0);
 
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) setNotesOpen(false);
+  };
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={open} onOpenChange={handleOpenChange}>
       <CollapsibleTrigger className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors text-left group">
         <Tag className="w-4 h-4 text-primary shrink-0" />
         <div className="flex-1 min-w-0">
@@ -203,12 +208,22 @@ function ReleaseItem({
       <CollapsibleContent>
         <div className="border-t border-border bg-secondary/10">
           {release.body && (
-            <div className="px-4 py-3 border-b border-border/50">
-              <p className="text-xs font-medium text-muted-foreground mb-1.5">{i18n.t('发布说明')}</p>
-              <div className="text-sm text-foreground whitespace-pre-wrap break-words leading-relaxed max-h-72 overflow-y-auto rounded-md bg-background/60 border border-border/50 p-3">
-                {release.body}
-              </div>
-            </div>
+            <Collapsible open={notesOpen} onOpenChange={setNotesOpen}>
+              <CollapsibleTrigger className="w-full flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border/50 hover:bg-secondary/30 transition-colors text-left">
+                <span className="text-xs font-medium text-muted-foreground">{i18n.t('发布说明')}</span>
+                <span className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
+                  {notesOpen ? i18n.t('收起') : i18n.t('展开')}
+                  <ChevronRight className={`w-3.5 h-3.5 transition-transform ${notesOpen ? 'rotate-90' : ''}`} />
+                </span>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="px-4 py-3 border-b border-border/50">
+                  <div className="text-sm text-foreground whitespace-pre-wrap break-words leading-relaxed max-h-72 overflow-y-auto rounded-md bg-background/60 border border-border/50 p-3">
+                    {release.body}
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           )}
           {/* 源码下载按钮（zipball / tarball 均为 api.github.com 接口，需携带 token） */}
           <div className="flex gap-2 px-4 py-2.5 border-b border-border/50 flex-wrap">

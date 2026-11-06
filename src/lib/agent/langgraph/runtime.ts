@@ -106,6 +106,7 @@ export interface GraphDeliverableResult {
 export type GraphDeliverableAssessor = (
   messages: GraphMessage[],
   finalText: string,
+  plan: GraphPlanStep[],
   signal?: AbortSignal
 ) => Promise<GraphDeliverableResult>;
 
@@ -338,7 +339,7 @@ export function createAgentGraph(options: {
       onEvent?.({ type: 'deliverable_start', step: state.steps });
       let result: GraphDeliverableResult;
       try {
-        result = await assessDeliverable(state.messages, state.finalText, signal);
+        result = await assessDeliverable(state.messages, state.finalText, state.plan, signal);
       } catch {
         // 检查器异常不应阻塞任务交付
         result = { deliverable: true };

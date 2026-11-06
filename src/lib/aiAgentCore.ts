@@ -791,7 +791,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
 // 默认无状态模型代理（Cloudflare Worker + 自有域名，避免 workers.dev 在部分网络被污染）
 const DEFAULT_LLM_PROXY_URL = 'https://llm.callact.xyz';
 
-function buildLLMRequest(cfg: ModelConfig): {
+function buildLLMRequest(cfg: ModelConfig, disableTools = false): {
   url: string;
   headers: Record<string, string>;
   bodyExtra: Record<string, unknown>;
@@ -800,7 +800,7 @@ function buildLLMRequest(cfg: ModelConfig): {
   const tempExtra = cfg.temperature !== undefined ? { temperature: cfg.temperature } : {};
   // 支持 FC 的模型注入 tools 定义，并设置 tool_choice:"auto" 让模型自主决定是否调用工具
   // parallel_tool_calls: 模型可单轮返回多个工具调用，Agent 循环并行执行（只读工具）
-  const fcExtra = supportsFunctionCalling(cfg.type, cfg.model)
+  const fcExtra = !disableTools && supportsFunctionCalling(cfg.type, cfg.model)
     ? { tools: getAllToolDefinitions(), tool_choice: "auto", parallel_tool_calls: true }
     : {};
 
@@ -4961,8 +4961,9 @@ async function callLLM(
   onHeartbeat?: () => Promise<void>,
   onUsage?: (usage: LLMUsage) => void,
   onContentChunk?: (chunk: string) => Promise<void>,
+  disableTools = false,
 ): Promise<LLMResult> {
-  const { url, headers, bodyExtra } = buildLLMRequest(cfg);
+  const { url, headers, bodyExtra } = buildLLMRequest(cfg, disableTools);
   console.log(`[callLLM] type=${cfg.type} model=${cfg.model || "default"} url=${url}`);
 
   // ── DeepSeek reasoning_content 一致性修复 ──────────────────────────────────
@@ -6502,6 +6503,7 @@ export function createLangGraphAdapters(options: LangGraphAdapterOptions) {
   const assessDeliverable = async (
     messages: GraphMessage[],
     finalText: string,
+    plan: GraphPlanStep[],
   ): Promise<GraphDeliverableResult> => {
     const checkMessages = [
       ...messages.map(toInternalGraphMessage),
@@ -6514,6 +6516,11 @@ export function createLangGraphAdapters(options: LangGraphAdapterOptions) {
           '2. 是否还有未处理的报错、缺失文件或未验证的写操作；',
           '3. 当前答复是否足以让用户直接使用或验收。',
           '',
+          '任务计划：',
+          ...(plan.length
+            ? plan.map(s => `- ${s.id}. ${s.title}${s.desc ? `：${s.desc}` : ''}`)
+            : ['- 无显式计划']),
+          '',
           '候选交付内容：',
           finalText.slice(0, 4000),
           '',
@@ -6524,7 +6531,15 @@ export function createLangGraphAdapters(options: LangGraphAdapterOptions) {
       },
     ];
     try {
-      const result = await callLLM({ ...cfg, temperature: 0.1 }, checkMessages);
+      const result = await callLLM(
+        { ...cfg, temperature: 0.1 },
+        checkMessages,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      );
       const text = result.text ?? '';
       const verdict = text.match(/DELIVERABLE\s*:\s*(YES|NO)/i)?.[1]?.toUpperCase();
       const missing = text.match(/MISSING\s*:\s*([^\n]*)/i)?.[1]?.trim();

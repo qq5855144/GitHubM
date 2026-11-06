@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronRight,
   DollarSign,
+  Download,
   TrendingUp,
   Activity,
   Users,
@@ -33,6 +34,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -51,6 +53,13 @@ import { getProviderStats, getTotalRequestCount, clearAllUsage, type ProviderSta
 import AgentDiagnosticsPanel from '@/components/ai/AgentDiagnosticsPanel';
 import { formatCostUsd, getModelPrice, SOURCES } from '@/components/ai/modelPricing';
 import { fetchVisitStats, type DailyStats, type VisitSummary } from '@/lib/visitStats';
+import {
+  DEFAULT_DOWNLOAD_PROXY_URL,
+  getDownloadProxyUrl,
+  isDownloadProxyEnabled,
+  setDownloadProxyEnabled,
+  setDownloadProxyUrl,
+} from '@/lib/githubDownload';
 import {
   XAxis,
   YAxis,
@@ -246,6 +255,8 @@ export default function SettingsPage() {
 
   // 折叠状态：key = 分组 id，value = true 表示折叠
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => loadCollapsed());
+  const [downloadProxyEnabled, setDownloadProxyEnabledState] = useState(() => isDownloadProxyEnabled());
+  const [downloadProxyUrlDraft, setDownloadProxyUrlDraft] = useState(() => getDownloadProxyUrl());
 
   const toggleSection = (id: string) => {
     setCollapsed(prev => {
@@ -415,6 +426,24 @@ export default function SettingsPage() {
   const changeLanguage = (lng: string) => {
     i18n.changeLanguage(lng);
     localStorage.setItem('app_language', lng);
+  };
+
+  const handleToggleDownloadProxy = (checked: boolean) => {
+    setDownloadProxyEnabledState(checked);
+    setDownloadProxyEnabled(checked);
+    toast.success(checked ? '全局下载代理已开启' : '全局下载代理已关闭');
+  };
+
+  const handleSaveDownloadProxy = () => {
+    setDownloadProxyUrl(downloadProxyUrlDraft);
+    setDownloadProxyUrlDraft(getDownloadProxyUrl());
+    toast.success('下载代理地址已保存');
+  };
+
+  const handleResetDownloadProxy = () => {
+    setDownloadProxyUrl('');
+    setDownloadProxyUrlDraft(DEFAULT_DOWNLOAD_PROXY_URL);
+    toast.success('已恢复默认下载代理');
   };
 
   return (
@@ -640,6 +669,88 @@ export default function SettingsPage() {
             当前方案：<span className="text-foreground font-medium">
               {ACCENT_SCHEMES.find(s => s.id === accentSchemeId)?.label ?? '紫罗兰'}
             </span>，选择后立即生效并持久化保存
+          </p>
+        </div>
+      </SectionGroup>
+
+      {/* ── 分组：下载与网络 ─────────────────────────────────────────────── */}
+      <SectionGroup
+        id="download"
+        title="下载与网络"
+        icon={<Download className="w-4 h-4" />}
+        collapsed={collapsed['download'] ?? false}
+        onToggle={toggleSection}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">全局下载代理</p>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              对所有通过应用发起的 GitHub 文件下载生效。目录打包和 Actions Artifacts 仍走 Token 直连。
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Badge
+              variant="outline"
+              className={cn(
+                'text-[10px]',
+                downloadProxyEnabled
+                  ? 'border-success/40 text-success'
+                  : 'border-border text-muted-foreground'
+              )}
+            >
+              {downloadProxyEnabled ? '已启用' : '未启用'}
+            </Badge>
+            <Switch
+              checked={downloadProxyEnabled}
+              onCheckedChange={handleToggleDownloadProxy}
+              aria-label="全局下载代理"
+            />
+          </div>
+        </div>
+
+        <div className="border-t border-border/60" />
+
+        <div className="space-y-2">
+          <Label className="text-xs font-medium text-muted-foreground">代理地址或模板</Label>
+          <Input
+            value={downloadProxyUrlDraft}
+            onChange={(e) => setDownloadProxyUrlDraft(e.target.value)}
+            placeholder={DEFAULT_DOWNLOAD_PROXY_URL}
+            className="bg-secondary border-border text-foreground font-mono text-sm"
+            spellCheck={false}
+          />
+          <div className="text-xs text-muted-foreground space-y-1 leading-relaxed">
+            <p>默认前缀：<code className="font-mono text-foreground/80">https://wget.la/</code></p>
+            <p>模板模式：<code className="font-mono text-foreground/80">{'https://proxy.example/?url={url}'}</code></p>
+            <p>也支持 <code className="font-mono text-foreground/80">{'{url_encoded}'}</code> 占位符；留空恢复默认。</p>
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              size="sm"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={handleSaveDownloadProxy}
+            >
+              保存代理地址
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-border hover:bg-secondary"
+              onClick={handleResetDownloadProxy}
+            >
+              恢复默认
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border/60 bg-secondary/40 p-3 text-xs text-muted-foreground space-y-1.5 leading-relaxed">
+          <p className="flex items-start gap-1.5">
+            <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            代理只对公开 GitHub 资源生效；私有仓库仍携带 Token 直连，不向代理发送 Token。
+          </p>
+          <p className="flex items-start gap-1.5">
+            <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            文件下载与 Release 附件使用此配置；根目录 ZIP（codeload）、GitHub API 目录打包与 Actions Artifacts 仍走直连。
           </p>
         </div>
       </SectionGroup>

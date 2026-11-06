@@ -1,45 +1,45 @@
 import { zipSync } from 'fflate';
 import { getBranch, getGitBlob, getGitTree } from '@/services/github';
 
-const ACCEL_KEY = 'github_download_wget_la';
-const ACCEL_URL_KEY = 'github_download_accel_url';
-export const DEFAULT_ACCEL_URL = 'https://wget.la/';
+const DOWNLOAD_PROXY_ENABLED_KEY = 'github_download_wget_la';
+const DOWNLOAD_PROXY_URL_KEY = 'github_download_accel_url';
+export const DEFAULT_DOWNLOAD_PROXY_URL = 'https://wget.la/';
 
-export function isWgetLaEnabled(): boolean {
+export function isDownloadProxyEnabled(): boolean {
   try {
-    return localStorage.getItem(ACCEL_KEY) === '1';
+    return localStorage.getItem(DOWNLOAD_PROXY_ENABLED_KEY) === '1';
   } catch {
     return false;
   }
 }
 
-export function setWgetLaEnabled(enabled: boolean): void {
+export function setDownloadProxyEnabled(enabled: boolean): void {
   try {
-    localStorage.setItem(ACCEL_KEY, enabled ? '1' : '0');
+    localStorage.setItem(DOWNLOAD_PROXY_ENABLED_KEY, enabled ? '1' : '0');
   } catch { /* ignore */ }
 }
 
-/** https://wget.la/https://github.com/... —— 只对公开 GitHub 资源有效 */
-export function getAccelBaseUrl(): string {
+/** 全局下载代理：支持前缀或模板，仅对公开 GitHub 资源有效 */
+export function getDownloadProxyUrl(): string {
   try {
-    return localStorage.getItem(ACCEL_URL_KEY) || DEFAULT_ACCEL_URL;
+    return localStorage.getItem(DOWNLOAD_PROXY_URL_KEY) || DEFAULT_DOWNLOAD_PROXY_URL;
   } catch {
-    return DEFAULT_ACCEL_URL;
+    return DEFAULT_DOWNLOAD_PROXY_URL;
   }
 }
 
-export function setAccelBaseUrl(value: string): void {
+export function setDownloadProxyUrl(value: string): void {
   try {
     const clean = value.trim();
-    if (!clean) localStorage.removeItem(ACCEL_URL_KEY);
-    else localStorage.setItem(ACCEL_URL_KEY, clean);
+    if (!clean) localStorage.removeItem(DOWNLOAD_PROXY_URL_KEY);
+    else localStorage.setItem(DOWNLOAD_PROXY_URL_KEY, clean);
   } catch { /* ignore */ }
 }
 
 /** 支持前缀或模板：https://proxy/、https://proxy/?url={url}、...?url={url_encoded} */
-export function toWgetLaUrl(url: string): string {
+export function toDownloadProxyUrl(url: string): string {
   if (!/^https?:\/\//i.test(url)) return url;
-  const template = getAccelBaseUrl();
+  const template = getDownloadProxyUrl();
   if (template.includes('{url_encoded}')) return template.replace('{url_encoded}', encodeURIComponent(url));
   if (template.includes('{url}')) return template.replace('{url}', url);
   return `${template.replace(/\/+$/, '')}/${url}`;
@@ -64,7 +64,7 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
  * 带认证下载文件。
  * - AndroidBridge：交给原生 DownloadManager
  * - 浏览器：fetch + Bearer token → Blob → a[download]
- * - wget.la：仅用于公开 GitHub 资源，不向代理发送 token
+ * - 全局下载代理：仅用于公开 GitHub 资源，不向代理发送 token
  */
 export async function downloadGithubFile(
   url: string,
@@ -72,8 +72,8 @@ export async function downloadGithubFile(
   token: string,
   options: { accelerate?: boolean } = {},
 ): Promise<void> {
-  const accelerate = !!options.accelerate && isGitHubDownloadUrl(url);
-  const finalUrl = accelerate ? toWgetLaUrl(url) : url;
+  const accelerate = (options.accelerate ?? isDownloadProxyEnabled()) && isGitHubDownloadUrl(url);
+  const finalUrl = accelerate ? toDownloadProxyUrl(url) : url;
   const bridge = (window as unknown as {
     AndroidBridge?: { downloadFile?: (u: string, f: string, t: string) => void }
   }).AndroidBridge;

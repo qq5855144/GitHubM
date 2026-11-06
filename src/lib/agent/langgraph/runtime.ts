@@ -67,6 +67,8 @@ export interface GraphEvent {
   step?: number;
   tool?: string;
   toolCallId?: string;
+  /** 工具参数摘要，用于 UI hint */
+  arguments?: Record<string, unknown>;
   content?: string;
   error?: string;
   /** 工具执行耗时（毫秒） */
@@ -297,7 +299,7 @@ export function createAgentGraph(options: {
 
       const risk = classifyTool(call.name);
       const toolStartedAt = Date.now();
-      onEvent?.({ type: 'tool_start', step: state.steps, tool: call.name, toolCallId: call.id });
+      onEvent?.({ type: 'tool_start', step: state.steps, tool: call.name, toolCallId: call.id, arguments: call.arguments });
       let output: string;
       try {
         const result = await executeTool(call, signal);

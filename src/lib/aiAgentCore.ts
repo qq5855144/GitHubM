@@ -6391,6 +6391,8 @@ export interface LangGraphAdapterOptions {
   modelConfig: ModelConfig;
   onContentChunk?: (chunk: string) => Promise<void>;
   onThinkingChunk?: (chunk: string) => Promise<void>;
+  onThinkingStart?: () => Promise<void>;
+  onThinkingEnd?: () => Promise<void>;
   onHeartbeat?: () => Promise<void>;
 }
 
@@ -6428,14 +6430,33 @@ export function createLangGraphAdapters(options: LangGraphAdapterOptions) {
 
   const model = async (messages: GraphMessage[]): Promise<GraphModelResult> => {
     const internalMessages = messages.map(toInternalGraphMessage);
-    const result = await callLLM(
-      cfg,
-      internalMessages,
-      options.onThinkingChunk,
-      options.onHeartbeat,
-      undefined,
-      options.onContentChunk,
-    );
+    let thinkingStarted = false;
+    const onThinkingChunk = async (chunk: string) => {
+      if (!options.onThinkingChunk) return;
+      if (!thinkingStarted) {
+        thinkingStarted = true;
+        await options.onThinkingStart?.();
+      }
+      await options.onThinkingChunk(chunk);
+    };
+
+    let result: LLMResult;
+    try {
+      result = await callLLM(
+        cfg,
+        internalMessages,
+        onThinkingChunk,
+        options.onHeartbeat,
+        undefined,
+        options.onContentChunk,
+      );
+    } finally {
+      // 与经典引擎一致：模型这一轮结束后关闭思考气泡，避免 spinner 一直转
+      if (thinkingStarted) {
+        thinkingStarted = false;
+        await options.onThinkingEnd?.();
+      }
+    }
 
     let toolCall: GraphToolCall | null = null;
     if (result.toolCall) {
@@ -6635,6 +6656,7 @@ export async function runAiAgentLangGraph(options: RunAgentOptions): Promise<voi
         .filter(m => m.role === "user" || m.role === "assistant")
         .map(m => ({ role: m.role as "user" | "assistant", content: String(m.content ?? "") })),
     ];
+    let graphPlanSteps: Array<{ id: string }> = [];
 
     const adapters = createLangGraphAdapters({
       githubToken: token,
@@ -6648,6 +6670,12 @@ export async function runAiAgentLangGraph(options: RunAgentOptions): Promise<voi
       },
       onThinkingChunk: async (chunk) => {
         await sendTyped({ type: "think_chunk", content: chunk });
+      },
+      onThinkingStart: async () => {
+        await sendTyped({ type: "think_start" });
+      },
+      onThinkingEnd: async () => {
+        await sendTyped({ type: "think_end" });
       },
       onHeartbeat: heartbeat,
     });
@@ -6670,24 +6698,39 @@ export async function runAiAgentLangGraph(options: RunAgentOptions): Promise<voi
       },
       onEvent: (event) => {
         if (event.type === "plan" && event.plan) {
+          graphPlanSteps = event.plan.map(s => ({ id: s.id }));
           void sendTyped({
             type: "plan",
             steps: event.plan.map(s => ({ id: s.id, title: s.title, desc: s.desc ?? "" })),
           });
+        } else if (event.type === "final") {
+          // 新引擎没有逐 step 的模型事件；交付完成时把计划标记为 done
+          for (const step of graphPlanSteps) {
+            void sendTyped({ type: "step_end", stepId: step.id, status: "done" });
+          }
         } else if (event.type === "tool_start" && event.tool) {
+          const hint = Object.entries(event.arguments ?? {})
+            .slice(0, 2)
+            .map(([k, v]) => `${k}=${String(v).replace(/\s+/g, " ").slice(0, 32)}`)
+            .join(" ")
+            .slice(0, 80);
           void sendTyped({
             type: "tool_start",
             id: event.toolCallId ?? `g_${Date.now()}`,
             tool: event.tool,
             label: event.tool,
-            hint: "",
+            hint,
           });
         } else if (event.type === "tool_end" && event.tool) {
+          const resultText = event.content ?? "";
+          const failed = /^(❌|工具执行失败|执行失败|Error:|错误[:：])/i.test(resultText.trim()) ||
+            /"status"\s*:\s*"error"/i.test(resultText) ||
+            /"error_message"\s*:\s*"[^"]+"/i.test(resultText);
           void sendTyped({
             type: "tool_end",
             id: event.toolCallId ?? `g_${Date.now()}`,
-            status: (event.content ?? "").startsWith("❌") ? "fail" : "success",
-            result: (event.content ?? "").slice(0, 2000),
+            status: failed ? "fail" : "success",
+            result: resultText.slice(0, 2000),
             elapsedMs: event.elapsedMs ?? 0,
           });
         } else if (event.type === "verify_start") {

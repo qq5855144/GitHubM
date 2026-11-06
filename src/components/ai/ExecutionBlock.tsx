@@ -109,8 +109,23 @@ function ThinkingRow({ msg }: { msg: Message }) {
   const content = msg.thinkingContent ?? '';
   const done = msg.thinkingDone ?? false;
   const isThinking = !done && msg.streaming === true;
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(isThinking);
+  const prevThinkingRef = useRef(isThinking);
   const preview = content.replace(/\s+/g, ' ').trim().slice(0, 40);
+
+  // 思考进行中自动展开，实时显示 reasoning；结束后延迟折叠为摘要
+  useEffect(() => {
+    const prev = prevThinkingRef.current;
+    prevThinkingRef.current = isThinking;
+    if (isThinking && !prev) {
+      setExpanded(true);
+      return;
+    }
+    if (!isThinking && prev) {
+      const t = setTimeout(() => setExpanded(false), 600);
+      return () => clearTimeout(t);
+    }
+  }, [isThinking]);
 
   return (
     <div className="flex gap-2 items-start pl-2">

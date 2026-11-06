@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_DOWNLOAD_PROXY_URL,
+  DOWNLOAD_PROXY_PRESETS,
   downloadGithubFile,
   isAutoDownloadProxyEnabled,
   resolveDownloadProxyUrl,
@@ -65,7 +66,7 @@ describe('global download proxy', () => {
     }));
 
     const { selected, results } = await testFastestDownloadProxy({ timeoutMs: 1000 });
-    expect(results).toHaveLength(3);
+    expect(results).toHaveLength(DOWNLOAD_PROXY_PRESETS.length);
     expect(selected.baseUrl).toBe('https://gh-proxy.com/');
 
     const resolved = await resolveDownloadProxyUrl('https://github.com/a/b/releases/download/v1/app.apk');

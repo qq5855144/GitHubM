@@ -138,11 +138,11 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg max-h-[calc(100dvh-2rem)] p-0 flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0 px-6 pt-5 pb-3 border-b border-border">
           <DialogTitle className="text-base">{i18n.t('AI 模型配置')}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4 pt-1">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-4 flex flex-col gap-4">
           {/* 平台选择 */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-sm font-normal">{i18n.t('选择平台')}</Label>
@@ -372,6 +372,34 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
             </div>
           )}
 
+{(draft.type === 'deepseek' || draft.type === 'openai') && (
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-sm font-normal">{i18n.t('思考强度')}</Label>
+              <Select
+                value={draft.reasoning_effort || 'auto'}
+                onValueChange={v => setDraft(prev => {
+                  const next = { ...prev };
+                  if (v === 'auto') delete next.reasoning_effort;
+                  else next.reasoning_effort = v as 'off' | 'low' | 'medium' | 'high' | 'max';
+                  return next;
+                })}
+              >
+                <SelectTrigger className="px-3"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">{i18n.t('自动（模型默认）')}</SelectItem>
+                  <SelectItem value="off">{i18n.t('关闭思考（最快）')}</SelectItem>
+                  <SelectItem value="low">{i18n.t('低（快速）')}</SelectItem>
+                  <SelectItem value="medium">{i18n.t('中（平衡）')}</SelectItem>
+                  <SelectItem value="high">{i18n.t('高（推荐）')}</SelectItem>
+                  <SelectItem value="max">{i18n.t('最高（复杂任务）')}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {i18n.t('仅对支持思考强度的模型生效；DeepSeek 思考模型会切换 thinking / reasoning_effort。')}
+              </p>
+            </div>
+          )}
+
           {/* 超时时间设置 */}
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-1.5">
@@ -393,11 +421,11 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
             <p className="text-xs text-muted-foreground">
               {i18n.t('AI 在此时间内未响应则报超时。复杂多步任务建议选 5~10 分钟。')}</p>
           </div>
+        </div>
 
-          <div className="flex gap-2 justify-end pt-1">
-            <Button variant="outline" onClick={onClose}>{i18n.t('取消')}</Button>
-            <Button onClick={handleSave}>{i18n.t('保存配置')}</Button>
-          </div>
+        <div className="shrink-0 border-t border-border bg-card px-6 py-3 flex gap-2 justify-end">
+          <Button variant="outline" onClick={onClose}>{i18n.t('取消')}</Button>
+          <Button onClick={handleSave}>{i18n.t('保存配置')}</Button>
         </div>
       </DialogContent>
     </Dialog>

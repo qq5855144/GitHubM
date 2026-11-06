@@ -191,6 +191,8 @@ export interface ModelConfig {
   proxy_url?: string;
   /** Agent 编排引擎：classic=旧循环（默认），langgraph=LangGraph（实验） */
   agent_engine?: 'classic' | 'langgraph';
+  /** 模型思考强度；off=关闭思考，auto/undefined=模型默认 */
+  reasoning_effort?: 'off' | 'low' | 'medium' | 'high' | 'max';
   model?: string;
   /**
    * 请求超时毫秒数（默认 300000 = 5 分钟）

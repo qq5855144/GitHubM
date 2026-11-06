@@ -16,7 +16,17 @@ import {
 } from './mcpClient';
 import { repairToolCallPairs, compressMessages, type MessageLike } from './agent/messageIntegrity';
 import { validateRequiredArguments, clampToolResult } from './agent/toolPolicy';
+import { getToolRisk } from './agent/toolPolicy';
 import { startAgentTrace, recordAgentTraceEvent, endAgentTrace } from './agent/runTrace';
+import {
+  type GraphMessage,
+  type GraphToolCall,
+  type GraphModelResult,
+  type GraphPlanStep,
+  type GraphToolResult,
+  type GraphToolRisk,
+  type GraphVerificationResult,
+} from './agent/langgraph/runtime';
 import {
   summarizeCheckRuns,
   summarizeCommitStatus,
@@ -63,6 +73,8 @@ interface ModelConfig {
   endpoint?: string;
   /** 无状态模型代理地址（Cloudflare Worker） */
   proxy_url?: string;
+  /** Agent 编排引擎：classic=旧循环（默认），langgraph=LangGraph（实验） */
+  agent_engine?: 'classic' | 'langgraph';
   /** 具体模型名称，如 deepseek-v4-flash / deepseek-v4-pro / gemini-2.5-flash-preview-05-20 */
   model?: string;
   /**
@@ -4930,6 +4942,7 @@ async function callLLM(
   onThinkingChunk?: (chunk: string) => Promise<void>,
   onHeartbeat?: () => Promise<void>,
   onUsage?: (usage: LLMUsage) => void,
+  onContentChunk?: (chunk: string) => Promise<void>,
 ): Promise<LLMResult> {
   const { url, headers, bodyExtra } = buildLLMRequest(cfg);
   console.log(`[callLLM] type=${cfg.type} model=${cfg.model || "default"} url=${url}`);
@@ -5083,7 +5096,9 @@ async function callLLM(
         }
 
         // ── 正式内容 ──
-        full += delta.content ?? "";
+        const contentDelta = delta.content ?? "";
+        full += contentDelta;
+        if (contentDelta && onContentChunk) await onContentChunk(contentDelta);
       } catch { /* 跳过非 JSON 行 */ }
     }
   }
@@ -6345,6 +6360,127 @@ function normalizeResultProtocol(result: string, isError: boolean): string {
 
 // ── 浏览器端 Agent 入口 ─────────────────────────────────────────────────────
 
+export interface LangGraphAdapterOptions {
+  githubToken: string;
+  owner: string;
+  repo: string;
+  targetBranch?: string;
+  modelConfig: ModelConfig;
+  onContentChunk?: (chunk: string) => Promise<void>;
+  onThinkingChunk?: (chunk: string) => Promise<void>;
+  onHeartbeat?: () => Promise<void>;
+}
+
+function toInternalGraphMessage(message: GraphMessage): Message {
+  const internal: Message = {
+    role: message.role as Message['role'],
+    content: message.content,
+  };
+  if (message.toolCallId) internal.tool_call_id = message.toolCallId;
+  if (message.toolCall) {
+    internal.tool_calls = [{
+      id: message.toolCall.id,
+      type: 'function',
+      function: {
+        name: message.toolCall.name,
+        arguments: JSON.stringify(message.toolCall.arguments),
+      },
+    }];
+  }
+  return internal;
+}
+
+/**
+ * 把现有 callLLM / executeTool / plan / verify 接成 LangGraph adapter。
+ * 这是旧循环与 LangGraph 之间的唯一桥接层，后续不再新增业务逻辑。
+ */
+export function createLangGraphAdapters(options: LangGraphAdapterOptions) {
+  const ctx: GithubContext = {
+    token: options.githubToken,
+    owner: options.owner,
+    repo: options.repo,
+  };
+  const cfg = options.modelConfig;
+  const branch = options.targetBranch;
+
+  const model = async (messages: GraphMessage[]): Promise<GraphModelResult> => {
+    const internalMessages = messages.map(toInternalGraphMessage);
+    const result = await callLLM(
+      cfg,
+      internalMessages,
+      options.onThinkingChunk,
+      options.onHeartbeat,
+      undefined,
+      options.onContentChunk,
+    );
+
+    let toolCall: GraphToolCall | null = null;
+    if (result.toolCall) {
+      toolCall = {
+        id: result.toolCall.id,
+        name: result.toolCall.name,
+        arguments: result.toolCall.arguments,
+      };
+    } else {
+      // 非 FC 模型：从文本中解析工具 JSON
+      const textCall = extractToolCall(result.text);
+      if (textCall && typeof textCall.tool === 'string') {
+        const { tool, _fcId, ...args } = textCall;
+        toolCall = {
+          id: String(_fcId ?? `call-${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`),
+          name: tool,
+          arguments: args,
+        };
+      }
+    }
+
+    return { content: result.text, toolCall };
+  };
+
+  const executeGraphTool = async (call: GraphToolCall): Promise<GraphToolResult> => {
+    const output = await executeTool(ctx, { tool: call.name, ...call.arguments }, branch);
+    return {
+      output,
+      risk: getToolRisk(call.name) as GraphToolRisk,
+    };
+  };
+
+  const planner = async (messages: GraphMessage[]): Promise<GraphPlanStep[]> => {
+    const lastUser = [...messages].reverse().find(m => m.role === 'user')?.content ?? '当前任务';
+    const planningMessages = [
+      ...messages.map(toInternalGraphMessage),
+      {
+        role: 'user' as const,
+        content: '请只输出任务计划，格式：PLAN:{"steps":[{"id":"1","title":"...","desc":"..."}]}',
+      },
+    ];
+    try {
+      const result = await callLLM({ ...cfg, temperature: 0.2 }, planningMessages);
+      const plan = extractPlan(result.text);
+      if (plan && plan.length > 0) {
+        return plan.map(s => ({ id: s.id, title: s.title, desc: s.desc, status: 'pending' as const }));
+      }
+    } catch {
+      // 规划失败时退化为单步，不阻塞主任务
+    }
+    return [{ id: '1', title: lastUser.slice(0, 24) || '执行任务', status: 'pending' }];
+  };
+
+  const verifier = async (): Promise<GraphVerificationResult> => {
+    const report = await verifyChanges(ctx, branch, '90');
+    const passed = report.includes('VERIFY_PASSED') || report.includes('VERIFY_NO_CHECKS');
+    return { passed, summary: report };
+  };
+
+  return {
+    model,
+    executeTool: executeGraphTool,
+    planner,
+    verifier,
+    classifyTool: (name: string) => getToolRisk(name) as GraphToolRisk,
+  };
+}
+
 /** runAiAgent 的调用参数（requestBody 与 Edge Function 版完全一致） */
 export interface RunAgentOptions {
   /** messages/github_token/owner/repo/target_branch/model_config/user_id/auto_mode/idempotency_key/resume_workflow_id */
@@ -6370,8 +6506,144 @@ export interface RunAgentOptions {
 /** 流指标（与 aiTypes.StreamMetrics 同构，保证页面 spread 类型安全） */
 export type AgentMetrics = Partial<StreamMetrics>;
 
+/** LangGraph 引擎入口（实验特性，通过 agent_engine=langgraph 开启） */
+export async function runAiAgentLangGraph(options: RunAgentOptions): Promise<void> {
+  const { requestBody, signal, onData, onComplete, onError, onMetrics } = options;
+  const startedAt = Date.now();
+  let firstTokenAt: number | undefined;
+  let totalChars = 0;
+  let streamedChars = 0;
+
+  try {
+    const body = requestBody;
+    const token = String(body.github_token ?? "");
+    const owner = String(body.owner ?? "");
+    const repo = String(body.repo ?? "");
+    const targetBranch = body.target_branch ? String(body.target_branch) : undefined;
+    const cfg = (body.model_config ?? { type: "deepseek" }) as ModelConfig;
+    if (!token || !owner || !repo) throw new Error("缺少必要参数：github_token, owner, repo");
+    if (cfg.type !== "custom" && !cfg.api_key) throw new Error(`使用 ${cfg.type} 模型需要提供 API Key`);
+
+    const streamId = `g_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+    const turnId = `g_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+    const emit = (data: string) => {
+      try {
+        const parsed = JSON.parse(data) as { type?: string; content?: string };
+        if (parsed.type === "content" && parsed.content) {
+          if (!firstTokenAt) {
+            firstTokenAt = Date.now();
+            onMetrics?.({ ttft: firstTokenAt - startedAt, startedAt, streamId });
+          }
+          totalChars += parsed.content.length;
+        }
+      } catch { /* ignore */ }
+      onData(data);
+    };
+    const { sendTyped, sendChunk, sendDone, sendError } = createSSEStream(streamId, turnId, emit);
+
+    const systemPrompt = buildSystemPrompt(targetBranch, true, cfg.type, cfg);
+    const requestMessages = (body.messages as Array<{ role?: string; content?: string }> | undefined) ?? [];
+    const graphMessages: GraphMessage[] = [
+      { role: "system", content: systemPrompt },
+      ...requestMessages
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .map(m => ({ role: m.role as "user" | "assistant", content: String(m.content ?? "") })),
+    ];
+
+    const adapters = createLangGraphAdapters({
+      githubToken: token,
+      owner,
+      repo,
+      targetBranch,
+      modelConfig: cfg,
+      onContentChunk: async (chunk) => {
+        streamedChars += chunk.length;
+        await sendChunk(chunk);
+      },
+      onThinkingChunk: async (chunk) => {
+        await sendTyped({ type: "think_chunk", content: chunk });
+      },
+    });
+
+    const { runLangGraphAgent } = await import('./agent/langgraph/runtime');
+    const result = await runLangGraphAgent({
+      messages: graphMessages,
+      model: adapters.model,
+      executeTool: adapters.executeTool,
+      planner: adapters.planner,
+      verifier: adapters.verifier,
+      classifyTool: adapters.classifyTool,
+      maxSteps: 20,
+      maxVerifyAttempts: 2,
+      signal,
+      onCheckpoint: (snapshot) => {
+        try {
+          localStorage.setItem("ai_langgraph_checkpoint", JSON.stringify(snapshot));
+        } catch { /* ignore */ }
+      },
+      onEvent: (event) => {
+        if (event.type === "plan" && event.plan) {
+          void sendTyped({
+            type: "plan",
+            steps: event.plan.map(s => ({ id: s.id, title: s.title, desc: s.desc ?? "" })),
+          });
+        } else if (event.type === "tool_start" && event.tool) {
+          void sendTyped({
+            type: "tool_start",
+            id: event.toolCallId ?? `g_${Date.now()}`,
+            tool: event.tool,
+            label: event.tool,
+            hint: "",
+          });
+        } else if (event.type === "tool_end" && event.tool) {
+          void sendTyped({
+            type: "tool_end",
+            id: event.toolCallId ?? `g_${Date.now()}`,
+            status: (event.content ?? "").startsWith("❌") ? "fail" : "success",
+            result: (event.content ?? "").slice(0, 2000),
+            elapsedMs: 0,
+          });
+        } else if (event.type === "verify_start") {
+          void sendTyped({ type: "status_info", message: "正在执行 CI 验证…" });
+        } else if (event.type === "verify_end" && event.verification) {
+          void sendTyped({
+            type: "status_info",
+            message: event.verification.passed
+              ? "✅ CI 验证通过"
+              : `❌ CI 验证失败：${event.verification.summary.slice(0, 200)}`,
+          });
+        } else if (event.type === "error" && event.error) {
+          void sendError("AGENT_ERROR", event.error);
+        }
+      },
+    });
+
+    if (result.error) throw new Error(result.error);
+    const remaining = result.finalText.slice(streamedChars);
+    if (remaining) await sendChunk(remaining);
+
+    const finishedAt = Date.now();
+    onMetrics?.({
+      startedAt,
+      firstTokenAt,
+      finishedAt,
+      ttft: firstTokenAt ? firstTokenAt - startedAt : undefined,
+      throughput: (finishedAt - startedAt) > 0 ? Math.round(totalChars / ((finishedAt - startedAt) / 1000)) : undefined,
+      streamId,
+      interruptReason: signal?.aborted ? "user_stop" : "completed",
+    });
+    await sendDone();
+    onComplete();
+  } catch (err) {
+    try { onError(err as Error); } catch { /* ignore */ }
+  }
+}
+
 /** 浏览器端运行 AI Agent（替代 Edge Function ai-assistant） */
 export async function runAiAgent(options: RunAgentOptions): Promise<void> {
+  if (options.requestBody.agent_engine === "langgraph") {
+    return runAiAgentLangGraph(options);
+  }
   const { requestBody, signal, onData, onComplete, onError, onMetrics } = options;
   const startedAt = Date.now();
   let firstTokenAt: number | undefined;

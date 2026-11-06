@@ -1,9 +1,8 @@
 // 代码浏览页（含在线编辑 + 文件树 + 右键上下文菜单 + 全屏编辑 + 文件图标 + 图片预览）
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import FileTree from '@/components/code/FileTree';
-import MarkdownRenderer from '@/components/common/MarkdownRenderer';
 import { CodeEditor } from '@/components/code/CodeEditor';
 import type { CodeEditorRef } from '@/components/code/CodeEditor';
 import { EditorSearchPanel } from '@/components/code/EditorSearchPanel';
@@ -226,6 +225,85 @@ function setCodeNavStack(owner: string, repo: string, stack: string[]) {
   catch { /* ignore */ }
 }
 
+// ── 移动端底部快捷栏 ─────────────────────────────────────────────────────
+// 参考 Acode：常用操作 + 代码符号横向滚动，尽量让拇指完成编辑。
+const EDITOR_QUICK_SYMBOLS: Array<{ label: string; value: string }> = [
+  { label: 'Tab', value: '  ' },
+  { label: '{', value: '{' },
+  { label: '}', value: '}' },
+  { label: '(', value: '(' },
+  { label: ')', value: ')' },
+  { label: '[', value: '[' },
+  { label: ']', value: ']' },
+  { label: '<', value: '<' },
+  { label: '>', value: '>' },
+  { label: ';', value: ';' },
+  { label: ':', value: ':' },
+  { label: '=', value: '=' },
+  { label: '+', value: '+' },
+  { label: '-', value: '-' },
+  { label: '*', value: '*' },
+  { label: '/', value: '/' },
+  { label: '\\', value: '\\' },
+  { label: "'", value: "'" },
+  { label: '"', value: '"' },
+  { label: '#', value: '#' },
+  { label: '!', value: '!' },
+  { label: '_', value: '_' },
+  { label: '?', value: '?' },
+  { label: '.', value: '.' },
+  { label: ',', value: ',' },
+  { label: '@', value: '@' },
+  { label: '&', value: '&' },
+  { label: '|', value: '|' },
+  { label: '$', value: '$' },
+  { label: '%', value: '%' },
+];
+
+function QuickToolButton({
+  title,
+  onClick,
+  active = false,
+  disabled = false,
+  children,
+}: {
+  title: string;
+  onClick: () => void;
+  active?: boolean;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className={`h-8 w-8 shrink-0 rounded-md hover:bg-white/10 hover:text-white ${active ? 'bg-white/10 text-white' : 'text-gray-300'} ${disabled ? 'opacity-40' : ''}`}
+      onPointerDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function QuickSymbolButton({ label, value, onInsert }: { label: string; value: string; onInsert: (value: string) => void }) {
+  return (
+    <button
+      type="button"
+      className="h-7 min-w-7 shrink-0 rounded-md px-1.5 font-mono text-[13px] text-gray-300 hover:bg-white/10 hover:text-white active:bg-white/20"
+      onPointerDown={(e) => e.preventDefault()}
+      onClick={() => onInsert(value)}
+      aria-label={`${i18n.t('插入')} ${label}`}
+    >
+      {label}
+    </button>
+  );
+}
+
 export default function CodeBrowserPage() {
   const { owner, repo, '*': filePath = '' } = useParams<{ owner: string; repo: string; '*': string }>();
   const navigate = useNavigate();
@@ -273,6 +351,7 @@ export default function CodeBrowserPage() {
 
   // 编辑器搜索
   const editorRef = useRef<CodeEditorRef | null>(null);
+  const commitInputRef = useRef<HTMLInputElement | null>(null);
 
   // 表单字段
   const [editContent, setEditContent] = useState('');
@@ -315,6 +394,7 @@ export default function CodeBrowserPage() {
     setCurrentFile(null);
     // 加载新路径时重置编辑器状态
     setEditorFullscreen(false);
+    setIsReadingMode(false);
     setActionMode(null);
     setEditContent('');
     setCommitMsg('');
@@ -437,6 +517,7 @@ export default function CodeBrowserPage() {
     setMoveTo('');
     setDeleteProgress(null);
     setEditorFullscreen(false);
+    setIsReadingMode(false);
     if (returnToParent && filePath) {
       const parentParts = filePath.split('/').slice(0, -1);
       // replace: true 将当前文件路由条目替换为父目录，而非新增入栈，
@@ -489,7 +570,14 @@ export default function CodeBrowserPage() {
     } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('保存失败')); }
     finally { setActionBusy(false); }
   };
-
+  const handleQuickSave = () => {
+    if (!commitMsg.trim()) {
+      commitInputRef.current?.focus();
+      toast.error(i18n.t('请填写提交信息'));
+      return;
+    }
+    void handleSaveEdit();
+  };
   // ─── 新建文件 ───
   const handleCreateFile = async () => {
     if (!owner || !repo || !newFileName.trim()) { toast.error(i18n.t('请填写文件名')); return; }
@@ -759,6 +847,9 @@ export default function CodeBrowserPage() {
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => navigate(`/repos/${owner}/${repo}/code/${item.path}`)}>
         <FolderOpen className="w-3.5 h-3.5 mr-2 text-yellow-400" />{i18n.t('打开文件夹')}</ContextMenuItem>
+      <ContextMenuItem className="text-foreground cursor-pointer text-sm"
+        onClick={() => void handleDownloadDirectory(item.path)}>
+        <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('下载文件夹 ZIP')}</ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => { navigate(`/repos/${owner}/${repo}/code/${item.path}`); setTimeout(() => openAction('new-file'), 100); }}>
@@ -1048,64 +1139,54 @@ export default function CodeBrowserPage() {
               {!isReadingMode && (
                 <div className="flex flex-col">
                   {/* 移动端工具栏 */}
-                  <div className="flex md:hidden items-center justify-between px-2 h-12 bg-[#2d2d2d] text-white shrink-0 border-b border-white/10 select-none">
-                    <Button variant="ghost" size="icon" className="w-10 h-10 text-white hover:bg-white/10" onClick={() => closeAction(true)} title={i18n.t('返回')}>
+                  <div className="flex md:hidden items-center gap-1 px-1.5 h-12 bg-[#2d2d2d] text-white shrink-0 border-b border-white/10 select-none">
+                    <Button variant="ghost" size="icon" className="w-10 h-10 shrink-0 text-white hover:bg-white/10" onClick={() => closeAction(true)} title={i18n.t('返回')}>
                       <ArrowLeft className="w-5 h-5" />
                     </Button>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => editorRef.current?.undo()} title={i18n.t('撤销')}>
-                        <Undo2 className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => editorRef.current?.redo()} title={i18n.t('重做')}>
-                        <Redo2 className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => setShowSearchPanel(true)} title={i18n.t('搜索/替换')}>
-                        <Search className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" onClick={() => setIsReadingMode(true)} title={i18n.t('阅读模式')}>
-                        <BookOpen className="w-4 h-4" />
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="w-9 h-9 text-white hover:bg-white/10" title={i18n.t('更多')}>
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56 bg-[#2d2d2d] text-white border-white/10" onCloseAutoFocus={(e) => e.preventDefault()}>
-                          <div className="flex items-center justify-between px-2 py-1.5">
-                            <span className="text-sm">{i18n.t('字号')}</span>
-                            <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-white/10"
-                                onClick={(e) => { e.preventDefault(); setEditorFontSize(s => Math.max(10, s - 1)); }} disabled={editorFontSize <= 10}>
-                                <ZoomOut className="w-4 h-4" />
-                              </Button>
-                              <span className="text-sm w-6 text-center tabular-nums">{editorFontSize}</span>
-                              <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-white/10"
-                                onClick={(e) => { e.preventDefault(); setEditorFontSize(s => Math.min(22, s + 1)); }} disabled={editorFontSize >= 22}>
-                                <ZoomIn className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </div>
-                          <DropdownMenuSeparator className="bg-white/10" />
-                          <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => { setWordWrap(w => w === 'on' ? 'off' : 'on'); }}>
-                            <WrapText className="w-4 h-4 mr-2" />
-                            {wordWrap === 'on' ? i18n.t('取消自动换行') : i18n.t('自动换行')}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-white/10" />
-                          <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => { copyToClipboard(editContent); toast.success(i18n.t('代码已复制')); }}>
-                            <Copy className="w-4 h-4 mr-2" />{i18n.t('复制内容')}</DropdownMenuItem>
-                          {currentFile?.download_url && (
-                            <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={async () => { try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); } catch { toast.error(i18n.t('下载失败')); } }}>
-                              <Download className="w-4 h-4 mr-2" />{i18n.t('下载文件')}</DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                    <div className="flex-1 min-w-0 px-1 text-center">
+                      <div className="text-sm font-medium truncate text-white">{currentFile?.name || i18n.t('编辑')}</div>
+                      <div className="text-[10px] text-gray-400 truncate">
+                        {editContent !== currentFile?.content ? i18n.t('未保存') : currentBranch}
+                      </div>
                     </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="w-9 h-9 shrink-0 text-white hover:bg-white/10" title={i18n.t('更多')}>
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56 bg-[#2d2d2d] text-white border-white/10" onCloseAutoFocus={(e) => e.preventDefault()}>
+                        <div className="flex items-center justify-between px-2 py-1.5">
+                          <span className="text-sm">{i18n.t('字号')}</span>
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-white/10"
+                              onClick={(e) => { e.preventDefault(); setEditorFontSize(s => Math.max(10, s - 1)); }} disabled={editorFontSize <= 10}>
+                              <ZoomOut className="w-4 h-4" />
+                            </Button>
+                            <span className="text-sm w-6 text-center tabular-nums">{editorFontSize}</span>
+                            <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-white/10"
+                              onClick={(e) => { e.preventDefault(); setEditorFontSize(s => Math.min(22, s + 1)); }} disabled={editorFontSize >= 22}>
+                              <ZoomIn className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <DropdownMenuSeparator className="bg-white/10" />
+                        <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => setIsReadingMode(true)}>
+                          <BookOpen className="w-4 h-4 mr-2" />{i18n.t('阅读模式')}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => { copyToClipboard(editContent); toast.success(i18n.t('代码已复制')); }}>
+                          <Copy className="w-4 h-4 mr-2" />{i18n.t('复制内容')}</DropdownMenuItem>
+                        {currentFile?.download_url && (
+                          <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={async () => { try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); } catch { toast.error(i18n.t('下载失败')); } }}>
+                            <Download className="w-4 h-4 mr-2" />{i18n.t('下载文件')}</DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                   {/* 移动端文件信息栏 */}
                   <div className="flex md:hidden items-center justify-between px-3 h-8 bg-[#1e1e1e] text-gray-400 text-xs shrink-0 font-mono">
                     <div className="flex items-center gap-1.5 truncate">
-                      <span className="truncate text-white">{editContent !== currentFile?.content ? '*' : ''}{currentFile?.name}</span>
+                      <span className="truncate text-gray-500">{currentFile?.path}</span>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <span className="editor-cursor-pos">{cursorPositionRef.current}</span>
@@ -1206,13 +1287,16 @@ export default function CodeBrowserPage() {
               {/* 代码编辑区 */}
               <div className="relative flex-1 min-h-0 flex overflow-hidden">
                 {isReadingMode ? (
-                  <div className="w-full h-full overflow-y-auto bg-background p-4 md:p-6" style={{ fontSize: editorFontSize }}>
-                    <style>{`.reading-mode-markdown pre code { font-size: inherit !important; } .reading-mode-markdown pre { margin: 0; min-height: 100%; border: none; background: transparent; }`}</style>
-                    <MarkdownRenderer 
-                      content={`\`\`\`${currentFile?.name?.split('.').pop() || 'text'}\n${editContent}\n\`\`\``}
-                      className="max-w-none font-mono reading-mode-markdown"
-                    />
-                  </div>
+                  <CodeEditor
+                    key={`read-${currentFile?.path || currentFile?.name || 'editor'}`}
+                    ref={editorRef}
+                    value={editContent}
+                    fileName={currentFile?.name || ''}
+                    fontSize={editorFontSize}
+                    wordWrap={wordWrap}
+                    readOnly
+                    onFontSizeChange={setEditorFontSize}
+                  />
                 ) : (
                   <CodeEditor
                     key={currentFile?.path || currentFile?.name || 'editor'}
@@ -1229,9 +1313,9 @@ export default function CodeBrowserPage() {
                 )}
                 
                 <EditorSearchPanel 
-                  view={editorRef.current?.getView() ?? null} 
+                  view={editorRef.current?.getView() ?? null}
                   content={editContent}
-                  visible={showSearchPanel} 
+                  visible={showSearchPanel && !isReadingMode}
                   onClose={() => setShowSearchPanel(false)}
                   readOnly={isReadingMode}
                 />
@@ -1269,6 +1353,56 @@ export default function CodeBrowserPage() {
               </div>
 
 
+              {/* 移动端底部快捷栏（Acode 风格） */}
+              {!isReadingMode && (
+                <div className="md:hidden flex items-center h-11 shrink-0 border-t border-white/10 bg-[#252526] text-gray-300 select-none">
+                  <div className="flex items-center gap-0.5 px-1">
+                    <QuickToolButton title={i18n.t('撤销')} onClick={() => editorRef.current?.undo()}>
+                      <Undo2 className="w-4 h-4" />
+                    </QuickToolButton>
+                    <QuickToolButton title={i18n.t('重做')} onClick={() => editorRef.current?.redo()}>
+                      <Redo2 className="w-4 h-4" />
+                    </QuickToolButton>
+                    <QuickToolButton
+                      title={i18n.t('搜索/替换')}
+                      active={showSearchPanel}
+                      onClick={() => setShowSearchPanel(v => !v)}
+                    >
+                      <Search className="w-4 h-4" />
+                    </QuickToolButton>
+                    <QuickToolButton
+                      title={wordWrap === 'on' ? i18n.t('取消自动换行') : i18n.t('自动换行')}
+                      active={wordWrap === 'on'}
+                      onClick={() => setWordWrap(w => w === 'on' ? 'off' : 'on')}
+                    >
+                      <WrapText className="w-4 h-4" />
+                    </QuickToolButton>
+                  </div>
+                  <div className="w-px h-5 bg-white/10 shrink-0" />
+                  <div className="flex-1 min-w-0 flex items-center gap-0.5 overflow-x-auto scrollbar-none px-1">
+                    {EDITOR_QUICK_SYMBOLS.map((item) => (
+                      <QuickSymbolButton
+                        key={item.label}
+                        label={item.label}
+                        value={item.value}
+                        onInsert={(value) => editorRef.current?.insertText(value)}
+                      />
+                    ))}
+                  </div>
+                  <div className="w-px h-5 bg-white/10 shrink-0" />
+                  <div className="flex items-center px-1">
+                    <QuickToolButton
+                      title={actionBusy ? i18n.t('提交中...') : i18n.t('保存并提交')}
+                      disabled={actionBusy}
+                      onClick={handleQuickSave}
+                    >
+                      {actionBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    </QuickToolButton>
+                  </div>
+                </div>
+              )}
+
+
               {/* 底栏：提交 */}
               {!isReadingMode && (
                 <div className="flex flex-col shrink-0 border-t border-border bg-card/95 select-none">
@@ -1288,6 +1422,7 @@ export default function CodeBrowserPage() {
                         setCommitMsg(e.target.value);
                         setShowSyntaxWarning(false);
                       }}
+                      ref={commitInputRef}
                       placeholder={i18n.t('提交信息（必填）...')}
                       className="h-8 bg-secondary border-border text-foreground placeholder:text-muted-foreground text-sm" />
                   </div>

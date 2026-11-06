@@ -601,7 +601,7 @@ export default function RepoDetailPage() {
               ) : (
                 <div className="divide-y divide-border">
                   {commits.map((commit) => (
-                    <div key={commit.sha} className="p-4 hover:bg-secondary/50 transition-colors">
+                    <div key={commit.sha} className="p-4 hover:bg-secondary/50 transition-colors cursor-pointer" onClick={() => navigate(`/repos/${repo.full_name}/commits`)}>
                       <div className="flex items-start gap-3">
                         <Avatar className="w-7 h-7 shrink-0">
                           <AvatarImage src={commit.author?.avatar_url} />

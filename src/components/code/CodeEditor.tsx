@@ -17,6 +17,14 @@ import {
   ViewUpdate,
 } from '@codemirror/view';
 import { EditorState, Extension, StateField } from '@codemirror/state';
+import { StreamLanguage, type StreamParser } from '@codemirror/language';
+import { shell } from '@codemirror/legacy-modes/mode/shell';
+import { powerShell } from '@codemirror/legacy-modes/mode/powershell';
+import { groovy } from '@codemirror/legacy-modes/mode/groovy';
+import { properties } from '@codemirror/legacy-modes/mode/properties';
+import { cmake } from '@codemirror/legacy-modes/mode/cmake';
+import { dockerFile } from '@codemirror/legacy-modes/mode/dockerfile';
+import { toml } from '@codemirror/legacy-modes/mode/toml';
 import { githubLight, githubDark } from '@uiw/codemirror-theme-github';
 import { undo, redo } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
@@ -42,6 +50,7 @@ export interface CodeEditorRef {
   redo: () => boolean;
   getValue: () => string;
   getView: () => EditorView | null;
+  insertText: (text: string) => void;
 }
 
 interface CodeEditorProps {
@@ -63,8 +72,26 @@ const CODE_FONT_FAMILY =
 const CODE_LINE_HEIGHT = '1.6';
 const ACTIVE_LINE_CLASS = 'cm-activeCodeLine';
 
+// legacy-modes 的 StreamParser 类型来自 @codemirror/streamparser，
+// 运行时与 @codemirror/language 的 StreamLanguage 完全兼容；
+// 这里在边界处做一次类型收窄，避免两个包的私有 StringStream 类型冲突。
+function legacyLanguage(mode: unknown): Extension {
+  return StreamLanguage.define(mode as StreamParser<unknown>);
+}
+
 function getLanguageExtension(fileName: string): Extension | null {
-  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const baseName = fileName.split('/').pop()?.toLowerCase() || '';
+  if (baseName === 'makefile' || baseName.endsWith('makefile')) {
+    return legacyLanguage(shell);
+  }
+  if (baseName === 'cmakelists.txt') {
+    return legacyLanguage(cmake);
+  }
+  if (baseName === 'dockerfile' || baseName.startsWith('dockerfile.')) {
+    return legacyLanguage(dockerFile);
+  }
+  const dot = baseName.lastIndexOf('.');
+  const ext = dot >= 0 ? baseName.slice(dot + 1) : '';
   switch (ext) {
     case 'js':
     case 'mjs':
@@ -114,6 +141,32 @@ function getLanguageExtension(fileName: string): Extension | null {
     case 'yaml':
     case 'yml':
       return yaml();
+    case 'sh':
+    case 'bash':
+    case 'zsh':
+    case 'ksh':
+    case 'bat':
+    case 'cmd':
+    case 'mk':
+      return legacyLanguage(shell);
+    case 'ps1':
+    case 'psm1':
+      return legacyLanguage(powerShell);
+    case 'gradle':
+    case 'groovy':
+      return legacyLanguage(groovy);
+    case 'properties':
+    case 'ini':
+    case 'conf':
+    case 'env':
+    case 'cfg':
+      return legacyLanguage(properties);
+    case 'toml':
+      return legacyLanguage(toml);
+    case 'cmake':
+      return legacyLanguage(cmake);
+    case 'dockerfile':
+      return legacyLanguage(dockerFile);
     case 'sql':
       return sql();
     default:
@@ -246,6 +299,17 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
       },
       getValue: () => viewRef.current?.state.doc.toString() ?? '',
       getView: () => viewRef.current,
+      insertText: (text: string) => {
+        const view = viewRef.current;
+        if (!view || readOnly) return;
+        const { from, to } = view.state.selection.main;
+        view.dispatch({
+          changes: { from, to, insert: text },
+          selection: { anchor: from + text.length },
+          scrollIntoView: true,
+        });
+        view.focus();
+      },
     }));
 
     // 字号由外层容器 CSS 继承给编辑器，不重建 CodeMirror 扩展。

@@ -100,16 +100,25 @@ export async function testProviderConnection(
   apiKey: string,
   endpoint?: string,
   model?: string,
+  proxyUrl?: string,
 ): Promise<TestConnectionResult> {
   if (type === 'wenxin') return { success: false, error: i18n.t('该平台已不再支持') };
-  const url = getProviderChatUrl(type, endpoint);
+  const proxyBase = proxyUrl?.trim().replace(/\/+$/, '') ||
+    (type !== 'custom' ? 'https://llm.callact.xyz' : '');
+  const url = proxyBase
+    ? `${proxyBase}/v1/chat/completions`
+    : getProviderChatUrl(type, endpoint);
   if (!url) return { success: false, error: i18n.t('接口地址为空，请先填写') };
-
+  const headers: Record<string, string> = {
+    ...authHeaders(apiKey),
+    ...(proxyBase ? { 'x-llm-provider': type } : {}),
+    ...(proxyBase && type === 'custom' && endpoint ? { 'x-llm-upstream': endpoint } : {}),
+  };
   const startedAt = Date.now();
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: authHeaders(apiKey),
+      headers,
       body: JSON.stringify({
         model: model || 'default',
         messages: [{ role: 'user', content: 'ping' }],

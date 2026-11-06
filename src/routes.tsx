@@ -84,7 +84,7 @@ export const routes: RouteConfig[] = [
   { name: i18n.t('数据导出'), path: '/export', element: <ExportPage /> },
   { name: i18n.t('批量上传'), path: '/repos/:owner/:repo/upload', element: <UploadPage /> },
   { name: i18n.t('Pages 部署'), path: '/repos/:owner/:repo/pages', element: <PagesDeployPage /> },
-  { name: i18n.t('Releases'), path: '/repos/:owner/:repo/artifacts', element: <ArtifactsPage /> },
+  { name: i18n.t('仓库产物'), path: '/repos/:owner/:repo/artifacts', element: <ArtifactsPage /> },
   { name: i18n.t('仓库 Forks'), path: '/repos/:owner/:repo/forks', element: <RepoForksPage /> },
   { name: i18n.t('仓库收藏者'), path: '/repos/:owner/:repo/stargazers', element: <StargazersPage /> },
   { name: i18n.t('设置'), path: '/settings', element: <SettingsPage /> },

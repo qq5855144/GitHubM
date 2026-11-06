@@ -498,7 +498,7 @@ export default function RepoDetailPage() {
         {([
           // ── 前列：高频入口（所有人可见）──
           { label: i18n.t('代码浏览'),        icon: Code,           path: 'code',          count: null,                   ownerOnly: false },
-          { label: i18n.t('Releases'),        icon: Package,        path: 'artifacts',     count: null,                   ownerOnly: false },
+          { label: i18n.t('产物下载'),        icon: Package,        path: 'artifacts',     count: null,                   ownerOnly: false },
           // ── 前列：管理入口（仅 owner）──
           { label: i18n.t('Pages 部署'),      icon: Globe,          path: 'pages',         count: null,                   ownerOnly: true  },
           // ── 核心协作功能（所有人可见）──

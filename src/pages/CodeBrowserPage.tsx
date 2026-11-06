@@ -1538,14 +1538,7 @@ export default function CodeBrowserPage() {
                           className="hidden md:flex items-center gap-0.5 mr-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {!isDir && item.download_url && (
-                            <Button variant="ghost" size="icon"
-                              className="h-6 w-6 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                              title={i18n.t('下载')}
-                              onClick={async (e) => { e.stopPropagation(); try { await downloadCodeFile(item.download_url!, item.name, token ?? ''); } catch { toast.error(i18n.t('下载失败')); } }}>
-                              <Download className="w-3 h-3" />
-                            </Button>
-                          )}
+                          {/* 文件下载统一走顶部「下载」菜单，避免重复入口 */}
                           <Button variant="ghost" size="icon"
                             className="h-6 w-6 text-muted-foreground hover:bg-secondary hover:text-foreground"
                             title={i18n.t('复制路径')}

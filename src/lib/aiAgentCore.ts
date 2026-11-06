@@ -61,6 +61,8 @@ interface ModelConfig {
   api_key?: string;
   /** 自定义接口地址（custom 时必填） */
   endpoint?: string;
+  /** 无状态模型代理地址（Cloudflare Worker） */
+  proxy_url?: string;
   /** 具体模型名称，如 deepseek-v4-flash / deepseek-v4-pro / gemini-2.5-flash-preview-05-20 */
   model?: string;
   /**
@@ -769,6 +771,9 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
  ];
 
+// 默认无状态模型代理（Cloudflare Worker + 自有域名，避免 workers.dev 在部分网络被污染）
+const DEFAULT_LLM_PROXY_URL = 'https://llm.callact.xyz';
+
 function buildLLMRequest(cfg: ModelConfig): {
   url: string;
   headers: Record<string, string>;
@@ -781,6 +786,30 @@ function buildLLMRequest(cfg: ModelConfig): {
   const fcExtra = supportsFunctionCalling(cfg.type, cfg.model)
     ? { tools: getAllToolDefinitions(), tool_choice: "auto", parallel_tool_calls: true }
     : {};
+
+  // 配置 proxy_url 后统一走无状态 Worker，解决 WebView CORS / 网络问题
+  const withProxy = (request: {
+    url: string;
+    headers: Record<string, string>;
+    bodyExtra: Record<string, unknown>;
+  }) => {
+    const base = cfg.proxy_url?.trim().replace(/\/+$/, '') ||
+      (cfg.type !== 'custom' ? DEFAULT_LLM_PROXY_URL : '');
+    if (!base) return request;
+    const headers: Record<string, string> = {
+      ...request.headers,
+      'x-llm-provider': cfg.type,
+    };
+    if (cfg.type === 'custom' && cfg.endpoint) {
+      headers['x-llm-upstream'] = cfg.endpoint;
+    }
+    return {
+      ...request,
+      url: `${base}/v1/chat/completions`,
+      headers,
+    };
+  };
+
   switch (cfg.type) {
     case "deepseek": {
       // 新模型命名（2026-05）：
@@ -798,7 +827,7 @@ function buildLLMRequest(cfg: ModelConfig): {
       const dsThinkingExtra = dsIsThinking
         ? { thinking: { type: "enabled" }, reasoning_effort: "high" }
         : {};
-      return {
+      return withProxy({
         url: "https://api.deepseek.com/v1/chat/completions",
         headers: { Authorization: `Bearer ${cfg.api_key}` },
         bodyExtra: {
@@ -810,11 +839,11 @@ function buildLLMRequest(cfg: ModelConfig): {
           ...dsThinkingExtra,
           ...fcExtra,
         },
-      };
+      });
     }
     case "gemini":
       // Google AI Studio 提供 OpenAI 兼容接口，无需额外适配
-      return {
+      return withProxy({
         url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         headers: { Authorization: `Bearer ${cfg.api_key}` },
         bodyExtra: {
@@ -824,10 +853,10 @@ function buildLLMRequest(cfg: ModelConfig): {
           ...tempExtra,
           ...fcExtra,
         },
-      };
+      });
     case "qwen":
       // 阿里云 DashScope OpenAI 兼容接口
-      return {
+      return withProxy({
         url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
         headers: { Authorization: `Bearer ${cfg.api_key}` },
         bodyExtra: {
@@ -837,22 +866,22 @@ function buildLLMRequest(cfg: ModelConfig): {
           ...tempExtra,
           ...fcExtra,
         },
-      };
+      });
     case "openai":
-      return {
+      return withProxy({
         url: "https://api.openai.com/v1/chat/completions",
         headers: { Authorization: `Bearer ${cfg.api_key}` },
         bodyExtra: { model: cfg.model || "gpt-4o-mini", stream: true, max_tokens: 16384, ...tempExtra, ...fcExtra },
-      };
+      });
     case "custom":
-      return {
+      return withProxy({
         url: cfg.endpoint!,
         headers: cfg.api_key ? { Authorization: `Bearer ${cfg.api_key}` } : {},
         // 自定义接口不注入 tools（不确定是否支持 FC）
         bodyExtra: cfg.model
           ? { model: cfg.model, stream: true, max_tokens: 8192, ...tempExtra }
           : { stream: true, max_tokens: 8192, ...tempExtra },
-      };
+      });
     default:
       // 文心平台已移除（依赖后端平台密钥，无法前端直连）。
       // 老配置已在 aiUtils.loadModelConfig 中自动迁移为 deepseek。

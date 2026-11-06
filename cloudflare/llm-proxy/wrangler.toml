@@ -1,0 +1,14 @@
+name = "githubm-llm-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-11-05"
+
+# 自定义域：workers.dev 在当前网络被 DNS 污染，使用已接入 Cloudflare 的域名
+routes = [
+  { pattern = "llm.callact.xyz", custom_domain = true }
+]
+
+# 不保存任何密钥；模型 API Key 由 App 每次请求携带。
+[vars]
+ALLOWED_ORIGIN = "*"
+# custom provider 上游白名单（按需填写，逗号分隔域名）
+ALLOWED_UPSTREAMS = ""

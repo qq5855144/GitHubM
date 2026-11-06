@@ -55,10 +55,13 @@ import {
   getJobLogs,
   getBranches,
   formatRelativeTime,
+  getFileContent,
 } from '@/services/github';
 import type { GitHubWorkflow, GitHubWorkflowRun, GitHubWorkflowJob } from '@/types/types';
 import { toast } from 'sonner';
 import { copyToClipboard } from '@/lib/utils';
+import { decodeBase64Content } from '@/lib/utils';
+import { parse as parseYaml } from 'yaml';
 import i18n from "@/i18n";
 
 function RunStatusBadge({ status, conclusion }: { status: string | null; conclusion: string | null }) {
@@ -388,6 +391,16 @@ export default function ActionsPage() {
   const [branches, setBranches] = useState<string[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [inputPairs, setInputPairs] = useState<{ key: string; value: string }[]>([]);
+  const [workflowInputs, setWorkflowInputs] = useState<Array<{
+    name: string;
+    description?: string;
+    required?: boolean;
+    type?: string;
+    options?: string[];
+    defaultValue?: string;
+  }>>([]);
+  const [workflowInputValues, setWorkflowInputValues] = useState<Record<string, string>>({});
+  const [loadingInputs, setLoadingInputs] = useState(false);
 
   useEffect(() => {
     if (!owner || !repo) return;
@@ -398,28 +411,80 @@ export default function ActionsPage() {
   }, [owner, repo]);
 
   // 打开触发 Dialog 时加载分支列表
+  const loadWorkflowInputs = useCallback(async (wf: GitHubWorkflow, ref: string) => {
+    if (!owner || !repo) return;
+    setLoadingInputs(true);
+    setWorkflowInputs([]);
+    setWorkflowInputValues({});
+    try {
+      const file = await getFileContent(owner, repo, wf.path, ref);
+      const text = file.encoding === 'base64'
+        ? decodeBase64Content(file.content)
+        : file.content;
+      const doc = parseYaml(text) as Record<string, unknown> | null;
+      const on = (doc?.on ?? (doc as Record<string, unknown> | null)?.['true']) as Record<string, unknown> | Array<unknown> | undefined;
+      const dispatch = (Array.isArray(on)
+        ? on.find(v => v === 'workflow_dispatch' || (v && typeof v === 'object' && 'workflow_dispatch' in (v as object)))
+        : on?.workflow_dispatch) as Record<string, unknown> | undefined;
+      const rawInputs = dispatch?.inputs as Record<string, {
+        description?: string;
+        required?: boolean;
+        type?: string;
+        default?: unknown;
+        options?: string[];
+      }> | undefined;
+      if (!rawInputs || typeof rawInputs !== 'object') return;
+      const defs = Object.entries(rawInputs).map(([name, def]) => ({
+        name,
+        description: def?.description,
+        required: !!def?.required,
+        type: def?.type || 'string',
+        options: Array.isArray(def?.options) ? def.options.map(String) : undefined,
+        defaultValue: def?.default === undefined ? '' : String(def.default),
+      }));
+      setWorkflowInputs(defs);
+      setWorkflowInputValues(Object.fromEntries(defs
+        .filter(d => d.defaultValue !== '')
+        .map(d => [d.name, d.defaultValue])));
+    } catch (err) {
+      console.warn('[Actions] 读取 workflow inputs 失败', err);
+    } finally {
+      setLoadingInputs(false);
+    }
+  }, [owner, repo]);
+
   const openTriggerDialog = useCallback(async (wf: GitHubWorkflow) => {
     setTriggerDialog(wf);
     setInputPairs([]);
+    setWorkflowInputs([]);
+    setWorkflowInputValues({});
     if (!owner || !repo) return;
     setLoadingBranches(true);
     try {
       const result = await getBranches(owner, repo, 1);
       const names = result.data.map((b) => b.name);
       setBranches(names);
-      setTriggerRef(names[0] || 'main');
+      const ref = names[0] || 'main';
+      setTriggerRef(ref);
+      void loadWorkflowInputs(wf, ref);
     } catch {
       setBranches([]);
       setTriggerRef('main');
+      void loadWorkflowInputs(wf, 'main');
     } finally {
       setLoadingBranches(false);
     }
-  }, [owner, repo]);
+  }, [owner, repo, loadWorkflowInputs]);
 
   const handleTriggerConfirm = async () => {
     if (!owner || !repo || !triggerDialog) return;
-    const inputs: Record<string, string> = {};
+    const inputs: Record<string, string> = { ...workflowInputValues };
     inputPairs.forEach(({ key, value }) => { if (key.trim()) inputs[key.trim()] = value; });
+    const missing = workflowInputs.filter(d => d.required && !(inputs[d.name] ?? '').trim());
+    if (missing.length) {
+      toast.error(`${i18n.t('请填写必填 Inputs：')}${missing.map(d => d.name).join(', ')}`);
+      return;
+    }
     setTriggering(triggerDialog.id);
     try {
       await triggerWorkflow(owner, repo, triggerDialog.id, triggerRef, inputs);
@@ -623,7 +688,10 @@ export default function ActionsPage() {
             {loadingBranches ? (
               <Skeleton className="h-9 bg-muted w-full" />
             ) : branches.length > 0 ? (
-              <Select value={triggerRef} onValueChange={setTriggerRef}>
+              <Select value={triggerRef} onValueChange={(v) => {
+                setTriggerRef(v);
+                if (triggerDialog) void loadWorkflowInputs(triggerDialog, v);
+              }}>
                 <SelectTrigger className="bg-secondary border-border text-foreground h-9 text-sm">
                   <SelectValue />
                 </SelectTrigger>
@@ -642,6 +710,62 @@ export default function ActionsPage() {
               />
             )}
           </div>
+
+          {/* 自动加载 workflow_dispatch.inputs */}
+          {loadingInputs ? (
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-28 bg-muted" />
+              <Skeleton className="h-9 w-full bg-muted" />
+            </div>
+          ) : workflowInputs.length > 0 && (
+            <div className="space-y-2.5">
+              <Label className="text-sm font-normal text-muted-foreground">
+                {i18n.t('工作流 Inputs')}</Label>
+              {workflowInputs.map((def) => {
+                const value = workflowInputValues[def.name] ?? '';
+                const setValue = (v: string) => setWorkflowInputValues(prev => ({ ...prev, [def.name]: v }));
+                return (
+                  <div key={def.name} className="space-y-1">
+                    <Label className="text-xs text-foreground font-mono flex items-center gap-1 flex-wrap">
+                      {def.name}
+                      {def.required && <span className="text-destructive">*</span>}
+                      <span className="text-[10px] text-muted-foreground font-sans">{def.type || 'string'}</span>
+                    </Label>
+                    {def.type === 'choice' && def.options?.length ? (
+                      <Select value={value} onValueChange={setValue}>
+                        <SelectTrigger className="bg-secondary border-border text-foreground h-9 text-sm">
+                          <SelectValue placeholder={i18n.t('请选择')} />
+                        </SelectTrigger>
+                        <SelectContent className="bg-popover border-border">
+                          {def.options.map(opt => <SelectItem key={opt} value={opt} className="text-sm">{opt}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : def.type === 'boolean' ? (
+                      <Select value={value || 'false'} onValueChange={setValue}>
+                        <SelectTrigger className="bg-secondary border-border text-foreground h-9 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-popover border-border">
+                          <SelectItem value="true">true</SelectItem>
+                          <SelectItem value="false">false</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        className="bg-secondary border-border text-foreground h-9 text-sm"
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        placeholder={def.defaultValue || i18n.t('请输入')}
+                      />
+                    )}
+                    {def.description && (
+                      <p className="text-[11px] text-muted-foreground">{def.description}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* 自定义 inputs */}
           <div className="space-y-2">

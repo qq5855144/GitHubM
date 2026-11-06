@@ -116,6 +116,7 @@ import type { GitHubContent, GitHubBranch } from '@/types/types';
 import { toast } from 'sonner';
 import { decodeBase64Content, copyToClipboard } from '@/lib/utils';
 import { getFileIconInfo, isImageFile } from '@/components/common/FileIcon';
+import { downloadGithubFile, downloadRepoDirectoryZip, isWgetLaEnabled, setWgetLaEnabled } from '@/lib/githubDownload';
 import i18n from "@/i18n";
 
 /**
@@ -126,27 +127,8 @@ import i18n from "@/i18n";
  * 浏览器：fetch + Authorization header → Blob → <a download>，
  *   确保私有仓库文件正常下载且文件名正确。
  */
-async function downloadCodeFile(url: string, filename: string, token: string): Promise<void> {
-  const bridge = (window as unknown as {
-    AndroidBridge?: { downloadFile?: (u: string, f: string, t: string) => void }
-  }).AndroidBridge;
-  if (bridge?.downloadFile) {
-    bridge.downloadFile(url, filename, token);
-    return;
-  }
-  const headers: Record<string, string> = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const blob = await res.blob();
-  const blobUrl = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = blobUrl;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(blobUrl);
+async function downloadCodeFile(url: string, filename: string, token: string, accelerate = false): Promise<void> {
+  await downloadGithubFile(url, filename, token, { accelerate });
 }
 
 type ActionMode =
@@ -307,6 +289,9 @@ export default function CodeBrowserPage() {
   const [skipExisting, setSkipExisting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [wgetAccel, setWgetAccel] = useState(() => isWgetLaEnabled());
+  const [dirDownloading, setDirDownloading] = useState(false);
+  const [dirProgress, setDirProgress] = useState<{ done: number; total: number } | null>(null);
 
   // 判断当前文件是否是图片
   const currentIsImage = currentFile ? isImageFile(currentFile.name) : false;
@@ -363,6 +348,34 @@ export default function CodeBrowserPage() {
       setLoading(false);
     }
   }, [owner, repo, filePath, currentBranch]);
+
+  const handleDownloadDirectory = useCallback(async (directory?: string) => {
+    if (!owner || !repo || !currentBranch || dirDownloading) return;
+    const targetDir = directory ?? filePath;
+    setDirDownloading(true);
+    setDirProgress(null);
+    try {
+      if (!targetDir) {
+        const url = `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/${encodeURIComponent(currentBranch)}`;
+        await downloadCodeFile(url, `${repo}-${currentBranch}.zip`, token ?? '', wgetAccel);
+      } else {
+        await downloadRepoDirectoryZip({
+          owner,
+          repo,
+          branch: currentBranch,
+          directory: targetDir,
+          token: token ?? '',
+          onProgress: (done, total) => setDirProgress({ done, total }),
+        });
+      }
+      toast.success(i18n.t('目录已打包下载'));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : i18n.t('目录下载失败'));
+    } finally {
+      setDirDownloading(false);
+      setDirProgress(null);
+    }
+  }, [owner, repo, currentBranch, filePath, token, dirDownloading, wgetAccel]);
 
   // ── 导航栈同步：每次 filePath 变化时更新 sessionStorage 导航栈 ───────────────
   // 这样面包屑点击时可以通过 navigate(-n) 回溯，而不是 push 新条目
@@ -1303,6 +1316,26 @@ export default function CodeBrowserPage() {
             {!currentFile && !loading && (
               <div className="flex items-center gap-1 shrink-0">
                 <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1 px-2"
+                  onClick={() => void handleDownloadDirectory()} disabled={dirDownloading}>
+                  {dirDownloading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                  <span className="hidden sm:inline">
+                    {dirDownloading && dirProgress
+                      ? `${dirProgress.done}/${dirProgress.total}`
+                      : i18n.t('下载目录')}
+                  </span>
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1 px-2"
+                  title={i18n.t('wget.la 下载加速（仅公开仓库）')}
+                  onClick={() => {
+                    const next = !wgetAccel;
+                    setWgetAccel(next);
+                    setWgetLaEnabled(next);
+                    toast.success(next ? i18n.t('已开启 wget.la 加速') : i18n.t('已关闭 wget.la 加速'));
+                  }}>
+                  <CheckCircle2 className={`w-3 h-3 ${wgetAccel ? 'text-success' : ''}`} />
+                  <span className="hidden lg:inline">{wgetAccel ? i18n.t('加速开') : i18n.t('加速关')}</span>
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1 px-2"
                   onClick={() => openAction('new-file')}>
                   <FilePlus className="w-3 h-3" /><span className="hidden sm:inline">{i18n.t('新建文件')}</span>
                 </Button>
@@ -1348,6 +1381,21 @@ export default function CodeBrowserPage() {
                   <DropdownMenuContent align="end" className="w-44">
                     <DropdownMenuItem onClick={() => { const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${currentBranch}/${currentFile.path}`; copyToClipboard(rawUrl); toast.success(i18n.t('Raw 链接已复制')); }}>
                       <Link className="w-3.5 h-3.5 mr-2" />{i18n.t('复制 Raw 链接')}</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => {
+                      const next = !wgetAccel;
+                      setWgetAccel(next);
+                      setWgetLaEnabled(next);
+                      toast.success(next ? i18n.t('已开启 wget.la 加速') : i18n.t('已关闭 wget.la 加速'));
+                    }}>
+                      <CheckCircle2 className={`w-3.5 h-3.5 mr-2 ${wgetAccel ? 'text-success' : 'text-muted-foreground'}`} />
+                      {wgetAccel ? i18n.t('wget.la 加速：开') : i18n.t('wget.la 加速：关')}</DropdownMenuItem>
+                    {currentFile.download_url && (
+                      <DropdownMenuItem onClick={async () => {
+                        try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? '', true); }
+                        catch { toast.error(i18n.t('加速下载失败，公开仓库才可使用代理')); }
+                      }}>
+                        <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('通过 wget.la 下载')}</DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => openAction('rename', currentFile)}>
                       <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</DropdownMenuItem>
@@ -1490,8 +1538,12 @@ export default function CodeBrowserPage() {
                                 <MoreHorizontal className="w-3 h-3" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-44">
-                              <DropdownMenuItem onClick={() => openAction('rename', item)}>
+<DropdownMenuContent align="end" className="w-44">
+                              {isDir && (
+                                 <DropdownMenuItem onClick={() => void handleDownloadDirectory(item.path)}>
+                                   <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('下载目录 ZIP')}</DropdownMenuItem>
+                               )}
+                               <DropdownMenuItem onClick={() => openAction('rename', item)}>
                                 <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => openAction('move', item)}>
                                 <MoveRight className="w-3.5 h-3.5 mr-2" />{i18n.t('移动到...')}</DropdownMenuItem>

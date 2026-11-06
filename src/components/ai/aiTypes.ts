@@ -189,8 +189,8 @@ export interface ModelConfig {
   endpoint?: string;
   /** 无状态模型代理地址（Cloudflare Worker），配置后所有模型请求走代理 */
   proxy_url?: string;
-  /** Agent 编排引擎：classic=旧循环（默认），langgraph=LangGraph（实验） */
-  agent_engine?: 'classic' | 'langgraph';
+  /** Agent 编排引擎：仅保留 LangGraph */
+  agent_engine?: 'langgraph';
   /** 模型思考强度；off=关闭思考，auto/undefined=模型默认 */
   reasoning_effort?: 'off' | 'low' | 'medium' | 'high' | 'max';
   model?: string;

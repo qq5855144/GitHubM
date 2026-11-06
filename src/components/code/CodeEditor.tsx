@@ -214,9 +214,10 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
     const extensions = useMemo(() => {
       const exts: Extension[] = [
         ...basicSetup({
-          lineNumbers: !isMobile,
+          // 行号在移动端也保留，便于按报错行号定位
+          lineNumbers: true,
           foldGutter: !isMobile,
-          highlightActiveLineGutter: !isMobile,
+          highlightActiveLineGutter: true,
           searchKeymap: false, // 自定义搜索快捷键
           tabSize: 2,
         }),

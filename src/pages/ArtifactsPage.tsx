@@ -49,6 +49,7 @@ import {
   type GitHubReleaseAsset,
 } from '@/services/github';
 import { toast } from 'sonner';
+import { downloadGithubFile, isDownloadProxyEnabled } from '@/lib/githubDownload';
 import i18n from "@/i18n";
 
 function formatBytes(bytes: number): string {
@@ -81,6 +82,18 @@ async function downloadWithAuth(asset: { url: string; browser_download_url: stri
   if (!token) {
     toast.error(i18n.t('请先登录后再下载'));
     return;
+  }
+
+  // 全局下载代理：仅对 github.com 上的 Release 附件生效。
+  // Source code zipball/tarball 是 api.github.com 接口，必须继续走 Token 直连。
+  if (isDownloadProxyEnabled() && asset.browser_download_url.startsWith('https://github.com/')) {
+    try {
+      await downloadGithubFile(asset.browser_download_url, asset.name, token);
+      toast.success(`开始下载 ${asset.name}`);
+      return;
+    } catch (err) {
+      toast.error(err instanceof Error ? `代理下载失败，已切换直连：${err.message}` : '代理下载失败，已切换直连');
+    }
   }
 
   // Android WebView 原生下载（携带 Token，支持私有仓库）

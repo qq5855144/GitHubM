@@ -75,6 +75,10 @@ interface ModelConfig {
   proxy_url?: string;
   /** Agent 编排引擎：classic=旧循环（默认），langgraph=LangGraph（实验） */
   agent_engine?: 'classic' | 'langgraph';
+  /** 模型思考强度；off=关闭思考，undefined=模型默认 */
+  reasoning_effort?: 'off' | 'low' | 'medium' | 'high' | 'max';
+  /** 单次模型请求超时（毫秒），默认 90000 */
+  timeoutMs?: number;
   /** 具体模型名称，如 deepseek-v4-flash / deepseek-v4-pro / gemini-2.5-flash-preview-05-20 */
   model?: string;
   /**
@@ -830,15 +834,19 @@ function buildLLMRequest(cfg: ModelConfig): {
       // 旧名称 deepseek-chat / deepseek-reasoner 仍可用，将于 2026/07/24 弃用
       const dsModel = cfg.model || "deepseek-v4-flash";
       const dsIsThinking = isDeepSeekThinkingModel(dsModel);
-      // 思考模式下不支持 temperature / top_p / presence_penalty / frequency_penalty
-      const dsTempExtra = dsIsThinking ? {} : tempExtra;
       // 思考模式控制参数：
       //   thinking.type = "enabled" 开启思考（默认），"disabled" 关闭
-      //   reasoning_effort = "high"（默认，适合普通请求） | "max"（复杂 Agent 请求）
-      // deepseek-v4-flash 非 FC 时也注入思考参数（按需开启）；思考模型始终开启
-      const dsThinkingExtra = dsIsThinking
-        ? { thinking: { type: "enabled" }, reasoning_effort: "high" }
-        : {};
+      //   reasoning_effort = low / medium / high / max
+      const effort = cfg.reasoning_effort;
+      const thinkingEnabled = effort ? effort !== "off" : dsIsThinking;
+      const dsTempExtra = thinkingEnabled ? {} : tempExtra;
+      const dsThinkingExtra = effort
+        ? (effort === "off"
+            ? { thinking: { type: "disabled" } }
+            : { thinking: { type: "enabled" }, reasoning_effort: effort })
+        : (dsIsThinking
+            ? { thinking: { type: "enabled" }, reasoning_effort: "high" }
+            : {});
       return withProxy({
         url: "https://api.deepseek.com/v1/chat/completions",
         headers: { Authorization: `Bearer ${cfg.api_key}` },
@@ -883,7 +891,16 @@ function buildLLMRequest(cfg: ModelConfig): {
       return withProxy({
         url: "https://api.openai.com/v1/chat/completions",
         headers: { Authorization: `Bearer ${cfg.api_key}` },
-        bodyExtra: { model: cfg.model || "gpt-4o-mini", stream: true, max_tokens: 16384, ...tempExtra, ...fcExtra },
+        bodyExtra: {
+          model: cfg.model || "gpt-4o-mini",
+          stream: true,
+          max_tokens: 16384,
+          ...tempExtra,
+          ...fcExtra,
+          ...(cfg.reasoning_effort && cfg.reasoning_effort !== 'off' && /^(o1|o3|o4|gpt-5)/i.test(cfg.model || '')
+            ? { reasoning_effort: cfg.reasoning_effort }
+            : {}),
+        },
       });
     case "custom":
       return withProxy({
@@ -4975,10 +4992,14 @@ async function callLLM(
   const dbgMsgs = safeMessages.map(m => m.role === "assistant" ? { role: m.role, hasRC: m.reasoning_content != null, rcLen: m.reasoning_content?.length ?? -1 } : { role: m.role });
   console.log(`[callLLM] debug-messages-structure: ${JSON.stringify(dbgMsgs)}`);
 
-  // ── LLM fetch 超时：90s 防止 TCP 连接永久挂起 ─────────────────────────────
-  // Edge Function 自身有 ~240s 超时，此处设 90s 确保在 Edge 超时前得到错误反馈
+  // ── LLM fetch 超时 ──────────────────────────────────────────────────────────
+  // 优先使用用户在模型设置中选择的请求超时；默认 90s。
+  const requestTimeoutMs = Math.min(
+    600_000,
+    Math.max(10_000, Number(cfg.timeoutMs) || 90_000),
+  );
   const llmAbort = new AbortController();
-  const llmTimer = setTimeout(() => llmAbort.abort("llm-timeout"), 90_000);
+  const llmTimer = setTimeout(() => llmAbort.abort("llm-timeout"), requestTimeoutMs);
 
   let res: Response;
   try {
@@ -4992,7 +5013,7 @@ async function callLLM(
     clearTimeout(llmTimer);
     const err = e as Error;
     if (err?.name === "AbortError") {
-      throw new Error("LLM 请求超时（90s）：模型服务响应过慢，请稍后重试");
+      throw new Error(`LLM 请求超时（${Math.round(requestTimeoutMs / 1000)}s）：模型服务响应过慢，请稍后重试`);
     }
     throw new Error(`LLM 网络请求失败：${err.message}`);
   }

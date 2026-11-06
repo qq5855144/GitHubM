@@ -1697,6 +1697,15 @@ export async function getGitTree(
   );
 }
 
+/** 读取 Git blob（base64）；走 api.github.com，避免 raw.githubusercontent.com 的 CORS 预检限制 */
+export async function getGitBlob(
+  owner: string,
+  repo: string,
+  sha: string
+): Promise<{ sha: string; size: number; encoding: string; content: string }> {
+  return request(`/repos/${owner}/${repo}/git/blobs/${sha}`);
+}
+
 /** 批量删除指定目录下的所有文件（先列出再逐个删除） */
 export async function deleteFolderContents(
   owner: string,

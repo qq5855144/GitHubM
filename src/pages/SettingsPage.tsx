@@ -55,6 +55,7 @@ import { formatCostUsd, getModelPrice, SOURCES } from '@/components/ai/modelPric
 import { fetchVisitStats, type DailyStats, type VisitSummary } from '@/lib/visitStats';
 import {
   DEFAULT_DOWNLOAD_PROXY_URL,
+  downloadGithubFile,
   getCachedFastestDownloadProxy,
   getDownloadProxyCandidates,
   getDownloadProxyUrl,
@@ -1354,13 +1355,27 @@ export default function SettingsPage() {
                   <Button
                     size="sm"
                     className="h-7 text-xs px-2 bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.preventDefault();
+                      const filename = updateInfo.downloadUrl.split('/').pop() || 'update.apk';
+                      const token = localStorage.getItem('github_manager_token') || '';
                       const bridge = (window as unknown as { AndroidBridge?: { downloadFile?: (u: string, f: string, t: string) => void } }).AndroidBridge;
+
+                      // 开启全局代理时，应用更新也复用自动测速/最快代理
+                      if (isDownloadProxyEnabled()) {
+                        try {
+                          await downloadGithubFile(updateInfo.downloadUrl, filename, token);
+                          toast.success('开始下载更新');
+                        } catch (err) {
+                          toast.error(err instanceof Error ? `更新下载失败：${err.message}` : '更新下载失败');
+                          if (!bridge?.downloadFile) {
+                            window.open(updateInfo.downloadUrl, '_blank', 'noopener,noreferrer');
+                          }
+                        }
+                        return;
+                      }
+
                       if (bridge?.downloadFile) {
-                        const filename = updateInfo.downloadUrl.split('/').pop() || 'update.apk';
-                        // 获取 token，更新通常在公开仓库，token 传空也可，但传 token 更稳妥
-                        const token = localStorage.getItem('github_manager_token') || '';
                         bridge.downloadFile(updateInfo.downloadUrl, filename, token);
                       } else {
                         window.open(updateInfo.downloadUrl, '_blank', 'noopener,noreferrer');

@@ -498,12 +498,12 @@ export default function SearchPage() {
       </div>
 
       {/* 搜索类型选项卡 */}
-      <div className="flex border-b border-border">
+      <div className="flex items-stretch border-b border-border overflow-x-auto scrollbar-none">
         {TABS.map(({ type, label, icon: Icon }) => (
           <button
             key={type}
             type="button"
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm border-b-2 transition-colors ${
+            className={`flex-none shrink-0 flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-sm border-b-2 whitespace-nowrap transition-colors ${
               searchType === type
                 ? 'border-primary text-foreground font-medium'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -514,8 +514,8 @@ export default function SearchPage() {
               if (query.trim()) handleSearch(query, type, 1);
             }}
           >
-            <Icon className="w-4 h-4" />
-            {label}
+            <Icon className="w-4 h-4 shrink-0" />
+            <span className="whitespace-nowrap">{label}</span>
           </button>
         ))}
       </div>

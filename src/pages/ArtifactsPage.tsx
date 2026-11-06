@@ -521,7 +521,7 @@ export default function ArtifactsPage() {
           ) : (
             <div className="space-y-2">
               {releases.map((rel) => (
-                <div key={rel.id} className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-colors">
+                <div key={rel.id} className="bg-card border border-border rounded-xl overflow-hidden">
                   <ReleaseItem release={rel} onDelete={setDeleteRelTarget} />
                 </div>
               ))}
@@ -557,7 +557,7 @@ export default function ArtifactsPage() {
           ) : (
             <div className="space-y-2">
               {artifacts.map((art) => (
-                <div key={art.id} className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3 hover:border-primary/40 transition-colors">
+                <div key={art.id} className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3">
                   <FileArchive className="w-4 h-4 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">

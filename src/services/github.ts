@@ -2083,3 +2083,102 @@ export async function blockUser(login: string): Promise<void> {
 export async function unblockUser(login: string): Promise<void> {
   await request<void>(`/user/blocks/${encodeURIComponent(login)}`, { method: 'DELETE' });
 }
+
+// ===== 提交撤销 / 分支回滚 =====
+
+interface GitCommitDetail {
+  sha: string;
+  commit: {
+    message: string;
+    tree: { sha: string };
+    parents: Array<{ sha: string }>;
+  };
+  files?: Array<{
+    filename: string;
+    previous_filename?: string;
+    status: string;
+  }>;
+}
+
+interface GitTreeEntry {
+  path: string;
+  mode: string;
+  type: 'blob' | 'tree' | 'commit';
+  sha: string | null;
+}
+
+async function getCommitDetail(owner: string, repo: string, sha: string): Promise<GitCommitDetail> {
+  return request<GitCommitDetail>(`/repos/${owner}/${repo}/commits/${sha}`);
+}
+
+/**
+ * 撤销某个提交：用 Git Data API 生成一个反向提交。
+ * 将该提交涉及的文件恢复到其父提交的状态，不重写历史。
+ */
+export async function revertCommit(
+  owner: string,
+  repo: string,
+  branch: string,
+  sha: string,
+): Promise<{ sha: string }> {
+  const target = await getCommitDetail(owner, repo, sha);
+  const parentSha = target.commit.parents[0]?.sha;
+  if (!parentSha) throw new Error('根提交没有父提交，无法撤销');
+  if (!target.files?.length) throw new Error('该提交没有可撤销的文件变更');
+
+  const current = await getCommitDetail(owner, repo, (await getBranch(owner, repo, branch)).commit.sha);
+  const parent = await getCommitDetail(owner, repo, parentSha);
+  const parentTree = await getGitTree(owner, repo, parent.commit.tree.sha, true);
+  if (parentTree.truncated) throw new Error('仓库文件树过大，GitHub 返回了截断结果，暂无法安全撤销');
+  const parentMap = new Map(parentTree.tree.map(item => [item.path, item]));
+  const changes = new Map<string, GitTreeEntry>();
+
+  const restore = (path: string) => {
+    const entry = parentMap.get(path);
+    if (!entry) throw new Error(`父提交中找不到文件：${path}`);
+    changes.set(path, { path, mode: entry.mode, type: entry.type, sha: entry.sha });
+  };
+  const remove = (path: string) => {
+    changes.set(path, { path, mode: '100644', type: 'blob', sha: null });
+  };
+
+  for (const file of target.files) {
+    const oldPath = file.previous_filename || file.filename;
+    if (file.status !== 'added') restore(oldPath);
+    if (file.status === 'added' || oldPath !== file.filename) remove(file.filename);
+  }
+
+  const treeEntries = [...changes.values()];
+  if (!treeEntries.length) throw new Error('该提交没有可撤销的文件变更');
+  const newTree = await request<{ sha: string }>(`/repos/${owner}/${repo}/git/trees`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base_tree: current.commit.tree.sha, tree: treeEntries }),
+  });
+  const message = `Revert "${target.commit.message.split('\n')[0]}"`;
+  const newCommit = await request<{ sha: string }>(`/repos/${owner}/${repo}/git/commits`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, tree: newTree.sha, parents: [current.sha] }),
+  });
+  await request(`/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sha: newCommit.sha, force: false }),
+  });
+  return { sha: newCommit.sha };
+}
+
+/** 回滚分支到指定提交（force update，历史会被移动） */
+export async function rollbackBranchToCommit(
+  owner: string,
+  repo: string,
+  branch: string,
+  sha: string,
+): Promise<void> {
+  await request(`/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sha, force: true }),
+  });
+}

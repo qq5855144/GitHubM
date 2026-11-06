@@ -29,6 +29,7 @@ import {
   searchRepositories,
   searchIssues,
   searchUsers,
+  searchCode,
   formatRelativeTime,
   formatNumber,
   getLanguageColor,
@@ -62,8 +63,17 @@ const HISTORY_STORAGE_KEY = 'github_search_history';
 const SORT_STORAGE_KEY    = 'github_search_sort';
 const MAX_HISTORY = 12;
 
-type SearchType = 'repositories' | 'issues' | 'users';
+type SearchType = 'repositories' | 'issues' | 'users' | 'code';
 type SortOption  = 'best-match' | 'stars' | 'forks' | 'updated';
+
+type CodeSearchItem = {
+  name: string;
+  path: string;
+  sha: string;
+  html_url: string;
+  repository: GitHubRepo;
+  score: number;
+};
 
 interface SortConfig { value: SortOption; label: string; apiSort?: string; apiOrder?: string }
 
@@ -177,6 +187,7 @@ export default function SearchPage() {
   const [repos, setRepos]           = useState<GitHubRepo[]>([]);
   const [issues, setIssues]         = useState<GitHubIssue[]>([]);
   const [users, setUsers]           = useState<GitHubUser[]>([]);
+  const [codeResults, setCodeResults] = useState<CodeSearchItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [searched, setSearched]     = useState(false);
   const [currentPage, setCurrentPage] = useState(initPage);
@@ -222,11 +233,20 @@ export default function SearchPage() {
         setTotalCount(result.total_count);
         setIssues([]);
         setUsers([]);
+        setCodeResults([]);
       } else if (type === 'issues') {
         const result = await searchIssues(searchQuery, { per_page: PER_PAGE, page });
         setIssues(result.items);
         setTotalCount(result.total_count);
         setRepos([]);
+        setUsers([]);
+        setCodeResults([]);
+      } else if (type === 'code') {
+        const result = await searchCode(searchQuery, { per_page: PER_PAGE, page });
+        setCodeResults(result.items);
+        setTotalCount(result.total_count);
+        setRepos([]);
+        setIssues([]);
         setUsers([]);
       } else {
         const result = await searchUsers(searchQuery, { per_page: PER_PAGE, page });
@@ -234,6 +254,7 @@ export default function SearchPage() {
         setTotalCount(result.total_count);
         setRepos([]);
         setIssues([]);
+        setCodeResults([]);
       }
       setCurrentPage(page);
       // 同步 URL 参数，方便返回时恢复
@@ -333,6 +354,7 @@ export default function SearchPage() {
     { type: 'repositories', label: i18n.t('仓库'), icon: BookOpen },
     { type: 'issues', label: 'Issues & PRs', icon: AlertCircle },
     { type: 'users', label: i18n.t('用户'), icon: Users },
+    { type: 'code', label: i18n.t('代码'), icon: Code2 },
   ];
 
   // 生成页码按钮列表（最多显示 7 个）
@@ -411,7 +433,9 @@ export default function SearchPage() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => setShowHistory(true)}
-            placeholder={i18n.t('搜索 GitHub…')}
+            placeholder={searchType === 'code'
+              ? i18n.t('搜索代码，可用 repo:owner/name 限定仓库')
+              : i18n.t('搜索 GitHub…')}
             className="search-input pl-9 pr-11 h-10 rounded-lg text-foreground placeholder:text-muted-foreground text-base"
           />
           {/* 回车搜索：置于输入框内部，不再使用外置搜索按钮 */}
@@ -622,6 +646,34 @@ export default function SearchPage() {
                     ))}
                   </div>
                 </div>
+              ))
+            )
+          )}
+
+          {/* 代码结果 */}
+          {searchType === 'code' && (
+            codeResults.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground">{i18n.t('无搜索结果')}</div>
+            ) : (
+              codeResults.map((item) => (
+                <button
+                  key={`${item.repository.full_name}:${item.path}:${item.sha}`}
+                  type="button"
+                  className="w-full p-4 hover:bg-secondary/50 transition-colors text-left border-b border-border last:border-0 group"
+                  onClick={() => navigate(`/repos/${item.repository.full_name}/code/${item.path}`)}
+                >
+                  <div className="flex items-start gap-3">
+                    <Code2 className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-muted-foreground">{item.repository.full_name}</span>
+                        <span className="text-[10px] text-muted-foreground/60">·</span>
+                        <span className="text-sm font-mono text-accent group-hover:underline break-all">{item.path}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{item.name}</p>
+                    </div>
+                  </div>
+                </button>
               ))
             )
           )}

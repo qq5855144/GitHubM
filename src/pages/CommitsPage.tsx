@@ -10,6 +10,9 @@ import {
   Minus,
   ExternalLink,
   GitBranch,
+  Undo2,
+  RotateCcw,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,7 +30,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { getCommits, getCommit, getBranches, formatRelativeTime } from '@/services/github';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { getCommits, getCommit, getBranches, formatRelativeTime, revertCommit, rollbackBranchToCommit } from '@/services/github';
 import type { GitHubCommit, GitHubBranch } from '@/types/types';
 import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
@@ -45,6 +58,9 @@ export default function CommitsPage() {
   const [page, setPage] = useState(1);
   const [selectedCommit, setSelectedCommit] = useState<GitHubCommit | null>(null);
   const [commitDetailLoading, setCommitDetailLoading] = useState(false);
+  const [actionCommit, setActionCommit] = useState<GitHubCommit | null>(null);
+  const [actionKind, setActionKind] = useState<'revert' | 'rollback' | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
 
   useEffect(() => {
     if (!owner || !repo) return;
@@ -109,6 +125,27 @@ export default function CommitsPage() {
       console.error(err);
     } finally {
       setCommitDetailLoading(false);
+    }
+  };
+
+  const handleConfirmAction = async () => {
+    if (!owner || !repo || !actionCommit || !actionKind || !selectedBranch) return;
+    setActionBusy(true);
+    try {
+      if (actionKind === 'revert') {
+        const result = await revertCommit(owner, repo, selectedBranch, actionCommit.sha);
+        toast.success(`已创建撤销提交 ${result.sha.substring(0, 7)}`);
+      } else {
+        await rollbackBranchToCommit(owner, repo, selectedBranch, actionCommit.sha);
+        toast.success(`分支 ${selectedBranch} 已回滚到 ${actionCommit.sha.substring(0, 7)}`);
+      }
+      setActionCommit(null);
+      setActionKind(null);
+      await loadCommits(1, false, true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : i18n.t('操作失败'));
+    } finally {
+      setActionBusy(false);
     }
   };
 
@@ -200,7 +237,23 @@ export default function CommitsPage() {
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost" size="icon"
+                      className="w-7 h-7 text-muted-foreground hover:bg-secondary hover:text-primary"
+                      title={i18n.t('撤销提交（创建反向提交）')}
+                      onClick={() => { setActionCommit(commit); setActionKind('revert'); }}
+                    >
+                      <Undo2 className="w-3.5 h-3.5" /><span className="hidden xl:inline text-xs ml-0.5">{i18n.t('撤销')}</span>
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="w-7 h-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      title={i18n.t('回滚分支到此提交（会移动分支）')}
+                      onClick={() => { setActionCommit(commit); setActionKind('rollback'); }}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" /><span className="hidden xl:inline text-xs ml-0.5">{i18n.t('回滚')}</span>
+                    </Button>
                     <button
                       type="button"
                       className="text-xs bg-secondary border border-border px-2 py-1 rounded font-mono text-accent hover:bg-secondary/80 transition-colors"
@@ -303,6 +356,35 @@ export default function CommitsPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!actionCommit && !!actionKind} onOpenChange={(open) => { if (!open && !actionBusy) { setActionCommit(null); setActionKind(null); } }}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">
+              {actionKind === 'revert' ? i18n.t('撤销这个提交？') : i18n.t('回滚分支到这个提交？')}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground space-y-2">
+              <span className="block font-mono text-xs break-all">{actionCommit?.sha}</span>
+              <span className="block">{actionCommit?.commit.message.split('\n')[0]}</span>
+              <span className="block text-xs">
+                {actionKind === 'revert'
+                  ? i18n.t('将创建一个新的反向提交，保留提交历史。')
+                  : i18n.t('会强制移动分支指针并丢失此提交之后的提交，操作不可撤销。')}
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionBusy}>{i18n.t('取消')}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={actionBusy}
+              className={actionKind === 'rollback' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
+              onClick={(e) => { e.preventDefault(); void handleConfirmAction(); }}
+            >
+              {actionBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : actionKind === 'revert' ? i18n.t('确认撤销') : i18n.t('确认回滚')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

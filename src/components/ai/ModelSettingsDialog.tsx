@@ -131,7 +131,7 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
     if (draft.api_key && draft.type !== 'wenxin') {
       saveProviderKey(draft.type, draft.api_key);
     }
-    onSave(draft);
+    onSave({ ...draft, agent_engine: 'langgraph' });
     onClose();
     toast.success(i18n.t('模型配置已保存'));
   };
@@ -287,24 +287,6 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
             />
             <p className="text-xs text-muted-foreground">
               {i18n.t('留空使用内置无状态代理，解决 Android WebView CORS / network error；也可填写自定义 Worker。')}
-            </p>
-          </div>
-
-          {/* Agent 引擎灰度 */}
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-sm font-normal">{i18n.t('Agent 引擎')}</Label>
-            <Select
-              value={draft.agent_engine || 'classic'}
-              onValueChange={v => setDraft(prev => ({ ...prev, agent_engine: v as 'classic' | 'langgraph' }))}
-            >
-              <SelectTrigger className="px-3"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="classic">{i18n.t('经典引擎（稳定）')}</SelectItem>
-                <SelectItem value="langgraph">{i18n.t('LangGraph 引擎（实验）')}</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {i18n.t('LangGraph 不按工具轮数中断：由模型判断任务是否可交付，交付检查通过后才结束。')}
             </p>
           </div>
 

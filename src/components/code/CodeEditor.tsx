@@ -232,11 +232,18 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
           },
           '.cm-gutters': {
             fontFamily: "ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', Menlo, Monaco, Consolas, monospace",
+            fontSize: `${fontSize}px`,
+            // 与代码区保持同一行高，否则行号和代码会逐行错位
+            lineHeight: '1.6',
+            fontVariantNumeric: 'tabular-nums',
             borderRight: '1px solid rgba(127, 127, 127, 0.14)',
+            backgroundColor: 'transparent',
           },
           '.cm-lineNumbers .cm-gutterElement': {
             padding: '0 8px 0 6px',
-            minWidth: '2.6em',
+            minWidth: '2.8em',
+            textAlign: 'right',
+            lineHeight: '1.6',
           },
           '.cm-activeLine': {
             backgroundColor: 'rgba(127, 127, 127, 0.06)',
@@ -246,7 +253,7 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
           '.cm-activeLineGutter': {
             backgroundColor: 'rgba(127, 127, 127, 0.10)',
             color: 'hsl(var(--primary))',
-            fontWeight: '600',
+            // 不加粗，避免行号宽度变化导致左右跳动
           },
         }),
         searchHighlightField,

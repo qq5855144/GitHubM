@@ -51,6 +51,15 @@ Token 权限：
 https://githubm-llm-proxy.<account>.workers.dev
 ```
 
+当前项目已部署到：
+
+```text
+https://llm.callact.xyz
+```
+
+`workers.dev` 在部分网络会被 DNS 污染，因此生产使用自定义域 `llm.callact.xyz`。  
+`wrangler.toml` 里的 `routes` 已绑定该自定义域。
+
 ## 安全说明
 
 - 不要使用 Cloudflare 邮箱/密码登录自动化；请使用 API Token，并开启 2FA。

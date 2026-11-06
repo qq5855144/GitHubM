@@ -375,6 +375,7 @@ export default function ArtifactsPage() {
   const [artifacts, setArtifacts] = useState<GitHubArtifact[]>([]);
   const [loadingReleases, setLoadingReleases] = useState(true);
   const [loadingArtifacts, setLoadingArtifacts] = useState(false);
+  const [activeTab, setActiveTab] = useState<'releases' | 'artifacts'>('releases');
   const [hasMoreReleases, setHasMoreReleases] = useState(false);
   const [releasePage, setReleasePage] = useState(1);
   const [deleteRelTarget, setDeleteRelTarget] = useState<number | null>(null);
@@ -459,50 +460,73 @@ export default function ArtifactsPage() {
         <Package className="w-5 h-5 text-primary" />
         {i18n.t('仓库产物')}</h1>
 
-      <Tabs defaultValue="releases">
-        <TabsList className="bg-secondary border border-border">
-          <TabsTrigger value="releases" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground gap-1.5">
-            <Tag className="w-3.5 h-3.5" />Releases
-          </TabsTrigger>
-          <TabsTrigger value="artifacts" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground gap-1.5"
-            onClick={() => { if (artifacts.length === 0) loadArtifacts(); }}>
-            <Zap className="w-3.5 h-3.5" />Artifacts
-          </TabsTrigger>
-        </TabsList>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          const next = value as 'releases' | 'artifacts';
+          setActiveTab(next);
+          if (next === 'artifacts' && artifacts.length === 0 && !loadingArtifacts) {
+            void loadArtifacts();
+          }
+        }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <TabsList className="bg-secondary border border-border shrink-0">
+            <TabsTrigger value="releases" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground gap-1.5">
+              <Tag className="w-3.5 h-3.5" />Releases
+            </TabsTrigger>
+            <TabsTrigger value="artifacts" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground gap-1.5">
+              <Zap className="w-3.5 h-3.5" />Artifacts
+            </TabsTrigger>
+          </TabsList>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="border border-border text-muted-foreground hover:bg-secondary h-8 shrink-0"
+            onClick={() => {
+              if (activeTab === 'releases') void loadReleases(1);
+              else void loadArtifacts();
+            }}
+            disabled={activeTab === 'releases' ? loadingReleases : loadingArtifacts}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${(activeTab === 'releases' ? loadingReleases : loadingArtifacts) ? 'animate-spin' : ''}`} />
+            {i18n.t('刷新')}
+          </Button>
+        </div>
 
         {/* Releases */}
         <TabsContent value="releases" className="mt-4">
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
-            {loadingReleases ? (
-              <div className="divide-y divide-border">
-                {[1,2,3].map(i => (
-                  <div key={i} className="p-4 flex gap-3">
-                    <Skeleton className="w-8 h-8 rounded bg-muted shrink-0" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-4 w-1/3 bg-muted" />
-                      <Skeleton className="h-3 w-1/4 bg-muted" />
-                    </div>
+          {loadingReleases && releases.length === 0 ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="bg-card border border-border rounded-xl p-4 flex gap-3">
+                  <Skeleton className="w-8 h-8 rounded bg-muted shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-1/3 bg-muted" />
+                    <Skeleton className="h-3 w-1/4 bg-muted" />
                   </div>
-                ))}
-              </div>
-            ) : releases.length === 0 ? (
-              <div className="py-16 text-center">
-                <Tag className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                <p className="text-foreground font-medium">{i18n.t('暂无 Release')}</p>
-                <p className="text-sm text-muted-foreground mt-1">{i18n.t('创建 Release 后可在此查看和下载产物')}</p>
-                <a href={`https://github.com/${owner}/${repo}/releases/new`} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block">
-                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90 mt-3">
-                    <ExternalLink className="w-4 h-4 mr-2" />{i18n.t('在 GitHub 创建 Release')}</Button>
-                </a>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {releases.map((rel) => (
-                  <ReleaseItem key={rel.id} release={rel} onDelete={setDeleteRelTarget} />
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
+              ))}
+            </div>
+          ) : releases.length === 0 ? (
+            <div className="bg-card border border-border rounded-xl py-16 text-center">
+              <Tag className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+              <p className="text-foreground font-medium">{i18n.t('暂无 Release')}</p>
+              <p className="text-sm text-muted-foreground mt-1">{i18n.t('创建 Release 后可在此查看和下载产物')}</p>
+              <a href={`https://github.com/${owner}/${repo}/releases/new`} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block">
+                <Button className="bg-primary text-primary-foreground hover:bg-primary/90 mt-3">
+                  <ExternalLink className="w-4 h-4 mr-2" />{i18n.t('在 GitHub 创建 Release')}</Button>
+              </a>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {releases.map((rel) => (
+                <div key={rel.id} className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-colors">
+                  <ReleaseItem release={rel} onDelete={setDeleteRelTarget} />
+                </div>
+              ))}
+            </div>
+          )}
           {hasMoreReleases && !loadingReleases && (
             <Button variant="ghost" className="w-full mt-3 border border-border text-muted-foreground hover:bg-secondary" onClick={() => loadReleases(releasePage + 1, true)}>
               {i18n.t('加载更多')}</Button>
@@ -511,70 +535,64 @@ export default function ArtifactsPage() {
 
         {/* Actions Artifacts */}
         <TabsContent value="artifacts" className="mt-4">
-          <div className="flex justify-end mb-3">
-            <Button variant="ghost" size="sm" className="border border-border text-muted-foreground hover:bg-secondary h-8" onClick={loadArtifacts} disabled={loadingArtifacts}>
-              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loadingArtifacts ? 'animate-spin' : ''}`} />{i18n.t('刷新')}</Button>
-          </div>
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
-            {loadingArtifacts ? (
-              <div className="divide-y divide-border">
-                {[1,2,3,4].map(i => (
-                  <div key={i} className="p-4 flex gap-3">
-                    <Skeleton className="w-8 h-8 rounded bg-muted shrink-0" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-4 w-1/3 bg-muted" />
-                      <Skeleton className="h-3 w-1/4 bg-muted" />
-                    </div>
+          {loadingArtifacts && artifacts.length === 0 ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="bg-card border border-border rounded-xl p-4 flex gap-3">
+                  <Skeleton className="w-8 h-8 rounded bg-muted shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-1/3 bg-muted" />
+                    <Skeleton className="h-3 w-1/4 bg-muted" />
                   </div>
-                ))}
-              </div>
-            ) : artifacts.length === 0 ? (
-              <div className="py-16 text-center">
-                <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                <p className="text-foreground font-medium">{i18n.t('暂无 Artifacts')}</p>
-                <p className="text-sm text-muted-foreground mt-1 text-pretty max-w-xs mx-auto">
-                  {i18n.t('Actions Artifacts 是工作流运行后上传的产物文件，会在一段时间后自动过期。')}</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {artifacts.map((art) => (
-                  <div key={art.id} className="flex items-center gap-3 px-4 py-3 group hover:bg-secondary/30 transition-colors">
-                    <FileArchive className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-mono text-foreground">{art.name}</span>
-                        {art.expired && <Badge variant="outline" className="text-xs text-muted-foreground border-border">{i18n.t('已过期')}</Badge>}
-                      </div>
-                      <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
-                        <span>{formatBytes(art.size_in_bytes)}</span>
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatRelativeTime(art.created_at)}</span>
-                        {art.expires_at && !art.expired && (
-                          <span>{i18n.t('过期：')}{formatRelativeTime(art.expires_at)}</span>
-                        )}
-                        {art.workflow_run && (
-                          <span>{i18n.t('分支：')}<code className="font-mono">{art.workflow_run.head_branch}</code></span>
-                        )}
-                      </div>
+                </div>
+              ))}
+            </div>
+          ) : artifacts.length === 0 ? (
+            <div className="bg-card border border-border rounded-xl py-16 text-center">
+              <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+              <p className="text-foreground font-medium">{i18n.t('暂无 Artifacts')}</p>
+              <p className="text-sm text-muted-foreground mt-1 text-pretty max-w-xs mx-auto">
+                {i18n.t('Actions Artifacts 是工作流运行后上传的产物文件，会在一段时间后自动过期。')}</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {artifacts.map((art) => (
+                <div key={art.id} className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3 hover:border-primary/40 transition-colors">
+                  <FileArchive className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-mono text-foreground">{art.name}</span>
+                      {art.expired && <Badge variant="outline" className="text-xs text-muted-foreground border-border">{i18n.t('已过期')}</Badge>}
                     </div>
-                    <div className="flex gap-1 shrink-0">
-                      {!art.expired && (
-                        <ArtifactDownloadButton art={art} owner={owner ?? ''} repo={repo ?? ''} />
+                    <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                      <span>{formatBytes(art.size_in_bytes)}</span>
+                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatRelativeTime(art.created_at)}</span>
+                      {art.expires_at && !art.expired && (
+                        <span>{i18n.t('过期：')}{formatRelativeTime(art.expires_at)}</span>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="w-8 h-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setDeleteArtTarget(art.id)}
-                        title={i18n.t('删除')}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      {art.workflow_run && (
+                        <span>{i18n.t('分支：')}<code className="font-mono">{art.workflow_run.head_branch}</code></span>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  <div className="flex gap-1 shrink-0">
+                    {!art.expired && (
+                      <ArtifactDownloadButton art={art} owner={owner ?? ''} repo={repo ?? ''} />
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-8 h-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setDeleteArtTarget(art.id)}
+                      title={i18n.t('删除')}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 

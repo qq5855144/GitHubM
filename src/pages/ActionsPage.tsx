@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import ActionsArtifacts from '@/components/actions/ActionsArtifacts';
 import {
   Select,
   SelectContent,
@@ -676,6 +677,8 @@ export default function ActionsPage() {
           )}
         </div>
       </div>
+
+      {owner && repo && <ActionsArtifacts owner={owner} repo={repo} />}
     </div>
 
     {/* 触发工作流 Dialog */}

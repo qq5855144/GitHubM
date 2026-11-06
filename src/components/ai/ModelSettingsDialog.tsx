@@ -304,11 +304,11 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              {i18n.t('LangGraph 为实验特性；如遇异常可切回经典引擎。')}
+              {i18n.t('LangGraph 不按工具轮数中断：由模型判断任务是否可交付，交付检查通过后才结束。')}
             </p>
           </div>
 
-          {/* 模型选择 */}
+           {/* 模型选择 */}
           {availableModels.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">

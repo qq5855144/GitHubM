@@ -1454,7 +1454,7 @@ const currentModelDef = getModelDef(modelConfig.type);
     streamingAiMsgIdRef.current = aiMsg.id;
     networkInterruptedRef.current = false;
 
-    let accumulated = '';
+    let answerBuffer = '';
     const newReqBody = { ...prevBody, messages: reconnectHistory };
     lastRequestBodyRef.current = newReqBody as Record<string, unknown>;
 
@@ -1482,19 +1482,173 @@ const currentModelDef = getModelDef(modelConfig.type);
       }
     };
 
+    // 重连也使用与主流程相同的时间线规则
+    const initMsgId = aiMsg.id;
+    let answerMsgId: string | null = null;
+    let hasSteps = false;
+    let planStepsLocal: Array<{ id: string; title: string; desc: string }> = [];
+    let currentStepBubbleId: string | null = null;
+    let thinkingBubbleId: string | null = null;
+    let currentThinking = '';
+    const toolBubbleMap = new Map<string, string>();
+
+    const finalizeAnswer = () => {
+      if (!answerMsgId) return;
+      const id = answerMsgId;
+      answerMsgId = null;
+      answerBuffer = '';
+      queueMsg(prev => prev.map(m => m.id === id ? { ...m, streaming: false } : m));
+    };
+    const finalizeThinking = () => {
+      if (!thinkingBubbleId) return;
+      const id = thinkingBubbleId;
+      thinkingBubbleId = null;
+      currentThinking = '';
+      queueMsg(prev => prev.map(m => m.id === id ? { ...m, streaming: false, thinkingDone: true } : m));
+    };
+    const ensureAnswerBubble = (): string => {
+      if (answerMsgId) return answerMsgId;
+      if (!hasSteps) {
+        answerMsgId = initMsgId;
+        answerBuffer = '';
+        return initMsgId;
+      }
+      const id = `ans-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+      answerMsgId = id;
+      answerBuffer = '';
+      streamingAiMsgIdRef.current = id;
+      queueMsg(prev => [...prev, {
+        id, role: 'assistant' as const, content: '', streaming: true, bubbleType: 'answer' as const,
+      }]);
+      return id;
+    };
+
     runAiAgent({
       requestBody: newReqBody,
       signal: abortRef.current.signal,
       onData: (data) => {
         const chunk = parseTypedChunk(data);
         if (!chunk) return;
-        if (chunk.type === 'content') {
-          accumulated += chunk.content;
-          const snap = accumulated;
-          queueMsg(prev => prev.map(m => m.id === aiMsg.id ? { ...m, content: snap } : m));
+        switch (chunk.type) {
+          case 'content': {
+            finalizeThinking();
+            const aid = ensureAnswerBubble();
+            answerBuffer += chunk.content;
+            const snap = answerBuffer;
+            queueMsg(prev => prev.map(m => m.id === aid ? { ...m, content: snap } : m));
+            break;
+          }
+          case 'think_start': {
+            finalizeAnswer();
+            finalizeThinking();
+            hasSteps = true;
+            const id = `think-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+            thinkingBubbleId = id;
+            queueMsg(prev => [...prev, {
+              id, role: 'assistant' as const, content: '',
+              streaming: true, bubbleType: 'thinking' as const,
+              thinkingContent: '', thinkingDone: false,
+            }]);
+            break;
+          }
+          case 'think_chunk': {
+            currentThinking += chunk.content;
+            if (thinkingBubbleId) {
+              const id = thinkingBubbleId;
+              const snap = currentThinking;
+              queueMsg(prev => prev.map(m => m.id === id ? { ...m, thinkingContent: snap } : m));
+            }
+            break;
+          }
+          case 'think_end': {
+            finalizeThinking();
+            break;
+          }
+          case 'tool_queued':
+          case 'tool_start': {
+            finalizeAnswer();
+            finalizeThinking();
+            hasSteps = true;
+            const existing = toolBubbleMap.get(chunk.id);
+            if (existing) {
+              queueMsg(prev => prev.map(m => m.id === existing ? { ...m, toolStatus: 'running', streaming: true } : m));
+            } else {
+              setToolHistory(prev => [...prev, {
+                id: chunk.id, tool: chunk.tool, label: chunk.label,
+                hint: chunk.hint, status: 'running', startedAt: Date.now(),
+              }]);
+              const id = `tool-${chunk.id}-${Date.now()}`;
+              toolBubbleMap.set(chunk.id, id);
+              queueMsg(prev => [...prev, {
+                id, role: 'assistant' as const, content: '',
+                streaming: true, bubbleType: 'tool' as const,
+                toolCallId: chunk.id, toolName: chunk.tool,
+                toolLabel: chunk.label, toolHint: chunk.hint,
+                toolStatus: 'running' as const,
+              }]);
+            }
+            break;
+          }
+          case 'tool_end': {
+            setToolHistory(prev => prev.map(t => t.id === chunk.id
+              ? { ...t, status: chunk.status, result: chunk.result, elapsedMs: chunk.elapsedMs }
+              : t));
+            const id = toolBubbleMap.get(chunk.id);
+            if (id) {
+              queueMsg(prev => prev.map(m => m.id === id ? {
+                ...m, streaming: false, toolStatus: chunk.status,
+                toolResult: chunk.result, toolElapsedMs: chunk.elapsedMs,
+              } : m));
+            }
+            break;
+          }
+          case 'plan': {
+            hasSteps = true;
+            planStepsLocal = chunk.steps;
+            setTaskPlanSteps(chunk.steps);
+            setStepStatuses(Object.fromEntries(chunk.steps.map(s => [s.id, 'pending' as StepStatus])));
+            setStepRetryCounts({});
+            setCurrentStepId(null);
+            setSidePanelTab('plan');
+            if (window.innerWidth >= 768) setShowToolHistory(true);
+            queueMsg(prev => prev.map(m => m.id === initMsgId ? {
+              ...m, bubbleType: 'step' as const, stepTitle: i18n.t('任务规划'),
+              inlinePlan: chunk.steps.map(s => ({ id: s.id, title: s.title, desc: s.desc, status: 'pending' as const })),
+            } : m));
+            break;
+          }
+          case 'step_start': {
+            finalizeAnswer();
+            hasSteps = true;
+            setStepStatuses(prev => ({ ...prev, [chunk.stepId]: 'running' }));
+            setCurrentStepId(chunk.stepId);
+            const step = planStepsLocal.find(s => s.id === chunk.stepId);
+            const id = `step-${chunk.stepId}-${Date.now()}`;
+            currentStepBubbleId = id;
+            queueMsg(prev => [...prev, {
+              id, role: 'assistant' as const, content: '',
+              streaming: true, bubbleType: 'step' as const,
+              stepTitle: step?.title ?? `步骤 ${chunk.stepId}`, stepId: chunk.stepId,
+            }]);
+            break;
+          }
+          case 'step_end': {
+            finalizeAnswer();
+            setStepStatuses(prev => ({ ...prev, [chunk.stepId]: chunk.status === 'error' ? 'error' : 'done' }));
+            if (currentStepBubbleId) {
+              const id = currentStepBubbleId;
+              currentStepBubbleId = null;
+              queueMsg(prev => prev.map(m => m.id === id ? { ...m, streaming: false } : m));
+            }
+            break;
+          }
+          default:
+            break;
         }
       },
       onComplete: async () => {
+        finalizeAnswer();
+        finalizeThinking();
         cancelAndFlush();
         networkInterruptedRef.current = false;
         setIsNetworkInterrupted(false);
@@ -1502,7 +1656,12 @@ const currentModelDef = getModelDef(modelConfig.type);
         // 重连流式成功 → 重置计数
         reconnectAttemptsRef.current = 0;
         toast.dismiss('reconnect-backoff');
-        setMessages(prev => prev.map(m => m.id === aiMsg.id ? { ...m, streaming: false } : m));
+        setMessages(prev => prev.map(m => {
+          if (!m.streaming) return m;
+          return m.bubbleType === 'thinking'
+            ? { ...m, streaming: false, thinkingDone: true }
+            : { ...m, streaming: false };
+        }));
         setIsStreaming(false);
         // 消息持久化由「全量持久化 effect」统一处理
         // ── 持久化工具日志 + workflow 快照（重连完成） ─────────────────────────
@@ -1519,9 +1678,18 @@ const currentModelDef = getModelDef(modelConfig.type);
       },
       onError: (err) => {
         cancelAndFlush();
-        setMessages(prev => prev.map(m =>
-          m.id === aiMsg.id ? { ...m, content: `❌ 重连失败：${err.message}`, streaming: false } : m
-        ));
+        const targetId = answerMsgId ?? currentStepBubbleId ?? initMsgId;
+        setMessages(prev => prev.map(m => {
+          if (m.id === targetId && m.bubbleType !== 'tool' && m.bubbleType !== 'thinking') {
+            return { ...m, content: `❌ 重连失败：${err.message}`, streaming: false };
+          }
+          if (m.streaming) {
+            return m.bubbleType === 'thinking'
+              ? { ...m, streaming: false, thinkingDone: true }
+              : { ...m, streaming: false };
+          }
+          return m;
+        }));
         setIsStreaming(false);
         toast.error(`重连失败：${err.message}`);
       },

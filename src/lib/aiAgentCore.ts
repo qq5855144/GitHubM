@@ -771,6 +771,9 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
  ];
 
+// 默认无状态模型代理（Cloudflare Worker + 自有域名，避免 workers.dev 在部分网络被污染）
+const DEFAULT_LLM_PROXY_URL = 'https://llm.callact.xyz';
+
 function buildLLMRequest(cfg: ModelConfig): {
   url: string;
   headers: Record<string, string>;
@@ -790,7 +793,8 @@ function buildLLMRequest(cfg: ModelConfig): {
     headers: Record<string, string>;
     bodyExtra: Record<string, unknown>;
   }) => {
-    const base = cfg.proxy_url?.trim().replace(/\/+$/, '');
+    const base = cfg.proxy_url?.trim().replace(/\/+$/, '') ||
+      (cfg.type !== 'custom' ? DEFAULT_LLM_PROXY_URL : '');
     if (!base) return request;
     const headers: Record<string, string> = {
       ...request.headers,

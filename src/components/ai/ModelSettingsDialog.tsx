@@ -281,12 +281,12 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
             <Label className="text-sm font-normal">{i18n.t('模型代理（可选）')}</Label>
             <Input
               className="px-3"
-              placeholder="https://githubm-llm-proxy.xxx.workers.dev"
+              placeholder="留空使用内置代理，或填写自定义 Worker 地址"
               value={draft.proxy_url || ''}
               onChange={e => setDraft(prev => ({ ...prev, proxy_url: e.target.value }))}
             />
             <p className="text-xs text-muted-foreground">
-              {i18n.t('解决 Android WebView CORS / network error；留空则直连模型 API。代理不保存会话和 Key。')}
+              {i18n.t('留空使用内置无状态代理，解决 Android WebView CORS / network error；也可填写自定义 Worker。')}
             </p>
           </div>
 

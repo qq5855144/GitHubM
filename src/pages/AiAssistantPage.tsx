@@ -882,6 +882,7 @@ const currentModelDef = getModelDef(modelConfig.type);
       model_config: modelConfig,
       user_id: user?.login || 'anonymous',
       auto_mode: autoMode,  // 自主执行模式标志，传递给 Edge Function
+      agent_engine: modelConfig.agent_engine || 'classic',
       idempotency_key: idempotencyKey,
     };
     // 断点恢复：传入 resume_workflow_id 时，Edge Function 将从历史快照继续

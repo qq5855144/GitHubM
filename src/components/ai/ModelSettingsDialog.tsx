@@ -290,6 +290,24 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
             </p>
           </div>
 
+          {/* Agent 引擎灰度 */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-sm font-normal">{i18n.t('Agent 引擎')}</Label>
+            <Select
+              value={draft.agent_engine || 'classic'}
+              onValueChange={v => setDraft(prev => ({ ...prev, agent_engine: v as 'classic' | 'langgraph' }))}
+            >
+              <SelectTrigger className="px-3"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="classic">{i18n.t('经典引擎（稳定）')}</SelectItem>
+                <SelectItem value="langgraph">{i18n.t('LangGraph 引擎（实验）')}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {i18n.t('LangGraph 为实验特性；如遇异常可切回经典引擎。')}
+            </p>
+          </div>
+
           {/* 模型选择 */}
           {availableModels.length > 0 && (
             <div className="flex flex-col gap-1.5">

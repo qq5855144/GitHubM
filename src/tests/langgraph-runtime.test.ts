@@ -74,7 +74,54 @@ describe('LangGraph agent runtime', () => {
     expect(result.finalText).toBe('已处理工具错误');
   });
 
-  it('达到最大工具轮次后停止', async () => {
+  it('plan 节点生成计划并写 checkpoint', async () => {
+    const events: GraphEvent[] = [];
+    const checkpoints: number[] = [];
+    const result = await runLangGraphAgent({
+      messages: [{ role: 'user', content: '实现登录' }],
+      planner: async () => [
+        { id: '1', title: '读取代码', status: 'pending' },
+        { id: '2', title: '修改代码', status: 'pending' },
+      ],
+      model: async () => ({ content: '计划完成' }),
+      executeTool: async () => 'ok',
+      onCheckpoint: s => { checkpoints.push(s.plan.length); },
+      onEvent: e => events.push(e),
+      maxSteps: 3,
+    });
+    expect(result.plan).toHaveLength(2);
+    expect(events.map(e => e.type)).toContain('plan');
+    expect(events.map(e => e.type)).toContain('checkpoint');
+    expect(checkpoints).toContain(2);
+  });
+
+  it('写工具后触发 verify 节点', async () => {
+    const events: GraphEvent[] = [];
+    let turn = 0;
+    const result = await runLangGraphAgent({
+      messages: [{ role: 'user', content: '修改 README' }],
+      model: async () => {
+        turn++;
+        if (turn === 1) {
+          return {
+            content: '',
+            toolCall: { id: 'w1', name: 'patch_file', arguments: { path: 'README.md' } },
+          };
+        }
+        return { content: '修改完成' };
+      },
+      executeTool: async () => ({ output: 'patched', risk: 'write' as const }),
+      verifier: async () => ({ passed: true, summary: 'CI passed' }),
+      onEvent: e => events.push(e),
+      maxSteps: 5,
+    });
+    expect(events.map(e => e.type)).toContain('verify_start');
+    expect(events.map(e => e.type)).toContain('verify_end');
+    expect(result.verification?.passed).toBe(true);
+    expect(result.finalText).toBe('修改完成');
+  });
+
+  it('最大轮次后停止', async () => {
     const result = await runLangGraphAgent({
       messages: [{ role: 'user', content: '无限调用' }],
       model: async () => ({

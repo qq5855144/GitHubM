@@ -199,40 +199,50 @@ function ReleaseItem({
   };
   return (
     <Collapsible open={open} onOpenChange={handleOpenChange}>
-      <CollapsibleTrigger className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors text-left group">
-        <Tag className="w-4 h-4 text-primary shrink-0" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold text-foreground font-mono">{release.tag_name}</span>
-            {release.name && release.name !== release.tag_name && (
-              <span className="text-sm text-muted-foreground truncate">{release.name}</span>
-            )}
-            {release.draft && <Badge variant="outline" className="text-xs text-muted-foreground border-border">{i18n.t('草稿')}</Badge>}
-            {release.prerelease && <Badge className="bg-warning/10 text-warning border-warning/30 text-xs">{i18n.t('预发布')}</Badge>}
-          </div>
-          <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatRelativeTime(release.published_at || release.created_at)}</span>
-            <span>{release.assets.length} {i18n.t('个产物 ·')}{formatBytes(totalSize)}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <a href={release.html_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:text-accent hover:bg-accent/10">
-              <ExternalLink className="w-3.5 h-3.5" />
-            </Button>
-          </a>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="w-7 h-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-            onClick={(e) => { e.stopPropagation(); onDelete(release.id); }}
-            title={i18n.t('删除 Release')}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
-          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
-        </div>
+      <CollapsibleTrigger asChild>
+        <button className="w-full flex items-start gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors text-left group">
+          <Tag className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          <span className="flex-1 min-w-0 block">
+            <span className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-foreground font-mono">{release.tag_name}</span>
+              {release.name && release.name !== release.tag_name && (
+                <span className="text-sm text-muted-foreground truncate">{release.name}</span>
+              )}
+              {release.draft && <Badge variant="outline" className="text-xs text-muted-foreground border-border">{i18n.t('草稿')}</Badge>}
+              {release.prerelease && <Badge className="bg-warning/10 text-warning border-warning/30 text-xs">{i18n.t('预发布')}</Badge>}
+            </span>
+            <span className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatRelativeTime(release.published_at || release.created_at)}</span>
+              <span>{release.assets.length} {i18n.t('个产物 ·')}{formatBytes(totalSize)}</span>
+            </span>
+          </span>
+        </button>
       </CollapsibleTrigger>
+      <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-border bg-secondary/20">
+        <a href={release.html_url} target="_blank" rel="noopener noreferrer">
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1 text-muted-foreground hover:text-accent hover:bg-accent/10">
+            <ExternalLink className="w-3.5 h-3.5" />GitHub
+          </Button>
+        </a>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 px-2 text-xs gap-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          onClick={() => onDelete(release.id)}
+          title={i18n.t('删除 Release')}
+        >
+          <Trash2 className="w-3.5 h-3.5" />{i18n.t('删除')}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-2 text-xs gap-1"
+          onClick={() => handleOpenChange(!open)}
+        >
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+          {open ? i18n.t('收起') : i18n.t('展开')}
+        </Button>
+      </div>
       <CollapsibleContent>
         <div className="border-t border-border bg-secondary/10">
           {release.body && (
@@ -686,14 +696,14 @@ export default function ArtifactsPage() {
           ) : (
             <div className="space-y-2">
               {artifacts.map((art) => (
-                <div key={art.id} className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3">
-                  <FileArchive className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-mono text-foreground">{art.name}</span>
+                <div key={art.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="px-4 pt-3 pb-2.5 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <FileArchive className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm font-mono text-foreground break-all min-w-0">{art.name}</span>
                       {art.expired && <Badge variant="outline" className="text-xs text-muted-foreground border-border">{i18n.t('已过期')}</Badge>}
                     </div>
-                    <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap pl-6">
                       <span>{formatBytes(art.size_in_bytes)}</span>
                       <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatRelativeTime(art.created_at)}</span>
                       {art.expires_at && !art.expired && (
@@ -704,7 +714,7 @@ export default function ArtifactsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-1 shrink-0">
+                  <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-border bg-secondary/20">
                     {!art.expired && (
                       <ArtifactDownloadButton art={art} owner={owner ?? ''} repo={repo ?? ''} />
                     )}

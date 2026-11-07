@@ -81,7 +81,7 @@ function KanbanColumn({
       </div>
       <div className="flex-1 p-2 space-y-2 min-h-20">
         {column.cards.map((card) => (
-          <div key={card.id} className="bg-card border border-border rounded p-2.5 group hover:border-primary/50 transition-colors">
+          <div key={card.id} className="bg-card border border-border rounded p-2.5 group transition-colors">
             <p className="text-xs text-foreground leading-relaxed text-pretty">{card.note || i18n.t('（关联 Issue/PR）')}</p>
             <p className="text-xs text-muted-foreground mt-1">{formatRelativeTime(card.updated_at)}</p>
           </div>

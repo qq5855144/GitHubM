@@ -619,7 +619,7 @@ export default function SettingsPage() {
                 'flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all',
                 i18n.language === 'zh-CN'
                   ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border bg-secondary/50 text-muted-foreground hover:border-primary/40 hover:bg-secondary'
+                  : 'border-border bg-secondary/50 text-muted-foreground hover:bg-secondary'
               )}
             >
               <span className="text-xs font-medium">{t('settings.langZh')}</span>
@@ -631,7 +631,7 @@ export default function SettingsPage() {
                 'flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all',
                 i18n.language === 'en'
                   ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border bg-secondary/50 text-muted-foreground hover:border-primary/40 hover:bg-secondary'
+                  : 'border-border bg-secondary/50 text-muted-foreground hover:bg-secondary'
               )}
             >
               <span className="text-xs font-medium">{t('settings.langEn')}</span>
@@ -661,7 +661,7 @@ export default function SettingsPage() {
                   'flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all',
                   currentTheme === value
                     ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border bg-secondary/50 text-muted-foreground hover:border-primary/40 hover:bg-secondary'
+                    : 'border-border bg-secondary/50 text-muted-foreground hover:bg-secondary'
                 )}
               >
                 <Icon className="w-5 h-5" />
@@ -693,7 +693,7 @@ export default function SettingsPage() {
                   'flex flex-col items-center gap-1.5 py-2.5 px-1 rounded-lg border-2 transition-all',
                   accentSchemeId === scheme.id
                     ? 'border-primary bg-primary/10'
-                    : 'border-border bg-secondary/50 hover:border-border/70 hover:bg-secondary'
+                    : 'border-border bg-secondary/50 hover:bg-secondary'
                 )}
               >
                 <span

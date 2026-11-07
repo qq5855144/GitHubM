@@ -36,7 +36,7 @@ export default function RepoCard({
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
       className={cn(
         'w-full bg-card border border-border rounded-xl text-left group cursor-pointer',
-        'hover:border-primary/50 hover:bg-secondary/30 active:scale-[0.99] transition-all',
+        'hover:bg-secondary/30 active:scale-[0.99] transition-all',
         compact ? 'p-3' : 'p-4',
         className,
       )}

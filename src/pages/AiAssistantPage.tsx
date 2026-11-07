@@ -2381,7 +2381,7 @@ const currentModelDef = getModelDef(modelConfig.type);
                     <button
                       key={q.label}
                       onClick={() => handleSend(q.text)}
-                      className="shrink-0 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-primary/5 hover:border-primary/30 hover:text-primary text-muted-foreground transition-all duration-150 whitespace-nowrap group"
+                      className="shrink-0 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-primary/5 hover:text-primary text-muted-foreground transition-all duration-150 whitespace-nowrap group"
                     >
                       <Icon className="w-3 h-3 shrink-0 group-hover:text-primary" />
                       <span>{q.label}</span>

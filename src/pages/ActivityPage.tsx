@@ -201,7 +201,7 @@ export default function ActivityPage() {
                   </div>
                   {/* 内容 */}
                   <div
-                    className="flex-1 bg-card border border-border rounded-lg p-3 min-w-0 cursor-pointer hover:border-primary/40 hover:bg-secondary/50 transition-colors"
+                    className="flex-1 bg-card border border-border rounded-lg p-3 min-w-0 cursor-pointer hover:bg-secondary/50 transition-colors"
                     onClick={() => navigate(getEventRoute(event))}
                   >
                     <div className="flex items-start gap-2 flex-wrap">

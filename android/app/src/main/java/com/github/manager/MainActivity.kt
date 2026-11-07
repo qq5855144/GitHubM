@@ -24,6 +24,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import org.json.JSONObject
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -260,6 +261,34 @@ class MainActivity : AppCompatActivity() {
         fun stopAgentTask() {
             runOnUiThread {
                 AgentForegroundService.stop(this@MainActivity)
+            }
+        }
+
+        /**
+         * 将 Actions Artifact 发布为 Release Asset。
+         * 浏览器无法直传 uploads.github.com，因此由原生层完成下载和上传。
+         */
+        @JavascriptInterface
+        fun publishArtifactToRelease(uploadUrl: String, artifactUrl: String, fileName: String, token: String) {
+            lifecycleScope.launch {
+                val result = ReleasePublisher.publish(this@MainActivity, uploadUrl, artifactUrl, fileName, token)
+                runOnUiThread {
+                    val detail = JSONObject().apply {
+                        put("success", result.success)
+                        put("message", result.message)
+                        put("assetName", result.assetName)
+                        put("browserDownloadUrl", result.browserDownloadUrl)
+                    }.toString()
+                    webView.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('releaseAssetPublishResult', { detail: $detail }));",
+                        null,
+                    )
+                    Toast.makeText(
+                        this@MainActivity,
+                        if (result.success) "已发布到 Release" else "发布失败：${result.message}",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
             }
         }
 

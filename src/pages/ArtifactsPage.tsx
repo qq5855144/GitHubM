@@ -17,6 +17,7 @@ import {
   Zap,
   Archive,
   Loader2,
+  Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -38,11 +39,31 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   getReleases,
   getRepoArtifacts,
+  createRelease,
   deleteArtifact,
   deleteRelease,
   getToken,
+  invalidateCache,
   formatRelativeTime,
   type GitHubRelease,
   type GitHubArtifact,
@@ -51,6 +72,13 @@ import {
 import { toast } from 'sonner';
 import { downloadGithubFile, isDownloadProxyEnabled } from '@/lib/githubDownload';
 import i18n from "@/i18n";
+
+interface ReleasePublishResultDetail {
+  success: boolean;
+  message: string;
+  assetName: string;
+  browserDownloadUrl?: string;
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -381,6 +409,16 @@ export default function ArtifactsPage() {
   const [deleteRelTarget, setDeleteRelTarget] = useState<number | null>(null);
   const [deleteArtTarget, setDeleteArtTarget] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [publishTarget, setPublishTarget] = useState<GitHubArtifact | null>(null);
+  const [publishMode, setPublishMode] = useState<'existing' | 'new'>('existing');
+  const [selectedReleaseId, setSelectedReleaseId] = useState('');
+  const [newReleaseTag, setNewReleaseTag] = useState('');
+  const [newReleaseName, setNewReleaseName] = useState('');
+  const [newReleaseBody, setNewReleaseBody] = useState('');
+  const [newReleaseDraft, setNewReleaseDraft] = useState(false);
+  const [newReleasePrerelease, setNewReleasePrerelease] = useState(false);
+  const [publishAssetName, setPublishAssetName] = useState('');
+  const [publishing, setPublishing] = useState(false);
 
   const loadReleases = useCallback(async (page = 1, append = false) => {
     if (!owner || !repo) return;
@@ -412,6 +450,97 @@ export default function ArtifactsPage() {
       setLoadingArtifacts(false);
     }
   }, [owner, repo]);
+
+  const nativePublishAvailable = typeof (window as unknown as {
+    AndroidBridge?: { publishArtifactToRelease?: (...args: string[]) => void };
+  }).AndroidBridge?.publishArtifactToRelease === 'function';
+  const selectedRelease = releases.find((release) => String(release.id) === selectedReleaseId);
+  const duplicateAsset = !!selectedRelease?.assets?.some((asset) => asset.name === publishAssetName.trim());
+
+  const openPublishDialog = (artifact: GitHubArtifact) => {
+    const latest = releases[0];
+    setPublishTarget(artifact);
+    setPublishAssetName(`${artifact.name}.zip`);
+    setPublishMode(latest ? 'existing' : 'new');
+    setSelectedReleaseId(latest ? String(latest.id) : '');
+    setNewReleaseTag(`artifact-${artifact.id}`);
+    setNewReleaseName(artifact.name);
+    setNewReleaseBody(`由 Actions Artifact ${artifact.name} 发布`);
+    setNewReleaseDraft(false);
+    setNewReleasePrerelease(false);
+    setPublishing(false);
+  };
+
+  const handlePublishArtifact = async () => {
+    if (!owner || !repo || !publishTarget) return;
+    const token = getToken();
+    if (!token) {
+      toast.error(i18n.t('请先登录后再发布'));
+      return;
+    }
+    const bridge = (window as unknown as {
+      AndroidBridge?: { publishArtifactToRelease?: (...args: string[]) => void };
+    }).AndroidBridge?.publishArtifactToRelease;
+    if (typeof bridge !== 'function') {
+      toast.error(i18n.t('浏览器环境暂不支持一键发布，请在 Android App 内操作'));
+      return;
+    }
+    const assetName = publishAssetName.trim();
+    if (!assetName) {
+      toast.error(i18n.t('请填写 Release Asset 名称'));
+      return;
+    }
+    if (publishMode === 'existing' && !selectedReleaseId) {
+      toast.error(i18n.t('请选择目标 Release'));
+      return;
+    }
+    if (publishMode === 'new' && !newReleaseTag.trim()) {
+      toast.error(i18n.t('请填写新 Release 的 Tag'));
+      return;
+    }
+    setPublishing(true);
+    try {
+      let releaseId = Number(selectedReleaseId);
+      if (publishMode === 'new') {
+        const release = await createRelease(owner, repo, {
+          tag_name: newReleaseTag.trim(),
+          name: newReleaseName.trim() || newReleaseTag.trim(),
+          body: newReleaseBody.trim(),
+          draft: newReleaseDraft,
+          prerelease: newReleasePrerelease,
+        });
+        releaseId = release.id;
+      }
+      if (!Number.isFinite(releaseId) || releaseId <= 0) {
+        throw new Error(i18n.t('目标 Release 无效'));
+      }
+      const uploadUrl = `https://uploads.github.com/repos/${owner}/${repo}/releases/${releaseId}/assets?name=${encodeURIComponent(assetName)}`;
+      bridge(uploadUrl, publishTarget.archive_download_url, assetName, token);
+      toast.info(i18n.t('正在下载并发布 Artifact...'));
+    } catch (err) {
+      setPublishing(false);
+      toast.error(err instanceof Error ? err.message : i18n.t('创建 Release 失败'));
+    }
+  };
+
+  useEffect(() => {
+    const handleResult = (event: Event) => {
+      const detail = (event as CustomEvent<ReleasePublishResultDetail>).detail;
+      if (!detail) return;
+      setPublishing(false);
+      if (detail.success) {
+        toast.success(`${i18n.t('已发布到 Release：')}${detail.assetName}`);
+        setPublishTarget(null);
+        setActiveTab('releases');
+        if (owner && repo) invalidateCache(`/repos/${owner}/${repo}/releases`);
+        void loadReleases(1);
+      } else {
+        toast.error(`${i18n.t('发布失败：')}${detail.message}`);
+      }
+    };
+    window.addEventListener('releaseAssetPublishResult', handleResult);
+    return () => window.removeEventListener('releaseAssetPublishResult', handleResult);
+  }, [loadReleases, owner, repo]);
 
   useEffect(() => { loadReleases(1); }, [loadReleases]);
 
@@ -579,6 +708,18 @@ export default function ArtifactsPage() {
                     {!art.expired && (
                       <ArtifactDownloadButton art={art} owner={owner ?? ''} repo={repo ?? ''} />
                     )}
+                    {!art.expired && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 text-xs gap-1 shrink-0"
+                        onClick={() => openPublishDialog(art)}
+                        title={i18n.t('发布到 Release')}
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        {i18n.t('发布')}
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -595,6 +736,146 @@ export default function ArtifactsPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={!!publishTarget}
+        onOpenChange={(open) => { if (!open && !publishing) setPublishTarget(null); }}
+      >
+        <DialogContent className="max-w-[calc(100%-1.5rem)] md:max-w-lg bg-card border-border max-h-[92vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2 text-balance">
+              <Upload className="w-4 h-4 text-primary shrink-0" />
+              {i18n.t('发布 Artifact 到 Release')}
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {publishTarget?.name}{publishTarget ? ` · ${formatBytes(publishTarget.size_in_bytes)}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPublishMode('existing')}
+                className={`rounded-lg border px-3 py-2 text-sm transition-colors ${publishMode === 'existing' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-secondary/40 text-muted-foreground hover:bg-secondary'}`}
+              >
+                {i18n.t('现有 Release')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPublishMode('new')}
+                className={`rounded-lg border px-3 py-2 text-sm transition-colors ${publishMode === 'new' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-secondary/40 text-muted-foreground hover:bg-secondary'}`}
+              >
+                {i18n.t('新建 Release')}
+              </button>
+            </div>
+
+            {publishMode === 'existing' ? (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">{i18n.t('目标 Release')}</Label>
+                {releases.length > 0 ? (
+                  <Select value={selectedReleaseId} onValueChange={setSelectedReleaseId}>
+                    <SelectTrigger className="bg-secondary border-border text-foreground h-9 text-sm">
+                      <SelectValue placeholder={i18n.t('选择 Release')} />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border">
+                      {releases.map((release) => (
+                        <SelectItem key={release.id} value={String(release.id)} className="text-sm">
+                          {release.tag_name}{release.name ? ` · ${release.name}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-xs text-muted-foreground py-1">{i18n.t('暂无可用 Release，请切换到「新建 Release」')}</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">{i18n.t('Tag')}</Label>
+                  <Input
+                    value={newReleaseTag}
+                    onChange={(e) => setNewReleaseTag(e.target.value)}
+                    placeholder="v1.0.0"
+                    className="bg-secondary border-border h-9 text-sm font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">{i18n.t('Release 名称')}</Label>
+                  <Input
+                    value={newReleaseName}
+                    onChange={(e) => setNewReleaseName(e.target.value)}
+                    className="bg-secondary border-border h-9 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">{i18n.t('发布说明')}</Label>
+                  <textarea
+                    value={newReleaseBody}
+                    onChange={(e) => setNewReleaseBody(e.target.value)}
+                    rows={3}
+                    className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground resize-none outline-none"
+                  />
+                </div>
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <Checkbox checked={newReleaseDraft} onCheckedChange={(v) => setNewReleaseDraft(v === true)} />
+                    {i18n.t('草稿')}
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <Checkbox checked={newReleasePrerelease} onCheckedChange={(v) => setNewReleasePrerelease(v === true)} />
+                    {i18n.t('预发布')}
+                  </label>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{i18n.t('Release Asset 名称')}</Label>
+              <Input
+                value={publishAssetName}
+                onChange={(e) => setPublishAssetName(e.target.value)}
+                className="bg-secondary border-border h-9 text-sm font-mono"
+              />
+              {duplicateAsset && (
+                <p className="text-[11px] text-warning">{i18n.t('目标 Release 已存在同名 Asset，请修改名称')}</p>
+              )}
+            </div>
+
+            {!nativePublishAvailable && (
+              <p className="text-[11px] text-warning">
+                {i18n.t('浏览器环境暂不支持一键上传，请在 Android App 内操作')}
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sticky bottom-0 -mx-6 -mb-6 px-6 pb-4 pt-3 border-t border-border bg-card">
+            <Button
+              variant="ghost"
+              className="border border-border text-muted-foreground hover:bg-secondary"
+              onClick={() => setPublishTarget(null)}
+              disabled={publishing}
+            >
+              {i18n.t('取消')}
+            </Button>
+            <Button
+              className="gap-1.5"
+              onClick={handlePublishArtifact}
+              disabled={
+                publishing
+                || !nativePublishAvailable
+                || !publishAssetName.trim()
+                || duplicateAsset
+                || (publishMode === 'existing' ? !selectedReleaseId : !newReleaseTag.trim())
+              }
+            >
+              {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              {publishing ? i18n.t('发布中...') : i18n.t('发布到 Release')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 删除 Release 确认 */}
       <AlertDialog open={!!deleteRelTarget} onOpenChange={() => setDeleteRelTarget(null)}>

@@ -100,7 +100,7 @@ export default function NotificationsPage() {
       case 'CheckSuite':
         return `/repos/${repoFullName}/actions`;
       case 'Commit':
-        return `/repos/${repoFullName}/commits/${repoFullName.split('/')[1]}`;
+        return `/repos/${repoFullName}/commits`;
       default:
         return `/repos/${repoFullName}`;
     }

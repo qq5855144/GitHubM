@@ -1,7 +1,7 @@
 // 提交历史页
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Clock,
   ChevronRight,
@@ -42,6 +42,9 @@ import i18n from "@/i18n";
 export default function CommitsPage() {
   const { owner, repo } = useParams<{ owner: string; repo: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const branchParam = searchParams.get('branch') || '';
+  const pathFilter = searchParams.get('path') || '';
   const [commits, setCommits] = useState<GitHubCommit[]>([]);
   const [branches, setBranches] = useState<GitHubBranch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState('');
@@ -57,16 +60,19 @@ export default function CommitsPage() {
     getBranches(owner, repo)
       .then((result) => {
         setBranches(result.data);
-        if (result.data.length > 0) setSelectedBranch(result.data[0].name);
+        const preferred = branchParam && result.data.some((branch) => branch.name === branchParam)
+          ? branchParam
+          : result.data[0]?.name || '';
+        setSelectedBranch(preferred);
       })
       .catch(console.error);
-  }, [owner, repo]);
+  }, [owner, repo, branchParam]);
 
   const loadCommits = useCallback(async (pageNum = 1, append = false, force = false) => {
     if (!owner || !repo || !selectedBranch) return;
     if (pageNum === 1) setLoading(true);
 
-    const cacheKey = `commits:${owner}/${repo}:${selectedBranch}:p1`;
+    const cacheKey = `commits:${owner}/${repo}:${selectedBranch}:${pathFilter}:p1`;
     if (pageNum === 1 && !append && !force) {
       const cached = pageCache.get<{ commits: GitHubCommit[]; hasNextPage: boolean }>(cacheKey);
       if (cached) {
@@ -83,6 +89,7 @@ export default function CommitsPage() {
         sha: selectedBranch,
         per_page: 30,
         page: pageNum,
+        path: pathFilter || undefined,
       });
       if (append) {
         setCommits((prev) => [...prev, ...result.data]);
@@ -98,7 +105,7 @@ export default function CommitsPage() {
     } finally {
       setLoading(false);
     }
-  }, [owner, repo, selectedBranch]);
+  }, [owner, repo, selectedBranch, pathFilter]);
 
   useEffect(() => {
     if (selectedBranch) loadCommits(1);
@@ -142,10 +149,23 @@ export default function CommitsPage() {
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-          <GitCommit className="w-5 h-5 text-primary" />
-          {i18n.t('提交历史')}</h1>
-        <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+            <GitCommit className="w-5 h-5 text-primary" />
+            {i18n.t('提交历史')}</h1>
+          {pathFilter && (
+            <p className="text-xs text-muted-foreground font-mono mt-1 break-all">{pathFilter}</p>
+          )}
+        </div>
+        <Select
+          value={selectedBranch}
+          onValueChange={(value) => {
+            setSelectedBranch(value);
+            const next = new URLSearchParams(searchParams);
+            next.set('branch', value);
+            setSearchParams(next, { replace: true });
+          }}
+        >
           <SelectTrigger className="bg-secondary border-border text-foreground w-40 h-9">
             <GitBranch className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
             <SelectValue placeholder={i18n.t('选择分支')} />

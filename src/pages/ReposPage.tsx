@@ -141,7 +141,7 @@ function RepoContextMenu({ repo, onDeleteRequest, onDeleteSuccess }: {
         onClick={(e) => { e.stopPropagation(); navigate(`/repos/${repo.full_name}/code`); }}>
         <Code2 className="w-3.5 h-3.5 mr-2" />{i18n.t('浏览代码')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-        onClick={(e) => { e.stopPropagation(); navigate(`/repos/${repo.full_name}/commits/${repo.default_branch}`); }}>
+        onClick={(e) => { e.stopPropagation(); navigate(`/repos/${repo.full_name}/commits?branch=${encodeURIComponent(repo.default_branch)}`); }}>
         <GitBranch className="w-3.5 h-3.5 mr-2" />{i18n.t('查看提交记录')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={(e) => { e.stopPropagation(); navigate(`/repos/${repo.full_name}/issues`); }}>

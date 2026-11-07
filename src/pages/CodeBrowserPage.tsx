@@ -813,7 +813,7 @@ export default function CodeBrowserPage() {
         onClick={() => openAction('move', item)}>
         <MoveRight className="w-3.5 h-3.5 mr-2" />{i18n.t('移动到...')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-        onClick={() => navigate(`/repos/${owner}/${repo}/commits/${currentBranch}?path=${item.path}`)}>
+        onClick={() => navigate(`/repos/${owner}/${repo}/commits?branch=${encodeURIComponent(currentBranch)}&path=${encodeURIComponent(item.path)}`)}>
         <History className="w-3.5 h-3.5 mr-2" />{i18n.t('查看历史')}</ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-destructive cursor-pointer text-sm focus:text-destructive"
@@ -1514,7 +1514,7 @@ export default function CodeBrowserPage() {
                 </Button>
                 <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 px-2"
                   title={i18n.t('查看提交历史')}
-                  onClick={() => navigate(`/repos/${owner}/${repo}/commits/${currentBranch}?path=${currentFile.path}`)}>
+                  onClick={() => navigate(`/repos/${owner}/${repo}/commits?branch=${encodeURIComponent(currentBranch)}&path=${encodeURIComponent(currentFile.path)}`)}>
                   <History className="w-3.5 h-3.5" /><span className="hidden md:inline">{i18n.t('历史')}</span>
                 </Button>
                 <DropdownMenu>
@@ -1675,7 +1675,7 @@ export default function CodeBrowserPage() {
                                   <Link className="w-3.5 h-3.5 mr-2" />{i18n.t('复制 Raw 链接')}</DropdownMenuItem>
                               )}
                               {!isDir && (
-                                <DropdownMenuItem onClick={() => navigate(`/repos/${owner}/${repo}/commits/${currentBranch}?path=${item.path}`)}>
+                                <DropdownMenuItem onClick={() => navigate(`/repos/${owner}/${repo}/commits?branch=${encodeURIComponent(currentBranch)}&path=${encodeURIComponent(item.path)}`)}>
                                   <History className="w-3.5 h-3.5 mr-2" />{i18n.t('查看历史')}</DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />

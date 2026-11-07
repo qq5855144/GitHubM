@@ -627,7 +627,7 @@ export default function FileTree({
 
   // 查看历史
   const handleViewHistory = useCallback((item: GitHubContent) => {
-    navigate(`/repos/${owner}/${repo}/commits/${branch}?path=${item.path}`);
+    navigate(`/repos/${owner}/${repo}/commits?branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(item.path)}`);
   }, [navigate, owner, repo, branch]);
 
   // 搜索过滤（本地过滤，只过滤名字，不过滤未展开子节点）

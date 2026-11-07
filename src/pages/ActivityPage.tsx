@@ -117,7 +117,7 @@ export default function ActivityPage() {
           : `/repos/${repoName}/pulls`;
       }
       case 'PushEvent':
-        return `/repos/${repoName}/commits/${repoName.split('/')[1]}`;
+        return `/repos/${repoName}/commits`;
       case 'ReleaseEvent':
         return `/repos/${repoName}/artifacts`;
       case 'CreateEvent':

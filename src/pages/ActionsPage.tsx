@@ -69,6 +69,7 @@ import {
   rerunWorkflowJob,
   getJobLogs,
   getBranches,
+  getRepo,
   formatRelativeTime,
   getFileContent,
 } from '@/services/github';
@@ -236,28 +237,28 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
         <Terminal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
         <span className="text-xs text-muted-foreground flex-1 min-w-[96px]">{i18n.t('日志输出')}</span>
         {isRunning && (
-          <span className="flex items-center gap-1 text-[10px] text-warning">
+          <span className="hidden sm:flex items-center gap-1 text-[10px] text-warning">
             <Loader2 className="w-3 h-3 animate-spin" />{i18n.t('实时刷新')}
           </span>
         )}
         <Button
           variant="ghost"
           size="sm"
-          className={`h-6 px-2 text-[10px] gap-1 ${follow ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'}`}
+          className={`h-6 px-1.5 sm:px-2 text-[10px] gap-1 ${follow ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'}`}
           onClick={() => setFollow((prev) => !prev)}
           title={i18n.t('跟随最新日志')}
         >
-          <ArrowDown className="w-3 h-3" />{follow ? i18n.t('跟随中') : i18n.t('跟随')}
+          <ArrowDown className="w-3 h-3" /><span className="hidden sm:inline">{follow ? i18n.t('跟随中') : i18n.t('跟随')}</span>
         </Button>
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+          className="h-6 px-1.5 sm:px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
           onClick={handleCopy}
           disabled={loading || !logs}
         >
           {copied ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
-          {copied ? i18n.t('已复制') : i18n.t('复制')}
+          <span className="hidden sm:inline">{copied ? i18n.t('已复制') : i18n.t('复制')}</span>
         </Button>
       </div>
       <div
@@ -715,10 +716,16 @@ export default function ActionsPage() {
     if (!owner || !repo) return;
     setLoadingBranches(true);
     try {
-      const result = await getBranches(owner, repo, 1);
+      const [result, repoInfo] = await Promise.all([
+        getBranches(owner, repo, 1),
+        getRepo(owner, repo).catch(() => null),
+      ]);
       const names = result.data.map((b) => b.name);
       setBranches(names);
-      const ref = names[0] || 'main';
+      const defaultBranch = repoInfo?.default_branch;
+      const ref = defaultBranch && (names.length === 0 || names.includes(defaultBranch))
+        ? defaultBranch
+        : names[0] || 'main';
       setTriggerRef(ref);
       void loadWorkflowInputs(wf, ref);
     } catch {
@@ -922,6 +929,7 @@ export default function ActionsPage() {
                     <SelectItem value="all" className="text-foreground text-sm">{i18n.t('全部状态')}</SelectItem>
                     <SelectItem value="success" className="text-foreground text-sm">{i18n.t('成功')}</SelectItem>
                     <SelectItem value="failure" className="text-foreground text-sm">{i18n.t('失败')}</SelectItem>
+                    <SelectItem value="queued" className="text-foreground text-sm">{i18n.t('排队中')}</SelectItem>
                     <SelectItem value="in_progress" className="text-foreground text-sm">{i18n.t('运行中')}</SelectItem>
                     <SelectItem value="cancelled" className="text-foreground text-sm">{i18n.t('已取消')}</SelectItem>
                   </SelectContent>

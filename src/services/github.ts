@@ -1227,12 +1227,32 @@ export async function rerunWorkflowRun(
   });
 }
 
+export async function rerunFailedWorkflowRun(
+  owner: string,
+  repo: string,
+  runId: number
+): Promise<void> {
+  await request<unknown>(`/repos/${owner}/${repo}/actions/runs/${runId}/rerun-failed-jobs`, {
+    method: 'POST',
+  });
+}
+
+export async function rerunWorkflowJob(
+  owner: string,
+  repo: string,
+  jobId: number
+): Promise<void> {
+  await request<unknown>(`/repos/${owner}/${repo}/actions/jobs/${jobId}/rerun`, {
+    method: 'POST',
+  });
+}
+
 export async function getWorkflowRunJobs(
   owner: string,
   repo: string,
   runId: number
 ): Promise<{ total_count: number; jobs: import('@/types/types').GitHubWorkflowJob[] }> {
-  return request(`/repos/${owner}/${repo}/actions/runs/${runId}/jobs`);
+  return request(`/repos/${owner}/${repo}/actions/runs/${runId}/jobs?per_page=100`);
 }
 
 // ===== GitHub Packages =====

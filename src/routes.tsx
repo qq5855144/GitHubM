@@ -69,6 +69,7 @@ export const routes: RouteConfig[] = [
   { name: i18n.t('协作者'), path: '/repos/:owner/:repo/collaborators', element: <CollaboratorsPage /> },
   // 新增仓库子功能
   { name: 'Actions', path: '/repos/:owner/:repo/actions', element: <ActionsPage /> },
+  { name: 'Actions 运行详情', path: '/repos/:owner/:repo/actions/runs/:runId', element: <ActionsPage /> },
   { name: 'Packages', path: '/repos/:owner/:repo/packages', element: <PackagesPage /> },
   { name: 'Projects', path: '/repos/:owner/:repo/projects', element: <ProjectsPage /> },
   { name: 'Discussions', path: '/repos/:owner/:repo/discussions', element: <DiscussionsPage /> },

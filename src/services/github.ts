@@ -858,15 +858,17 @@ export async function getCommits(
     per_page?: number;
     page?: number;
     author?: string;
+    path?: string;
   } = {}
 ): Promise<{ data: GitHubCommit[]; hasNextPage: boolean }> {
-  const { sha, per_page = 30, page = 1, author } = params;
+  const { sha, per_page = 30, page = 1, author, path } = params;
   const queryParams = new URLSearchParams({
     per_page: String(per_page),
     page: String(page),
   });
   if (sha) queryParams.set('sha', sha);
   if (author) queryParams.set('author', author);
+  if (path) queryParams.set('path', path);
 
   return requestWithPagination<GitHubCommit>(
     `/repos/${owner}/${repo}/commits?${queryParams.toString()}`

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ChevronRight,
@@ -22,12 +22,20 @@ import i18n from '@/i18n';
 export default function CommitDetailPage() {
   const { owner, repo, sha } = useParams<{ owner: string; repo: string; sha: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [commit, setCommit] = useState<GitHubCommit | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!owner || !repo || !sha) return;
+    // 兼容旧链接：/commits/:branch 实际是分支历史，不是提交 SHA
+    if (!/^[0-9a-f]{7,40}$/i.test(sha)) {
+      const params = new URLSearchParams(location.search);
+      params.set('branch', sha);
+      navigate(`/repos/${owner}/${repo}/commits?${params.toString()}`, { replace: true });
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -45,7 +53,7 @@ export default function CommitDetailPage() {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [owner, repo, sha]);
+  }, [owner, repo, sha, location.search, navigate]);
 
   const shortSha = sha ? sha.substring(0, 7) : '';
 

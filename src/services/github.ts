@@ -1185,7 +1185,20 @@ export async function getWorkflows(
   owner: string,
   repo: string
 ): Promise<{ total_count: number; workflows: import('@/types/types').GitHubWorkflow[] }> {
-  return request(`/repos/${owner}/${repo}/actions/workflows`);
+  const workflows: import('@/types/types').GitHubWorkflow[] = [];
+  let page = 1;
+  let total = 0;
+  // GitHub 默认每页 30 条；必须分页拉取，否则工作流较多时会漏项。
+  while (page <= 10) {
+    const res = await request<{ total_count: number; workflows: import('@/types/types').GitHubWorkflow[] }>(
+      `/repos/${owner}/${repo}/actions/workflows?per_page=100&page=${page}`
+    );
+    total = Number(res.total_count ?? 0);
+    workflows.push(...(res.workflows ?? []));
+    if ((res.workflows?.length ?? 0) < 100 || workflows.length >= total) break;
+    page++;
+  }
+  return { total_count: total, workflows };
 }
 
 export async function getWorkflowRuns(
@@ -1725,6 +1738,24 @@ export interface GitHubArtifact {
   updated_at: string;
   archive_download_url: string;
   workflow_run: { id: number; head_branch: string; head_sha: string; event: string } | null;
+}
+
+export async function createRelease(
+  owner: string,
+  repo: string,
+  data: {
+    tag_name: string;
+    name?: string;
+    body?: string;
+    draft?: boolean;
+    prerelease?: boolean;
+    target_commitish?: string;
+  }
+): Promise<GitHubRelease> {
+  return request<GitHubRelease>(`/repos/${owner}/${repo}/releases`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function getReleases(

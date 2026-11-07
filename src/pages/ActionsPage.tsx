@@ -20,6 +20,8 @@ import {
   Terminal,
   Copy,
   Check,
+  ArrowDown,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +43,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -51,7 +63,10 @@ import {
   triggerWorkflow,
   cancelWorkflowRun,
   rerunWorkflowRun,
+  getWorkflowRun,
   getWorkflowRunJobs,
+  rerunFailedWorkflowRun,
+  rerunWorkflowJob,
   getJobLogs,
   getBranches,
   formatRelativeTime,
@@ -88,7 +103,30 @@ function RunStatusBadge({ status, conclusion }: { status: string | null; conclus
   if (conclusion === 'timed_out') {
     return <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs flex items-center gap-1"><Clock className="w-3 h-3" />{i18n.t('超时')}</Badge>;
   }
+  if (conclusion === 'action_required') {
+    return <Badge className="bg-warning/10 text-warning border-warning/30 text-xs flex items-center gap-1"><AlertCircle className="w-3 h-3" />{i18n.t('需要处理')}</Badge>;
+  }
   return <Badge className="bg-secondary text-muted-foreground border-border text-xs">{conclusion || status || i18n.t('未知')}</Badge>;
+}
+
+function isActiveRun(run: Pick<GitHubWorkflowRun, 'status' | 'conclusion'> | null | undefined): boolean {
+  if (!run) return false;
+  return run.status === 'queued' || run.status === 'in_progress' || run.status === 'waiting' || run.conclusion === 'action_required';
+}
+
+function formatDuration(start?: string | null, end?: string | null): string {
+  if (!start) return '';
+  const startMs = new Date(start).getTime();
+  const endMs = end ? new Date(end).getTime() : Date.now();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return '';
+  const totalSeconds = Math.max(0, Math.round((endMs - startMs) / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}秒`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return `${minutes}分${seconds ? `${seconds}秒` : ''}`;
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return `${hours}小时${restMinutes ? `${restMinutes}分` : ''}`;
 }
 
 // ANSI 颜色码转 Tailwind className（精简版）
@@ -112,7 +150,6 @@ function AnsiLine({ raw }: { raw: string }) {
   return <span>{clean}</span>;
 }
 
-// 日志面板
 interface LogPanelProps {
   jobId: number;
   owner: string;
@@ -120,17 +157,25 @@ interface LogPanelProps {
   isRunning: boolean;
 }
 
+const MAX_LOG_LINES = 2000;
+
+function trimLogLines(text: string): string {
+  const lines = text.split('\n');
+  if (lines.length <= MAX_LOG_LINES) return text;
+  return `${i18n.t('… 日志过长，仅显示最后')} ${MAX_LOG_LINES} ${i18n.t('行')}\n${lines.slice(-MAX_LOG_LINES).join('\n')}`;
+}
+
 function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
   const [logs, setLogs] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [follow, setFollow] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchLogs = useCallback(async () => {
     try {
       const text = await getJobLogs(owner, repo, jobId);
-      setLogs(text);
+      setLogs(trimLogLines(text));
     } catch (err) {
       const msg = err instanceof Error ? err.message : i18n.t('获取日志失败');
       setLogs(`[错误] ${msg}`);
@@ -140,21 +185,40 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
   }, [owner, repo, jobId]);
 
   useEffect(() => {
-    fetchLogs();
-    if (isRunning) {
-      intervalRef.current = setInterval(fetchLogs, 3000);
-    }
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = async () => {
+      if (cancelled) return;
+      if (!document.hidden) await fetchLogs();
+      if (!cancelled && isRunning) timer = setTimeout(tick, 3000);
+    };
+
+    void tick();
+    const handleVisibility = () => {
+      if (document.hidden) return;
+      if (timer) clearTimeout(timer);
+      void tick();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [fetchLogs, isRunning]);
 
-  // 自动滚动到底部
   useEffect(() => {
-    if (scrollRef.current && isRunning) {
+    if (scrollRef.current && follow) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [logs, isRunning]);
+  }, [logs, follow]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
+  };
 
   const handleCopy = async () => {
     try {
@@ -168,13 +232,23 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
 
   return (
     <div className="bg-[#0d1117] border border-border rounded-lg overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-secondary/20">
-        <Terminal className="w-3.5 h-3.5 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground flex-1">{i18n.t('日志输出')}</span>
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border bg-secondary/20 flex-wrap">
+        <Terminal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <span className="text-xs text-muted-foreground flex-1 min-w-[96px]">{i18n.t('日志输出')}</span>
         {isRunning && (
           <span className="flex items-center gap-1 text-[10px] text-warning">
-            <Loader2 className="w-3 h-3 animate-spin" />{i18n.t('实时刷新')}</span>
+            <Loader2 className="w-3 h-3 animate-spin" />{i18n.t('实时刷新')}
+          </span>
         )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className={`h-6 px-2 text-[10px] gap-1 ${follow ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'}`}
+          onClick={() => setFollow((prev) => !prev)}
+          title={i18n.t('跟随最新日志')}
+        >
+          <ArrowDown className="w-3 h-3" />{follow ? i18n.t('跟随中') : i18n.t('跟随')}
+        </Button>
         <Button
           variant="ghost"
           size="sm"
@@ -188,6 +262,7 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
       </div>
       <div
         ref={scrollRef}
+        onScroll={handleScroll}
         className="overflow-y-auto max-h-96 p-3 font-mono text-xs leading-relaxed text-[#e6edf3]"
       >
         {loading ? (
@@ -209,10 +284,27 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
   );
 }
 
-function JobItem({ job, owner, repo }: { job: GitHubWorkflowJob; owner: string; repo: string }) {
-  const [open, setOpen] = useState(false);
+function JobItem({
+  job,
+  owner,
+  repo,
+  onRerun,
+  isRerunning,
+}: {
+  job: GitHubWorkflowJob;
+  owner: string;
+  repo: string;
+  onRerun: (job: GitHubWorkflowJob) => void;
+  isRerunning: boolean;
+}) {
+  const [open, setOpen] = useState(job.conclusion === 'failure' || job.conclusion === 'timed_out');
   const [showLogs, setShowLogs] = useState(false);
   const isRunning = job.status === 'in_progress' || job.status === 'queued';
+  const duration = formatDuration(job.started_at, job.completed_at);
+
+  useEffect(() => {
+    if (job.conclusion === 'failure' || job.conclusion === 'timed_out') setOpen(true);
+  }, [job.conclusion]);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -220,7 +312,8 @@ function JobItem({ job, owner, repo }: { job: GitHubWorkflowJob; owner: string; 
         <ChevronDown className={`w-3 h-3 text-muted-foreground shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
         <RunStatusBadge status={job.status} conclusion={job.conclusion} />
         <span className="text-sm text-foreground flex-1 min-w-0 truncate">{job.name}</span>
-        <span className="text-xs text-muted-foreground shrink-0">{formatRelativeTime(job.started_at)}</span>
+        {duration && <span className="text-[10px] text-muted-foreground shrink-0">{duration}</span>}
+        {job.started_at && <span className="text-xs text-muted-foreground shrink-0">{formatRelativeTime(job.started_at)}</span>}
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="pl-8 pr-4 pb-2 space-y-0.5">
@@ -238,8 +331,7 @@ function JobItem({ job, owner, repo }: { job: GitHubWorkflowJob; owner: string; 
               <span className="text-xs text-muted-foreground flex-1 min-w-0 truncate">{step.name}</span>
             </div>
           ))}
-          {/* 日志查看按钮 */}
-          <div className="pt-2 pb-1">
+          <div className="pt-2 pb-1 flex items-center gap-2 flex-wrap">
             <Button
               variant="ghost"
               size="sm"
@@ -250,6 +342,18 @@ function JobItem({ job, owner, repo }: { job: GitHubWorkflowJob; owner: string; 
               {showLogs ? i18n.t('收起日志') : i18n.t('查看日志')}
               {isRunning && <span className="text-warning text-[10px]">{i18n.t('● 实时')}</span>}
             </Button>
+            {job.status === 'completed' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1.5 border border-border text-muted-foreground hover:bg-secondary"
+                onClick={() => onRerun(job)}
+                disabled={isRerunning}
+              >
+                {isRerunning ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                {isRerunning ? i18n.t('触发中...') : i18n.t('重跑任务')}
+              </Button>
+            )}
           </div>
           {showLogs && (
             <LogPanel jobId={job.id} owner={owner} repo={repo} isRunning={isRunning} />
@@ -260,41 +364,85 @@ function JobItem({ job, owner, repo }: { job: GitHubWorkflowJob; owner: string; 
   );
 }
 
-function RunDetail({ owner, repo, run, onClose }: {
-  owner: string; repo: string;
+function RunDetail({
+  owner,
+  repo,
+  run,
+  onClose,
+  onRunUpdate,
+  onRefreshList,
+}: {
+  owner: string;
+  repo: string;
   run: GitHubWorkflowRun;
   onClose: () => void;
+  onRunUpdate: (run: GitHubWorkflowRun) => void;
+  onRefreshList: () => void;
 }) {
+  const [liveRun, setLiveRun] = useState<GitHubWorkflowRun>(run);
   const [jobs, setJobs] = useState<GitHubWorkflowJob[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [cancelling, setCancelling] = useState(false);
-  const [rerunning, setRerunning] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isRunning = run.status === 'in_progress' || run.status === 'queued';
+  const [rerunning, setRerunning] = useState<'all' | 'failed' | null>(null);
+  const [rerunningJobId, setRerunningJobId] = useState<number | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const isRunning = isActiveRun(liveRun);
+  const isFailed = liveRun.status === 'completed' && (liveRun.conclusion === 'failure' || liveRun.conclusion === 'timed_out');
 
-  const loadJobs = useCallback(() => {
-    getWorkflowRunJobs(owner, repo, run.id)
-      .then((res) => setJobs(res.jobs))
-      .catch(console.error)
-      .finally(() => setLoadingJobs(false));
-  }, [owner, repo, run.id]);
+  const loadDetail = useCallback(async () => {
+    const [freshRun, jobsResult] = await Promise.all([
+      getWorkflowRun(owner, repo, run.id),
+      getWorkflowRunJobs(owner, repo, run.id),
+    ]);
+    setLiveRun(freshRun);
+    setJobs(Array.isArray(jobsResult.jobs) ? jobsResult.jobs : []);
+    setLoadingJobs(false);
+    onRunUpdate(freshRun);
+    return freshRun;
+  }, [owner, repo, run.id, onRunUpdate]);
 
   useEffect(() => {
-    loadJobs();
-    if (isRunning) {
-      intervalRef.current = setInterval(loadJobs, 5000);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = async () => {
+      if (cancelled) return;
+      if (document.hidden) {
+        timer = setTimeout(tick, 5000);
+        return;
+      }
+      try {
+        const freshRun = await loadDetail();
+        if (!cancelled && isActiveRun(freshRun)) timer = setTimeout(tick, 5000);
+      } catch {
+        if (!cancelled) {
+          setLoadingJobs(false);
+          timer = setTimeout(tick, 10000);
+        }
+      }
     };
-  }, [loadJobs, isRunning]);
+
+    void tick();
+    const handleVisibility = () => {
+      if (document.hidden) return;
+      if (timer) clearTimeout(timer);
+      void tick();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [loadDetail]);
 
   const handleCancel = async () => {
     setCancelling(true);
     try {
       await cancelWorkflowRun(owner, repo, run.id);
-      toast.success(i18n.t('已取消工作流运行'));
-      onClose();
+      toast.success(i18n.t('已发送取消请求'));
+      setCancelOpen(false);
+      setTimeout(() => { void loadDetail().catch(() => undefined); }, 1000);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : i18n.t('取消失败'));
     } finally {
@@ -302,78 +450,149 @@ function RunDetail({ owner, repo, run, onClose }: {
     }
   };
 
-  const handleRerun = async () => {
-    setRerunning(true);
+  const handleRerun = async (mode: 'all' | 'failed') => {
+    setRerunning(mode);
     try {
-      await rerunWorkflowRun(owner, repo, run.id);
-      toast.success(i18n.t('已重新触发工作流'));
+      if (mode === 'failed') await rerunFailedWorkflowRun(owner, repo, run.id);
+      else await rerunWorkflowRun(owner, repo, run.id);
+      toast.success(mode === 'failed' ? i18n.t('已重新触发失败任务') : i18n.t('已重新触发工作流'));
       onClose();
+      setTimeout(onRefreshList, 1500);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : i18n.t('重新运行失败'));
     } finally {
-      setRerunning(false);
+      setRerunning(null);
     }
   };
 
+  const handleRerunJob = async (job: GitHubWorkflowJob) => {
+    setRerunningJobId(job.id);
+    try {
+      await rerunWorkflowJob(owner, repo, job.id);
+      toast.success(`${i18n.t('已重新触发任务：')}${job.name}`);
+      setTimeout(() => { void loadDetail().catch(() => undefined); }, 1200);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : i18n.t('重新运行任务失败'));
+    } finally {
+      setRerunningJobId(null);
+    }
+  };
+
+  const duration = formatDuration(liveRun.run_started_at || liveRun.created_at, liveRun.status === 'completed' ? liveRun.updated_at : null);
+
   return (
-    <div className="bg-card border border-border rounded-lg overflow-hidden">
-      <div className="p-4 border-b border-border bg-secondary/30 flex items-center gap-3 flex-wrap">
-        <button type="button" onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground">{i18n.t('← 返回列表')}</button>
-        <span className="text-muted-foreground text-sm">/</span>
-        <span className="text-sm font-medium text-foreground truncate max-w-xs">{run.name} #{run.run_number}</span>
-        <RunStatusBadge status={run.status} conclusion={run.conclusion} />
-        {isRunning && (
-          <span className="text-[11px] text-warning flex items-center gap-1 ml-1">
-            <Loader2 className="w-3 h-3 animate-spin" />{i18n.t('自动刷新中')}</span>
-        )}
-        <div className="ml-auto flex gap-2">
-          {(run.status === 'in_progress' || run.status === 'queued') && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-muted-foreground hover:bg-secondary h-8 border border-border"
-              onClick={handleCancel}
-              disabled={cancelling}
-            >
-              <XCircle className="w-3.5 h-3.5 mr-1" />
-              {cancelling ? i18n.t('取消中...') : i18n.t('取消运行')}
+    <>
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="p-4 border-b border-border bg-secondary/30 flex flex-wrap items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button type="button" onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground">
+                {i18n.t('← 返回列表')}
+              </button>
+              <span className="text-muted-foreground text-sm">/</span>
+              <RunStatusBadge status={liveRun.status} conclusion={liveRun.conclusion} />
+              {isRunning && (
+                <span className="text-[11px] text-warning flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />{i18n.t('自动刷新中')}
+                </span>
+              )}
+            </div>
+            <p className="text-sm font-medium text-foreground mt-1.5 break-words">
+              {liveRun.name} <span className="text-muted-foreground font-normal">#{liveRun.run_number}</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
+            {isRunning && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground hover:bg-secondary h-8 border border-border"
+                onClick={() => setCancelOpen(true)}
+              >
+                <XCircle className="w-3.5 h-3.5 mr-1" />
+                {i18n.t('取消运行')}
+              </Button>
+            )}
+            {isFailed && (
+              <Button
+                size="sm"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 h-8"
+                onClick={() => handleRerun('failed')}
+                disabled={!!rerunning}
+              >
+                {rerunning === 'failed' ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                {rerunning === 'failed' ? i18n.t('触发中...') : i18n.t('重跑失败项')}
+              </Button>
+            )}
+            {liveRun.status === 'completed' && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => handleRerun('all')}
+                disabled={!!rerunning}
+              >
+                {rerunning === 'all' ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                {rerunning === 'all' ? i18n.t('触发中...') : i18n.t('全部重跑')}
+              </Button>
+            )}
+            <Button asChild size="sm" variant="ghost" className="h-8 border border-border text-muted-foreground hover:bg-secondary">
+              <a href={liveRun.html_url} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="w-3.5 h-3.5 mr-1" />{i18n.t('GitHub')}
+              </a>
             </Button>
-          )}
-          {run.status === 'completed' && (
-            <Button
-              size="sm"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 h-8"
-              onClick={handleRerun}
-              disabled={rerunning}
-            >
-              <RefreshCw className="w-3.5 h-3.5 mr-1" />
-              {rerunning ? i18n.t('触发中...') : i18n.t('重新运行')}
-            </Button>
-          )}
+          </div>
+        </div>
+        <div className="p-4 space-y-2 text-xs text-muted-foreground border-b border-border">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-x-4 gap-y-1.5">
+            <span>{i18n.t('触发者：')}<span className="text-foreground">{liveRun.triggering_actor?.login || '-'}</span></span>
+            <span>{i18n.t('分支：')}<code className="font-mono text-foreground">{liveRun.head_branch}</code></span>
+            <span>{i18n.t('事件：')}<span className="text-foreground">{liveRun.event}</span></span>
+            <span>{i18n.t('耗时：')}<span className="text-foreground">{duration || '-'}</span></span>
+            <span>{i18n.t('开始：')}<span className="text-foreground">{formatRelativeTime(liveRun.created_at)}</span></span>
+          </div>
+          <p className="text-foreground text-sm mt-1 break-words">{liveRun.head_commit?.message?.split('\n')[0]}</p>
+        </div>
+        <div className="divide-y divide-border">
+          {loadingJobs ? (
+            <div className="p-4 space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-8 bg-muted" />)}</div>
+          ) : jobs.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground text-sm">{i18n.t('暂无任务数据')}</div>
+          ) : jobs.map((job) => (
+            <JobItem
+              key={job.id}
+              job={job}
+              owner={owner}
+              repo={repo}
+              onRerun={handleRerunJob}
+              isRerunning={rerunningJobId === job.id}
+            />
+          ))}
         </div>
       </div>
-      <div className="p-4 space-y-1 text-xs text-muted-foreground border-b border-border">
-        <div className="flex gap-4 flex-wrap">
-          <span>{i18n.t('触发者：')}<span className="text-foreground">{run.triggering_actor?.login}</span></span>
-          <span>{i18n.t('分支：')}<code className="font-mono text-foreground">{run.head_branch}</code></span>
-          <span>{i18n.t('事件：')}<span className="text-foreground">{run.event}</span></span>
-          <span>{i18n.t('开始：')}<span className="text-foreground">{formatRelativeTime(run.created_at)}</span></span>
-        </div>
-        <p className="text-foreground text-sm mt-1">{run.head_commit?.message?.split('\n')[0]}</p>
-      </div>
-      <div className="divide-y divide-border">
-        {loadingJobs ? (
-          <div className="p-4 space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-8 bg-muted" />)}</div>
-        ) : jobs.length === 0 ? (
-          <div className="py-8 text-center text-muted-foreground text-sm">{i18n.t('暂无任务数据')}</div>
-        ) : jobs.map((job) => <JobItem key={job.id} job={job} owner={owner} repo={repo} />)}
-      </div>
-    </div>
+
+      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-md bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">{i18n.t('确认取消运行')}</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              {i18n.t('取消后正在执行的任务会被终止，已完成的步骤不会回滚。')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('返回')}</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleCancel} disabled={cancelling}>
+              {cancelling ? i18n.t('取消中...') : i18n.t('确认取消')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
 export default function ActionsPage() {
-  const { owner, repo } = useParams<{ owner: string; repo: string }>();
+  const { owner, repo, runId } = useParams<{ owner: string; repo: string; runId?: string }>();
   const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<GitHubWorkflow[]>([]);
   const [runs, setRuns] = useState<GitHubWorkflowRun[]>([]);
@@ -382,8 +601,10 @@ export default function ActionsPage() {
   const [selectedWorkflow, setSelectedWorkflow] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedRun, setSelectedRun] = useState<GitHubWorkflowRun | null>(null);
+  const [loadingRun, setLoadingRun] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
   const [triggering, setTriggering] = useState<number | null>(null);
   // 触发工作流 Dialog 状态
   const [triggerDialog, setTriggerDialog] = useState<GitHubWorkflow | null>(null);
@@ -409,6 +630,31 @@ export default function ActionsPage() {
       .catch(console.error)
       .finally(() => setLoadingWf(false));
   }, [owner, repo]);
+
+  useEffect(() => {
+    if (!owner || !repo) return;
+    if (!runId) {
+      setSelectedRun(null);
+      setLoadingRun(false);
+      return;
+    }
+    let cancelled = false;
+    setLoadingRun(true);
+    getWorkflowRun(owner, repo, Number(runId))
+      .then((run) => {
+        if (!cancelled) setSelectedRun(run);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        toast.error(i18n.t('加载运行详情失败'));
+        navigate(`/repos/${owner}/${repo}/actions`, { replace: true });
+        console.error(err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRun(false);
+      });
+    return () => { cancelled = true; };
+  }, [owner, repo, runId, navigate]);
 
   // 打开触发 Dialog 时加载分支列表
   const loadWorkflowInputs = useCallback(async (wf: GitHubWorkflow, ref: string) => {
@@ -506,26 +752,68 @@ export default function ActionsPage() {
     }
   };
 
-  const loadRuns = useCallback(async (pg = 1, append = false) => {
+  const loadRuns = useCallback(async (pg = 1, append = false, silent = false) => {
     if (!owner || !repo) return;
-    setLoadingRuns(true);
+    if (!silent) setLoadingRuns(true);
     try {
       const wfId = selectedWorkflow !== 'all' ? selectedWorkflow : undefined;
       const status = statusFilter !== 'all' ? statusFilter : undefined;
       const res = await getWorkflowRuns(owner, repo, { workflow_id: wfId, status, per_page: 20, page: pg });
       if (append) setRuns((prev) => [...prev, ...res.workflow_runs]);
       else setRuns(res.workflow_runs);
-      setHasMore(res.workflow_runs.length === 20);
+      const total = Number(res.total_count ?? 0);
+      setTotalCount(total);
+      setHasMore(pg * 20 < total);
       setPage(pg);
     } catch (err) {
-      toast.error(i18n.t('加载运行记录失败'));
+      if (!silent) toast.error(i18n.t('加载运行记录失败'));
       console.error(err);
     } finally {
-      setLoadingRuns(false);
+      if (!silent) setLoadingRuns(false);
     }
   }, [owner, repo, selectedWorkflow, statusFilter]);
 
   useEffect(() => { loadRuns(1); }, [loadRuns]);
+
+  const handleRunUpdate = useCallback((updated: GitHubWorkflowRun) => {
+    setRuns((prev) => prev.map((item) => item.id === updated.id ? updated : item));
+  }, []);
+
+  const hasActiveRuns = runs.some(isActiveRun);
+  useEffect(() => {
+    if (!hasActiveRuns || selectedRun || page !== 1) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tick = () => {
+      if (!document.hidden) void loadRuns(1, false, true);
+      timer = setTimeout(tick, 8000);
+    };
+    timer = setTimeout(tick, 8000);
+    const handleVisibility = () => {
+      if (document.hidden) return;
+      if (timer) clearTimeout(timer);
+      void loadRuns(1, false, true);
+      timer = setTimeout(tick, 8000);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [hasActiveRuns, selectedRun, page, loadRuns]);
+
+  const selectedWorkflowObj = workflows.find((wf) => String(wf.id) === selectedWorkflow);
+  const openSelectedTrigger = () => {
+    if (!selectedWorkflowObj) {
+      toast.info(i18n.t('请先选择一个工作流'));
+      return;
+    }
+    void openTriggerDialog(selectedWorkflowObj);
+  };
+
+  const closeRunDetail = () => {
+    setSelectedRun(null);
+    if (runId) navigate(`/repos/${owner}/${repo}/actions`);
+  };
 
   return (
     <>
@@ -536,17 +824,29 @@ export default function ActionsPage() {
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-foreground">Actions</span>
+        {selectedRun ? (
+          <button type="button" className="text-muted-foreground hover:text-accent" onClick={closeRunDetail}>Actions</button>
+        ) : (
+          <span className="text-foreground">Actions</span>
+        )}
+        {selectedRun && (
+          <>
+            <ChevronRight className="w-3 h-3" />
+            <span className="text-foreground truncate">#{selectedRun.run_number}</span>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
         <Zap className="w-5 h-5 text-primary" />
-        <h1 className="text-xl font-bold text-foreground">{i18n.t('Actions 工作流')}</h1>
+        <h1 className="text-xl font-bold text-foreground">
+          {selectedRun ? i18n.t('Actions 运行详情') : i18n.t('Actions 工作流')}
+        </h1>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* 工作流列表 */}
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="hidden md:block bg-card border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border bg-secondary/30">
             <p className="text-sm font-medium text-foreground">{i18n.t('工作流')}</p>
           </div>
@@ -570,7 +870,7 @@ export default function ActionsPage() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="w-7 h-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                    className="w-7 h-7 opacity-100 md:opacity-0 md:group-hover:opacity-100 group-focus-within:opacity-100 text-muted-foreground hover:text-primary hover:bg-primary/10"
                     onClick={() => openTriggerDialog(wf)}
                     disabled={triggering === wf.id}
                     title={i18n.t('触发工作流')}
@@ -586,7 +886,20 @@ export default function ActionsPage() {
         {/* 运行记录 */}
         <div className="md:col-span-2 space-y-3">
           {selectedRun ? (
-            <RunDetail owner={owner!} repo={repo!} run={selectedRun} onClose={() => setSelectedRun(null)} />
+            <RunDetail
+              owner={owner!}
+              repo={repo!}
+              run={selectedRun}
+              onClose={closeRunDetail}
+              onRunUpdate={handleRunUpdate}
+              onRefreshList={() => { void loadRuns(1); }}
+            />
+          ) : loadingRun ? (
+            <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+              <Skeleton className="h-8 w-40 bg-muted" />
+              <Skeleton className="h-4 w-full bg-muted" />
+              <Skeleton className="h-20 w-full bg-muted" />
+            </div>
           ) : (
             <>
               <div className="flex items-center gap-3 flex-wrap">
@@ -618,9 +931,24 @@ export default function ActionsPage() {
                   size="sm"
                   className="text-muted-foreground hover:bg-secondary h-9"
                   onClick={() => loadRuns(1)}
+                  disabled={loadingRuns}
+                  title={i18n.t('刷新运行记录')}
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className={`w-4 h-4 ${loadingRuns ? 'animate-spin' : ''}`} />
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5"
+                  onClick={openSelectedTrigger}
+                  title={selectedWorkflowObj ? i18n.t('触发当前工作流') : i18n.t('请先选择工作流')}
+                >
+                  <Play className="w-3.5 h-3.5" />{i18n.t('运行')}
+                </Button>
+                <span className="text-[11px] text-muted-foreground ml-auto flex items-center gap-1.5">
+                  {hasActiveRuns && <><Loader2 className="w-3 h-3 animate-spin text-warning" />{i18n.t('自动刷新')}</>}
+                  {totalCount > 0 && <span>{i18n.t('共')} {totalCount} {i18n.t('条')}</span>}
+                </span>
               </div>
               <div className="bg-card border border-border rounded-lg overflow-hidden">
                 {loadingRuns && runs.length === 0 ? (
@@ -637,7 +965,10 @@ export default function ActionsPage() {
                         key={run.id}
                         type="button"
                         className="w-full flex items-start gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors text-left"
-                        onClick={() => setSelectedRun(run)}
+                        onClick={() => {
+                          setSelectedRun(run);
+                          navigate(`/repos/${owner}/${repo}/actions/runs/${run.id}`);
+                        }}
                       >
                         <div className="mt-0.5 shrink-0">
                           <RunStatusBadge status={run.status} conclusion={run.conclusion} />
@@ -655,6 +986,7 @@ export default function ActionsPage() {
                             <code className="font-mono">{run.head_branch}</code>
                             <span>·</span>
                             <span>{formatRelativeTime(run.created_at)}</span>
+                            {run.status === 'completed' && <><span>·</span><span>{formatDuration(run.run_started_at || run.created_at, run.updated_at)}</span></>}
                           </div>
                         </div>
                       </button>

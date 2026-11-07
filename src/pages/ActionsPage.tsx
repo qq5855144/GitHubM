@@ -22,6 +22,16 @@ import {
   Check,
   ArrowDown,
   ExternalLink,
+  Search,
+  Tag,
+  Power,
+  MoreHorizontal,
+  ChevronsUpDown,
+  Download,
+  Package,
+  ShieldCheck,
+  ShieldX,
+  Save,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -58,6 +68,22 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
   getWorkflows,
   getWorkflowRuns,
   triggerWorkflow,
@@ -65,6 +91,13 @@ import {
   rerunWorkflowRun,
   getWorkflowRun,
   getWorkflowRunJobs,
+  getRunArtifacts,
+  getTags,
+  enableWorkflow,
+  disableWorkflow,
+  getPendingDeployments,
+  reviewPendingDeployments,
+  getToken,
   rerunFailedWorkflowRun,
   rerunWorkflowJob,
   getJobLogs,
@@ -74,6 +107,7 @@ import {
   getFileContent,
 } from '@/services/github';
 import type { GitHubWorkflow, GitHubWorkflowRun, GitHubWorkflowJob } from '@/types/types';
+import type { GitHubArtifact, GitHubPendingDeployment, GitHubTagRef } from '@/services/github';
 import { toast } from 'sonner';
 import { copyToClipboard } from '@/lib/utils';
 import { decodeBase64Content } from '@/lib/utils';
@@ -128,6 +162,164 @@ function formatDuration(start?: string | null, end?: string | null): string {
   const hours = Math.floor(minutes / 60);
   const restMinutes = minutes % 60;
   return `${hours}小时${restMinutes ? `${restMinutes}分` : ''}`;
+}
+
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes < 1024) return `${bytes || 0} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function safeFileName(name: string): string {
+  return name.replace(/[^\w.\-]+/g, '_').slice(0, 90) || 'download';
+}
+
+/** 原生下载 API 资源；浏览器环境回退到 GitHub 页面。 */
+function downloadApiResource(apiUrl: string, fileName: string, fallbackUrl: string): void {
+  const token = getToken();
+  if (!token) {
+    toast.error(i18n.t('请先登录后再下载'));
+    return;
+  }
+  const bridge = (window as unknown as { AndroidBridge?: { downloadFile?: (url: string, name: string, token: string) => void } }).AndroidBridge;
+  if (bridge?.downloadFile) {
+    bridge.downloadFile(apiUrl, fileName, token);
+    toast.success(`${i18n.t('开始下载')} ${fileName}`);
+    return;
+  }
+  window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+  toast.info(i18n.t('已打开 GitHub 页面，请在浏览器中下载'));
+}
+
+interface TriggerPreset {
+  id: string;
+  name: string;
+  ref: string;
+  inputs: Record<string, string>;
+  createdAt: number;
+}
+
+const TRIGGER_PRESET_KEY = 'actions_trigger_presets_v1';
+
+function triggerPresetKey(owner: string, repo: string, workflowId: number): string {
+  return `${TRIGGER_PRESET_KEY}:${owner}/${repo}/${workflowId}`;
+}
+
+function triggerLastKey(owner: string, repo: string, workflowId: number): string {
+  return `actions_trigger_last:${owner}/${repo}/${workflowId}`;
+}
+
+function loadTriggerPresets(owner: string, repo: string, workflowId: number): TriggerPreset[] {
+  try {
+    const raw = localStorage.getItem(triggerPresetKey(owner, repo, workflowId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as TriggerPreset[];
+    return Array.isArray(parsed) ? parsed.filter((p) => p && p.id && p.ref) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTriggerPresets(owner: string, repo: string, workflowId: number, presets: TriggerPreset[]): void {
+  try {
+    localStorage.setItem(triggerPresetKey(owner, repo, workflowId), JSON.stringify(presets.slice(0, 20)));
+  } catch { /* ignore */ }
+}
+
+interface LastTrigger {
+  ref: string;
+  inputs: Record<string, string>;
+}
+
+function loadLastTrigger(owner: string, repo: string, workflowId: number): LastTrigger | null {
+  try {
+    const raw = localStorage.getItem(triggerLastKey(owner, repo, workflowId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as LastTrigger;
+    return parsed?.ref ? { ref: parsed.ref, inputs: parsed.inputs ?? {} } : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLastTrigger(owner: string, repo: string, workflowId: number, last: LastTrigger): void {
+  try {
+    localStorage.setItem(triggerLastKey(owner, repo, workflowId), JSON.stringify(last));
+  } catch { /* ignore */ }
+}
+
+function RefSelector({
+  value,
+  onChange,
+  branches,
+  tags,
+  disabled,
+}: {
+  value: string;
+  onChange: (ref: string) => void;
+  branches: string[];
+  tags: string[];
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full h-10 justify-between bg-secondary border-border text-foreground font-mono text-sm"
+          disabled={disabled}
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <GitBranch className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="truncate">{value || i18n.t('选择分支或 Tag')}</span>
+          </span>
+          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] min-w-[280px] p-0 bg-popover border-border">
+        <Command>
+          <CommandInput placeholder={i18n.t('搜索分支或 Tag...')} />
+          <CommandList className="max-h-72">
+            <CommandEmpty>{i18n.t('没有匹配的分支或 Tag')}</CommandEmpty>
+            {branches.length > 0 && (
+              <CommandGroup heading={`${i18n.t('分支')} (${branches.length})`}>
+                {branches.map((name) => (
+                  <CommandItem
+                    key={`branch:${name}`}
+                    value={`branch:${name}`}
+                    onSelect={() => { onChange(name); setOpen(false); }}
+                  >
+                    <GitBranch className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="font-mono truncate">{name}</span>
+                    {value === name && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {tags.length > 0 && (
+              <CommandGroup heading={`Tags (${tags.length})`}>
+                {tags.map((name) => (
+                  <CommandItem
+                    key={`tag:${name}`}
+                    value={`tag:${name}`}
+                    onSelect={() => { onChange(name); setOpen(false); }}
+                  >
+                    <Tag className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="font-mono truncate">{name}</span>
+                    {value === name && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 // ANSI 颜色码转 Tailwind className（精简版）
@@ -348,6 +540,20 @@ function JobItem({
                 variant="ghost"
                 size="sm"
                 className="h-7 text-xs gap-1.5 border border-border text-muted-foreground hover:bg-secondary"
+                onClick={() => downloadApiResource(
+                  `https://api.github.com/repos/${owner}/${repo}/actions/jobs/${job.id}/logs`,
+                  `${safeFileName(job.name)}-logs.txt`,
+                  job.html_url,
+                )}
+              >
+                <Download className="w-3 h-3" />{i18n.t('下载日志')}
+              </Button>
+            )}
+            {job.status === 'completed' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1.5 border border-border text-muted-foreground hover:bg-secondary"
                 onClick={() => onRerun(job)}
                 disabled={isRerunning}
               >
@@ -387,6 +593,10 @@ function RunDetail({
   const [rerunning, setRerunning] = useState<'all' | 'failed' | null>(null);
   const [rerunningJobId, setRerunningJobId] = useState<number | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [pendingDeployments, setPendingDeployments] = useState<GitHubPendingDeployment[]>([]);
+  const [artifacts, setArtifacts] = useState<GitHubArtifact[]>([]);
+  const [loadingArtifacts, setLoadingArtifacts] = useState(true);
+  const [reviewingEnv, setReviewingEnv] = useState<number | null>(null);
   const isRunning = isActiveRun(liveRun);
   const isFailed = liveRun.status === 'completed' && (liveRun.conclusion === 'failure' || liveRun.conclusion === 'timed_out');
 
@@ -399,6 +609,15 @@ function RunDetail({
     setJobs(Array.isArray(jobsResult.jobs) ? jobsResult.jobs : []);
     setLoadingJobs(false);
     onRunUpdate(freshRun);
+    if (freshRun.status === 'waiting' || freshRun.conclusion === 'action_required') {
+      try {
+        setPendingDeployments(await getPendingDeployments(owner, repo, run.id));
+      } catch {
+        setPendingDeployments([]);
+      }
+    } else {
+      setPendingDeployments([]);
+    }
     return freshRun;
   }, [owner, repo, run.id, onRunUpdate]);
 
@@ -436,6 +655,36 @@ function RunDetail({
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [loadDetail]);
+
+  const completed = liveRun.status === 'completed';
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingArtifacts(true);
+    getRunArtifacts(owner, repo, run.id)
+      .then((res) => {
+        if (!cancelled) setArtifacts(Array.isArray(res.artifacts) ? res.artifacts : []);
+      })
+      .catch(() => {
+        if (!cancelled) setArtifacts([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingArtifacts(false);
+      });
+    return () => { cancelled = true; };
+  }, [owner, repo, run.id, completed]);
+
+  const handleReviewDeployment = async (deployment: GitHubPendingDeployment, decision: 'approved' | 'rejected') => {
+    setReviewingEnv(deployment.environment.id);
+    try {
+      await reviewPendingDeployments(owner, repo, run.id, [deployment.environment.id], decision);
+      toast.success(decision === 'approved' ? i18n.t('已批准部署') : i18n.t('已拒绝部署'));
+      setTimeout(() => { void loadDetail().catch(() => undefined); }, 800);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : i18n.t('部署审批失败'));
+    } finally {
+      setReviewingEnv(null);
+    }
+  };
 
   const handleCancel = async () => {
     setCancelling(true);
@@ -554,7 +803,54 @@ function RunDetail({
           </div>
           <p className="text-foreground text-sm mt-1 break-words">{liveRun.head_commit?.message?.split('\n')[0]}</p>
         </div>
-        <div className="divide-y divide-border">
+        {pendingDeployments.length > 0 && (
+          <div className="p-4 border-b border-border">
+            <div className="rounded-xl border border-warning/30 bg-warning/5 p-3 space-y-2.5">
+              <div className="flex items-center gap-2 text-warning">
+                <ShieldCheck className="w-4 h-4 shrink-0" />
+                <p className="text-sm font-medium">{i18n.t('待审批部署')}</p>
+              </div>
+              {pendingDeployments.map((deployment) => (
+                <div key={deployment.environment.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-card/80 border border-border p-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground truncate">{deployment.environment.name}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {deployment.current_user_can_approve
+                        ? i18n.t('等待你审批后继续执行')
+                        : i18n.t('等待其他审批人处理')}
+                      {!!deployment.wait_timer && ` · ${i18n.t('等待计时')} ${deployment.wait_timer}${i18n.t('分钟')}`}
+                    </p>
+                  </div>
+                  {deployment.current_user_can_approve && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1 border-destructive/30 text-destructive hover:bg-destructive/10"
+                        onClick={() => handleReviewDeployment(deployment, 'rejected')}
+                        disabled={reviewingEnv === deployment.environment.id}
+                      >
+                        <ShieldX className="w-3.5 h-3.5" />{i18n.t('拒绝')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-8 gap-1"
+                        onClick={() => handleReviewDeployment(deployment, 'approved')}
+                        disabled={reviewingEnv === deployment.environment.id}
+                      >
+                        {reviewingEnv === deployment.environment.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <ShieldCheck className="w-3.5 h-3.5" />}
+                        {i18n.t('批准')}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+<div className="divide-y divide-border">
           {loadingJobs ? (
             <div className="p-4 space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-8 bg-muted" />)}</div>
           ) : jobs.length === 0 ? (
@@ -569,6 +865,53 @@ function RunDetail({
               isRerunning={rerunningJobId === job.id}
             />
           ))}
+        </div>
+        <div className="border-t border-border">
+          <div className="px-4 py-3 flex items-center gap-2">
+            <Package className="w-4 h-4 text-muted-foreground" />
+            <p className="text-sm font-medium text-foreground">{i18n.t('Artifacts')}</p>
+            {!loadingArtifacts && artifacts.length > 0 && (
+              <Badge variant="outline" className="text-[10px] border-border text-muted-foreground">{artifacts.length}</Badge>
+            )}
+          </div>
+          {loadingArtifacts ? (
+            <div className="px-4 pb-4 space-y-2">
+              <Skeleton className="h-10 bg-muted" />
+              <Skeleton className="h-10 bg-muted" />
+            </div>
+          ) : artifacts.length === 0 ? (
+            <p className="px-4 pb-4 text-xs text-muted-foreground">
+              {completed ? i18n.t('本次运行没有产物') : i18n.t('运行完成后可查看产物')}
+            </p>
+          ) : (
+            <div className="divide-y divide-border border-t border-border">
+              {artifacts.map((artifact) => (
+                <div key={artifact.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+                  <Package className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-foreground font-mono truncate">{artifact.name}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {formatBytes(artifact.size_in_bytes)}
+                      {artifact.expired && ` · ${i18n.t('已过期')}`}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1 shrink-0"
+                    disabled={artifact.expired}
+                    onClick={() => downloadApiResource(
+                      artifact.archive_download_url,
+                      `${safeFileName(artifact.name)}.zip`,
+                      liveRun.html_url,
+                    )}
+                  >
+                    <Download className="w-3.5 h-3.5" />{i18n.t('下载')}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -611,7 +954,13 @@ export default function ActionsPage() {
   const [triggerDialog, setTriggerDialog] = useState<GitHubWorkflow | null>(null);
   const [triggerRef, setTriggerRef] = useState('main');
   const [branches, setBranches] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
+  const [presets, setPresets] = useState<TriggerPreset[]>([]);
+  const [showPresetForm, setShowPresetForm] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const [workflowSearch, setWorkflowSearch] = useState('');
+  const [togglingWorkflow, setTogglingWorkflow] = useState<number | null>(null);
   const [inputPairs, setInputPairs] = useState<{ key: string; value: string }[]>([]);
   const [workflowInputs, setWorkflowInputs] = useState<Array<{
     name: string;
@@ -623,6 +972,7 @@ export default function ActionsPage() {
   }>>([]);
   const [workflowInputValues, setWorkflowInputValues] = useState<Record<string, string>>({});
   const [loadingInputs, setLoadingInputs] = useState(false);
+  const workflowInputRequestRef = useRef(0);
 
   useEffect(() => {
     if (!owner || !repo) return;
@@ -658,13 +1008,15 @@ export default function ActionsPage() {
   }, [owner, repo, runId, navigate]);
 
   // 打开触发 Dialog 时加载分支列表
-  const loadWorkflowInputs = useCallback(async (wf: GitHubWorkflow, ref: string) => {
+  const loadWorkflowInputs = useCallback(async (wf: GitHubWorkflow, ref: string, initialValues?: Record<string, string>) => {
     if (!owner || !repo) return;
+    const requestId = ++workflowInputRequestRef.current;
     setLoadingInputs(true);
     setWorkflowInputs([]);
     setWorkflowInputValues({});
     try {
       const file = await getFileContent(owner, repo, wf.path, ref);
+      if (requestId !== workflowInputRequestRef.current) return;
       const text = file.encoding === 'base64'
         ? decodeBase64Content(file.content)
         : file.content;
@@ -698,13 +1050,20 @@ export default function ActionsPage() {
               : '',
       }));
       setWorkflowInputs(defs);
-      setWorkflowInputValues(Object.fromEntries(defs
+      const defaultValues = Object.fromEntries(defs
         .filter(d => d.defaultValue !== '')
-        .map(d => [d.name, d.defaultValue])));
+        .map(d => [d.name, d.defaultValue]));
+      setWorkflowInputValues({ ...defaultValues, ...(initialValues ?? {}) });
+      const definedNames = new Set(defs.map((d) => d.name));
+      setInputPairs(Object.entries(initialValues ?? {})
+        .filter(([key]) => !definedNames.has(key))
+        .map(([key, value]) => ({ key, value })));
     } catch (err) {
-      console.warn('[Actions] 读取 workflow inputs 失败', err);
+      if (requestId === workflowInputRequestRef.current) {
+        console.warn('[Actions] 读取 workflow inputs 失败', err);
+      }
     } finally {
-      setLoadingInputs(false);
+      if (requestId === workflowInputRequestRef.current) setLoadingInputs(false);
     }
   }, [owner, repo]);
 
@@ -713,12 +1072,17 @@ export default function ActionsPage() {
     setInputPairs([]);
     setWorkflowInputs([]);
     setWorkflowInputValues({});
+    setTags([]);
+    setShowPresetForm(false);
+    setPresetName('');
     if (!owner || !repo) return;
+    setPresets(loadTriggerPresets(owner, repo, wf.id));
     setLoadingBranches(true);
     try {
-      const [result, repoInfo] = await Promise.all([
-        getBranches(owner, repo, 1),
+      const [result, repoInfo, tagRefs] = await Promise.all([
+        getBranches(owner, repo, 1, 100),
         getRepo(owner, repo).catch(() => null),
+        getTags(owner, repo, 100).catch(() => [] as GitHubTagRef[]),
       ]);
       const names = result.data.map((b) => b.name);
       const defaultBranch = repoInfo?.default_branch;
@@ -726,9 +1090,11 @@ export default function ActionsPage() {
         ? [defaultBranch, ...names]
         : names;
       setBranches(branchOptions);
-      const ref = defaultBranch || names[0] || 'main';
+      setTags(tagRefs.map((tag) => tag.name));
+      const last = loadLastTrigger(owner, repo, wf.id);
+      const ref = last?.ref || defaultBranch || names[0] || 'main';
       setTriggerRef(ref);
-      void loadWorkflowInputs(wf, ref);
+      void loadWorkflowInputs(wf, ref, last?.inputs);
     } catch {
       setBranches([]);
       setTriggerRef('main');
@@ -737,6 +1103,61 @@ export default function ActionsPage() {
       setLoadingBranches(false);
     }
   }, [owner, repo, loadWorkflowInputs]);
+
+  const collectTriggerInputs = () => {
+    const inputs: Record<string, string> = { ...workflowInputValues };
+    inputPairs.forEach(({ key, value }) => { if (key.trim()) inputs[key.trim()] = value; });
+    return inputs;
+  };
+
+  const handleSavePreset = () => {
+    if (!owner || !repo || !triggerDialog) return;
+    const name = presetName.trim() || `${i18n.t('预设')} ${presets.length + 1}`;
+    const preset: TriggerPreset = {
+      id: crypto.randomUUID(),
+      name,
+      ref: triggerRef,
+      inputs: collectTriggerInputs(),
+      createdAt: Date.now(),
+    };
+    const next = [preset, ...presets].slice(0, 20);
+    setPresets(next);
+    saveTriggerPresets(owner, repo, triggerDialog.id, next);
+    setShowPresetForm(false);
+    setPresetName('');
+    toast.success(i18n.t('预设已保存'));
+  };
+
+  const applyPreset = (preset: TriggerPreset) => {
+    if (!triggerDialog) return;
+    setTriggerRef(preset.ref);
+    void loadWorkflowInputs(triggerDialog, preset.ref, preset.inputs);
+    toast.success(`${i18n.t('已应用预设：')}${preset.name}`);
+  };
+
+  const deletePreset = (id: string) => {
+    if (!owner || !repo || !triggerDialog) return;
+    const next = presets.filter((preset) => preset.id !== id);
+    setPresets(next);
+    saveTriggerPresets(owner, repo, triggerDialog.id, next);
+  };
+
+  const handleToggleWorkflow = async (wf: GitHubWorkflow) => {
+    setTogglingWorkflow(wf.id);
+    const enable = wf.state !== 'active';
+    try {
+      if (enable) await enableWorkflow(owner!, repo!, wf.id);
+      else await disableWorkflow(owner!, repo!, wf.id);
+      setWorkflows((prev) => prev.map((item) => item.id === wf.id
+        ? { ...item, state: enable ? 'active' : 'disabled_manually' }
+        : item));
+      toast.success(enable ? i18n.t('工作流已启用') : i18n.t('工作流已禁用'));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : i18n.t('工作流状态切换失败'));
+    } finally {
+      setTogglingWorkflow(null);
+    }
+  };
 
   const handleTriggerConfirm = async () => {
     if (!owner || !repo || !triggerDialog) return;
@@ -750,7 +1171,8 @@ export default function ActionsPage() {
     setTriggering(triggerDialog.id);
     try {
       await triggerWorkflow(owner, repo, triggerDialog.id, triggerRef, inputs);
-      toast.success(`工作流 "${triggerDialog.name}" 已在 ${triggerRef} 分支触发`);
+      saveLastTrigger(owner, repo, triggerDialog.id, { ref: triggerRef, inputs });
+      toast.success(`工作流 "${triggerDialog.name}" 已在 ${triggerRef} 触发`);
       setTriggerDialog(null);
       setTimeout(() => loadRuns(1), 2000);
     } catch (err) {
@@ -815,8 +1237,16 @@ export default function ActionsPage() {
       toast.info(i18n.t('请先选择一个工作流'));
       return;
     }
+    if (selectedWorkflowObj.state !== 'active') {
+      toast.error(i18n.t('工作流已禁用，请先启用'));
+      return;
+    }
     void openTriggerDialog(selectedWorkflowObj);
   };
+  const filteredWorkflows = workflows.filter((wf) => {
+    const query = workflowSearch.trim().toLowerCase();
+    return !query || wf.name.toLowerCase().includes(query) || wf.path.toLowerCase().includes(query);
+  });
 
   const closeRunDetail = () => {
     setSelectedRun(null);
@@ -825,7 +1255,7 @@ export default function ActionsPage() {
 
   return (
     <>
-    <div className="p-4 md:p-6 space-y-4 max-w-5xl mx-auto">
+    <div className="p-4 md:p-6 space-y-4 max-w-6xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
         <button type="button" className="hover:text-accent" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
@@ -845,54 +1275,113 @@ export default function ActionsPage() {
         )}
       </div>
 
-      <div className="flex items-center gap-2">
-        <Zap className="w-5 h-5 text-primary" />
-        <h1 className="text-xl font-bold text-foreground">
-          {selectedRun ? i18n.t('Actions 运行详情') : i18n.t('Actions 工作流')}
-        </h1>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Zap className="w-5 h-5 text-primary shrink-0" />
+          <h1 className="text-xl font-bold text-foreground truncate">
+            {selectedRun ? i18n.t('Actions 运行详情') : i18n.t('Actions 工作流')}
+          </h1>
+        </div>
+        {!selectedRun && (
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0 bg-card border-border"
+            onClick={() => loadRuns(1)}
+            disabled={loadingRuns}
+            title={i18n.t('刷新运行记录')}
+          >
+            <RefreshCw className={`w-4 h-4 ${loadingRuns ? 'animate-spin' : ''}`} />
+          </Button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)] gap-4 items-start">
         {/* 工作流列表 */}
-        <div className="hidden md:block bg-card border border-border rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-border bg-secondary/30">
-            <p className="text-sm font-medium text-foreground">{i18n.t('工作流')}</p>
+        <div className="hidden md:flex md:flex-col bg-card border border-border rounded-xl overflow-hidden md:sticky md:top-4">
+          <div className="px-3 py-3 border-b border-border bg-secondary/30 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-foreground">{i18n.t('工作流')}</p>
+              <Badge variant="outline" className="text-[10px] border-border text-muted-foreground">{workflows.length}</Badge>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                value={workflowSearch}
+                onChange={(e) => setWorkflowSearch(e.target.value)}
+                placeholder={i18n.t('搜索工作流')}
+                className="h-8 pl-8 text-xs bg-background border-border"
+              />
+            </div>
           </div>
           {loadingWf ? (
             <div className="p-3 space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-8 bg-muted" />)}</div>
-          ) : workflows.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">{i18n.t('暂无工作流')}</div>
+          ) : filteredWorkflows.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              {workflowSearch ? i18n.t('没有匹配的工作流') : i18n.t('暂无工作流')}
+            </div>
           ) : (
-            <div className="divide-y divide-border">
-              {workflows.map((wf) => (
-                <div key={wf.id} className="flex items-center gap-2 px-3 py-2.5 group">
-                  <div
-                    className="flex-1 min-w-0 cursor-pointer"
-                    onClick={() => setSelectedWorkflow(String(wf.id))}
-                  >
-                    <p className={`text-sm truncate ${selectedWorkflow === String(wf.id) ? 'text-primary font-medium' : 'text-foreground'}`}>
-                      {wf.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground font-mono truncate">{wf.path}</p>
+            <div className="divide-y divide-border max-h-[calc(100vh-18rem)] overflow-y-auto">
+              {filteredWorkflows.map((wf) => {
+                const selected = selectedWorkflow === String(wf.id);
+                const active = wf.state === 'active';
+                return (
+                  <div key={wf.id} className={`flex items-center gap-1 pr-1 ${selected ? 'bg-primary/5' : 'hover:bg-secondary/40'} transition-colors`}>
+                    <button
+                      type="button"
+                      className="flex-1 min-w-0 flex items-start gap-2 px-3 py-2.5 text-left"
+                      onClick={() => {
+                        setSelectedWorkflow(String(wf.id));
+                        if (selectedRun) closeRunDetail();
+                      }}
+                    >
+                      <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${active ? 'bg-success' : 'bg-muted-foreground/40'}`} />
+                      <span className="min-w-0">
+                        <span className={`block text-sm truncate ${selected ? 'text-primary font-medium' : 'text-foreground'}`}>{wf.name}</span>
+                        <span className="block text-[10px] text-muted-foreground font-mono truncate mt-0.5">{wf.path}</span>
+                      </span>
+                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-7 h-7 shrink-0 text-muted-foreground hover:text-foreground"
+                          title={i18n.t('工作流操作')}
+                        >
+                          <MoreHorizontal className="w-3.5 h-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44 bg-popover border-border">
+                        <DropdownMenuItem
+                          onSelect={() => openTriggerDialog(wf)}
+                          disabled={!active}
+                          className="gap-2 text-sm"
+                        >
+                          <Play className="w-3.5 h-3.5" />{i18n.t('运行工作流')}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-border" />
+                        <DropdownMenuItem
+                          onSelect={() => handleToggleWorkflow(wf)}
+                          disabled={togglingWorkflow === wf.id}
+                          className="gap-2 text-sm"
+                        >
+                          {togglingWorkflow === wf.id
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <Power className="w-3.5 h-3.5" />}
+                          {active ? i18n.t('禁用工作流') : i18n.t('启用工作流')}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-7 h-7 opacity-100 md:opacity-0 md:group-hover:opacity-100 group-focus-within:opacity-100 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                    onClick={() => openTriggerDialog(wf)}
-                    disabled={triggering === wf.id}
-                    title={i18n.t('触发工作流')}
-                  >
-                    {triggering === wf.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
         {/* 运行记录 */}
-        <div className="md:col-span-2 space-y-3">
+        <div className="min-w-0 space-y-3">
           {selectedRun ? (
             <RunDetail
               owner={owner!}
@@ -910,54 +1399,92 @@ export default function ActionsPage() {
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-3 flex-wrap">
-                <Select value={selectedWorkflow} onValueChange={(v) => { setSelectedWorkflow(v); setSelectedRun(null); }}>
-                  <SelectTrigger className="bg-secondary border-border text-foreground w-36 h-9 text-sm">
-                    <SelectValue placeholder={i18n.t('工作流')} />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-border">
-                    <SelectItem value="all" className="text-foreground text-sm">{i18n.t('全部工作流')}</SelectItem>
-                    {workflows.map((wf) => (
-                      <SelectItem key={wf.id} value={String(wf.id)} className="text-foreground text-sm">{wf.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="bg-secondary border-border text-foreground w-28 h-9 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-border">
-                    <SelectItem value="all" className="text-foreground text-sm">{i18n.t('全部状态')}</SelectItem>
-                    <SelectItem value="success" className="text-foreground text-sm">{i18n.t('成功')}</SelectItem>
-                    <SelectItem value="failure" className="text-foreground text-sm">{i18n.t('失败')}</SelectItem>
-                    <SelectItem value="queued" className="text-foreground text-sm">{i18n.t('排队中')}</SelectItem>
-                    <SelectItem value="in_progress" className="text-foreground text-sm">{i18n.t('运行中')}</SelectItem>
-                    <SelectItem value="cancelled" className="text-foreground text-sm">{i18n.t('已取消')}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:bg-secondary h-9"
-                  onClick={() => loadRuns(1)}
-                  disabled={loadingRuns}
-                  title={i18n.t('刷新运行记录')}
-                >
-                  <RefreshCw className={`w-4 h-4 ${loadingRuns ? 'animate-spin' : ''}`} />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 gap-1.5"
-                  onClick={openSelectedTrigger}
-                  title={selectedWorkflowObj ? i18n.t('触发当前工作流') : i18n.t('请先选择工作流')}
-                >
-                  <Play className="w-3.5 h-3.5" />{i18n.t('运行')}
-                </Button>
-                <span className="text-[11px] text-muted-foreground ml-auto flex items-center gap-1.5">
-                  {hasActiveRuns && <><Loader2 className="w-3 h-3 animate-spin text-warning" />{i18n.t('自动刷新')}</>}
-                  {totalCount > 0 && <span>{i18n.t('共')} {totalCount} {i18n.t('条')}</span>}
-                </span>
+              <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Select value={selectedWorkflow} onValueChange={(v) => { setSelectedWorkflow(v); setSelectedRun(null); }}>
+                    <SelectTrigger className="bg-secondary border-border text-foreground w-full sm:w-56 h-9 text-sm">
+                      <SelectValue placeholder={i18n.t('工作流')} />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border">
+                      <SelectItem value="all" className="text-foreground text-sm">{i18n.t('全部工作流')}</SelectItem>
+                      {workflows.map((wf) => (
+                        <SelectItem key={wf.id} value={String(wf.id)} className="text-foreground text-sm">{wf.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="bg-secondary border-border text-foreground w-[116px] h-9 text-sm shrink-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        <SelectItem value="all" className="text-foreground text-sm">{i18n.t('全部状态')}</SelectItem>
+                        <SelectItem value="success" className="text-foreground text-sm">{i18n.t('成功')}</SelectItem>
+                        <SelectItem value="failure" className="text-foreground text-sm">{i18n.t('失败')}</SelectItem>
+                        <SelectItem value="queued" className="text-foreground text-sm">{i18n.t('排队中')}</SelectItem>
+                        <SelectItem value="in_progress" className="text-foreground text-sm">{i18n.t('运行中')}</SelectItem>
+                        <SelectItem value="cancelled" className="text-foreground text-sm">{i18n.t('已取消')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      className="h-9 gap-1.5 flex-1 sm:flex-none px-3"
+                      onClick={openSelectedTrigger}
+                      disabled={!selectedWorkflowObj || selectedWorkflowObj.state !== 'active'}
+                      title={selectedWorkflowObj ? i18n.t('触发当前工作流') : i18n.t('请先选择工作流')}
+                    >
+                      <Play className="w-3.5 h-3.5" />{i18n.t('运行')}
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9 shrink-0 bg-card border-border"
+                          disabled={!selectedWorkflowObj}
+                          title={i18n.t('工作流操作')}
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44 bg-popover border-border">
+                        <DropdownMenuItem
+                          onSelect={openSelectedTrigger}
+                          disabled={!selectedWorkflowObj || selectedWorkflowObj.state !== 'active'}
+                          className="gap-2 text-sm"
+                        >
+                          <Play className="w-3.5 h-3.5" />{i18n.t('运行工作流')}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-border" />
+                        <DropdownMenuItem
+                          onSelect={() => { if (selectedWorkflowObj) void handleToggleWorkflow(selectedWorkflowObj); }}
+                          disabled={!selectedWorkflowObj || togglingWorkflow === selectedWorkflowObj.id}
+                          className="gap-2 text-sm"
+                        >
+                          {selectedWorkflowObj && togglingWorkflow === selectedWorkflowObj.id
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <Power className="w-3.5 h-3.5" />}
+                          {selectedWorkflowObj?.state === 'active' ? i18n.t('禁用工作流') : i18n.t('启用工作流')}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {hasActiveRuns && (
+                      <span className="flex items-center gap-1 text-warning">
+                        <Loader2 className="w-3 h-3 animate-spin" />{i18n.t('自动刷新')}
+                      </span>
+                    )}
+                    {selectedWorkflowObj && (
+                      <span className={selectedWorkflowObj.state === 'active' ? 'text-success' : 'text-muted-foreground'}>
+                        {selectedWorkflowObj.state === 'active' ? i18n.t('已启用') : i18n.t('已禁用')}
+                      </span>
+                    )}
+                  </div>
+                  {totalCount > 0 && <span className="shrink-0">{i18n.t('共')} {totalCount} {i18n.t('条')}</span>}
+                </div>
               </div>
               <div className="bg-card border border-border rounded-lg overflow-hidden">
                 {loadingRuns && runs.length === 0 ? (
@@ -1022,7 +1549,7 @@ export default function ActionsPage() {
 
     {/* 触发工作流 Dialog */}
     <Dialog open={!!triggerDialog} onOpenChange={(open) => { if (!open) setTriggerDialog(null); }}>
-      <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
+      <DialogContent className="max-w-[calc(100%-1.5rem)] md:max-w-2xl max-h-[92vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
           <DialogTitle className="text-foreground flex items-center gap-2 text-balance">
             <Zap className="w-4 h-4 text-primary shrink-0" />
@@ -1030,34 +1557,86 @@ export default function ActionsPage() {
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          {/* 分支选择 */}
+        <div className="space-y-5 py-3">
+          {/* 分支 / Tag 搜索选择 */}
           <div className="space-y-1.5">
             <Label className="text-sm font-normal text-muted-foreground flex items-center gap-1.5">
-              <GitBranch className="w-3.5 h-3.5" />{i18n.t('运行分支')}</Label>
+              <GitBranch className="w-3.5 h-3.5" />{i18n.t('运行分支 / Tag')}
+            </Label>
             {loadingBranches ? (
-              <Skeleton className="h-9 bg-muted w-full" />
-            ) : branches.length > 0 ? (
-              <Select value={triggerRef} onValueChange={(v) => {
-                setTriggerRef(v);
-                if (triggerDialog) void loadWorkflowInputs(triggerDialog, v);
-              }}>
-                <SelectTrigger className="bg-secondary border-border text-foreground h-9 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border max-h-52">
-                  {branches.map((b) => (
-                    <SelectItem key={b} value={b} className="text-foreground text-sm font-mono">{b}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Skeleton className="h-10 bg-muted w-full" />
             ) : (
-              <Input
-                className="bg-secondary border-border text-foreground h-9 text-sm font-mono"
+              <RefSelector
                 value={triggerRef}
-                onChange={(e) => setTriggerRef(e.target.value)}
-                placeholder={i18n.t('分支名称，例如 main')}
+                onChange={(ref) => {
+                  setTriggerRef(ref);
+                  if (triggerDialog) void loadWorkflowInputs(triggerDialog, ref);
+                }}
+                branches={branches}
+                tags={tags}
               />
+            )}
+          </div>
+
+          {/* 触发预设 */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-sm font-normal text-muted-foreground">{i18n.t('触发预设')}</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary gap-1"
+                onClick={() => setShowPresetForm((prev) => !prev)}
+              >
+                <Save className="w-3 h-3" />{i18n.t('保存当前')}
+              </Button>
+            </div>
+            {showPresetForm && (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  placeholder={i18n.t('预设名称（可选）')}
+                  className="h-8 text-xs bg-secondary border-border flex-1"
+                />
+                <Button type="button" size="sm" className="h-8 shrink-0" onClick={handleSavePreset}>
+                  {i18n.t('保存')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 shrink-0 text-muted-foreground"
+                  onClick={() => { setShowPresetForm(false); setPresetName(''); }}
+                >
+                  {i18n.t('取消')}
+                </Button>
+              </div>
+            )}
+            {presets.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">
+                {i18n.t('可将当前分支与 Inputs 保存为预设，下次一键复用')}
+              </p>
+            ) : (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {presets.map((preset) => (
+                  <div key={preset.id} className="shrink-0 flex items-center gap-1.5 rounded-lg border border-border bg-secondary/40 px-2 py-1.5 max-w-[210px]">
+                    <button type="button" className="min-w-0 text-left" onClick={() => applyPreset(preset)}>
+                      <span className="block text-xs font-medium text-foreground truncate">{preset.name}</span>
+                      <span className="block text-[10px] font-mono text-muted-foreground truncate max-w-[150px]">{preset.ref}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="w-5 h-5 shrink-0 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex items-center justify-center"
+                      onClick={() => deletePreset(preset.id)}
+                      title={i18n.t('删除预设')}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
@@ -1070,103 +1649,118 @@ export default function ActionsPage() {
           ) : workflowInputs.length > 0 && (
             <div className="space-y-2.5">
               <Label className="text-sm font-normal text-muted-foreground">
-                {i18n.t('工作流 Inputs')}</Label>
-              {workflowInputs.map((def) => {
-                const value = workflowInputValues[def.name] ?? '';
-                const setValue = (v: string) => setWorkflowInputValues(prev => ({ ...prev, [def.name]: v }));
-                return (
-                  <div key={def.name} className="space-y-1">
-                    <Label className="text-xs text-foreground font-mono flex items-center gap-1 flex-wrap">
-                      {def.name}
-                      {def.required && <span className="text-destructive">*</span>}
-                      <span className="text-[10px] text-muted-foreground font-sans">{def.type || 'string'}</span>
-                    </Label>
-                    {def.type === 'choice' && def.options?.length ? (
-                      <Select value={value} onValueChange={setValue}>
-                        <SelectTrigger className="bg-secondary border-border text-foreground h-9 text-sm">
-                          <SelectValue placeholder={i18n.t('请选择')} />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover border-border">
-                          {def.options.map(opt => <SelectItem key={opt} value={opt} className="text-sm">{opt}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    ) : def.type === 'boolean' ? (
-                      <Select value={value || 'false'} onValueChange={setValue}>
-                        <SelectTrigger className="bg-secondary border-border text-foreground h-9 text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover border-border">
-                          <SelectItem value="true">true</SelectItem>
-                          <SelectItem value="false">false</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        className="bg-secondary border-border text-foreground h-9 text-sm"
-                        value={value}
-                        onChange={(e) => setValue(e.target.value)}
-                        placeholder={def.defaultValue || i18n.t('请输入')}
-                      />
-                    )}
-                    {def.description && (
-                      <p className="text-[11px] text-muted-foreground">{def.description}</p>
-                    )}
-                  </div>
-                );
-              })}
+                {i18n.t('工作流 Inputs')}
+              </Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {workflowInputs.map((def) => {
+                  const value = workflowInputValues[def.name] ?? '';
+                  const setValue = (v: string) => setWorkflowInputValues(prev => ({ ...prev, [def.name]: v }));
+                  return (
+                    <div key={def.name} className="space-y-1 min-w-0">
+                      <Label className="text-xs text-foreground font-mono flex items-center gap-1 flex-wrap">
+                        {def.name}
+                        {def.required && <span className="text-destructive">*</span>}
+                        <span className="text-[10px] text-muted-foreground font-sans">{def.type || 'string'}</span>
+                      </Label>
+                      {def.type === 'choice' && def.options?.length ? (
+                        <Select value={value} onValueChange={setValue}>
+                          <SelectTrigger className="bg-secondary border-border text-foreground h-9 text-sm">
+                            <SelectValue placeholder={i18n.t('请选择')} />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover border-border">
+                            {def.options.map(opt => <SelectItem key={opt} value={opt} className="text-sm">{opt}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      ) : def.type === 'boolean' ? (
+                        <Select value={value || 'false'} onValueChange={setValue}>
+                          <SelectTrigger className="bg-secondary border-border text-foreground h-9 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover border-border">
+                            <SelectItem value="true">true</SelectItem>
+                            <SelectItem value="false">false</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          className="bg-secondary border-border text-foreground h-9 text-sm"
+                          value={value}
+                          onChange={(e) => setValue(e.target.value)}
+                          placeholder={def.defaultValue || i18n.t('请输入')}
+                        />
+                      )}
+                      {def.description && (
+                        <p className="text-[11px] text-muted-foreground">{def.description}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
           {/* 自定义 inputs */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-normal text-muted-foreground">
-                {i18n.t('自定义 Inputs（可选）')}</Label>
+          <Collapsible className="border-t border-border pt-3">
+            <CollapsibleTrigger asChild>
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary gap-1"
-                onClick={() => setInputPairs((prev) => [...prev, { key: '', value: '' }])}
+                className="w-full h-8 px-2 justify-between text-xs text-muted-foreground hover:text-foreground hover:bg-secondary"
               >
-                <Plus className="w-3 h-3" />{i18n.t('添加')}</Button>
-            </div>
-            {inputPairs.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-1">
-                {i18n.t('无需 inputs 时留空，工作流将使用默认值运行')}</p>
-            ) : (
-              <div className="space-y-2">
-                {inputPairs.map((pair, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <Input
-                      className="bg-secondary border-border text-foreground h-8 text-xs font-mono flex-1"
-                      placeholder="key"
-                      value={pair.key}
-                      onChange={(e) => setInputPairs((prev) => prev.map((p, i) => i === idx ? { ...p, key: e.target.value } : p))}
-                    />
-                    <Input
-                      className="bg-secondary border-border text-foreground h-8 text-xs font-mono flex-1"
-                      placeholder="value"
-                      value={pair.value}
-                      onChange={(e) => setInputPairs((prev) => prev.map((p, i) => i === idx ? { ...p, value: e.target.value } : p))}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="w-8 h-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => setInputPairs((prev) => prev.filter((_, i) => i !== idx))}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                ))}
+                <span>{i18n.t('自定义 Inputs（可选）')}</span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2 space-y-2">
+              <div className="flex items-center justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary gap-1"
+                  onClick={() => setInputPairs((prev) => [...prev, { key: '', value: '' }])}
+                >
+                  <Plus className="w-3 h-3" />{i18n.t('添加')}
+                </Button>
               </div>
-            )}
-          </div>
+              {inputPairs.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-1">
+                  {i18n.t('无需 inputs 时留空，工作流将使用默认值运行')}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {inputPairs.map((pair, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Input
+                        className="bg-secondary border-border text-foreground h-8 text-xs font-mono flex-1 min-w-0"
+                        placeholder="key"
+                        value={pair.key}
+                        onChange={(e) => setInputPairs((prev) => prev.map((p, i) => i === idx ? { ...p, key: e.target.value } : p))}
+                      />
+                      <Input
+                        className="bg-secondary border-border text-foreground h-8 text-xs font-mono flex-1 min-w-0"
+                        placeholder="value"
+                        value={pair.value}
+                        onChange={(e) => setInputPairs((prev) => prev.map((p, i) => i === idx ? { ...p, value: e.target.value } : p))}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="w-8 h-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setInputPairs((prev) => prev.filter((_, i) => i !== idx))}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 sticky bottom-0 -mx-6 -mb-6 px-6 pb-4 pt-3 border-t border-border bg-card">
           <Button
             variant="ghost"
             className="border border-border text-muted-foreground hover:bg-secondary"

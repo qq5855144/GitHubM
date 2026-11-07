@@ -888,11 +888,27 @@ export async function getCommit(
 export async function getBranches(
   owner: string,
   repo: string,
-  page = 1
+  page = 1,
+  perPage = 30
 ): Promise<{ data: GitHubBranch[]; hasNextPage: boolean }> {
   return requestWithPagination<GitHubBranch>(
-    `/repos/${owner}/${repo}/branches?per_page=30&page=${page}`
+    `/repos/${owner}/${repo}/branches?per_page=${perPage}&page=${page}`
   );
+}
+
+export interface GitHubTagRef {
+  name: string;
+  commit: { sha: string; url: string };
+  zipball_url?: string;
+  tarball_url?: string;
+}
+
+export async function getTags(
+  owner: string,
+  repo: string,
+  perPage = 100
+): Promise<GitHubTagRef[]> {
+  return request<GitHubTagRef[]>(`/repos/${owner}/${repo}/tags?per_page=${perPage}`);
 }
 
 export async function getBranch(
@@ -1207,6 +1223,26 @@ export async function triggerWorkflow(
   });
 }
 
+export async function enableWorkflow(
+  owner: string,
+  repo: string,
+  workflowId: number | string
+): Promise<void> {
+  await request<unknown>(`/repos/${owner}/${repo}/actions/workflows/${workflowId}/enable`, {
+    method: 'PUT',
+  });
+}
+
+export async function disableWorkflow(
+  owner: string,
+  repo: string,
+  workflowId: number | string
+): Promise<void> {
+  await request<unknown>(`/repos/${owner}/${repo}/actions/workflows/${workflowId}/disable`, {
+    method: 'PUT',
+  });
+}
+
 export async function cancelWorkflowRun(
   owner: string,
   repo: string,
@@ -1253,6 +1289,47 @@ export async function getWorkflowRunJobs(
   runId: number
 ): Promise<{ total_count: number; jobs: import('@/types/types').GitHubWorkflowJob[] }> {
   return request(`/repos/${owner}/${repo}/actions/runs/${runId}/jobs?per_page=100`);
+}
+
+export async function getRunArtifacts(
+  owner: string,
+  repo: string,
+  runId: number
+): Promise<{ total_count: number; artifacts: GitHubArtifact[] }> {
+  return request<{ total_count: number; artifacts: GitHubArtifact[] }>(
+    `/repos/${owner}/${repo}/actions/runs/${runId}/artifacts?per_page=100`
+  );
+}
+
+export interface GitHubPendingDeployment {
+  environment: { id: number; name: string; url?: string };
+  wait_timer?: number;
+  current_user_can_approve: boolean;
+  reviewers?: Array<{ type: string; reviewer: { login?: string; name?: string } }>;
+}
+
+export async function getPendingDeployments(
+  owner: string,
+  repo: string,
+  runId: number
+): Promise<GitHubPendingDeployment[]> {
+  return request<GitHubPendingDeployment[]>(
+    `/repos/${owner}/${repo}/actions/runs/${runId}/pending_deployments`
+  );
+}
+
+export async function reviewPendingDeployments(
+  owner: string,
+  repo: string,
+  runId: number,
+  environmentIds: number[],
+  state: 'approved' | 'rejected',
+  comment = ''
+): Promise<void> {
+  await request<unknown>(`/repos/${owner}/${repo}/actions/runs/${runId}/pending_deployments`, {
+    method: 'POST',
+    body: JSON.stringify({ environment_ids: environmentIds, state, comment }),
+  });
 }
 
 // ===== GitHub Packages =====

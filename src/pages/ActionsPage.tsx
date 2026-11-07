@@ -721,11 +721,12 @@ export default function ActionsPage() {
         getRepo(owner, repo).catch(() => null),
       ]);
       const names = result.data.map((b) => b.name);
-      setBranches(names);
       const defaultBranch = repoInfo?.default_branch;
-      const ref = defaultBranch && (names.length === 0 || names.includes(defaultBranch))
-        ? defaultBranch
-        : names[0] || 'main';
+      const branchOptions = defaultBranch && !names.includes(defaultBranch)
+        ? [defaultBranch, ...names]
+        : names;
+      setBranches(branchOptions);
+      const ref = defaultBranch || names[0] || 'main';
       setTriggerRef(ref);
       void loadWorkflowInputs(wf, ref);
     } catch {

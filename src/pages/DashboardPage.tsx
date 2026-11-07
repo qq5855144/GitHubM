@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { cacheActivityEvent } from '@/pages/ActivityDetailPage';
 import {
   BookOpen,
   Star,
@@ -296,6 +297,11 @@ export default function DashboardPage() {
     );
   }, [user]);
 
+  const openEventDetail = (event: GitHubEvent) => {
+    cacheActivityEvent(event);
+    navigate(`/activity/${encodeURIComponent(event.id)}`, { state: { event } });
+  };
+
   const getEventDescription = (event: GitHubEvent): string => {
     const repoName = event.repo.name;
     switch (event.type) {
@@ -495,7 +501,7 @@ export default function DashboardPage() {
             ) : (
               <div className="px-4 pb-4 space-y-0">
                 {events.map((event, index) => (
-                  <div key={event.id} className="flex gap-3 py-3 -mx-2 px-2 rounded-md border-b border-border last:border-0 cursor-pointer hover:bg-secondary/30 transition-colors" onClick={() => navigate(`/repos/${event.repo.name}`)}>
+                  <div key={event.id} className="flex gap-3 py-3 -mx-2 px-2 rounded-md border-b border-border last:border-0 cursor-pointer hover:bg-secondary/30 transition-colors" onClick={() => openEventDetail(event)}>
                     <div className="w-1 shrink-0 relative">
                       <div className={`w-2 h-2 rounded-full bg-primary mt-1 -ml-0.5 ${index === 0 ? 'ring-2 ring-primary/20' : ''}`} />
                       {index < events.length - 1 && (

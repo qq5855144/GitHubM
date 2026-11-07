@@ -9,12 +9,14 @@ import PullsPage from './pages/PullsPage';
 import PullDetailPage from './pages/PullDetailPage';
 import CodeBrowserPage from './pages/CodeBrowserPage';
 import CommitsPage from './pages/CommitsPage';
+import CommitDetailPage from './pages/CommitDetailPage';
 import BranchesPage from './pages/BranchesPage';
 import CollaboratorsPage from './pages/CollaboratorsPage';
 import NotificationsPage from './pages/NotificationsPage';
 import SearchPage from './pages/SearchPage';
 import SettingsPage from './pages/SettingsPage';
 import ActivityPage from './pages/ActivityPage';
+import ActivityDetailPage from './pages/ActivityDetailPage';
 import ActionsPage from './pages/ActionsPage';
 import GistsPage from './pages/GistsPage';
 import GistDetailPage from './pages/GistDetailPage';
@@ -62,6 +64,7 @@ export const routes: RouteConfig[] = [
   { name: i18n.t('代码浏览'), path: '/repos/:owner/:repo/code/*', element: <CodeBrowserPage /> },
   { name: i18n.t('代码浏览根'), path: '/repos/:owner/:repo/code', element: <CodeBrowserPage /> },
   { name: i18n.t('提交历史'), path: '/repos/:owner/:repo/commits', element: <CommitsPage /> },
+  { name: i18n.t('提交详情'), path: '/repos/:owner/:repo/commits/:sha', element: <CommitDetailPage /> },
   { name: i18n.t('分支管理'), path: '/repos/:owner/:repo/branches', element: <BranchesPage /> },
   { name: i18n.t('协作者'), path: '/repos/:owner/:repo/collaborators', element: <CollaboratorsPage /> },
   // 新增仓库子功能
@@ -74,6 +77,7 @@ export const routes: RouteConfig[] = [
   { name: i18n.t('通知'), path: '/notifications', element: <NotificationsPage /> },
   { name: i18n.t('搜索'), path: '/search', element: <SearchPage /> },
   { name: i18n.t('活动'), path: '/activity', element: <ActivityPage /> },
+  { name: i18n.t('活动详情'), path: '/activity/:eventId', element: <ActivityDetailPage /> },
   { name: 'Gists', path: '/gists', element: <GistsPage /> },
   { name: i18n.t('Gist 详情'), path: '/gists/:gistId', element: <GistDetailPage /> },
   { name: i18n.t('关注列表'), path: '/follow-list/:type', element: <FollowListPage /> },

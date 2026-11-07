@@ -11,13 +11,13 @@ import {
   Clock,
   FileArchive,
   AlertCircle,
-  ChevronDown,
   ExternalLink,
   RefreshCw,
   Zap,
   Archive,
   Loader2,
   Upload,
+  Share2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -71,6 +71,7 @@ import {
 } from '@/services/github';
 import { toast } from 'sonner';
 import { downloadGithubFile, isDownloadProxyEnabled } from '@/lib/githubDownload';
+import { copyToClipboard } from '@/lib/utils';
 import i18n from "@/i18n";
 
 interface ReleasePublishResultDetail {
@@ -197,6 +198,15 @@ function ReleaseItem({
     setOpen(next);
     if (!next) setNotesOpen(false);
   };
+
+  const handleShare = async () => {
+    try {
+      await copyToClipboard(release.html_url);
+      toast.success(i18n.t('已复制 Release 产物链接'));
+    } catch {
+      toast.error(i18n.t('复制链接失败'));
+    }
+  };
   return (
     <Collapsible open={open} onOpenChange={handleOpenChange}>
       <CollapsibleTrigger asChild>
@@ -219,11 +229,15 @@ function ReleaseItem({
         </button>
       </CollapsibleTrigger>
       <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-border bg-secondary/20">
-        <a href={release.html_url} target="_blank" rel="noopener noreferrer">
-          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1 text-muted-foreground hover:text-accent hover:bg-accent/10">
-            <ExternalLink className="w-3.5 h-3.5" />GitHub
-          </Button>
-        </a>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-2 text-xs gap-1"
+          onClick={handleShare}
+          title={i18n.t('复制产物链接')}
+        >
+          <Share2 className="w-3.5 h-3.5" />{i18n.t('分享')}
+        </Button>
         <Button
           variant="ghost"
           size="sm"
@@ -232,15 +246,6 @@ function ReleaseItem({
           title={i18n.t('删除 Release')}
         >
           <Trash2 className="w-3.5 h-3.5" />{i18n.t('删除')}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 px-2 text-xs gap-1"
-          onClick={() => handleOpenChange(!open)}
-        >
-          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
-          {open ? i18n.t('收起') : i18n.t('展开')}
         </Button>
       </div>
       <CollapsibleContent>

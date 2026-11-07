@@ -1017,6 +1017,8 @@ async function githubRequest(ctx: GithubContext, apiPath: string, options: Reque
         const body = await res.text();
         throw new GithubApiError(res.status, body, apiPath);
       }
+      // 写操作成功后让仓库搜索缓存失效，避免 AI 修改文件后搜索到旧内容
+      if (isWrite) clearRepoSearchCaches();
       // 204 No Content 时不解析 JSON
       if (res.status === 204) return {};
       return res.json();
@@ -2151,6 +2153,11 @@ const BINARY_EXTENSIONS = new Set([
   "woff", "woff2", "ttf", "otf", "eot", "class", "pyc", "lockb",
 ]);
 const SEARCH_SKIP_DIRS = ["node_modules/", "dist/", "build/", ".git/", ".next/", ".turbo/", "__pycache__/", ".cache/"];
+
+function clearRepoSearchCaches(): void {
+  repoTreeCache.clear();
+  blobTextCache.clear();
+}
 
 function isSearchableRepoPath(entry: RepoTreeEntry): boolean {
   if (entry.type !== "blob" || !entry.path) return false;

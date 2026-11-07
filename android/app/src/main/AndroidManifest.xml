@@ -83,6 +83,11 @@
             android:name=".DownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <!-- ── AI 任务后台保活服务 ───────────────────────────────── -->
+        <service
+            android:name=".AgentForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- ── FileProvider：为相机拍照提供安全的 content:// URI ── -->
         <provider

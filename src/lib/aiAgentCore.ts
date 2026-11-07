@@ -132,11 +132,66 @@ interface ToolDefinition {
 /** 合并工具定义：本地补充工具 + 官方 MCP 工具（运行时动态，本地同名工具优先） */
 function getAllToolDefinitions(): ToolDefinition[] {
   const localNames = new Set(TOOL_DEFINITIONS.map((t) => t.function.name));
-  // 本地同名工具优先：executeTool 的 switch 先于 MCP 透传匹配，
-  // 因此 MCP 重名工具永远不会被执行，必须从发给 LLM 的工具面中排除，
-  // 否则 DeepSeek 等 API 会以 "Tool names must be unique." 拒绝请求。
-  const mcpOnly = mcpOpenAiTools.filter((t) => !localNames.has(t.function.name));
+  // MCP 连接失败时不把不可执行的远端工具暴露给模型，避免连续调用后全部报错。
+  const mcpOnly = mcpFailed
+    ? []
+    : mcpOpenAiTools.filter((t) => !localNames.has(t.function.name));
   return [...TOOL_DEFINITIONS, ...mcpOnly];
+}
+
+let mcpToken = "";
+let mcpInitPromise: Promise<void> | null = null;
+let mcpLastFailureAt = 0;
+
+/**
+ * 初始化官方 GitHub MCP。失败不影响本地工具；缓存工具 Schema 仅用于展示，
+ * 连接失败后会从工具面移除，避免模型调用不可执行工具。
+ */
+async function ensureMcpInitialized(token: string, signal?: AbortSignal): Promise<void> {
+  if (!token) return;
+  if (mcpClient && mcpReady && !mcpFailed && mcpToken === token) return;
+  if (mcpToken === token && mcpFailed && Date.now() - mcpLastFailureAt < 5 * 60_000) return;
+  if (mcpInitPromise && mcpToken === token) return mcpInitPromise;
+
+  if (mcpToken !== token) {
+    mcpToken = token;
+    mcpReady = false;
+    mcpFailed = false;
+    mcpToolNames = new Set();
+    mcpOpenAiTools = [];
+    mcpClient?.disconnect();
+    mcpClient = null;
+    const cached = loadCachedTools();
+    if (cached?.tools?.length) applyMcpTools(cached.tools);
+  }
+
+  mcpClient = new GitHubMcpClient({ token, timeoutMs: 8_000 });
+  mcpInitPromise = (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5_000);
+    const onAbort = () => controller.abort();
+    signal?.addEventListener("abort", onAbort);
+    try {
+      await mcpClient!.connect(controller.signal);
+      const tools = await mcpClient!.listTools(controller.signal);
+      if (tools.length > 0) {
+        applyMcpTools(tools);
+        saveCachedTools(tools);
+        const instructions = mcpClient!.instructions;
+        if (instructions) saveCachedInstructions(instructions);
+      }
+      mcpFailed = false;
+    } catch (err) {
+      mcpFailed = true;
+      mcpLastFailureAt = Date.now();
+      console.warn("[MCP] GitHub 官方 MCP 不可用，使用本地工具兜底", err);
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      mcpInitPromise = null;
+    }
+  })();
+  return mcpInitPromise;
 }
 
 const TOOL_DEFINITIONS: ToolDefinition[] = [
@@ -1171,7 +1226,10 @@ async function listFiles(ctx: GithubContext, path: string): Promise<string> {
       return `目录 "${cleanPath || "/"}" 内容：\n${items.join("\n")}`;
     }
     return JSON.stringify(data);
-  } catch (e) { return diagnose4xx(e, "list_files"); }
+  } catch (e) {
+    const fallback = await listFilesFromTree(ctx, path);
+    return fallback ?? diagnose4xx(e, "list_files");
+  }
 }
 
 /**
@@ -2078,6 +2136,152 @@ async function writeFile(
  * Search API 不可用时的兜底：用 Git Trees API 按“文件路径”匹配关键词。
  * 不读取文件内容，但能帮助模型继续定位 src/ 等目录，而不是直接卡死。
  */
+interface RepoTreeEntry {
+  path: string;
+  sha: string;
+  type: string;
+  size?: number;
+}
+
+const repoTreeCache = new Map<string, { at: number; entries: RepoTreeEntry[]; truncated: boolean }>();
+const blobTextCache = new Map<string, { at: number; text: string }>();
+const BINARY_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "svgz", "pdf", "zip", "gz", "tgz",
+  "apk", "aab", "jar", "dex", "so", "dll", "exe", "bin", "mp3", "mp4", "mov", "webm",
+  "woff", "woff2", "ttf", "otf", "eot", "class", "pyc", "lockb",
+]);
+const SEARCH_SKIP_DIRS = ["node_modules/", "dist/", "build/", ".git/", ".next/", ".turbo/", "__pycache__/", ".cache/"];
+
+function isSearchableRepoPath(entry: RepoTreeEntry): boolean {
+  if (entry.type !== "blob" || !entry.path) return false;
+  if (SEARCH_SKIP_DIRS.some((prefix) => entry.path.includes(prefix))) return false;
+  if ((entry.size ?? 0) > 800_000) return false;
+  const base = entry.path.split("/").pop()?.toLowerCase() ?? "";
+  const ext = base.includes(".") ? base.split(".").pop() ?? "" : "";
+  return !ext || !BINARY_EXTENSIONS.has(ext);
+}
+
+async function getRepoTreeEntries(ctx: GithubContext, ref?: string): Promise<{ entries: RepoTreeEntry[]; truncated: boolean }> {
+  const cacheKey = `${ctx.owner}/${ctx.repo}@${ref || "default"}`;
+  const cached = repoTreeCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < 60_000) return { entries: cached.entries, truncated: cached.truncated };
+  let branch = ref;
+  if (!branch) {
+    const repoInfo = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}`) as { default_branch?: string };
+    branch = repoInfo.default_branch || "main";
+  }
+  const tree = await githubRequest(
+    ctx,
+    `/repos/${ctx.owner}/${ctx.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+  ) as { tree?: RepoTreeEntry[]; truncated?: boolean };
+  const entries = (tree.tree ?? []).filter((item) => item.type === "blob");
+  const truncated = tree.truncated === true;
+  repoTreeCache.set(cacheKey, { at: Date.now(), entries, truncated });
+  return { entries, truncated };
+}
+
+async function getRepoBlobText(ctx: GithubContext, entry: RepoTreeEntry): Promise<string> {
+  const cacheKey = `${ctx.owner}/${ctx.repo}@${entry.sha}`;
+  const cached = blobTextCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < 5 * 60_000) return cached.text;
+  const blob = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}/git/blobs/${entry.sha}`) as { content?: string };
+  const text = decodeBase64Utf8(blob.content ?? "");
+  if (blobTextCache.size > 200) {
+    const oldest = blobTextCache.keys().next().value;
+    if (oldest) blobTextCache.delete(oldest);
+  }
+  blobTextCache.set(cacheKey, { at: Date.now(), text });
+  return text;
+}
+
+function matchesRepoFilePattern(path: string, pattern?: string): boolean {
+  if (!pattern) return true;
+  const clean = pattern.replace(/^\/+/, "");
+  if (!clean) return true;
+  if (clean.includes("*")) {
+    const regex = new RegExp(`^${clean.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
+    return regex.test(path);
+  }
+  return path === clean || path.startsWith(clean.endsWith("/") ? clean : `${clean}/`) || path.includes(clean);
+}
+
+async function listFilesFromTree(ctx: GithubContext, path: string): Promise<string | null> {
+  try {
+    const cleanPath = (path ?? "").replace(/^\/+|\/+$/g, "");
+    const { entries } = await getRepoTreeEntries(ctx);
+    const prefix = cleanPath ? `${cleanPath}/` : "";
+    const children = new Map<string, { type: "file" | "dir"; size: number }>();
+    for (const entry of entries) {
+      if (!entry.path.startsWith(prefix)) continue;
+      const rest = entry.path.slice(prefix.length);
+      if (!rest) continue;
+      const name = rest.split("/")[0];
+      const isDir = rest.includes("/");
+      if (!children.has(name)) children.set(name, { type: isDir ? "dir" : "file", size: entry.size ?? 0 });
+    }
+    if (children.size === 0) return `目录 "${cleanPath || "/"}" 为空或不存在。`;
+    const items = Array.from(children, ([name, info]) =>
+      `${info.type === "dir" ? "📁" : "📄"} ${name}${info.type === "file" ? ` (${info.size}B)` : ""}`
+    ).sort();
+    return `目录 "${cleanPath || "/"}" 内容（Git Tree 兜底）：\n${items.join("\n")}`;
+  } catch {
+    return null;
+  }
+}
+
+async function localRepoSearch(
+  ctx: GithubContext,
+  query: string,
+  filePattern?: string,
+  offset = 0,
+): Promise<string> {
+  const cleanQuery = query.replace(/\b(?:repo|path|language|filename|in):\S+/gi, "").trim() || query;
+  let regex: RegExp;
+  try {
+    regex = new RegExp(cleanQuery, "i");
+  } catch {
+    regex = new RegExp(cleanQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  }
+  const { entries, truncated } = await getRepoTreeEntries(ctx);
+  const candidates = entries
+    .filter(isSearchableRepoPath)
+    .filter((entry) => matchesRepoFilePattern(entry.path, filePattern))
+    .slice(0, 250);
+  if (candidates.length === 0) return `全仓库搜索 "${query}" 未找到可扫描的文本文件。`;
+
+  const matches: Array<{ path: string; hits: string[] }> = [];
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < candidates.length) {
+      const entry = candidates[cursor++];
+      try {
+        const text = await getRepoBlobText(ctx, entry);
+        const hits: string[] = [];
+        text.split("\n").forEach((line, index) => {
+          if (!regex.test(line)) return;
+          const lineNo = String(index + 1).padStart(6, " ");
+          const highlighter = new RegExp(regex.source, "gi");
+          hits.push(`  ${lineNo} | ${line.replace(highlighter, (m) => `>>${m}<<`)}`);
+        });
+        if (hits.length > 0) matches.push({ path: entry.path, hits });
+      } catch { /* 单个文件失败不阻断全仓库搜索 */ }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(6, candidates.length) }, () => worker()));
+  matches.sort((a, b) => a.path.localeCompare(b.path));
+  if (matches.length === 0) {
+    return `全仓库搜索 "${query}" 未找到匹配内容（已扫描 ${candidates.length} 个文本文件${truncated ? "，文件树被 GitHub 截断" : ""}）。`;
+  }
+  const page = matches.slice(offset, offset + 8);
+  const header = `🔍 本地仓库内容搜索 "${query}"，匹配 ${matches.length} 个文件（已扫描 ${candidates.length} 个文本文件${truncated ? "，文件树被截断" : ""}）` +
+    (filePattern ? `，路径过滤：${filePattern}` : "") + `\n本次展示第 ${offset + 1}–${offset + page.length} 个文件：\n`;
+  const body = page.map((item) => `📄 ${item.path}（${item.hits.length} 处匹配）：\n${item.hits.slice(0, 20).join("\n")}`).join("\n\n");
+  const next = offset + page.length < matches.length
+    ? `\n\n继续查看请调用：{"tool":"grep_in_repo","query":"${query}","offset":"${offset + page.length}"${filePattern ? `,"file_pattern":"${filePattern}"` : ""}}`
+    : "";
+  return header + body + next;
+}
+
 async function fallbackPathSearch(ctx: GithubContext, query: string): Promise<string | null> {
   try {
     const repoInfo = await githubRequest(ctx, `/repos/${ctx.owner}/${ctx.repo}`) as { default_branch?: string };
@@ -2104,6 +2308,8 @@ async function fallbackPathSearch(ctx: GithubContext, query: string): Promise<st
 }
 
 async function searchCode(ctx: GithubContext, query: string): Promise<string> {
+  // 优先使用 Git Tree + Blobs 本地内容搜索，不依赖 GitHub Search API 配额
+  try { return await localRepoSearch(ctx, query); } catch { /* 继续尝试 Search API */ }
   try {
     const data = await githubRequest(
       ctx, `/search/code?q=${encodeURIComponent(query)}+repo:${ctx.owner}/${ctx.repo}&per_page=10`
@@ -2136,6 +2342,8 @@ async function grepInRepo(
   filePattern?: string,
   offset = 0,
 ): Promise<string> {
+  // 优先本地扫描，彻底绕开 Search API 限流/不可用问题
+  try { return await localRepoSearch(ctx, query, filePattern, offset); } catch { /* 继续尝试 Search API */ }
   try {
     // Step 1: GitHub Search Code API 找到含关键词的文件
     let searchQ = `${encodeURIComponent(query)}+repo:${ctx.owner}/${ctx.repo}`;
@@ -6626,6 +6834,7 @@ export async function runAiAgentLangGraph(options: RunAgentOptions): Promise<voi
     const cfg = (body.model_config ?? { type: "deepseek" }) as ModelConfig;
     if (!token || !owner || !repo) throw new Error("缺少必要参数：github_token, owner, repo");
     if (cfg.type !== "custom" && !cfg.api_key) throw new Error(`使用 ${cfg.type} 模型需要提供 API Key`);
+    await ensureMcpInitialized(token, signal);
 
     const streamId = `g_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
     const turnId = `g_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;

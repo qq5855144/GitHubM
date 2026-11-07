@@ -355,7 +355,7 @@ export default function GraphQLPlaygroundPage() {
               <button
                 key={t.id}
                 type="button"
-                className="text-left bg-card border border-border rounded-lg p-3 hover:border-primary/50 hover:bg-secondary/30 transition-all group"
+                className="text-left bg-card border border-border rounded-lg p-3 hover:bg-secondary/30 transition-all group"
                 onClick={() => loadTemplate(t)}
               >
                 <div className="text-sm font-medium text-foreground group-hover:text-primary mb-1">{t.name}</div>

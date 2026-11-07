@@ -128,8 +128,7 @@ export default function MorePage() {
               <Link
                 key={f.path}
                 to={f.path}
-                className="group bg-card border border-border rounded-xl p-4 hover:border-primary/50
-                           hover:shadow-sm transition-colors flex flex-col gap-2"
+                className="group bg-card border border-border rounded-xl p-4 hover:shadow-sm transition-colors flex flex-col gap-2"
               >
                 <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                   <Icon className="w-5 h-5" />

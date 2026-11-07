@@ -428,7 +428,7 @@ export default function DashboardPage() {
             <button
               key={stat.label}
               type="button"
-              className="text-left bg-card border border-border rounded-2xl p-4 hover:border-primary/25 hover:shadow-soft-md active:scale-[0.98] transition-all group"
+              className="text-left bg-card border border-border rounded-2xl p-4 hover:shadow-soft-md active:scale-[0.98] transition-all group"
               onClick={() => navigate(stat.to)}
             >
               <div className="flex items-center gap-2 mb-2">

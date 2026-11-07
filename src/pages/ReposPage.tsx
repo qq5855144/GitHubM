@@ -636,7 +636,7 @@ export default function ReposPage() {
                   <div
                     role="button"
                     tabIndex={0}
-                    className="w-full bg-card border border-border rounded-xl p-4 hover:border-primary/50 hover:bg-secondary/30 active:scale-[0.99] transition-all text-left group cursor-pointer"
+                    className="w-full bg-card border border-border rounded-xl p-4 hover:bg-secondary/30 active:scale-[0.99] transition-all text-left group cursor-pointer"
                     onClick={() => navigate(`/repos/${repo.full_name}`)}
                     onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/repos/${repo.full_name}`); }}
                   >

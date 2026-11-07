@@ -6,8 +6,6 @@ import {
   Clock,
   ChevronRight,
   GitCommit,
-  Plus,
-  Minus,
   ExternalLink,
   GitBranch,
   Undo2,
@@ -25,12 +23,6 @@ import {
 } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -40,7 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { getCommits, getCommit, getBranches, formatRelativeTime, revertCommit, rollbackBranchToCommit } from '@/services/github';
+import { getCommits, getBranches, formatRelativeTime, revertCommit, rollbackBranchToCommit } from '@/services/github';
 import type { GitHubCommit, GitHubBranch } from '@/types/types';
 import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
@@ -56,8 +48,6 @@ export default function CommitsPage() {
   const [loading, setLoading] = useState(true);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [page, setPage] = useState(1);
-  const [selectedCommit, setSelectedCommit] = useState<GitHubCommit | null>(null);
-  const [commitDetailLoading, setCommitDetailLoading] = useState(false);
   const [actionCommit, setActionCommit] = useState<GitHubCommit | null>(null);
   const [actionKind, setActionKind] = useState<'revert' | 'rollback' | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -114,18 +104,9 @@ export default function CommitsPage() {
     if (selectedBranch) loadCommits(1);
   }, [loadCommits, selectedBranch]);
 
-  const handleViewCommit = async (sha: string) => {
+  const handleViewCommit = (sha: string) => {
     if (!owner || !repo) return;
-    setCommitDetailLoading(true);
-    try {
-      const detail = await getCommit(owner, repo, sha);
-      setSelectedCommit(detail);
-    } catch (err) {
-      toast.error(i18n.t('加载提交详情失败'));
-      console.error(err);
-    } finally {
-      setCommitDetailLoading(false);
-    }
+    navigate(`/repos/${owner}/${repo}/commits/${sha}`);
   };
 
   const handleConfirmAction = async () => {
@@ -290,72 +271,7 @@ export default function CommitsPage() {
         </div>
       )}
 
-      {/* 提交详情弹窗 */}
-      <Dialog open={!!selectedCommit} onOpenChange={() => setSelectedCommit(null)}>
-        <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-2xl bg-card border-border max-h-[90dvh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-foreground text-base font-medium">
-              {i18n.t('提交详情')}</DialogTitle>
-          </DialogHeader>
-          {commitDetailLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-6 w-full bg-muted" />
-              <Skeleton className="h-4 w-2/3 bg-muted" />
-            </div>
-          ) : selectedCommit ? (
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm font-medium text-foreground">{selectedCommit.commit.message}</p>
-                <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                  <span>{selectedCommit.commit.author.name}</span>
-                  <span>{formatRelativeTime(selectedCommit.commit.author.date)}</span>
-                  <code className="font-mono text-accent">{selectedCommit.sha.substring(0, 12)}</code>
-                </div>
-              </div>
-              {selectedCommit.stats && (
-                <div className="flex items-center gap-3 text-sm bg-secondary rounded-lg px-3 py-2">
-                  <span className="text-muted-foreground">{selectedCommit.stats.total} {i18n.t('个改动')}</span>
-                  <span className="text-primary flex items-center gap-1"><Plus className="w-3.5 h-3.5" />{selectedCommit.stats.additions}</span>
-                  <span className="text-destructive flex items-center gap-1"><Minus className="w-3.5 h-3.5" />{selectedCommit.stats.deletions}</span>
-                </div>
-              )}
-              {selectedCommit.files && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-foreground">{i18n.t('变更文件 (')}{selectedCommit.files.length})</p>
-                  <div className="space-y-2">
-                    {selectedCommit.files.map((file) => (
-                      <div key={file.filename} className="bg-secondary border border-border rounded-md overflow-hidden">
-                        <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-                          <code className="text-xs font-mono text-foreground flex-1 min-w-0 truncate">{file.filename}</code>
-                          <span className="text-xs text-primary shrink-0">+{file.additions}</span>
-                          <span className="text-xs text-destructive shrink-0">-{file.deletions}</span>
-                        </div>
-                        {file.patch && (
-                          <pre className="text-xs p-2 font-mono overflow-x-auto max-h-40">
-                            {file.patch.split('\n').slice(0, 20).map((line, i) => (
-                              <span
-                                key={i}
-                                className={`block ${
-                                  line.startsWith('+') ? 'text-primary' :
-                                  line.startsWith('-') ? 'text-destructive' :
-                                  line.startsWith('@@') ? 'text-accent' :
-                                  'text-muted-foreground'
-                                }`}
-                              >
-                                {line}
-                              </span>
-                            ))}
-                          </pre>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+
 
       <AlertDialog open={!!actionCommit && !!actionKind} onOpenChange={(open) => { if (!open && !actionBusy) { setActionCommit(null); setActionKind(null); } }}>
         <AlertDialogContent className="bg-card border-border">

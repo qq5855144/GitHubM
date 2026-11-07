@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getRepoBranches } from '@/services/github';
 import { runAiAgent } from '@/lib/aiAgentCore';
+import { startAgentBackgroundTask, stopAgentBackgroundTask } from '@/lib/agentBackground';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -790,6 +791,7 @@ const currentModelDef = getModelDef(modelConfig.type);
     const aiMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: '', streaming: true };
     setMessages(prev => isRegen ? [...prev, aiMsg] : [...prev, userMsg, aiMsg]);
     setIsStreaming(true);
+    startAgentBackgroundTask(i18n.t('AI 助手正在执行任务'));
     autoFollowRef.current = true;
     scrollToBottom('auto');
 
@@ -1338,6 +1340,7 @@ const currentModelDef = getModelDef(modelConfig.type);
         }
       },
       onComplete: async () => {
+        stopAgentBackgroundTask();
         // 取消待执行的 rAF，立即同步 flush 所有 pending mutations，确保最终状态一致
         cancelAndFlush();
         networkInterruptedRef.current = false;
@@ -1382,6 +1385,7 @@ const currentModelDef = getModelDef(modelConfig.type);
         }
       },
       onError: (err) => {
+        stopAgentBackgroundTask();
         // 同样先 flush 所有 pending mutations，再写入错误状态
         cancelAndFlush();
         const isUserAbort = abortRef.current?.signal.aborted;
@@ -1450,6 +1454,7 @@ const currentModelDef = getModelDef(modelConfig.type);
     const aiMsg: Message = { id: Date.now().toString(), role: 'assistant', content: '', streaming: true };
     setMessages(prev => [...prev, aiMsg]);
     setIsStreaming(true);
+    startAgentBackgroundTask(i18n.t('AI 助手正在恢复任务'));
     abortRef.current = new AbortController();
     streamingAiMsgIdRef.current = aiMsg.id;
     networkInterruptedRef.current = false;
@@ -1647,6 +1652,7 @@ const currentModelDef = getModelDef(modelConfig.type);
         }
       },
       onComplete: async () => {
+        stopAgentBackgroundTask();
         finalizeAnswer();
         finalizeThinking();
         cancelAndFlush();
@@ -1677,6 +1683,7 @@ const currentModelDef = getModelDef(modelConfig.type);
         }
       },
       onError: (err) => {
+        stopAgentBackgroundTask();
         cancelAndFlush();
         const targetId = answerMsgId ?? currentStepBubbleId ?? initMsgId;
         setMessages(prev => prev.map(m => {

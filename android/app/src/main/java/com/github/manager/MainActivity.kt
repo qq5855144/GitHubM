@@ -246,6 +246,23 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        /** AI 任务开始时启动前台保活服务，防止切到后台后被系统回收。 */
+        @JavascriptInterface
+        fun startAgentTask(title: String) {
+            runOnUiThread {
+                val text = title.ifBlank { "AI 助手正在执行任务" }
+                AgentForegroundService.start(this@MainActivity, text)
+            }
+        }
+
+        /** AI 任务完成、失败或取消时关闭保活服务。 */
+        @JavascriptInterface
+        fun stopAgentTask() {
+            runOnUiThread {
+                AgentForegroundService.stop(this@MainActivity)
+            }
+        }
+
         /**
          * 检查是否有新版本可用，结果通过 JS CustomEvent 'appUpdateAvailable' 异步推送给前端。
          * 调用方：SettingsPage 或应用冷启动后延迟调用。

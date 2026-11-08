@@ -42,38 +42,6 @@ jobs:
         working-directory: worker
         run: npm install --no-audit --no-fund
 
-      - name: 创建或复用 D1 数据库
-        id: d1
-        run: |
-          API="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database"
-          LIST_JSON=$(curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$API")
-          DB_ID=$(echo "$LIST_JSON" | jq -r '.result[]? | select(.name == "githubm-stats") | .uuid' | head -n 1)
-
-          if [ -z "$DB_ID" ] || [ "$DB_ID" = "null" ]; then
-            CREATE_JSON=$(curl -fsS -X POST "$API" \
-              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d '{"name":"githubm-stats"}')
-            DB_ID=$(echo "$CREATE_JSON" | jq -r '.result.uuid')
-          fi
-
-          if [ -z "$DB_ID" ] || [ "$DB_ID" = "null" ]; then
-            echo "D1 数据库创建或查询失败"
-            echo "$LIST_JSON" | head -c 1000
-            exit 1
-          fi
-          echo "D1 database id: $DB_ID"
-          echo "id=$DB_ID" >> "$GITHUB_OUTPUT"
-
-      - name: 写入 D1 绑定
-        run: |
-          sed -i "s/__D1_DATABASE_ID__/${{ steps.d1.outputs.id }}/" worker/wrangler.toml
-          grep -A4 'd1_databases' worker/wrangler.toml
-
-      - name: 应用数据库迁移
-        working-directory: worker
-        run: npx wrangler d1 migrations apply githubm-stats --remote
-
       - name: 设置 Worker Secret
         working-directory: worker
         run: printf '%s' "$STATS_SECRET" | npx wrangler secret put STATS_SECRET
@@ -90,15 +58,18 @@ jobs:
             echo "### GitHubM Stats Worker"
             echo ""
             echo "- Worker URL: ${WORKER_URL:-未识别，请查看日志}"
-            echo "- D1 database: githubm-stats"
+            echo "- 存储：Durable Object SQLite"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 验证健康检查
         run: |
-          URL="${{ steps.deploy.outputs.url }}"
+          URL="${{ vars.VITE_STATS_API_URL }}"
           if [ -z "$URL" ]; then
-            echo "未从部署日志识别 Worker URL，跳过健康检查"
-            exit 0
+            URL="${{ steps.deploy.outputs.url }}"
+          fi
+          if [ -z "$URL" ]; then
+            echo "未配置 VITE_STATS_API_URL，且未从部署日志识别 Worker URL"
+            exit 1
           fi
           curl -fsS --retry 5 --retry-delay 3 "$URL/health"
           echo

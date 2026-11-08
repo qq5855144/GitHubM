@@ -5,11 +5,12 @@
  * - 只保留一个「访问量」指标
  * - 同一 GitHub 用户 30 分钟内只计 1 次
  * - 不记录路径、PV/UV、IP、登录名或明文 Token
+ * - 计数状态存放在 Durable Object，无需单独部署数据库
  * - 私有仓库通过 /v1/export 拉取每日快照归档
  */
 
 export interface Env {
-  DB: D1Database;
+  STATS: DurableObjectNamespace;
   /** 同时用于用户 ID 哈希盐和 /v1/export 鉴权 */
   STATS_SECRET: string;
 }
@@ -44,6 +45,13 @@ function json(data: unknown, status = 200, cacheControl?: string): Response {
   headers.set('Content-Type', 'application/json; charset=utf-8');
   if (cacheControl) headers.set('Cache-Control', cacheControl);
   return new Response(JSON.stringify(data), { status, headers });
+}
+
+function internalJson(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+  });
 }
 
 function emptyCors(status = 204): Response {
@@ -135,6 +143,16 @@ async function userIdHash(user: GitHubUser, env: Env): Promise<string> {
   return sha256Hex(`${user.id}:${env.STATS_SECRET}`);
 }
 
+function getCounter(env: Env): DurableObjectStub {
+  return env.STATS.get(env.STATS.idFromName('global'));
+}
+
+async function readCounterSummary(env: Env, days: number): Promise<Response> {
+  return getCounter(env).fetch(
+    new Request(`https://stats.internal/summary?days=${days}`, { method: 'GET' }),
+  );
+}
+
 async function handleHit(request: Request, env: Env): Promise<Response> {
   if (!env.STATS_SECRET || env.STATS_SECRET.length < 16) {
     return json({ ok: false, error: 'stats_secret_not_configured' }, 503);
@@ -143,74 +161,15 @@ async function handleHit(request: Request, env: Env): Promise<Response> {
   const user = await authenticate(request);
   if (!user) return json({ ok: false, error: 'unauthorized' }, 401);
 
-  const now = Date.now();
-  const day = utcDay(now);
   const hash = await userIdHash(user, env);
-
-  // 同一用户 30 分钟内只计一次；不区分页面。
-  const claim = await env.DB.prepare(
-    `INSERT INTO last_hits (user_id_hash, last_at)
-     VALUES (?, ?)
-     ON CONFLICT(user_id_hash)
-     DO UPDATE SET last_at = excluded.last_at
-     WHERE last_hits.last_at <= ?`,
-  )
-    .bind(hash, now, now - RATE_WINDOW_MS)
-    .run();
-
-  if ((claim.meta.changes ?? 0) === 0) {
-    return json({ ok: true, counted: false });
-  }
-
-  await env.DB.prepare(
-    `INSERT INTO daily_stats (day, visits) VALUES (?, 1)
-     ON CONFLICT(day) DO UPDATE SET visits = visits + 1`,
-  )
-    .bind(day)
-    .run();
-
-  return json({ ok: true, counted: true });
-}
-
-async function readSummary(db: D1Database, days: number): Promise<SummaryResponse> {
-  const today = utcDay();
-  const startDay = shiftDay(today, -(days - 1));
-
-  const [trendResult, todayResult, totalResult, activeDaysResult] = await Promise.all([
-    db
-      .prepare(`SELECT day AS date, visits FROM daily_stats WHERE day >= ? ORDER BY day`)
-      .bind(startDay)
-      .all<{ date: string; visits: number }>(),
-    db.prepare(`SELECT COALESCE(visits, 0) AS visits FROM daily_stats WHERE day = ?`).bind(today).first<{ visits: number }>(),
-    db.prepare(`SELECT COALESCE(SUM(visits), 0) AS visits FROM daily_stats`).first<{ visits: number }>(),
-    db.prepare(`SELECT COUNT(*) AS days FROM daily_stats WHERE visits > 0`).first<{ days: number }>(),
-  ]);
-
-  const byDay = new Map(
-    (trendResult.results ?? []).map((row) => [row.date, Number(row.visits) || 0]),
+  const response = await getCounter(env).fetch(
+    new Request('https://stats.internal/hit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userHash: hash }),
+    }),
   );
-
-  const daysList: Array<{ date: string; visits: number }> = [];
-  let periodVisits = 0;
-  let periodActiveDays = 0;
-  for (let offset = -(days - 1); offset <= 0; offset += 1) {
-    const date = shiftDay(today, offset);
-    const visits = byDay.get(date) ?? 0;
-    periodVisits += visits;
-    if (visits > 0) periodActiveDays += 1;
-    daysList.push({ date, visits });
-  }
-
-  return {
-    generatedAt: new Date().toISOString(),
-    today: { visits: Number(todayResult?.visits) || 0 },
-    period: { days, visits: periodVisits, activeDays: periodActiveDays },
-    total: {
-      visits: Number(totalResult?.visits) || 0,
-      activeDays: Number(activeDaysResult?.days) || 0,
-    },
-    days: daysList,
-  };
+  return json(await response.json(), response.status);
 }
 
 async function handleSummary(request: Request, env: Env): Promise<Response> {
@@ -226,8 +185,8 @@ async function handleSummary(request: Request, env: Env): Promise<Response> {
     ? Math.min(Math.max(requestedDays, 1), MAX_SUMMARY_DAYS)
     : 7;
 
-  const summary = await readSummary(env.DB, days);
-  return json(summary, 200, 'private, max-age=30');
+  const response = await readCounterSummary(env, days);
+  return json(await response.json(), response.status, 'private, max-age=30');
 }
 
 async function handleExport(request: Request, env: Env): Promise<Response> {
@@ -247,8 +206,8 @@ async function handleExport(request: Request, env: Env): Promise<Response> {
     ? Math.min(Math.max(requestedDays, 1), MAX_EXPORT_DAYS)
     : 365;
 
-  const summary = await readSummary(env.DB, days);
-  return json(summary, 200, 'no-store');
+  const response = await readCounterSummary(env, days);
+  return json(await response.json(), response.status, 'no-store');
 }
 
 async function route(request: Request, env: Env): Promise<Response> {
@@ -271,6 +230,127 @@ async function route(request: Request, env: Env): Promise<Response> {
   return json({ ok: false, error: 'not_found' }, 404);
 }
 
+export class StatsCounter {
+  private readonly sql: SqlStorage;
+
+  constructor(ctx: DurableObjectState, readonly env: Env) {
+    this.sql = ctx.storage.sql;
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS daily_stats (
+        day TEXT PRIMARY KEY,
+        visits INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS last_hits (
+        user_id_hash TEXT PRIMARY KEY,
+        last_at INTEGER NOT NULL
+      );
+    `);
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname === '/hit' && request.method === 'POST') {
+      return this.handleHitAsync(request);
+    }
+    if (url.pathname === '/summary' && request.method === 'GET') {
+      return this.handleSummary(request);
+    }
+    if (url.pathname === '/cleanup' && request.method === 'POST') {
+      return this.handleCleanup();
+    }
+    return internalJson({ ok: false, error: 'not_found' }, 404);
+  }
+
+  private async handleHitAsync(request: Request): Promise<Response> {
+    const body = (await request.json()) as { userHash?: unknown };
+    const hash = typeof body.userHash === 'string' ? body.userHash : '';
+    if (!/^[a-f0-9]{64}$/.test(hash)) {
+      return internalJson({ ok: false, error: 'invalid_user_hash' }, 400);
+    }
+
+    const now = Date.now();
+    const day = utcDay(now);
+    const recent = this.sql
+      .exec<{ last_at: number }>(`SELECT last_at FROM last_hits WHERE user_id_hash = ?`, hash)
+      .toArray()[0];
+
+    if (recent && now - Number(recent.last_at) < RATE_WINDOW_MS) {
+      return internalJson({ ok: true, counted: false });
+    }
+
+    this.sql.exec(
+      `INSERT INTO last_hits (user_id_hash, last_at) VALUES (?, ?)
+       ON CONFLICT(user_id_hash) DO UPDATE SET last_at = excluded.last_at`,
+      hash,
+      now,
+    );
+    this.sql.exec(
+      `INSERT INTO daily_stats (day, visits) VALUES (?, 1)
+       ON CONFLICT(day) DO UPDATE SET visits = visits + 1`,
+      day,
+    );
+    return internalJson({ ok: true, counted: true });
+  }
+
+  private handleSummary(request: Request): Response {
+    const url = new URL(request.url);
+    const requestedDays = Number.parseInt(url.searchParams.get('days') ?? '7', 10);
+    const days = Number.isFinite(requestedDays)
+      ? Math.min(Math.max(requestedDays, 1), MAX_EXPORT_DAYS)
+      : 7;
+    const today = utcDay();
+    const startDay = shiftDay(today, -(days - 1));
+
+    const rows = this.sql
+      .exec<{ date: string; visits: number }>(
+        `SELECT day AS date, visits FROM daily_stats WHERE day >= ? ORDER BY day`,
+        startDay,
+      )
+      .toArray();
+    const byDay = new Map(rows.map((row) => [row.date, Number(row.visits) || 0]));
+
+    const daysList: Array<{ date: string; visits: number }> = [];
+    let periodVisits = 0;
+    let periodActiveDays = 0;
+    for (let offset = -(days - 1); offset <= 0; offset += 1) {
+      const date = shiftDay(today, offset);
+      const visits = byDay.get(date) ?? 0;
+      periodVisits += visits;
+      if (visits > 0) periodActiveDays += 1;
+      daysList.push({ date, visits });
+    }
+
+    const total = this.sql
+      .exec<{ visits: number }>(`SELECT COALESCE(SUM(visits), 0) AS visits FROM daily_stats`)
+      .one();
+    const activeDays = this.sql
+      .exec<{ days: number }>(`SELECT COUNT(*) AS days FROM daily_stats WHERE visits > 0`)
+      .one();
+
+    const summary: SummaryResponse = {
+      generatedAt: new Date().toISOString(),
+      today: { visits: byDay.get(today) ?? 0 },
+      period: { days, visits: periodVisits, activeDays: periodActiveDays },
+      total: {
+        visits: Number(total.visits) || 0,
+        activeDays: Number(activeDays.days) || 0,
+      },
+      days: daysList,
+    };
+    return internalJson(summary);
+  }
+
+  private handleCleanup(): Response {
+    this.sql.exec(
+      `DELETE FROM last_hits WHERE last_at < ?`,
+      Date.now() - 7 * 24 * 60 * 60 * 1000,
+    );
+    return internalJson({ ok: true });
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
@@ -282,9 +362,8 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    // 只保留最近 7 天的去重窗口，避免 last_hits 无限增长。
-    await env.DB.prepare(`DELETE FROM last_hits WHERE last_at < ?`)
-      .bind(Date.now() - 7 * 24 * 60 * 60 * 1000)
-      .run();
+    await getCounter(env).fetch(
+      new Request('https://stats.internal/cleanup', { method: 'POST' }),
+    );
   },
 } satisfies ExportedHandler<Env>;

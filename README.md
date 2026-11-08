@@ -10,11 +10,22 @@
 <p align="center">
   <a href="https://qq5855144.github.io/GitHubM/"><img src="https://img.shields.io/badge/GitHub%20Pages-在线体验-222?logo=github" alt="Pages"></a>
   <a href="https://github.com/qq5855144/GitHubM/releases"><img src="https://img.shields.io/github/v/release/qq5855144/GitHubM?label=Release&logo=android&color=blue" alt="Release"></a>
-  <a href="https://github.com/qq5855144/GitHubM/actions"><img src="https://img.shields.io/badge/CI%2CD%20Actions-自动部署-success?logo=githubactions" alt="CI"></a>
+  <a href="https://github.com/qq5855144/GitHubM/actions/workflows/deploy.yml"><img src="https://github.com/qq5855144/GitHubM/actions/workflows/deploy.yml/badge.svg" alt="CI/CD"></a>
   <img src="https://img.shields.io/badge/React-18-61dafb?logo=react" alt="React">
   <img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript">
   <img src="https://img.shields.io/github/stars/qq5855144/GitHubM?style=social" alt="Stars">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+</p>
+
+<p align="center">
+  <a href="#简介">简介</a> ·
+  <a href="#功能一览">功能</a> ·
+  <a href="#ai-开发助手">AI 助手</a> ·
+  <a href="#技术栈">技术栈</a> ·
+  <a href="#项目结构">项目结构</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#多端构建">多端构建</a> ·
+  <a href="#常见问题">FAQ</a>
 </p>
 
 ---
@@ -23,11 +34,20 @@
 
 GitHubM 把 GitHub 的日常操作集中到一个界面里：仓库、Issue、Pull Request、Actions、Packages、Discussions、Wiki、Gist、通知、搜索、代码浏览——**40+ 页面**覆盖 GitHub 主流功能；同时内置 **AI 开发助手**，用自然语言驱动仓库读写、搜索、CI 修复、代码审查等完整流程。
 
-设计上有三条硬约束：
+**为什么做这个项目**
 
-- **纯前端**：所有 GitHub API 调用由浏览器/WebView 直连完成，Token 与模型 Key 只存在本机，无中转服务器
-- **一套代码三端复用**：Web（GitHub Pages）、Android（Kotlin WebView 壳）、Desktop（Tauri 2）共享同一份 `dist/`
-- **移动端优先的健壮性**：针对 Android 老版本 WebView 做了 polyfill、`file://` 资源加载、前后台保活等专项适配
+- 官方面板在移动端的交互密度不适合触屏，长列表、日志、Diff 阅读体验差
+- 想在手机上完成「改一行代码 → 提 PR → 看 CI → 修 CI」的闭环，而不只是看看通知
+- 不希望为了用一个客户端就把 Token 交给第三方服务器
+
+**四条设计约束**
+
+| 约束 | 落地方式 |
+|------|----------|
+| **纯前端** | 所有 GitHub API 调用由浏览器 / WebView 直连完成，Token 与模型 Key 只存本机，无中转服务器 |
+| **一套代码三端复用** | Web（GitHub Pages）、Android（Kotlin WebView 壳）、Desktop（Tauri 2）共享同一份 `dist/` |
+| **移动端优先的健壮性** | 针对 Android 老版本 WebView 做 polyfill、`file://` 资源加载、前后台保活专项适配 |
+| **可离线可用** | APK 内嵌全部前端资源，弱网下仍可浏览已加载内容与本地缓存 |
 
 > **在线体验**：<https://qq5855144.github.io/GitHubM/>
 
@@ -49,7 +69,8 @@ GitHubM 把 GitHub 的日常操作集中到一个界面里：仓库、Issue、Pu
 | **Releases / Artifacts** | 版本发布管理、构建产物下载 |
 | **Packages / Projects / Discussions / Wiki** | 仓库外围协作模块 |
 | **Gists** | 代码片段浏览与详情 |
-| **通知 / 活动 / 搜索** | 未读通知、动态时间线、仓库与代码与用户全局搜索 |
+| **通知 / 活动 / 搜索** | 未读通知、动态时间线、仓库 / 代码 / 用户全局搜索 |
+| **用户维度** | 用户主页、关注列表、收藏仓库、Star 记录 |
 | **更多** | 多账号切换、数据导出、批量上传、Pages 部署、GraphQL Playground、访问统计 |
 
 ### 仓库内子模块
@@ -63,12 +84,22 @@ GitHubM 把 GitHub 的日常操作集中到一个界面里：仓库、Issue、Pu
 - **多账号**：本地保存多个 GitHub Token，一键切换，互不干扰
 - **离线感知**：`NetworkStatusBanner` 实时提示网络断开与恢复
 - **隐私**：访问统计完全本地化（localStorage 记录 PV / UV），不上报任何服务器
+- **大列表性能**：虚拟滚动（`@tanstack/react-virtual`）+ 分页，长日志与长文件不卡顿
 
 ---
 
 ## AI 开发助手
 
 内置 **LangGraph 编排的 ReAct Agent**，可在对话中完成「读代码 → 改代码 → 提交 → 开 PR → 查 CI → 修 CI」的闭环。
+
+### 典型用法
+
+```
+你：修复 actions 里 run #1234 的失败，原因是 lint 报错
+Agent：get_workflow_runs → get_run_jobs → get_job_logs
+       → grep_in_repo 定位文件 → read_function → patch_file
+       → verify_changes → 汇报结果
+```
 
 ### 模型接入
 
@@ -80,7 +111,7 @@ GitHubM 把 GitHub 的日常操作集中到一个界面里：仓库、Issue、Pu
 | **Qwen 通义千问** | 自带 API Key，DashScope 兼容模式 |
 | **自定义接口** | 任意 OpenAI 兼容服务，可指定 endpoint |
 
-模型配置项支持 `temperature` 手动指定或按任务类型自动推断（写代码 0.1 / 分析 0.3 / 对话 0.7）、`reasoning_effort` 思考强度、请求超时。
+模型配置支持 `temperature` 手动指定或按任务类型自动推断（写代码 0.1 / 分析 0.3 / 对话 0.7）、`reasoning_effort` 思考强度、请求超时。
 
 ### 工具层：双通道
 
@@ -163,6 +194,26 @@ npx wrangler deploy
 | **Desktop** | Tauri 2（Rust） |
 | **CI/CD** | GitHub Actions（Pages 部署 + APK 构建签名 + Tauri 打包 + PR 质量门卡） |
 
+### 运行时架构
+
+```
+┌──────────────────────────────────────────────┐
+│  UI（React + shadcn/ui + Tailwind）          │
+│  pages / components / contexts / stores      │
+└───────────────┬──────────────────────────────┘
+                │
+┌───────────────▼──────────────────────────────┐
+│  Service 层                                  │
+│  github.ts（REST）· github-graphql.ts        │
+│  aiAgentCore.ts · mcpClient.ts · agent/*     │
+└───────┬───────────────────────┬──────────────┘
+        │ 直连 HTTPS            │ 直连 / 代理
+┌───────▼──────────┐   ┌────────▼────────────────┐
+│  api.github.com  │   │  LLM Provider / MCP     │
+└──────────────────┘   └─────────────────────────┘
+        ▲ 无中转服务器，Token 仅存本机 localStorage
+```
+
 ---
 
 ## 项目结构
@@ -176,7 +227,7 @@ GitHubM/
 │   │   ├── android-test-apk.yml  # 仅上传测试 APK 供真机回归（不发 Release）
 │   │   ├── tauri-build.yml       # tag v* 触发，macOS/Windows/Linux 桌面包
 │   │   └── stale.yml             # Issue/PR 自动清理
-│   ├── ISSUE_TEMPLATE/ · CODEOWNERS · PULL_REQUEST_TEMPLATE.md
+│   └── ISSUE_TEMPLATE/ · CODEOWNERS · PULL_REQUEST_TEMPLATE.md
 ├── android/                      # Android WebView 壳工程
 │   ├── app/src/main/             # MainActivity.kt · assets(注入 dist) · res
 │   ├── app/build.gradle.kts      # 签名、混淆、CI 版本号注入
@@ -196,7 +247,7 @@ GitHubM/
 │   │   ├── aiAgentCore.ts        # AI 引擎：工具定义、模型适配、ReAct 循环
 │   │   ├── mcpClient.ts          # 官方 GitHub MCP 客户端 + 工具缓存
 │   │   ├── agent/                # langgraph/runtime · toolPolicy · messageIntegrity · verification · runTrace
-│   │   ├── githubDownload.ts · auto-translator.ts · visitStats.ts · page-cache.ts
+│   │   └── githubDownload.ts · auto-translator.ts · visitStats.ts · page-cache.ts
 │   ├── pages/                    # 40+ 页面（每个 GitHub 模块一页）
 │   ├── services/                 # github.ts（REST）· github-graphql.ts · github-achievements.ts
 │   ├── stores/ · types/ · tests/
@@ -206,6 +257,7 @@ GitHubM/
 ├── .rules/                       # ast-grep 自定义 lint 规则 + check.sh
 ├── scripts/                      # i18n 同步、keystore Secrets 配置等工具脚本
 ├── docs/prd.md                   # 产品需求文档
+├── index.html                    # 主题预初始化脚本（防 FOUC）
 ├── vite.config.ts                # base "./" · 移除 crossorigin · WebView 构建优化
 └── tailwind.config.js · biome.json · tsconfig*.json
 ```
@@ -216,8 +268,11 @@ GitHubM/
 
 ### 环境要求
 
-- **Node.js** ≥ 20（CI 使用 22 / 24）
-- **pnpm** ≥ 9
+| 场景 | 依赖 |
+|------|------|
+| **Web 开发** | Node.js ≥ 20（CI 使用 22 / 24）、pnpm ≥ 9（CI 使用 10） |
+| **Android 构建** | JDK 17、Android SDK API 34+、Gradle 8.7 |
+| **Desktop 构建** | Rust stable、Tauri 2 环境依赖（Linux 需 `libwebkit2gtk-4.1-dev` 等） |
 
 ### 本地开发
 
@@ -240,16 +295,21 @@ pnpm dev            # 启动开发服务器 http://localhost:5173
 | `pnpm test` | Vitest 单元测试 |
 | `pnpm test:watch` | 监听模式 |
 | `pnpm test:coverage` | 生成覆盖率报告 |
-| `pnpm lint` | 完整质量检查：类型检查 + Biome + ast-grep 规则 + Tailwind CSS 校验 + 构建验证 |
+| `pnpm lint` | 完整质量检查：类型检查（tsgo）+ Biome + ast-grep 规则 + Tailwind CSS 校验 + 构建验证 |
+| `pnpm tauri dev` / `pnpm tauri build` | 桌面端调试 / 打包 |
 
 ### Token 权限
 
-在 <https://github.com/settings/tokens> 生成 Token，勾选：
+在 <https://github.com/settings/tokens> 生成 Token（推荐 Fine-grained 或 Classic 均可），勾选：
 
-- `repo` — 仓库读写
-- `notifications` — 通知
-- `user` — 用户信息
-- `workflow` — Actions 触发与重跑
+| Scope | 用途 |
+|-------|------|
+| `repo` | 仓库读写（代码、Issue、PR） |
+| `notifications` | 通知列表与已读标记 |
+| `user` | 用户信息、关注列表 |
+| `workflow` | Actions 触发与重跑 |
+| `read:packages` | Packages 列表（可选） |
+| `gist` | Gist 浏览与创建（可选） |
 
 ### 环境变量
 
@@ -277,6 +337,8 @@ pnpm build          # dist/
 - `base: "./"` — 相对路径资源，兼容 GitHub Pages 子目录与 `file://`
 - 移除 `crossorigin` 属性 — `file://` 无 Origin，带该属性会触发 CORS 预检并静默白屏
 - 关闭 `modulePreload` 与 `manualChunks` — 避免 `file://` 下跨 chunk 动态 import 被拦截
+
+> 若你 fork 后自建 WebView 壳，请勿移除以上配置，否则 Android 端大概率白屏。
 
 ### Android APK
 
@@ -308,6 +370,15 @@ pnpm tauri build
 
 推送到 `v*` tag 时，`tauri-build.yml` 自动产出 macOS（arm64 / x64）、Windows、Linux 安装包。
 
+### 兼容性
+
+| 平台 | 建议版本 | 备注 |
+|------|----------|------|
+| Chrome / Edge | 最新两个大版本 | 完整支持 |
+| Safari | 16+ | 完整支持 |
+| Android WebView | Chromium 93+ 最佳 | 更低版本依赖 `main.tsx` 中的 `Object.hasOwn` / `crypto.randomUUID` polyfill |
+| 桌面端 | macOS 11+ / Windows 10+ / Linux（webkit2gtk 4.1） | Tauri 2 运行时要求 |
+
 ---
 
 ## 签名与发布
@@ -323,7 +394,7 @@ bash scripts/setup-keystore-secrets.sh
 
 CI 还支持**零配置自动持久化**：若上述 Secret 缺失但配置了 `GH_PAT`（需 `repo` 权限），首次构建会自动生成 Keystore 并回写到 Secrets，后续构建复用同一证书。
 
-> ⚠️ 生产使用请替换为你自己的 keystore，不要沿用仓库中的示例证书。
+> ⚠️ 生产使用请替换为你自己的 keystore，不要沿用仓库中的示例证书。签名不一致会导致无法覆盖安装。
 
 ---
 
@@ -341,6 +412,49 @@ tag v* ────► tauri-build（三平台桌面安装包）
 - `versionCode` 使用 **Unix 时间戳**，保证严格递增，避免测试包与正式包互相降级
 - `versionName` 为人类可读的 `1.0.<run_number>`
 - Pages 部署同组并发、自动取消旧任务；APK 构建不受影响
+- PR 依赖 `pnpm install --frozen-lockfile`，修改依赖后请务必提交 `pnpm-lock.yaml`
+
+---
+
+## 常见问题
+
+<details>
+<summary><b>打开后一直转圈或空白页</b></summary>
+
+1. 确认 Token 具备 `repo` 权限且未过期（设置 → 账号管理可重新填写）
+2. 打开开发者工具查看是否有 401 / 403 响应
+3. 点击侧边栏「设置 → 清除本地缓存」后重试
+</details>
+
+<details>
+<summary><b>Android APK 白屏</b></summary>
+
+绝大多数是构建配置被改动导致：`base` 必须为 `./`、HTML 中不能带 `crossorigin`、不能开启 `modulePreload`。若自行升级 Vite 版本，请回归验证这三项。
+</details>
+
+<details>
+<summary><b>AI 助手在手机上请求失败（CORS / 网络错误）</b></summary>
+
+部分模型域名在 WebView 下受 CORS 或 DNS 限制，部署 `cloudflare/llm-proxy` 后在「设置 → AI 配置」填写代理地址即可，代理不保存任何凭据。
+</details>
+
+<details>
+<summary><b>`pnpm lint` 执行很慢</b></summary>
+
+该命令串联了类型检查、Biome、ast-grep 规则、Tailwind 校验和生产构建验证五项，用于本地复现 CI 门卡。日常可只跑 `npx biome check` 快速自查。
+</details>
+
+<details>
+<summary><b>CI 构建失败提示 lockfile 不一致</b></summary>
+
+本地执行 `pnpm install` 生成新的 `pnpm-lock.yaml` 后一并提交；不要使用其他包管理器写入 lockfile。
+</details>
+
+<details>
+<summary><b>Pages 子路径部署后刷新 404</b></summary>
+
+项目使用 `HashRouter`，路由位于 `#` 之后，无需额外配置 404 fallback。若你改成了 BrowserRouter，需要为静态托管补充 SPA 回退规则。
+</details>
 
 ---
 
@@ -364,6 +478,14 @@ tag v* ────► tauri-build（三平台桌面安装包）
 - 提交前本地执行 `pnpm lint` 与 `pnpm test`
 - 新增工具函数需附带 Vitest 用例；UI 改动请附改动前后截图
 - 样式仅使用语义 token（`bg-primary`），禁止直接使用 `bg-blue-500` 这类固定色值类
+
+## 路线图
+
+- [ ] PR 行内评论与 Review 线程查看
+- [ ] 代码编辑器多标签页与冲突合并视图
+- [ ] AI 助手任务模板（一键复现常用工作流）
+- [ ] 离线缓存策略升级（Service Worker + 增量同步）
+- [ ] 更多模型提供商与本地模型（Ollama）支持
 
 ---
 

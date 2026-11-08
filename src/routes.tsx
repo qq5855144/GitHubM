@@ -18,6 +18,7 @@ import SettingsPage from './pages/SettingsPage';
 import ActivityPage from './pages/ActivityPage';
 import ActivityDetailPage from './pages/ActivityDetailPage';
 import ActionsPage from './pages/ActionsPage';
+import ActionsSecretsPage from './pages/ActionsSecretsPage';
 import GistsPage from './pages/GistsPage';
 import GistDetailPage from './pages/GistDetailPage';
 import PackagesPage from './pages/PackagesPage';
@@ -70,6 +71,7 @@ export const routes: RouteConfig[] = [
   // 新增仓库子功能
   { name: 'Actions', path: '/repos/:owner/:repo/actions', element: <ActionsPage /> },
   { name: 'Actions 运行详情', path: '/repos/:owner/:repo/actions/runs/:runId', element: <ActionsPage /> },
+  { name: i18n.t('Actions 密钥与变量'), path: '/repos/:owner/:repo/actions/secrets', element: <ActionsSecretsPage /> },
   { name: 'Packages', path: '/repos/:owner/:repo/packages', element: <PackagesPage /> },
   { name: 'Projects', path: '/repos/:owner/:repo/projects', element: <ProjectsPage /> },
   { name: 'Discussions', path: '/repos/:owner/:repo/discussions', element: <DiscussionsPage /> },

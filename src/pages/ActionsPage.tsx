@@ -32,6 +32,7 @@ import {
   ShieldCheck,
   ShieldX,
   Save,
+  KeyRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1283,16 +1284,27 @@ export default function ActionsPage() {
           </h1>
         </div>
         {!selectedRun && (
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 shrink-0 bg-card border-border"
-            onClick={() => loadRuns(1)}
-            disabled={loadingRuns}
-            title={i18n.t('刷新运行记录')}
-          >
-            <RefreshCw className={`w-4 h-4 ${loadingRuns ? 'animate-spin' : ''}`} />
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 bg-card border-border"
+              onClick={() => navigate(`/repos/${owner}/${repo}/actions/secrets`)}
+              title={i18n.t('Actions 密钥与变量')}
+            >
+              <KeyRound className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 bg-card border-border"
+              onClick={() => loadRuns(1)}
+              disabled={loadingRuns}
+              title={i18n.t('刷新运行记录')}
+            >
+              <RefreshCw className={`w-4 h-4 ${loadingRuns ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
         )}
       </div>
 

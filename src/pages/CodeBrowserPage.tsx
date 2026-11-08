@@ -351,6 +351,27 @@ export default function CodeBrowserPage() {
   // 编辑器搜索
   const editorRef = useRef<CodeEditorRef | null>(null);
   const commitInputRef = useRef<HTMLInputElement | null>(null);
+  const breadcrumbRef = useRef<HTMLDivElement | null>(null);
+
+  // 路径变化后自动横向滚动到当前目录，保证最深路径始终可见
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const el = breadcrumbRef.current;
+      if (!el) return;
+      const current = el.querySelector<HTMLElement>('[data-breadcrumb-current="true"]');
+      if (!current) {
+        el.scrollTo({ left: el.scrollWidth, behavior: 'smooth' });
+        return;
+      }
+      const containerRect = el.getBoundingClientRect();
+      const currentRect = current.getBoundingClientRect();
+      const overflowRight = currentRect.right - containerRect.right + 12;
+      if (overflowRight > 0) {
+        el.scrollBy({ left: overflowRight, behavior: 'smooth' });
+      }
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [filePath, owner, repo]);
 
   // 表单字段
   const [editContent, setEditContent] = useState('');
@@ -917,12 +938,17 @@ export default function CodeBrowserPage() {
             <PanelLeftOpen className="w-4 h-4" />
           </Button>
           {/* 移动端保留面包屑等 */}
-        <div className="flex items-center gap-1 text-sm text-muted-foreground flex-1 min-w-0 overflow-x-auto whitespace-nowrap scrollbar-none">
-          <button type="button" className="hover:text-primary transition-colors shrink-0" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
-          <ChevronRight className="w-3 h-3 shrink-0" />
-          <button type="button" className="hover:text-primary transition-colors shrink-0 max-w-[120px] truncate" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
-          <ChevronRight className="w-3 h-3 shrink-0" />
-          <button type="button" className="hover:text-primary transition-colors shrink-0" onClick={() => navigate(`/repos/${owner}/${repo}/code`)}>{i18n.t('代码')}</button>
+<div ref={breadcrumbRef} className="flex items-center gap-1 text-sm text-muted-foreground flex-1 min-w-0 overflow-x-auto whitespace-nowrap scrollbar-none scroll-smooth">
+           <button type="button" className="hover:text-primary transition-colors shrink-0" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
+           <ChevronRight className="w-3 h-3 shrink-0" />
+           <button type="button" className="hover:text-primary transition-colors shrink-0 max-w-[120px] truncate" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
+           <ChevronRight className="w-3 h-3 shrink-0" />
+           <button
+             type="button"
+             data-breadcrumb-current={pathParts.length === 0 ? 'true' : undefined}
+             className={`shrink-0 rounded px-1.5 py-0.5 transition-colors ${pathParts.length === 0 ? 'bg-primary/10 text-primary font-semibold' : 'hover:text-primary'}`}
+             onClick={() => navigate(`/repos/${owner}/${repo}/code`)}
+           >{i18n.t('代码')}</button>
           {pathParts.map((part, i) => {
             // 渲染时预计算目标路径字符串，onClick 绑定不可变常量，消除闭包时序问题
             const targetPath = pathParts.slice(0, i + 1).join('/');
@@ -945,7 +971,8 @@ export default function CodeBrowserPage() {
                 <ChevronRight className="w-3 h-3 text-muted-foreground" />
                 <button
                   type="button"
-                  className={`text-sm ${isLast ? 'text-foreground font-medium cursor-default' : 'text-primary hover:underline cursor-pointer'}`}
+                  data-breadcrumb-current={isLast ? 'true' : undefined}
+                  className={`text-sm rounded px-1.5 py-0.5 transition-colors ${isLast ? 'bg-primary/10 text-primary font-semibold cursor-default' : 'text-primary hover:underline cursor-pointer'}`}
                   onClick={isLast ? undefined : handleBreadcrumbClick}
                 >
                   {part}
@@ -955,55 +982,7 @@ export default function CodeBrowserPage() {
           })}
         </div>
 
-        {/* 移动端：分支切换按钮 */}
-        {branches.length > 0 && currentBranch && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="md:hidden h-7 px-2 text-xs gap-1 border-border hover:bg-secondary shrink-0 max-w-[70vw] sm:max-w-[320px]"
-                title={`${i18n.t('切换分支')}: ${currentBranch}`}
-              >
-                <GitBranch className="w-3 h-3 text-muted-foreground shrink-0" />
-                <span className="truncate font-mono">{currentBranch}</span>
-                <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[min(380px,calc(100vw-24px))] max-h-[60vh] overflow-y-auto">
-              <div className="px-2 py-1.5 flex items-start gap-1.5 text-[10px] text-muted-foreground">
-                <GitBranch className="w-3 h-3 shrink-0 mt-0.5" />
-                <span className="break-all leading-relaxed">{currentBranch}</span>
-              </div>
-              <DropdownMenuSeparator />
-              {branches.map((b) => (
-                <DropdownMenuItem
-                  key={b.name}
-                  onClick={() => setCurrentBranch(b.name)}
-                  className={`font-mono text-xs gap-2 items-center ${b.name === currentBranch ? 'text-primary font-semibold' : ''}`}
-                >
-                  <GitBranch className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-                  <span className="whitespace-normal break-all flex-1 min-w-0 leading-relaxed">{b.name}</span>
-                  {b.name === currentBranch && (
-                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-primary" />
-                  )}
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuSeparator />
-              <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
-                {i18n.t('共')} {branches.length} {i18n.t('个分支')}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-
-        {/* 桌面端：当前分支显示（只读，切换在文件树里） */}
-        {currentBranch && (
-          <Badge variant="outline" className="border-border text-muted-foreground hidden md:flex items-center gap-1 h-6 text-xs shrink-0">
-            <GitBranch className="w-3 h-3" />{currentBranch}
-          </Badge>
-        )}
-
+        {/* 分支切换已移动到文件列表顶部工具栏 */}
         </div>
 
         {/* ─── 主体结构 (Sidebar + Main) ─── */}
@@ -1448,7 +1427,7 @@ export default function CodeBrowserPage() {
           )}
 
           {/* 路径操作工具条（非编辑状态，或移动端编辑状态） */}
-          <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border bg-secondary/20 shrink-0 ${actionMode === 'edit' ? 'md:hidden' : ''}`}>
+          <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border bg-secondary/20 shrink-0 overflow-x-auto scrollbar-none ${actionMode === 'edit' ? 'md:hidden' : ''}`}>
             {filePath ? (
               <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 shrink-0 px-2"
                 onClick={() => {
@@ -1467,6 +1446,46 @@ export default function CodeBrowserPage() {
               </Button>
             ) : (
               <span className="text-xs text-muted-foreground px-1 font-mono">/</span>
+            )}
+            {branches.length > 0 && currentBranch && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1 border-border hover:bg-secondary shrink-0 max-w-[42vw] sm:max-w-[260px]"
+                    title={`${i18n.t('切换分支')}: ${currentBranch}`}
+                  >
+                    <GitBranch className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <span className="truncate font-mono">{currentBranch}</span>
+                    <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[min(380px,calc(100vw-24px))] max-h-[60vh] overflow-y-auto">
+                  <div className="px-2 py-1.5 flex items-start gap-1.5 text-[10px] text-muted-foreground">
+                    <GitBranch className="w-3 h-3 shrink-0 mt-0.5" />
+                    <span className="break-all leading-relaxed">{currentBranch}</span>
+                  </div>
+                  <DropdownMenuSeparator />
+                  {branches.map((b) => (
+                    <DropdownMenuItem
+                      key={b.name}
+                      onClick={() => setCurrentBranch(b.name)}
+                      className={`font-mono text-xs gap-2 items-center ${b.name === currentBranch ? 'text-primary font-semibold' : ''}`}
+                    >
+                      <GitBranch className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                      <span className="whitespace-normal break-all flex-1 min-w-0 leading-relaxed">{b.name}</span>
+                      {b.name === currentBranch && (
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-primary" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
+                    {i18n.t('共')} {branches.length} {i18n.t('个分支')}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             <div className="flex-1" />
             {/* 目录操作按钮（仅目录页显示） */}

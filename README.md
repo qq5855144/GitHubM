@@ -8,6 +8,7 @@
 </p>
 
 <p align="center">
+  <a href="https://githubm-web.pages.dev/"><img src="https://img.shields.io/badge/Cloudflare%20Pages-在线体验-F38020?logo=cloudflare" alt="Cloudflare Pages"></a>
   <a href="https://qq5855144.github.io/GitHubM/"><img src="https://img.shields.io/badge/GitHub%20Pages-在线体验-222?logo=github" alt="Pages"></a>
   <a href="https://github.com/qq5855144/GitHubM/releases"><img src="https://img.shields.io/github/v/release/qq5855144/GitHubM?label=Release&logo=android&color=blue" alt="Release"></a>
   <a href="https://github.com/qq5855144/GitHubM/actions/workflows/deploy.yml"><img src="https://github.com/qq5855144/GitHubM/actions/workflows/deploy.yml/badge.svg" alt="CI/CD"></a>
@@ -45,11 +46,13 @@ GitHubM 把 GitHub 的日常操作集中到一个界面里：仓库、Issue、Pu
 | 约束 | 落地方式 |
 |------|----------|
 | **纯前端** | 所有 GitHub API 调用由浏览器 / WebView 直连完成，Token 与模型 Key 只存本机，无中转服务器 |
-| **一套代码三端复用** | Web（GitHub Pages）、Android（Kotlin WebView 壳）、Desktop（Tauri 2）共享同一份 `dist/` |
+| **一套代码三端复用** | Web（Cloudflare Pages / GitHub Pages）、Android（Kotlin WebView 壳）、Desktop（Tauri 2）共享同一份 `dist/` |
 | **移动端优先的健壮性** | 针对 Android 老版本 WebView 做 polyfill、`file://` 资源加载、前后台保活专项适配 |
 | **可离线可用** | APK 内嵌全部前端资源，弱网下仍可浏览已加载内容与本地缓存 |
 
-> **在线体验**：<https://qq5855144.github.io/GitHubM/>
+> **在线体验**：
+> - Cloudflare Pages（全球 CDN）：<https://githubm-web.pages.dev/>
+> - GitHub Pages：<https://qq5855144.github.io/GitHubM/>
 
 ---
 

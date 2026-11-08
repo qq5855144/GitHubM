@@ -896,6 +896,28 @@ export async function getBranches(
   );
 }
 
+/**
+ * 拉取仓库全部分支。
+ * branches API 默认每页 30 个，仓库分支较多时 main 可能不在第一页。
+ */
+export async function getAllBranches(
+  owner: string,
+  repo: string
+): Promise<GitHubBranch[]> {
+  const all: GitHubBranch[] = [];
+  const seen = new Set<string>();
+  for (let page = 1; page <= 20; page += 1) {
+    const result = await getBranches(owner, repo, page, 100);
+    for (const branch of result.data) {
+      if (seen.has(branch.name)) continue;
+      seen.add(branch.name);
+      all.push(branch);
+    }
+    if (!result.hasNextPage || result.data.length === 0) break;
+  }
+  return all;
+}
+
 export interface GitHubTagRef {
   name: string;
   commit: { sha: string; url: string };

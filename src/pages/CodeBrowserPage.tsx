@@ -103,7 +103,8 @@ import {
 } from '@/components/ui/sheet';
 import {
   getRepoContents,
-  getBranches,
+  getAllBranches,
+  getRepo,
   updateFileContent,
   createFileContent,
   deleteFileContent,
@@ -473,15 +474,29 @@ export default function CodeBrowserPage() {
 
   useEffect(() => {
     if (!owner || !repo) return;
-    getBranches(owner, repo)
-      .then((result) => {
-        setBranches(result.data);
-        if (result.data.length > 0 && !currentBranch) {
-          setCurrentBranch(result.data[0].name);
-        }
+    let cancelled = false;
+    setBranches([]);
+    setCurrentBranch('');
+    Promise.all([
+      getAllBranches(owner, repo),
+      getRepo(owner, repo).catch(() => null),
+    ])
+      .then(([branchList, repoInfo]) => {
+        if (cancelled) return;
+        const defaultBranch = repoInfo?.default_branch ?? '';
+        // 默认分支放到首位，避免 main 被大量 feature 分支淹没。
+        const sorted = [...branchList].sort((a, b) => {
+          if (a.name === defaultBranch) return -1;
+          if (b.name === defaultBranch) return 1;
+          return a.name.localeCompare(b.name);
+        });
+        setBranches(sorted);
+        const preferred = defaultBranch || sorted[0]?.name || '';
+        if (preferred) setCurrentBranch(preferred);
       })
       .catch(console.error);
-  }, [owner, repo, currentBranch]);
+    return () => { cancelled = true; };
+  }, [owner, repo]);
 
   useEffect(() => { loadContents(); }, [loadContents]);
 
@@ -947,28 +962,37 @@ export default function CodeBrowserPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="md:hidden h-7 px-2 text-xs gap-1 border-border hover:bg-secondary shrink-0 max-w-[110px]"
-                title={i18n.t('切换分支')}
+                className="md:hidden h-7 px-2 text-xs gap-1 border-border hover:bg-secondary shrink-0 max-w-[70vw] sm:max-w-[320px]"
+                title={`${i18n.t('切换分支')}: ${currentBranch}`}
               >
                 <GitBranch className="w-3 h-3 text-muted-foreground shrink-0" />
                 <span className="truncate font-mono">{currentBranch}</span>
                 <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52 max-h-64 overflow-y-auto">
+            <DropdownMenuContent align="end" className="w-[min(380px,calc(100vw-24px))] max-h-[60vh] overflow-y-auto">
+              <div className="px-2 py-1.5 flex items-start gap-1.5 text-[10px] text-muted-foreground">
+                <GitBranch className="w-3 h-3 shrink-0 mt-0.5" />
+                <span className="break-all leading-relaxed">{currentBranch}</span>
+              </div>
+              <DropdownMenuSeparator />
               {branches.map((b) => (
                 <DropdownMenuItem
                   key={b.name}
                   onClick={() => setCurrentBranch(b.name)}
-                  className={`font-mono text-xs gap-2 ${b.name === currentBranch ? 'text-primary font-semibold' : ''}`}
+                  className={`font-mono text-xs gap-2 items-center ${b.name === currentBranch ? 'text-primary font-semibold' : ''}`}
                 >
                   <GitBranch className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate flex-1">{b.name}</span>
+                  <span className="whitespace-normal break-all flex-1 min-w-0 leading-relaxed">{b.name}</span>
                   {b.name === currentBranch && (
                     <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-primary" />
                   )}
                 </DropdownMenuItem>
               ))}
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
+                {i18n.t('共')} {branches.length} {i18n.t('个分支')}
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
         )}

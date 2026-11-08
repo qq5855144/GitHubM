@@ -1427,7 +1427,7 @@ export default function CodeBrowserPage() {
           )}
 
           {/* 路径操作工具条（非编辑状态，或移动端编辑状态） */}
-          <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border bg-secondary/20 shrink-0 overflow-x-auto scrollbar-none ${actionMode === 'edit' ? 'md:hidden' : ''}`}>
+          <div className={`flex flex-wrap items-center gap-2 px-3 py-1.5 border-b border-border bg-secondary/20 shrink-0 ${actionMode === 'edit' ? 'md:hidden' : ''}`}>
             {filePath ? (
               <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 shrink-0 px-2"
                 onClick={() => {
@@ -1447,47 +1447,6 @@ export default function CodeBrowserPage() {
             ) : (
               <span className="text-xs text-muted-foreground px-1 font-mono">/</span>
             )}
-            {branches.length > 0 && currentBranch && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs gap-1 border-border hover:bg-secondary shrink-0 max-w-[42vw] sm:max-w-[260px]"
-                    title={`${i18n.t('切换分支')}: ${currentBranch}`}
-                  >
-                    <GitBranch className="w-3 h-3 text-muted-foreground shrink-0" />
-                    <span className="truncate font-mono">{currentBranch}</span>
-                    <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[min(380px,calc(100vw-24px))] max-h-[60vh] overflow-y-auto">
-                  <div className="px-2 py-1.5 flex items-start gap-1.5 text-[10px] text-muted-foreground">
-                    <GitBranch className="w-3 h-3 shrink-0 mt-0.5" />
-                    <span className="break-all leading-relaxed">{currentBranch}</span>
-                  </div>
-                  <DropdownMenuSeparator />
-                  {branches.map((b) => (
-                    <DropdownMenuItem
-                      key={b.name}
-                      onClick={() => setCurrentBranch(b.name)}
-                      className={`font-mono text-xs gap-2 items-center ${b.name === currentBranch ? 'text-primary font-semibold' : ''}`}
-                    >
-                      <GitBranch className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-                      <span className="whitespace-normal break-all flex-1 min-w-0 leading-relaxed">{b.name}</span>
-                      {b.name === currentBranch && (
-                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-primary" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuSeparator />
-                  <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
-                    {i18n.t('共')} {branches.length} {i18n.t('个分支')}
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            <div className="flex-1" />
             {/* 目录操作按钮（仅目录页显示） */}
             {!currentFile && !loading && (
               <div className="flex items-center gap-1 shrink-0">
@@ -1579,6 +1538,48 @@ export default function CodeBrowserPage() {
                       className="text-destructive focus:text-destructive"
                       onClick={() => { setCommitMsg(`Delete ${currentFile.name}`); openAction('delete-file', currentFile); }}>
                       <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除文件')}</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
+            {branches.length > 0 && currentBranch && (
+              <div className="ml-auto flex items-center shrink-0">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1 border-border hover:bg-secondary shrink-0 max-w-[42vw] sm:max-w-[260px]"
+                      title={`${i18n.t('切换分支')}: ${currentBranch}`}
+                    >
+                      <GitBranch className="w-3 h-3 text-muted-foreground shrink-0" />
+                      <span className="truncate font-mono">{currentBranch}</span>
+                      <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[min(380px,calc(100vw-24px))] max-h-[60vh] overflow-y-auto">
+                    <div className="px-2 py-1.5 flex items-start gap-1.5 text-[10px] text-muted-foreground">
+                      <GitBranch className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span className="break-all leading-relaxed">{currentBranch}</span>
+                    </div>
+                    <DropdownMenuSeparator />
+                    {branches.map((b) => (
+                      <DropdownMenuItem
+                        key={b.name}
+                        onClick={() => setCurrentBranch(b.name)}
+                        className={`font-mono text-xs gap-2 items-center ${b.name === currentBranch ? 'text-primary font-semibold' : ''}`}
+                      >
+                        <GitBranch className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                        <span className="whitespace-normal break-all flex-1 min-w-0 leading-relaxed">{b.name}</span>
+                        {b.name === currentBranch && (
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-primary" />
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
+                      {i18n.t('共')} {branches.length} {i18n.t('个分支')}
+                    </div>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>

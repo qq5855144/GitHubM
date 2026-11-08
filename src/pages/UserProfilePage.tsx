@@ -285,7 +285,7 @@ export default function UserProfilePage() {
             </Avatar>
             <div className="flex-1 min-w-0 pb-1">
               <h1
-                className="text-lg font-bold text-foreground truncate leading-snug"
+                className="text-[15px] font-bold text-foreground truncate leading-snug"
                 title={profile.name || profile.login}
               >
                 {profile.name || profile.login}

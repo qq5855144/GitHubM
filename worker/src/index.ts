@@ -28,10 +28,19 @@ interface SummaryResponse {
   days: Array<{ date: string; visits: number }>;
 }
 
+interface ProfileAchievement {
+  slug: string;
+  name: string;
+  iconUrl: string;
+  tier: string | null;
+  count: number | null;
+}
+
 const RATE_WINDOW_MS = 30 * 60 * 1000;
 const MAX_SUMMARY_DAYS = 90;
 const MAX_EXPORT_DAYS = 3650;
 const AUTH_CACHE_SECONDS = 600;
+const ACHIEVEMENT_CACHE_MS = 6 * 60 * 60 * 1000;
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -210,6 +219,133 @@ async function handleExport(request: Request, env: Env): Promise<Response> {
   return json(await response.json(), response.status, 'no-store');
 }
 
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function parseAchievements(html: string): ProfileAchievement[] {
+  const result: ProfileAchievement[] = [];
+  const seen = new Set<string>();
+  const anchorPattern =
+    /<a[^>]+href="\/[^"]*\?achievement=([a-z0-9-]+)[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
+  const imagePattern =
+    /<img[^>]+src="([^"]+)"[^>]*alt="Achievement: ([^"]+)"/i;
+  const tierPattern = /achievement-tier-label--([a-z]+)/;
+  const countPattern = />x(\d+)</;
+
+  let anchor: RegExpExecArray | null;
+  while ((anchor = anchorPattern.exec(html)) !== null && result.length < 24) {
+    const slug = anchor[1].toLowerCase();
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+
+    const block = anchor[2] ?? '';
+    const image = imagePattern.exec(block);
+    if (!image) continue;
+    const iconUrl = image[1];
+    if (!iconUrl.startsWith('https://github.githubassets.com/')) continue;
+
+    const tier = tierPattern.exec(block)?.[1] ?? null;
+    const countValue = countPattern.exec(block)?.[1];
+    result.push({
+      slug,
+      name: decodeHtml(image[2]),
+      iconUrl,
+      tier,
+      count: countValue ? Number.parseInt(countValue, 10) || null : null,
+    });
+  }
+  return result;
+}
+
+async function handleAchievements(request: Request, env: Env): Promise<Response> {
+  const user = await authenticate(request);
+  if (!user) return json({ ok: false, error: 'unauthorized' }, 401);
+
+  const stub = getCounter(env);
+  let cached: { achievements: ProfileAchievement[]; fetchedAt: number } | null = null;
+  try {
+    const cachedResponse = await stub.fetch(
+      `https://stats.internal/achievements/get?login=${encodeURIComponent(user.login)}`,
+    );
+    if (cachedResponse.ok) {
+      cached = (await cachedResponse.json()) as {
+        achievements: ProfileAchievement[];
+        fetchedAt: number;
+      };
+    }
+  } catch {
+    // 缓存不可用时继续尝试 GitHub。
+  }
+
+  if (cached && Date.now() - cached.fetchedAt < ACHIEVEMENT_CACHE_MS) {
+    return json({
+      ok: true,
+      cached: true,
+      generatedAt: new Date(cached.fetchedAt).toISOString(),
+      achievements: cached.achievements,
+    });
+  }
+
+  try {
+    const response = await fetch(`https://github.com/${encodeURIComponent(user.login)}?tab=achievements`, {
+      headers: {
+        Accept: 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.8',
+        'User-Agent':
+          'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 ' +
+          '(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36 GitHubM',
+      },
+    });
+    if (!response.ok) throw new Error(`GitHub profile HTTP ${response.status}`);
+
+    const achievements = parseAchievements(await response.text());
+    if (achievements.length > 0) {
+      await stub.fetch('https://stats.internal/achievements/put', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: user.login, achievements }),
+      });
+      return json({
+        ok: true,
+        cached: false,
+        generatedAt: new Date().toISOString(),
+        achievements,
+      });
+    }
+
+    if (cached) {
+      return json({
+        ok: true,
+        cached: true,
+        stale: true,
+        generatedAt: new Date(cached.fetchedAt).toISOString(),
+        achievements: cached.achievements,
+      });
+    }
+    return json({ ok: true, cached: false, generatedAt: new Date().toISOString(), achievements: [] });
+  } catch (error) {
+    if (cached) {
+      return json({
+        ok: true,
+        cached: true,
+        stale: true,
+        generatedAt: new Date(cached.fetchedAt).toISOString(),
+        achievements: cached.achievements,
+      });
+    }
+    console.error(
+      '[githubm-stats] achievement fetch failed',
+      error instanceof Error ? error.message : error,
+    );
+    return json({ ok: false, error: 'achievement_upstream_unavailable' }, 502);
+  }
+}
+
 async function route(request: Request, env: Env): Promise<Response> {
   if (request.method === 'OPTIONS') return emptyCors();
 
@@ -225,6 +361,9 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === '/v1/export' && request.method === 'GET') {
     return handleExport(request, env);
+  }
+  if (url.pathname === '/v1/achievements' && request.method === 'GET') {
+    return handleAchievements(request, env);
   }
 
   return json({ ok: false, error: 'not_found' }, 404);
@@ -247,6 +386,13 @@ export class StatsCounter {
         last_at INTEGER NOT NULL
       );
     `);
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS achievement_cache (
+        login TEXT PRIMARY KEY,
+        payload TEXT NOT NULL,
+        fetched_at INTEGER NOT NULL
+      );
+    `);
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -259,6 +405,12 @@ export class StatsCounter {
     }
     if (url.pathname === '/cleanup' && request.method === 'POST') {
       return this.handleCleanup();
+    }
+    if (url.pathname === '/achievements/get' && request.method === 'GET') {
+      return this.handleAchievementGet(request);
+    }
+    if (url.pathname === '/achievements/put' && request.method === 'POST') {
+      return this.handleAchievementPut(request);
     }
     return internalJson({ ok: false, error: 'not_found' }, 404);
   }
@@ -340,6 +492,51 @@ export class StatsCounter {
       days: daysList,
     };
     return internalJson(summary);
+  }
+
+  private handleAchievementGet(request: Request): Response {
+    const url = new URL(request.url);
+    const login = (url.searchParams.get('login') ?? '').trim();
+    if (!login) return internalJson({ ok: false, error: 'invalid_login' }, 400);
+
+    const row = this.sql
+      .exec<{ payload: string; fetched_at: number }>(
+        `SELECT payload, fetched_at FROM achievement_cache WHERE login = ?`,
+        login,
+      )
+      .toArray()[0];
+    if (!row) return internalJson({ ok: false, error: 'not_found' }, 404);
+
+    try {
+      return internalJson({
+        achievements: JSON.parse(row.payload),
+        fetchedAt: Number(row.fetched_at) || 0,
+      });
+    } catch {
+      return internalJson({ ok: false, error: 'invalid_cache' }, 500);
+    }
+  }
+
+  private async handleAchievementPut(request: Request): Promise<Response> {
+    const body = (await request.json()) as {
+      login?: unknown;
+      achievements?: unknown;
+    };
+    const login = typeof body.login === 'string' ? body.login.trim() : '';
+    if (!login || !Array.isArray(body.achievements)) {
+      return internalJson({ ok: false, error: 'invalid_payload' }, 400);
+    }
+
+    this.sql.exec(
+      `INSERT INTO achievement_cache (login, payload, fetched_at) VALUES (?, ?, ?)
+       ON CONFLICT(login) DO UPDATE SET
+         payload = excluded.payload,
+         fetched_at = excluded.fetched_at`,
+      login,
+      JSON.stringify(body.achievements),
+      Date.now(),
+    );
+    return internalJson({ ok: true });
   }
 
   private handleCleanup(): Response {

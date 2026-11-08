@@ -407,7 +407,7 @@ export default function RepoDetailPage() {
                     variant="ghost"
                     size="sm"
                     className="h-8 px-2 text-xs gap-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    onClick={() => navigate(`/repos/${owner}/${repo}/actions/secrets`)}
+                    onClick={() => navigate(`/repos/${repo.full_name}/actions/secrets`)}
                   >
                     <KeyRound className="w-3.5 h-3.5" />{i18n.t('Actions 配置')}
                   </Button>

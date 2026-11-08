@@ -14,7 +14,6 @@ import {
   Clock,
   Globe,
   Lock,
-  ExternalLink,
   ChevronRight,
   Tag,
   Upload,
@@ -28,6 +27,7 @@ import {
   LayoutGrid,
   Network,
   RefreshCw,
+  Share2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,10 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
   getRepo,
@@ -63,7 +60,7 @@ import type { GitHubRepo, GitHubCommit } from '@/types/types';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer';
 import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
-import { decodeBase64Content } from '@/lib/utils';
+import { copyToClipboard, decodeBase64Content } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
@@ -267,6 +264,17 @@ export default function RepoDetailPage() {
     finally { setDeleting(false); }
   };
 
+
+  const handleShareRepo = async () => {
+    if (!repo) return;
+    try {
+      await copyToClipboard(repo.html_url);
+      toast.success(i18n.t('已复制仓库链接'));
+    } catch {
+      toast.error(i18n.t('复制链接失败'));
+    }
+  };
+
   // 修改仓库信息
   const handleUpdateRepo = async () => {
     if (!owner || !repoName) return;
@@ -361,6 +369,36 @@ export default function RepoDetailPage() {
               <p className="text-sm text-muted-foreground mt-1 text-pretty">{repo.description}</p>
             )}
             {/* 仓库所有者：点击头像/用户名进入用户主页（查看其所有仓库） */}
+            <div className="flex flex-wrap items-center gap-2 mt-2 pb-2 border-b border-border">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs gap-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                onClick={handleShareRepo}
+              >
+                <Share2 className="w-3.5 h-3.5" />{i18n.t('分享')}
+              </Button>
+              {isOwner && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-xs gap-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    onClick={openEditDialog}
+                  >
+                    <Settings className="w-3.5 h-3.5" />{i18n.t('仓库设置')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-xs gap-1.5 text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => { setDeleteConfirmName(''); setDeleteDialogOpen(true); }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />{i18n.t('删除仓库')}
+                  </Button>
+                </>
+              )}
+            </div>
             <UserLink
               login={repo.owner.login}
               className="inline-flex items-center gap-1.5 mt-2 text-xs text-muted-foreground hover:text-accent transition-colors"
@@ -375,40 +413,7 @@ export default function RepoDetailPage() {
             </UserLink>
           </div>
 
-          {/* 右侧操作按钮区 —— 根据 isOwner 动态显示 */}
-          <div className="flex items-center gap-1 shrink-0">
-            <a href={repo.html_url} target="_blank" rel="noopener noreferrer">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground hover:bg-secondary" title={i18n.t('在 GitHub 中查看')}>
-                    <ExternalLink className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="bg-popover border-border text-foreground text-xs">{i18n.t('在 GitHub 中查看')}</TooltipContent>
-              </Tooltip>
-            </a>
-            {/* 仅自己的仓库显示编辑和删除 */}
-            {isOwner && (
-              <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground hover:bg-secondary" onClick={openEditDialog}>
-                      <Settings className="w-4 h-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-popover border-border text-foreground text-xs">{i18n.t('编辑仓库设置')}</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="w-8 h-8 text-destructive/70 hover:bg-destructive/10 hover:text-destructive" onClick={() => { setDeleteConfirmName(''); setDeleteDialogOpen(true); }}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-popover border-border text-foreground text-xs">{i18n.t('删除仓库')}</TooltipContent>
-                </Tooltip>
-              </>
-            )}
-          </div>
+
         </div>
       </div>
 

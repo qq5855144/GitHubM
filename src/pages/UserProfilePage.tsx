@@ -19,7 +19,6 @@ import {
   Users,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -277,50 +276,21 @@ export default function UserProfilePage() {
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="h-20 bg-gradient-to-r from-primary/30 via-accent/20 to-transparent" />
         <div className="p-5 -mt-10">
-          <div className="flex items-end gap-4 flex-wrap">
-            <Avatar className="w-20 h-20 ring-4 ring-card shadow-sm">
+          <div className="flex items-center gap-4">
+            <Avatar className="w-20 h-20 shrink-0 ring-4 ring-card shadow-sm">
               <AvatarImage src={profile.avatar_url} alt={profile.login} />
               <AvatarFallback className="bg-secondary text-xl font-semibold">
                 {profile.login.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0 pb-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl font-bold text-foreground break-words whitespace-normal leading-snug">
-                  {profile.name || profile.login}
-                </h1>
-                {isSelf && (
-                  <Badge className="bg-primary/15 text-primary border border-primary/30 text-xs">
-                    {i18n.t('这是你')}
-                  </Badge>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground">@{profile.login}</p>
-            </div>
-            <div className="flex items-center gap-2 pb-1">
-              {!isSelf && followingChecked && (
-                <Button
-                  size="sm"
-                  onClick={toggleFollow}
-                  disabled={followLoading}
-                  className={
-                    following
-                      ? 'border border-border bg-background text-foreground hover:bg-destructive/10 hover:text-destructive'
-                      : 'bg-primary text-primary-foreground hover:bg-primary/90'
-                  }
-                  variant={following ? 'outline' : 'default'}
-                >
-                  {followLoading ? (
-                    <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-                  ) : following ? (
-                    <UserMinus className="w-4 h-4 mr-1.5" />
-                  ) : (
-                    <UserPlus className="w-4 h-4 mr-1.5" />
-                  )}
-                  {following ? i18n.t('取消关注') : i18n.t('关注')}
-                </Button>
-              )}
-              {/* GitHub 跳转入口已移除，统一在应用内浏览 */}
+              <h1
+                className="text-lg font-bold text-foreground truncate leading-snug"
+                title={profile.name || profile.login}
+              >
+                {profile.name || profile.login}
+              </h1>
+              <p className="text-sm text-muted-foreground truncate">@{profile.login}</p>
             </div>
           </div>
 
@@ -360,11 +330,38 @@ export default function UserProfilePage() {
               {i18n.t('加入于')}
               {new Date(profile.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })}
             </span>
-            <ProfileAchievements
-              achievements={achievements}
-              loading={achievementsLoading}
-            />
+            {!isSelf && followingChecked && (
+              <Button
+                size="sm"
+                onClick={toggleFollow}
+                disabled={followLoading}
+                className={
+                  following
+                    ? 'h-7 px-2.5 text-xs gap-1 border border-border bg-background text-foreground hover:bg-destructive/10 hover:text-destructive'
+                    : 'h-7 px-2.5 text-xs gap-1 bg-primary text-primary-foreground hover:bg-primary/90'
+                }
+                variant={following ? 'outline' : 'default'}
+              >
+                {followLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : following ? (
+                  <UserMinus className="w-3.5 h-3.5" />
+                ) : (
+                  <UserPlus className="w-3.5 h-3.5" />
+                )}
+                {following ? i18n.t('取消关注') : i18n.t('关注')}
+              </Button>
+            )}
           </div>
+
+          {(achievementsLoading || achievements.length > 0) && (
+            <div className="mt-3">
+              <ProfileAchievements
+                achievements={achievements}
+                loading={achievementsLoading}
+              />
+            </div>
+          )}
 
           <div className="flex items-center gap-5 mt-4 pt-4 border-t border-border flex-wrap">
             <StatButton

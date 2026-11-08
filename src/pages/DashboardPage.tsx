@@ -26,7 +26,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserRepos, getUserEvents, formatRelativeTime, formatNumber, getLanguageColor, getStarredCount } from '@/services/github';
 import { gqlGetContributions, gqlGetPinnedRepos } from '@/services/github-graphql';
-import { loadProfileAchievements, type ProfileAchievement } from '@/services/github-achievements';
+import { getCachedProfileAchievements, loadProfileAchievements, type ProfileAchievement } from '@/services/github-achievements';
 import type { GitHubRepo, GitHubEvent, ContributionCalendar, GQL_PinnedRepo } from '@/types/types';
 import RepoCard from '@/components/repo/RepoCard';
 import { UserLink } from '@/components/common/UserLink';
@@ -227,7 +227,7 @@ function AchievementBadge({ achievement }: { achievement: ProfileAchievement }) 
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const navigate = useNavigate();
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [events, setEvents] = useState<GitHubEvent[]>([]);
@@ -246,8 +246,14 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    setAchievementsLoading(true);
-    loadProfileAchievements(user.login)
+    const cached = getCachedProfileAchievements(user.login);
+    if (cached.length > 0) {
+      setAchievements(cached);
+      setAchievementsLoading(false);
+    } else {
+      setAchievementsLoading(true);
+    }
+    loadProfileAchievements(user.login, token, true)
       .then((items) => {
         if (!cancelled) setAchievements(items);
       })
@@ -257,7 +263,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, token]);
 
   useEffect(() => {
     if (!user) return;

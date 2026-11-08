@@ -9,7 +9,6 @@ import {
   BookOpen,
   Building2,
   Calendar,
-  ExternalLink,
   GitFork,
   Link2,
   Loader2,
@@ -38,6 +37,12 @@ import {
 } from '@/services/github';
 import type { GitHubRepo, GitHubUser } from '@/types/types';
 import RepoCard from '@/components/repo/RepoCard';
+import { ProfileAchievements } from '@/components/profile/ProfileAchievements';
+import {
+  getCachedProfileAchievements,
+  loadProfileAchievements,
+  type ProfileAchievement,
+} from '@/services/github-achievements';
 import { toast } from 'sonner';
 import i18n from '@/i18n';
 
@@ -71,7 +76,7 @@ function StatButton({
 export default function UserProfilePage() {
   const { username = '' } = useParams<{ username: string }>();
   const navigate = useNavigate();
-  const { user: me } = useAuth();
+  const { user: me, token } = useAuth();
 
   const [profile, setProfile] = useState<GitHubUser | null>(null);
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
@@ -81,6 +86,9 @@ export default function UserProfilePage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [notFound, setNotFound] = useState(false);
+
+  const [achievements, setAchievements] = useState<ProfileAchievement[]>([]);
+  const [achievementsLoading, setAchievementsLoading] = useState(false);
 
   const [following, setFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
@@ -97,6 +105,8 @@ export default function UserProfilePage() {
     setRepos([]);
     setPage(1);
     setHasMore(true);
+    setAchievements([]);
+    setAchievementsLoading(false);
 
     getUserByLogin(username)
       .then((data) => {
@@ -127,6 +137,30 @@ export default function UserProfilePage() {
       cancelled = true;
     };
   }, [username, isSelf]);
+
+  // 加载该用户的 GitHub 官方个人成就
+  useEffect(() => {
+    const login = profile?.login;
+    if (!login) return;
+    let cancelled = false;
+    const cached = getCachedProfileAchievements(login);
+    if (cached.length > 0) {
+      setAchievements(cached);
+      setAchievementsLoading(false);
+    } else {
+      setAchievementsLoading(true);
+    }
+    loadProfileAchievements(login, token, true)
+      .then((items) => {
+        if (!cancelled) setAchievements(items);
+      })
+      .finally(() => {
+        if (!cancelled) setAchievementsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.login, token]);
 
   // 关注状态只在「非本人」时需要
   useEffect(() => {
@@ -252,7 +286,7 @@ export default function UserProfilePage() {
             </Avatar>
             <div className="flex-1 min-w-0 pb-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl font-bold text-foreground truncate">
+                <h1 className="text-xl font-bold text-foreground break-words whitespace-normal leading-snug">
                   {profile.name || profile.login}
                 </h1>
                 {isSelf && (
@@ -286,12 +320,7 @@ export default function UserProfilePage() {
                   {following ? i18n.t('取消关注') : i18n.t('关注')}
                 </Button>
               )}
-              <a href={profile.html_url} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" size="sm" className="border-border">
-                  <ExternalLink className="w-4 h-4 mr-1.5" />
-                  GitHub
-                </Button>
-              </a>
+              {/* GitHub 跳转入口已移除，统一在应用内浏览 */}
             </div>
           </div>
 
@@ -331,6 +360,10 @@ export default function UserProfilePage() {
               {i18n.t('加入于')}
               {new Date(profile.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })}
             </span>
+            <ProfileAchievements
+              achievements={achievements}
+              loading={achievementsLoading}
+            />
           </div>
 
           <div className="flex items-center gap-5 mt-4 pt-4 border-t border-border flex-wrap">

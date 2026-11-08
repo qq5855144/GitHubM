@@ -265,12 +265,16 @@ function parseAchievements(html: string): ProfileAchievement[] {
 async function handleAchievements(request: Request, env: Env): Promise<Response> {
   const user = await authenticate(request);
   if (!user) return json({ ok: false, error: 'unauthorized' }, 401);
-
+  // 允许查看任意公开 GitHub 用户的成就；未传或非法时回退到当前登录用户。
+  const requestedLogin = (new URL(request.url).searchParams.get('login') ?? '').trim();
+  const login = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(requestedLogin)
+    ? requestedLogin
+    : user.login;
   const stub = getCounter(env);
   let cached: { achievements: ProfileAchievement[]; fetchedAt: number } | null = null;
   try {
     const cachedResponse = await stub.fetch(
-      `https://stats.internal/achievements/get?login=${encodeURIComponent(user.login)}`,
+      `https://stats.internal/achievements/get?login=${encodeURIComponent(login)}`,
     );
     if (cachedResponse.ok) {
       cached = (await cachedResponse.json()) as {
@@ -292,7 +296,7 @@ async function handleAchievements(request: Request, env: Env): Promise<Response>
   }
 
   try {
-    const response = await fetch(`https://github.com/${encodeURIComponent(user.login)}?tab=achievements`, {
+    const response = await fetch(`https://github.com/${encodeURIComponent(login)}?tab=achievements`, {
       headers: {
         Accept: 'text/html,application/xhtml+xml',
         'Accept-Language': 'en-US,en;q=0.8',
@@ -308,7 +312,7 @@ async function handleAchievements(request: Request, env: Env): Promise<Response>
       await stub.fetch('https://stats.internal/achievements/put', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login: user.login, achievements }),
+        body: JSON.stringify({ login, achievements }),
       });
       return json({
         ok: true,

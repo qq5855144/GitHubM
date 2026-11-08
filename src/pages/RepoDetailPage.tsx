@@ -352,15 +352,29 @@ export default function RepoDetailPage() {
         </div>
         <div className="flex items-start gap-2">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold text-foreground text-balance">{repo.full_name}</h1>
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <UserLink
+                login={repo.owner.login}
+                className="inline-flex items-center gap-1.5 min-w-0 hover:text-accent transition-colors"
+              >
+                <Avatar className="w-6 h-6 shrink-0">
+                  <AvatarImage src={repo.owner.avatar_url} alt={repo.owner.login} />
+                  <AvatarFallback className="bg-secondary text-[10px]">
+                    {repo.owner.login.substring(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-lg font-semibold text-foreground truncate">{repo.owner.login}</span>
+              </UserLink>
+              <span className="text-muted-foreground text-lg">/</span>
+              <h1 className="text-xl font-bold text-foreground text-balance min-w-0 break-words">{repo.name}</h1>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap mt-2">
               <Badge variant="outline" className="border-border text-muted-foreground text-xs">
                 {repo.private ? <><Lock className="w-3 h-3 mr-1" />{i18n.t('私有')}</> : <><Globe className="w-3 h-3 mr-1" />{i18n.t('公开')}</>}
               </Badge>
               {repo.archived && (
                 <Badge variant="outline" className="border-warning text-warning text-xs">{i18n.t('已归档')}</Badge>
               )}
-              {/* 身份标识 */}
               {isOwner && (
                 <Badge className="bg-primary/15 text-primary border border-primary/30 text-xs">{i18n.t('我的仓库')}</Badge>
               )}
@@ -368,7 +382,7 @@ export default function RepoDetailPage() {
             {repo.description && (
               <p className="text-sm text-muted-foreground mt-1 text-pretty">{repo.description}</p>
             )}
-            {/* 仓库所有者：点击头像/用户名进入用户主页（查看其所有仓库） */}
+            {/* 仓库操作 */}
             <div className="flex flex-wrap items-center gap-2 mt-2 pb-2 border-b border-border">
               <Button
                 variant="ghost"
@@ -399,21 +413,7 @@ export default function RepoDetailPage() {
                 </>
               )}
             </div>
-            <UserLink
-              login={repo.owner.login}
-              className="inline-flex items-center gap-1.5 mt-2 text-xs text-muted-foreground hover:text-accent transition-colors"
-            >
-              <Avatar className="w-5 h-5 shrink-0">
-                <AvatarImage src={repo.owner.avatar_url} alt={repo.owner.login} />
-                <AvatarFallback className="bg-secondary text-[10px]">
-                  {repo.owner.login.substring(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <span>{repo.owner.login}</span>
-            </UserLink>
           </div>
-
-
         </div>
       </div>
 

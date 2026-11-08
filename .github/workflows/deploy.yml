@@ -156,11 +156,20 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: 设置 Gradle 8.7
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.7'
-          cache-read-only: false
+      - name: 安装 Gradle 8.7
+        run: |
+          set -euo pipefail
+          ZIP=/tmp/gradle-8.7-bin.zip
+          # gradle 官方下载节点近期频繁 504，优先使用国内镜像，失败再回退官方源。
+          if ! curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 300 \
+            -o "$ZIP" "https://mirrors.cloud.tencent.com/gradle/gradle-8.7-bin.zip"; then
+            curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 300 \
+              -o "$ZIP" "https://services.gradle.org/distributions/gradle-8.7-bin.zip"
+          fi
+          rm -rf "$HOME/gradle-8.7"
+          unzip -q "$ZIP" -d "$HOME"
+          echo "$HOME/gradle-8.7/bin" >> "$GITHUB_PATH"
+          "$HOME/gradle-8.7/bin/gradle" --version
 
       - name: 生成 local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties

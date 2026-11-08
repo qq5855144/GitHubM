@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserRepos, getUserEvents, formatRelativeTime, formatNumber, getLanguageColor, getStarredCount } from '@/services/github';
 import { gqlGetContributions, gqlGetPinnedRepos } from '@/services/github-graphql';
+import { loadProfileAchievements, type ProfileAchievement } from '@/services/github-achievements';
 import type { GitHubRepo, GitHubEvent, ContributionCalendar, GQL_PinnedRepo } from '@/types/types';
 import RepoCard from '@/components/repo/RepoCard';
 import { UserLink } from '@/components/common/UserLink';
@@ -191,6 +192,36 @@ function PinnedRepoCard({ repo }: { repo: GQL_PinnedRepo }) {
   );
 }
 
+const ACHIEVEMENT_TIER_LABELS: Record<string, string> = {
+  bronze: i18n.t('青铜'),
+  silver: i18n.t('白银'),
+  gold: i18n.t('黄金'),
+};
+
+function AchievementBadge({ achievement }: { achievement: ProfileAchievement }) {
+  const titleParts = [
+    achievement.name,
+    achievement.tier ? (ACHIEVEMENT_TIER_LABELS[achievement.tier] || achievement.tier) : null,
+    achievement.count && achievement.count > 1 ? `x${achievement.count}` : null,
+  ].filter(Boolean);
+  return (
+    <div className="relative shrink-0" title={titleParts.join(' · ')}>
+      <img
+        src={achievement.iconUrl}
+        alt={`GitHub ${i18n.t('成就')}: ${achievement.name}`}
+        className="w-8 h-8 object-contain"
+        loading="lazy"
+        decoding="async"
+      />
+      {achievement.count && achievement.count > 1 && (
+        <span className="absolute -right-1 -bottom-1 min-w-4 h-4 px-1 inline-flex items-center justify-center rounded-full border border-border bg-popover text-[9px] font-semibold leading-none text-foreground">
+          x{achievement.count}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -204,6 +235,24 @@ export default function DashboardPage() {
   const [pinnedRepos, setPinnedRepos] = useState<GQL_PinnedRepo[]>([]);
   const [pinnedLoading, setPinnedLoading] = useState(true);
   const [starredCount, setStarredCount] = useState<number | null>(null);
+  const [achievements, setAchievements] = useState<ProfileAchievement[]>([]);
+  const [achievementsLoading, setAchievementsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    setAchievementsLoading(true);
+    loadProfileAchievements(user.login)
+      .then((items) => {
+        if (!cancelled) setAchievements(items);
+      })
+      .finally(() => {
+        if (!cancelled) setAchievementsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -389,9 +438,9 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-        {/* 底部：GitHub 主页按钮 */}
-        <div className="mt-4 pt-4 border-t border-border flex items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+        {/* 底部：社交信息 + GitHub 官方个人成就 */}
+        <div className="mt-4 pt-4 border-t border-border flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground min-w-0">
             {user.twitter_username && (
               <span className="flex items-center gap-1">
                 <span className="text-[10px] font-bold text-muted-foreground/80">𝕏</span>
@@ -402,16 +451,23 @@ export default function DashboardPage() {
               {i18n.t('加入于')}{new Date(user.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })}
             </span>
           </div>
-          <a
-            href={user.html_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium
-                       border border-border rounded-lg px-3 h-8
-                       bg-background hover:bg-secondary transition-colors text-foreground"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            {i18n.t('GitHub 主页')}</a>
+          {(achievementsLoading || achievements.length > 0) && (
+            <div
+              className="flex flex-wrap items-center justify-end gap-1.5 shrink-0 ml-auto"
+              aria-label={i18n.t('GitHub 个人成就')}
+            >
+              {achievementsLoading
+                ? Array.from({ length: 4 }).map((_, index) => (
+                    <Skeleton key={index} className="w-8 h-8 rounded-full bg-muted" />
+                  ))
+                : achievements.slice(0, 8).map((achievement) => (
+                    <AchievementBadge key={achievement.slug} achievement={achievement} />
+                  ))}
+              {!achievementsLoading && achievements.length > 8 && (
+                <span className="text-[10px] text-muted-foreground">+{achievements.length - 8}</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

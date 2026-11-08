@@ -24,6 +24,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import org.json.JSONArray
 import org.json.JSONObject
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -43,6 +44,7 @@ import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.regex.Pattern
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -170,6 +172,101 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ── JS 桥接口 ───────────────────────────────────────────────────
+    private fun emitProfileAchievements(payload: String) {
+        runOnUiThread {
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('profileAchievementsLoaded', { detail: $payload }));",
+                null,
+            )
+        }
+    }
+
+    /**
+     * 原生解析 GitHub 公开主页的成就徽章。
+     * 只读取 github.githubassets.com 下的官方徽章图片。
+     */
+    private fun fetchProfileAchievementsPayload(login: String): String {
+        val result = JSONObject().apply {
+            put("login", login)
+            put("success", false)
+            put("achievements", JSONArray())
+        }
+        var connection: HttpURLConnection? = null
+        return try {
+            val url = URL("https://github.com/$login?tab=achievements")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 12000
+                readTimeout = 18000
+                instanceFollowRedirects = true
+                setRequestProperty("Accept", "text/html,application/xhtml+xml")
+                setRequestProperty("Accept-Language", "en-US,en;q=0.8")
+                setRequestProperty(
+                    "User-Agent",
+                    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
+                        "(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36 GitHubM",
+                )
+            }
+            connection = conn
+            if (conn.responseCode !in 200..299) {
+                throw IOException("GitHub profile HTTP ${conn.responseCode}")
+            }
+            val html = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val anchorPattern = Pattern.compile(
+                "<a[^>]+href=\"/[^\"]*\\?achievement=([a-z0-9-]+)[^\"]*\"[^>]*>(.*?)</a>",
+                Pattern.CASE_INSENSITIVE or Pattern.DOTALL,
+            )
+            val imagePattern = Pattern.compile(
+                "<img[^>]+src=\"([^\"]+)\"[^>]*alt=\"Achievement: ([^\"]+)\"",
+                Pattern.CASE_INSENSITIVE or Pattern.DOTALL,
+            )
+            val tierPattern = Pattern.compile("achievement-tier-label--([a-z]+)")
+            val countPattern = Pattern.compile(">x(\\d+)<")
+            val achievements = JSONArray()
+            val seen = mutableSetOf<String>()
+            val matcher = anchorPattern.matcher(html)
+            while (matcher.find() && achievements.length() < 24) {
+                val slug = matcher.group(1)?.lowercase() ?: continue
+                if (!seen.add(slug)) continue
+                val block = matcher.group(2) ?: continue
+                val imageMatcher = imagePattern.matcher(block)
+                if (!imageMatcher.find()) continue
+                val iconUrl = imageMatcher.group(1) ?: continue
+                if (!iconUrl.startsWith("https://github.githubassets.com/")) continue
+                val name = decodeHtml(imageMatcher.group(2) ?: slug)
+                val tierMatch = tierPattern.matcher(block)
+                val tier = if (tierMatch.find()) tierMatch.group(1) else null
+                val countMatch = countPattern.matcher(block)
+                val count = if (countMatch.find()) countMatch.group(1)?.toIntOrNull() else null
+                achievements.put(
+                    JSONObject().apply {
+                        put("slug", slug)
+                        put("name", name)
+                        put("iconUrl", iconUrl)
+                        put("tier", tier ?: JSONObject.NULL)
+                        put("count", count ?: JSONObject.NULL)
+                    }
+                )
+            }
+            result.put("success", true)
+            result.put("achievements", achievements)
+            result.toString()
+        } catch (error: Exception) {
+            result.put("message", error.message ?: "fetch failed")
+            result.toString()
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun decodeHtml(value: String): String {
+        return value
+            .replace("&amp;", "&")
+            .replace("&#39;", "'")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+    }
+
     inner class WebAppBridge {
 
         /** React 首屏就绪后调用，与 3s 最小时间共同触发启动遮罩淡出 */
@@ -244,6 +341,36 @@ class MainActivity : AppCompatActivity() {
         fun downloadFile(url: String, fileName: String, token: String) {
             runOnUiThread {
                 checkStoragePermissionAndDownload(url, fileName, token)
+            }
+        }
+
+        /**
+         * 首页个人卡片调用：读取 GitHub 公开主页的成就徽章。
+         *
+         * GitHub 官方 REST / GraphQL API 暂未开放成就字段，因此由原生层请求公开主页 HTML，
+         * 解析官方徽章图片、名称、等级与次数，再通过 CustomEvent 异步回传前端。
+         *
+         * 调用：window.AndroidBridge.fetchProfileAchievements(login)
+         */
+        @JavascriptInterface
+        fun fetchProfileAchievements(login: String) {
+            val normalized = login.trim()
+            if (!normalized.matches(Regex("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$"))) {
+                emitProfileAchievements(
+                    JSONObject().apply {
+                        put("login", normalized)
+                        put("success", false)
+                        put("achievements", JSONArray())
+                        put("message", "invalid login")
+                    }.toString()
+                )
+                return
+            }
+            lifecycleScope.launch(Dispatchers.IO) {
+                val payload = fetchProfileAchievementsPayload(normalized)
+                withContext(Dispatchers.Main) {
+                    emitProfileAchievements(payload)
+                }
             }
         }
 

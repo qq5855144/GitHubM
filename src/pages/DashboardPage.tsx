@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserRepos, getUserEvents, formatRelativeTime, formatNumber, getLanguageColor, getStarredCount } from '@/services/github';
@@ -30,6 +29,7 @@ import { getCachedProfileAchievements, loadProfileAchievements, type ProfileAchi
 import type { GitHubRepo, GitHubEvent, ContributionCalendar, GQL_PinnedRepo } from '@/types/types';
 import RepoCard from '@/components/repo/RepoCard';
 import { UserLink } from '@/components/common/UserLink';
+import { ProfileAchievements } from '@/components/profile/ProfileAchievements';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
 import i18n from "@/i18n";
@@ -193,39 +193,6 @@ function PinnedRepoCard({ repo }: { repo: GQL_PinnedRepo }) {
   );
 }
 
-const ACHIEVEMENT_TIER_LABELS: Record<string, string> = {
-  bronze: i18n.t('青铜'),
-  silver: i18n.t('白银'),
-  gold: i18n.t('黄金'),
-};
-
-function achievementMetaParts(achievement: ProfileAchievement): string[] {
-  return [
-    achievement.tier ? (ACHIEVEMENT_TIER_LABELS[achievement.tier] || achievement.tier) : null,
-    achievement.count && achievement.count > 1 ? `x${achievement.count}` : null,
-  ].filter((value): value is string => Boolean(value));
-}
-
-function AchievementBadge({ achievement }: { achievement: ProfileAchievement }) {
-  const titleParts = [achievement.name, ...achievementMetaParts(achievement)];
-  return (
-    <div className="relative shrink-0" title={titleParts.join(' · ')}>
-      <img
-        src={achievement.iconUrl}
-        alt={`GitHub ${i18n.t('成就')}: ${achievement.name}`}
-        className="w-8 h-8 object-contain"
-        loading="lazy"
-        decoding="async"
-      />
-      {achievement.count && achievement.count > 1 && (
-        <span className="absolute -right-1 -bottom-1 min-w-4 h-4 px-1 inline-flex items-center justify-center rounded-full border border-border bg-popover text-[9px] font-semibold leading-none text-foreground">
-          x{achievement.count}
-        </span>
-      )}
-    </div>
-  );
-}
-
 export default function DashboardPage() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
@@ -241,7 +208,6 @@ export default function DashboardPage() {
   const [starredCount, setStarredCount] = useState<number | null>(null);
   const [achievements, setAchievements] = useState<ProfileAchievement[]>([]);
   const [achievementsLoading, setAchievementsLoading] = useState(false);
-  const [achievementsDialogOpen, setAchievementsDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -462,82 +428,13 @@ export default function DashboardPage() {
               {i18n.t('加入于')}{new Date(user.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })}
             </span>
           </div>
-          {(achievementsLoading || achievements.length > 0) && (
-            achievementsLoading ? (
-              <div className="flex items-center justify-end gap-1.5 shrink-0 ml-auto" aria-label={i18n.t('GitHub 个人成就')}>
-                {Array.from({ length: 4 }).map((_, index) => (
-                  <Skeleton key={index} className="w-8 h-8 rounded-full bg-muted" />
-                ))}
-              </div>
-            ) : achievements.length > 4 ? (
-              <button
-                type="button"
-                className="relative flex items-center justify-end gap-1.5 shrink-0 ml-auto rounded-lg cursor-pointer active:opacity-75 transition-opacity"
-                aria-haspopup="dialog"
-                aria-label={`${i18n.t('GitHub 个人成就')}，${i18n.t('共')} ${achievements.length} ${i18n.t('枚')}，${i18n.t('查看全部')}`}
-                title={i18n.t('查看全部成就')}
-                onClick={() => setAchievementsDialogOpen(true)}
-              >
-                {achievements.slice(0, 4).map((achievement) => (
-                  <AchievementBadge key={achievement.slug} achievement={achievement} />
-                ))}
-                <span className="absolute -right-2 -top-2 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full border border-border bg-popover text-[9px] font-semibold leading-none text-foreground shadow-sm">
-                  +{achievements.length - 4}
-                </span>
-              </button>
-            ) : (
-              <div className="flex items-center justify-end gap-1.5 shrink-0 ml-auto" aria-label={i18n.t('GitHub 个人成就')}>
-                {achievements.map((achievement) => (
-                  <AchievementBadge key={achievement.slug} achievement={achievement} />
-                ))}
-              </div>
-            )
-          )}
+          <ProfileAchievements
+            achievements={achievements}
+            loading={achievementsLoading}
+            className="ml-auto justify-end"
+          />
         </div>
       </div>
-
-      <Dialog open={achievementsDialogOpen} onOpenChange={setAchievementsDialogOpen}>
-        <DialogContent className="max-w-md max-h-[80vh] p-5">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              {i18n.t('GitHub 个人成就')}
-              <Badge variant="outline" className="border-border text-muted-foreground text-xs">
-                {achievements.length}
-              </Badge>
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              {i18n.t('共获得')} {achievements.length} {i18n.t('枚官方成就徽章')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="-mx-1 max-h-[60vh] overflow-y-auto px-1 pb-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {achievements.map((achievement) => {
-                const meta = achievementMetaParts(achievement);
-                return (
-                  <div
-                    key={achievement.slug}
-                    className="flex items-center gap-3 rounded-xl border border-border bg-background/40 p-2.5"
-                  >
-                    <img
-                      src={achievement.iconUrl}
-                      alt={achievement.name}
-                      className="w-10 h-10 shrink-0 object-contain"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">{achievement.name}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {meta.length > 0 ? meta.join(' · ') : i18n.t('已获得')}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -99,13 +99,16 @@ async function fetchRemoteAchievements(
   token: string,
 ): Promise<ProfileAchievement[] | null> {
   if (!STATS_API_URL) return null;
-  const response = await fetch(`${STATS_API_URL}/v1/achievements`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
+  const response = await fetch(
+    `${STATS_API_URL}/v1/achievements?login=${encodeURIComponent(login)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+      credentials: 'omit',
     },
-    credentials: 'omit',
-  });
+  );
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const payload = (await response.json()) as AchievementPayload;
   if (payload.ok !== true && payload.success !== true) return null;

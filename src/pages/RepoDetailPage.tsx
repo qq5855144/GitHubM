@@ -384,12 +384,13 @@ export default function RepoDetailPage() {
               <p className="text-sm text-muted-foreground mt-1 text-pretty">{repo.description}</p>
             )}
             {/* 仓库操作 */}
-            <div className="flex flex-wrap items-center gap-2 mt-2 pb-2 border-b border-border">
+            <div className="flex flex-nowrap items-center gap-1 mt-2 pb-2 border-b border-border overflow-x-auto scrollbar-none">
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 px-2 text-xs gap-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="h-8 px-2 text-xs gap-1.5 shrink-0 text-muted-foreground hover:bg-secondary hover:text-foreground"
                 onClick={handleShareRepo}
+                title={i18n.t('分享仓库链接')}
               >
                 <Share2 className="w-3.5 h-3.5" />{i18n.t('分享')}
               </Button>
@@ -398,26 +399,29 @@ export default function RepoDetailPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 px-2 text-xs gap-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    className="h-8 px-2 text-xs gap-1.5 shrink-0 text-muted-foreground hover:bg-secondary hover:text-foreground"
                     onClick={openEditDialog}
+                    title={i18n.t('仓库设置')}
                   >
-                    <Settings className="w-3.5 h-3.5" />{i18n.t('仓库设置')}
+                    <Settings className="w-3.5 h-3.5" />{i18n.t('设置')}
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 px-2 text-xs gap-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    className="h-8 px-2 text-xs gap-1.5 shrink-0 text-muted-foreground hover:bg-secondary hover:text-foreground"
                     onClick={() => navigate(`/repos/${repo.full_name}/actions/secrets`)}
+                    title={i18n.t('Actions 密钥与变量')}
                   >
-                    <KeyRound className="w-3.5 h-3.5" />{i18n.t('Actions 配置')}
+                    <KeyRound className="w-3.5 h-3.5" />{i18n.t('密钥')}
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 px-2 text-xs gap-1.5 text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
+                    className="h-8 px-2 text-xs gap-1.5 shrink-0 text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => { setDeleteConfirmName(''); setDeleteDialogOpen(true); }}
+                    title={i18n.t('删除仓库')}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />{i18n.t('删除仓库')}
+                    <Trash2 className="w-3.5 h-3.5" />{i18n.t('删除')}
                   </Button>
                 </>
               )}

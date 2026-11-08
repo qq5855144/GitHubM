@@ -51,3 +51,8 @@ historical_context.txt
 /tasks
 package.json.[0-9]*
 .native-wind-cache
+
+# ── Cloudflare Worker ─────────────────────────────────────────────
+worker/.wrangler/
+worker/.dev.vars
+worker/node_modules/

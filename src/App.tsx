@@ -6,7 +6,7 @@ import MainLayout from '@/components/layouts/MainLayout';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import { routes } from './routes';
-import { recordVisit } from '@/lib/visitStats';
+import { recordVisit, recordGlobalVisit } from '@/lib/visitStats';
 
 // 路由守卫：未登录跳转到 /login
 function RouteGuard({ children }: { children: React.ReactNode }) {
@@ -29,27 +29,32 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
  * 当 auth 加载完成（无论已登录或未登录）后，通知 Android 原生层
  * 隐藏启动遮罩，避免 WebView 初始化过程中的闪烁。
  */
-// 访问统计埋点：路由变化 + 页面切回可见时上报 PV
+// 访问统计埋点：登录后按路由变化 + 页面切回可见时记录访问量
 function VisitTracker() {
   const location = useLocation();
+  const { token, isAuthenticated } = useAuth();
 
   // ① 路由变化时记录
   useEffect(() => {
+    if (!isAuthenticated || !token) return;
     const path = location.pathname || '/';
     recordVisit(path);
-  }, [location.pathname]);
+    recordGlobalVisit(token);
+  }, [location.pathname, isAuthenticated, token]);
 
   // ② 页面从后台切回前台时记录（用户切回标签页、锁屏解锁等场景）
   useEffect(() => {
+    if (!isAuthenticated || !token) return;
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         const path = location.pathname || '/';
         recordVisit(path);
+        recordGlobalVisit(token);
       }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [location.pathname]);
+  }, [location.pathname, isAuthenticated, token]);
 
   return null;
 }

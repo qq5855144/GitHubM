@@ -1,0 +1,14 @@
+name = "githubm-stats"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+workers_dev = true
+
+# CI 会把 __D1_DATABASE_ID__ 替换成实际 D1 数据库 ID 后再部署。
+[[d1_databases]]
+binding = "DB"
+database_name = "githubm-stats"
+database_id = "__D1_DATABASE_ID__"
+migrations_dir = "migrations"
+
+[triggers]
+crons = ["17 3 * * *"]

@@ -81,6 +81,8 @@ interface ReleasePublishResultDetail {
   browserDownloadUrl?: string;
 }
 
+const CARD_ACTION_BUTTON_CLASS = 'h-8 px-2 text-xs gap-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground';
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -230,9 +232,9 @@ function ReleaseItem({
       </CollapsibleTrigger>
       <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-border bg-secondary/20">
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="h-8 px-2 text-xs gap-1"
+          className={CARD_ACTION_BUTTON_CLASS}
           onClick={handleShare}
           title={i18n.t('复制产物链接')}
         >
@@ -241,7 +243,7 @@ function ReleaseItem({
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 px-2 text-xs gap-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          className={`${CARD_ACTION_BUTTON_CLASS} hover:text-destructive hover:bg-destructive/10`}
           onClick={() => onDelete(release.id)}
           title={i18n.t('删除 Release')}
         >
@@ -397,15 +399,15 @@ function ArtifactDownloadButton({ art, owner, repo }: { art: GitHubArtifact; own
 
   return (
     <Button
-      variant="outline"
+      variant="ghost"
       size="sm"
-      className="h-8 text-xs"
+      className={CARD_ACTION_BUTTON_CLASS}
       disabled={downloading}
       onClick={handleDownload}
     >
       {downloading
-        ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />{i18n.t('获取中')}</>
-        : <><Download className="w-3.5 h-3.5 mr-1.5" />{i18n.t('下载')}</>
+        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{i18n.t('获取中')}</>
+        : <><Download className="w-3.5 h-3.5" />{i18n.t('下载')}</>
       }
     </Button>
   );
@@ -725,9 +727,9 @@ export default function ArtifactsPage() {
                     )}
                     {!art.expired && (
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        className="h-8 px-2 text-xs gap-1 shrink-0"
+                        className={CARD_ACTION_BUTTON_CLASS}
                         onClick={() => openPublishDialog(art)}
                         title={i18n.t('发布到 Release')}
                       >
@@ -737,12 +739,13 @@ export default function ArtifactsPage() {
                     )}
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="w-8 h-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      size="sm"
+                      className={`${CARD_ACTION_BUTTON_CLASS} hover:text-destructive hover:bg-destructive/10`}
                       onClick={() => setDeleteArtTarget(art.id)}
                       title={i18n.t('删除')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
+                      {i18n.t('删除')}
                     </Button>
                   </div>
                 </div>

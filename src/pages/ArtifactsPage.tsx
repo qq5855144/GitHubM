@@ -155,30 +155,33 @@ function AssetItem({ asset }: { asset: GitHubReleaseAsset }) {
   };
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 group hover:bg-secondary/30 transition-colors">
-      <FileArchive className="w-4 h-4 text-muted-foreground shrink-0" />
-      <div className="flex-1 min-w-0">
+    <div className="px-4 py-2.5 hover:bg-secondary/30 transition-colors">
+      <div className="flex items-center gap-2 min-w-0">
+        <FileArchive className="w-4 h-4 text-muted-foreground shrink-0" />
         <p className="text-sm text-foreground font-mono truncate">{asset.name}</p>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+      </div>
+      <div className="flex items-center justify-between gap-3 mt-1.5 pl-6">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0 flex-wrap">
           <span>{formatBytes(asset.size)}</span>
           <span>·</span>
-          <span>{asset.content_type}</span>
-          <span>·</span>
-          <span className="flex items-center gap-0.5"><Download className="w-3 h-3" />{asset.download_count}</span>
+          <span className="flex items-center gap-1">
+            <Download className="w-3 h-3" />
+            {i18n.t('下载量')} {asset.download_count}
+          </span>
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={CARD_ACTION_BUTTON_CLASS}
+          onClick={handleDownload}
+          disabled={downloading}
+        >
+          {downloading
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{i18n.t('下载中')}</>
+            : <><Download className="w-3.5 h-3.5" />{i18n.t('下载')}</>
+          }
+        </Button>
       </div>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 text-xs shrink-0"
-        onClick={handleDownload}
-        disabled={downloading}
-      >
-        {downloading
-          ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />{i18n.t('下载中')}</>
-          : <><Download className="w-3.5 h-3.5 mr-1.5" />{i18n.t('下载')}</>
-        }
-      </Button>
     </div>
   );
 }

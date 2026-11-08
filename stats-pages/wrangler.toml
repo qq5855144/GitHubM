@@ -1,0 +1,7 @@
+name = "githubm-stats-pages"
+pages_build_output_dir = "public"
+compatibility_date = "2026-01-01"
+
+[[services]]
+binding = "STATS_WORKER"
+service = "githubm-stats"

@@ -47,20 +47,18 @@ npm install
 npx wrangler deploy
 ```
 
-## 自定义域名
+## 线上入口
 
-当前 Worker：
+Worker 本身使用：
 
 ```text
 githubm-stats
 ```
 
-计划使用：
+由于当前 Cloudflare 账号的 `workers.dev` 路由异常（最小 Worker 也返回 `1101`），线上通过一个 Cloudflare Pages 项目做 Service Binding 透明代理：
 
 ```text
-https://stats.callact.xyz
+https://githubm-stats-pages.pages.dev
 ```
 
-需要在 Cloudflare Dashboard 的 Worker `Settings → Domains & Routes` 中添加上面的 Custom Domain。
-
-> 当前账号的 `workers.dev` 路由返回 `1101 Worker threw exception`，即使最小 Worker 也一样；同账号已有 Worker 的 Custom Domain 正常，因此线上入口使用 `stats.callact.xyz`。
+Pages 项目配置在 `../stats-pages/`，自带 `*.pages.dev` 子域名，不依赖自定义域名。

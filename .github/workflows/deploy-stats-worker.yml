@@ -61,6 +61,10 @@ jobs:
             echo "- 存储：Durable Object SQLite"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: 部署 Pages 透明代理
+        working-directory: stats-pages
+        run: npx --yes wrangler@4 pages deploy public --project-name githubm-stats-pages --branch main --commit-dirty=true
+
       - name: 验证健康检查
         run: |
           URL="${{ vars.VITE_STATS_API_URL }}"

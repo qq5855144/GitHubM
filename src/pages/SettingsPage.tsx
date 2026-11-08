@@ -27,8 +27,6 @@ import {
   Download,
   TrendingUp,
   Activity,
-  Users,
-  Calendar,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,7 +50,7 @@ import { MODEL_DEFS, loadProviderKey, saveProviderKey } from '@/components/ai/ai
 import { getProviderStats, getTotalRequestCount, clearAllUsage, type ProviderStats } from '@/components/ai/usageStats';
 import AgentDiagnosticsPanel from '@/components/ai/AgentDiagnosticsPanel';
 import { formatCostUsd, getModelPrice, SOURCES } from '@/components/ai/modelPricing';
-import { fetchVisitStats, type DailyStats, type VisitSummary } from '@/lib/visitStats';
+import { fetchVisitStats, type DailyStats, type VisitSummary, type VisitStatsSource } from '@/lib/visitStats';
 import {
   DEFAULT_DOWNLOAD_PROXY_URL,
   downloadGithubFile,
@@ -73,7 +71,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   Bar,
   BarChart,
@@ -342,24 +339,28 @@ export default function SettingsPage() {
 
   // ── 访问统计 ────────────────────────────────────────────────────────────────
   const [visitDays, setVisitDays] = useState<DailyStats[]>([]);
-  const [visitSummary, setVisitSummary] = useState<VisitSummary>({ todayPv: 0, todayUv: 0, totalPv: 0, totalUv: 0, allTimePv: 0, allTimeUv: 0, activeDays: 0 });
+  const [visitSummary, setVisitSummary] = useState<VisitSummary>({ todayVisits: 0, periodVisits: 0, allTimeVisits: 0, activeDays: 0 });
   const [visitLoading, setVisitLoading] = useState(false);
   const [visitError, setVisitError] = useState<string | null>(null);
+  const [visitSource, setVisitSource] = useState<VisitStatsSource>('local');
+  const [visitUpdatedAt, setVisitUpdatedAt] = useState<string | null>(null);
 
   const loadVisitStats = useCallback(async () => {
     setVisitLoading(true);
     setVisitError(null);
     try {
-      const result = await fetchVisitStats(7);
+      const result = await fetchVisitStats(7, token);
       setVisitDays(result.trend);
       setVisitSummary(result.summary);
+      setVisitSource(result.source);
+      setVisitUpdatedAt(result.updatedAt ?? null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : '获取访问统计失败，请重试';
       setVisitError(msg);
     } finally {
       setVisitLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => { loadVisitStats(); }, [loadVisitStats]);
 
@@ -427,13 +428,17 @@ export default function SettingsPage() {
 
   // ── 访问统计卡片 ─────────────────────────────────────────────────────────────
   const summaryCards = [
-    { label: '今日访问', value: visitSummary.todayPv, icon: <Activity className="w-4 h-4" />, color: 'text-primary' },
-    { label: '今日独立 IP', value: visitSummary.todayUv, icon: <Users className="w-4 h-4" />, color: 'text-primary' },
-    { label: '近7天 PV', value: visitSummary.totalPv, icon: <TrendingUp className="w-4 h-4" />, color: 'text-primary' },
-    { label: '近7天 UV', value: visitSummary.totalUv, icon: <Calendar className="w-4 h-4" />, color: 'text-primary' },
-    { label: '历史总访问量', value: visitSummary.allTimePv, icon: <BarChart3 className="w-4 h-4" />, color: 'text-primary' },
-    { label: '历史总独立 IP', value: visitSummary.allTimeUv, icon: <Users className="w-4 h-4" />, color: 'text-primary' },
+    { label: '今日访问量', value: visitSummary.todayVisits, icon: <Activity className="w-4 h-4" />, color: 'text-primary' },
+    { label: '近 7 天访问量', value: visitSummary.periodVisits, icon: <TrendingUp className="w-4 h-4" />, color: 'text-primary' },
+    { label: '历史总访问量', value: visitSummary.allTimeVisits, icon: <BarChart3 className="w-4 h-4" />, color: 'text-primary' },
   ];
+
+  const visitSourceText =
+    visitSource === 'global'
+      ? '全网访问量，同一 GitHub 账号 30 分钟内只计一次'
+      : visitSource === 'global-cache'
+        ? `全网缓存数据${visitUpdatedAt ? `，缓存于 ${new Date(visitUpdatedAt).toLocaleString('zh-CN')}` : ''}`
+        : '本机访问量，全网统计服务暂不可用';
 
   const changeLanguage = (lng: string) => {
     i18n.changeLanguage(lng);
@@ -1228,7 +1233,7 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground flex items-center gap-1">
             <Activity className="w-3 h-3" />
-            全网真实访问数据，按客户端 IP 去重计算 UV
+            {visitSourceText}
           </p>
           <Button
             variant="ghost"
@@ -1250,7 +1255,7 @@ export default function SettingsPage() {
         )}
 
         {/* 汇总卡片 */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {summaryCards.map(card => (
             <div key={card.label} className="bg-secondary/50 rounded-lg p-3 flex items-center gap-3">
               <div className={cn('shrink-0', card.color)}>{card.icon}</div>
@@ -1275,7 +1280,7 @@ export default function SettingsPage() {
             <div className="h-[180px] bg-secondary/30 rounded-lg flex items-center justify-center">
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             </div>
-          ) : !visitDays.some(d => d.pv > 0 || d.uv > 0) ? (
+          ) : !visitDays.some(d => d.visits > 0) ? (
             <div className="flex flex-col items-center justify-center py-8 gap-2 bg-secondary/30 rounded-lg">
               <TrendingUp className="w-8 h-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">暂无访问数据</p>
@@ -1308,12 +1313,7 @@ export default function SettingsPage() {
                     labelStyle={{ color: 'hsl(var(--foreground))' }}
                     cursor={{ fill: 'hsl(var(--secondary))' }}
                   />
-                  <Legend
-                    layout="horizontal"
-                    wrapperStyle={{ paddingTop: 8, fontSize: 12 }}
-                  />
-                  <Bar dataKey="pv" name="PV 访问量" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="uv" name="UV 独立访客" fill="hsl(var(--primary) / 0.4)" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="visits" name="访问量" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1321,7 +1321,7 @@ export default function SettingsPage() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          UV 基于客户端 IP 的 SHA-256 哈希计算，不存储明文 IP，符合隐私保护要求。
+          访问量按 GitHub 账号去重，同一账号 30 分钟内只计一次；不记录路径、IP、登录名或明文 Token。
         </p>
       </SectionGroup>
 

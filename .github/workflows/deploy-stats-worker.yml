@@ -1,0 +1,80 @@
+name: Deploy Stats Worker
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-stats-worker
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: 部署全网访问统计 Worker
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STATS_SECRET: ${{ secrets.STATS_SECRET }}
+    steps:
+      - name: 校验 Secrets
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$STATS_SECRET" ]; then
+            echo "缺少 CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID / STATS_SECRET"
+            exit 1
+          fi
+          if [ "${#STATS_SECRET}" -lt 32 ]; then
+            echo "STATS_SECRET 至少需要 32 个字符"
+            exit 1
+          fi
+
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 安装 Worker 依赖
+        working-directory: worker
+        run: npm install --no-audit --no-fund
+
+      - name: 设置 Worker Secret
+        working-directory: worker
+        run: printf '%s' "$STATS_SECRET" | npx wrangler secret put STATS_SECRET
+
+      - name: 部署 Worker
+        id: deploy
+        working-directory: worker
+        run: |
+          set -o pipefail
+          npx wrangler deploy 2>&1 | tee /tmp/wrangler-deploy.log
+          WORKER_URL=$(grep -Eo 'https://[A-Za-z0-9._-]+\.workers\.dev' /tmp/wrangler-deploy.log | tail -n 1 || true)
+          echo "url=$WORKER_URL" >> "$GITHUB_OUTPUT"
+          {
+            echo "### GitHubM Stats Worker"
+            echo ""
+            echo "- Worker URL: ${WORKER_URL:-未识别，请查看日志}"
+            echo "- 存储：Durable Object SQLite"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 部署 Pages 透明代理
+        working-directory: stats-pages
+        run: npx --yes wrangler@4 pages deploy public --project-name githubm-stats-pages --branch main --commit-dirty=true
+
+      - name: 验证健康检查
+        run: |
+          URL="${{ vars.VITE_STATS_API_URL }}"
+          if [ -z "$URL" ]; then
+            URL="${{ steps.deploy.outputs.url }}"
+          fi
+          if [ -z "$URL" ]; then
+            echo "未配置 VITE_STATS_API_URL，且未从部署日志识别 Worker URL"
+            exit 1
+          fi
+          curl -fsS --retry 5 --retry-delay 3 "$URL/health"
+          echo
+          echo "Worker URL: $URL"

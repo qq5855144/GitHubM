@@ -14,7 +14,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  ShieldAlert,
   Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -344,10 +343,6 @@ export default function ActionsSecretsPage() {
         </TabsList>
 
         <TabsContent value="secret" className="mt-3 space-y-3">
-          <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning flex items-start gap-2">
-            <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{i18n.t('Secret 只能写入和覆盖，无法读取原值；列表只显示名称和更新时间。')}</span>
-          </div>
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             {loading ? (
               <div className="py-12 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
@@ -364,7 +359,6 @@ export default function ActionsSecretsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-sm font-medium text-foreground break-all">{secret.name}</span>
-                      <Badge variant="outline" className="border-border text-[10px] text-muted-foreground">{i18n.t('不可读取')}</Badge>
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1">
                       {i18n.t('更新于')} {formatTime(secret.updated_at)}

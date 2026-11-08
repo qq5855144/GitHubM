@@ -948,7 +948,7 @@ export default function CodeBrowserPage() {
              data-breadcrumb-current={pathParts.length === 0 ? 'true' : undefined}
              className={`shrink-0 rounded px-1.5 py-0.5 transition-colors ${pathParts.length === 0 ? 'bg-primary/10 text-primary font-semibold' : 'hover:text-primary'}`}
              onClick={() => navigate(`/repos/${owner}/${repo}/code`)}
-           >{i18n.t('代码')}</button>
+           >{i18n.t('根')}</button>
           {pathParts.map((part, i) => {
             // 渲染时预计算目标路径字符串，onClick 绑定不可变常量，消除闭包时序问题
             const targetPath = pathParts.slice(0, i + 1).join('/');

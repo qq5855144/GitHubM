@@ -1408,9 +1408,9 @@ export default function CodeBrowserPage() {
               )}
 
 
-              {/* 底栏：提交 */}
+              {/* 底栏：提交（桌面端保留；移动端使用上方黑色快捷工具栏） */}
               {!isReadingMode && (
-                <div className="flex flex-col shrink-0 border-t border-border bg-card/95 select-none">
+                <div className="hidden md:flex flex-col shrink-0 border-t border-border bg-card/95 select-none">
                   {syntaxErrors.length > 0 && (
                     <div className="px-3 py-1.5 bg-destructive/10 border-b border-destructive/20 text-xs text-destructive max-h-24 overflow-y-auto">
                       <div className="font-semibold mb-1 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />{i18n.t('发现')}{syntaxErrors.length} {i18n.t('个语法错误：')}</div>

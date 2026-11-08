@@ -918,6 +918,135 @@ export async function getAllBranches(
   return all;
 }
 
+// ===== Actions Secrets / Variables API =====
+
+export interface GitHubActionsSecretInfo {
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GitHubActionsVariableInfo {
+  name: string;
+  value: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GitHubActionsPublicKey {
+  key_id: string;
+  key: string;
+}
+
+export async function getRepoActionsSecrets(
+  owner: string,
+  repo: string
+): Promise<GitHubActionsSecretInfo[]> {
+  const all: GitHubActionsSecretInfo[] = [];
+  const seen = new Set<string>();
+  for (let page = 1; page <= 20; page += 1) {
+    const result = await request<{
+      total_count: number;
+      secrets: GitHubActionsSecretInfo[];
+    }>(`/repos/${owner}/${repo}/actions/secrets?per_page=100&page=${page}`);
+    for (const secret of result.secrets ?? []) {
+      if (seen.has(secret.name)) continue;
+      seen.add(secret.name);
+      all.push(secret);
+    }
+    if ((result.secrets?.length ?? 0) < 100) break;
+  }
+  return all;
+}
+
+export async function getRepoActionsPublicKey(
+  owner: string,
+  repo: string
+): Promise<GitHubActionsPublicKey> {
+  return request<GitHubActionsPublicKey>(`/repos/${owner}/${repo}/actions/secrets/public-key`);
+}
+
+export async function putRepoActionsSecret(
+  owner: string,
+  repo: string,
+  name: string,
+  encryptedValue: string,
+  keyId: string
+): Promise<void> {
+  await request<void>(`/repos/${owner}/${repo}/actions/secrets/${encodeURIComponent(name)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ encrypted_value: encryptedValue, key_id: keyId }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+export async function deleteRepoActionsSecret(
+  owner: string,
+  repo: string,
+  name: string
+): Promise<void> {
+  await request<void>(`/repos/${owner}/${repo}/actions/secrets/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getRepoActionsVariables(
+  owner: string,
+  repo: string
+): Promise<GitHubActionsVariableInfo[]> {
+  const all: GitHubActionsVariableInfo[] = [];
+  const seen = new Set<string>();
+  for (let page = 1; page <= 20; page += 1) {
+    const result = await request<{
+      total_count: number;
+      variables: GitHubActionsVariableInfo[];
+    }>(`/repos/${owner}/${repo}/actions/variables?per_page=100&page=${page}`);
+    for (const variable of result.variables ?? []) {
+      if (seen.has(variable.name)) continue;
+      seen.add(variable.name);
+      all.push(variable);
+    }
+    if ((result.variables?.length ?? 0) < 100) break;
+  }
+  return all;
+}
+
+export async function createRepoActionsVariable(
+  owner: string,
+  repo: string,
+  name: string,
+  value: string
+): Promise<void> {
+  await request<void>(`/repos/${owner}/${repo}/actions/variables`, {
+    method: 'POST',
+    body: JSON.stringify({ name, value }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+export async function updateRepoActionsVariable(
+  owner: string,
+  repo: string,
+  name: string,
+  value: string
+): Promise<void> {
+  await request<void>(`/repos/${owner}/${repo}/actions/variables/${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name, value }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+export async function deleteRepoActionsVariable(
+  owner: string,
+  repo: string,
+  name: string
+): Promise<void> {
+  await request<void>(`/repos/${owner}/${repo}/actions/variables/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+}
+
 export interface GitHubTagRef {
   name: string;
   commit: { sha: string; url: string };

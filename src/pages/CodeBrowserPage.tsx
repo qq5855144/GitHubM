@@ -1427,7 +1427,7 @@ export default function CodeBrowserPage() {
           )}
 
           {/* 路径操作工具条（非编辑状态，或移动端编辑状态） */}
-          <div className={`flex flex-wrap items-center gap-2 px-3 py-1.5 border-b border-border bg-secondary/20 shrink-0 ${actionMode === 'edit' ? 'md:hidden' : ''}`}>
+          <div className={`flex flex-wrap items-center gap-1.5 px-3 py-1.5 border-b border-border bg-secondary/20 shrink-0 ${actionMode === 'edit' ? 'md:hidden' : ''}`}>
             {filePath ? (
               <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 shrink-0 px-2"
                 onClick={() => {
@@ -1449,13 +1449,14 @@ export default function CodeBrowserPage() {
             )}
             {/* 目录操作按钮（仅目录页显示） */}
             {!currentFile && !loading && (
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-0.5 shrink-0">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1 px-2"
-                      disabled={dirDownloading}>
+                      disabled={dirDownloading}
+                      title={dirDownloading && dirProgress ? `${dirProgress.done}/${dirProgress.total}` : i18n.t('下载')}>
                       {dirDownloading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
-                      <span>
+                      <span className="hidden sm:inline">
                         {dirDownloading && dirProgress
                           ? `${dirProgress.done}/${dirProgress.total}`
                           : i18n.t('下载')}
@@ -1487,12 +1488,12 @@ export default function CodeBrowserPage() {
             )}
             {/* 文件查看时的操作栏 */}
             {currentFile && !loading && (
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-0.5 shrink-0">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 px-2"
                       title={i18n.t('下载')}>
-                      <Download className="w-3.5 h-3.5" /><span>{i18n.t('下载')}</span>
+                      <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">{i18n.t('下载')}</span>
                       <ChevronDown className="w-3 h-3 opacity-60" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -1549,7 +1550,7 @@ export default function CodeBrowserPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-7 px-2 text-xs gap-1 border-border hover:bg-secondary shrink-0 max-w-[42vw] sm:max-w-[260px]"
+                      className="h-7 px-2 text-xs gap-1 border-border hover:bg-secondary shrink-0 max-w-[30vw] sm:max-w-[260px]"
                       title={`${i18n.t('切换分支')}: ${currentBranch}`}
                     >
                       <GitBranch className="w-3 h-3 text-muted-foreground shrink-0" />

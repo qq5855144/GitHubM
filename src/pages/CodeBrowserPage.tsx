@@ -324,6 +324,8 @@ export default function CodeBrowserPage() {
   // 编辑器全屏
   const [editorFullscreen, setEditorFullscreen] = useState(false);
   const [isReadingMode, setIsReadingMode] = useState(false);
+  // 软键盘遮挡高度（visualViewport 坐标系），用于把移动端快捷工具栏顶到键盘上方
+  const [keyboardInset, setKeyboardInset] = useState(0);
 
   // 编辑器显示选项
   const [editorFontSize, setEditorFontSize] = useState(14);   // px，范围 10-22
@@ -904,6 +906,36 @@ export default function CodeBrowserPage() {
     }
   }, [actionMode]);
 
+  // 移动端软键盘适配：visualViewport 高度收缩时，为编辑器预留键盘高度。
+  // 这样底部黑色快捷工具栏会自动停在输入法上方，不会继续被键盘遮挡。
+  useEffect(() => {
+    if (actionMode !== 'edit') {
+      setKeyboardInset(0);
+      return;
+    }
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let rafId = 0;
+    const update = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const inset = Math.max(0, window.innerHeight - (vv.offsetTop + vv.height));
+        // 小于 80px 的多为地址栏/浏览器工具栏变化，不当作软键盘。
+        const next = inset > 80 ? Math.round(inset) : 0;
+        setKeyboardInset(prev => (Math.abs(prev - next) > 1 ? next : prev));
+      });
+    };
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      cancelAnimationFrame(rafId);
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+      setKeyboardInset(0);
+    };
+  }, [actionMode]);
+
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-background text-foreground">
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -1118,7 +1150,10 @@ export default function CodeBrowserPage() {
 
           {/* 统一编辑器区域 */}
           {actionMode === 'edit' && (
-            <div className={`flex flex-col bg-background ${editorFullscreen ? 'fixed inset-0 z-50' : 'hidden md:flex flex-1 min-h-0'}`}>
+            <div
+              className={`flex flex-col bg-background ${editorFullscreen ? 'fixed inset-0 z-50' : 'hidden md:flex flex-1 min-h-0'}`}
+              style={keyboardInset > 0 ? { paddingBottom: `${keyboardInset}px` } : undefined}
+            >
               {/* 编辑器顶栏 */}
               {!isReadingMode && (
                 <div className="flex flex-col">

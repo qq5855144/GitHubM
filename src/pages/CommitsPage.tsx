@@ -199,28 +199,30 @@ export default function CommitsPage() {
       </div>
 
       {/* 提交列表 */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="space-y-2">
         {loading ? (
-          <div className="divide-y divide-border">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="p-4 flex items-center gap-3">
-                <Skeleton className="w-8 h-8 rounded-full bg-muted" />
+          <>
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+                <Skeleton className="w-8 h-8 rounded-full bg-muted shrink-0" />
                 <div className="flex-1">
                   <Skeleton className="h-5 w-2/3 bg-muted mb-1.5" />
                   <Skeleton className="h-4 w-1/3 bg-muted" />
                 </div>
               </div>
             ))}
-          </div>
+          </>
         ) : commits.length === 0 ? (
-          <div className="py-16 text-center text-muted-foreground">{i18n.t('暂无提交记录')}</div>
+          <div className="bg-card border border-border rounded-xl py-16 text-center text-muted-foreground">
+            {i18n.t('暂无提交记录')}
+          </div>
         ) : (
-          <div className="divide-y divide-border">
-            {commits.map((commit) => (
-              <div
-                key={commit.sha}
-                className="p-4 hover:bg-secondary/50 transition-colors group"
-              >
+          commits.map((commit) => (
+            <div
+              key={commit.sha}
+              className="bg-card border border-border rounded-xl overflow-hidden group"
+            >
+              <div className="px-4 pt-3 pb-2.5 min-w-0">
                 <div className="flex items-start gap-3">
                   {commit.author ? (
                     <UserLink login={commit.author.login} className="shrink-0">
@@ -254,47 +256,55 @@ export default function CommitsPage() {
                         <Clock className="w-3 h-3" />
                         {formatRelativeTime(commit.commit.author.date)}
                       </span>
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        {commit.sha.substring(0, 7)}
+                      </span>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost" size="icon"
-                      className="w-7 h-7 text-muted-foreground hover:bg-secondary hover:text-primary"
-                      title={i18n.t('撤销提交（创建反向提交）')}
-                      onClick={() => { setActionCommit(commit); setActionKind('revert'); }}
-                    >
-                      <Undo2 className="w-3.5 h-3.5" /><span className="hidden xl:inline text-xs ml-0.5">{i18n.t('撤销')}</span>
-                    </Button>
-                    <Button
-                      variant="ghost" size="icon"
-                      className="w-7 h-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      title={i18n.t('回滚分支到此提交（会移动分支）')}
-                      onClick={() => { setActionCommit(commit); setActionKind('rollback'); }}
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" /><span className="hidden xl:inline text-xs ml-0.5">{i18n.t('回滚')}</span>
-                    </Button>
-                    <button
-                      type="button"
-                      className="text-xs bg-secondary border border-border px-2 py-1 rounded font-mono text-accent hover:bg-secondary/80 transition-colors"
-                      onClick={() => handleViewCommit(commit.sha)}
-                    >
-                      {commit.sha.substring(0, 7)}
-                    </button>
-                    <a
-                      href={commit.html_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary">
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </Button>
-                    </a>
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+              <div className="flex items-center justify-end gap-1 px-3 py-2 border-t border-border bg-secondary/20">
+                <Button
+                  variant="ghost" size="sm"
+                  className="h-8 px-2 text-xs gap-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  title={i18n.t('查看提交详情')}
+                  onClick={() => handleViewCommit(commit.sha)}
+                >
+                  <GitCommit className="w-3.5 h-3.5" />{i18n.t('详情')}
+                </Button>
+                <Button
+                  variant="ghost" size="sm"
+                  className="h-8 px-2 text-xs gap-1.5 text-muted-foreground hover:bg-secondary hover:text-primary"
+                  title={i18n.t('撤销提交（创建反向提交）')}
+                  onClick={() => { setActionCommit(commit); setActionKind('revert'); }}
+                >
+                  <Undo2 className="w-3.5 h-3.5" />{i18n.t('撤销')}
+                </Button>
+                <Button
+                  variant="ghost" size="sm"
+                  className="h-8 px-2 text-xs gap-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  title={i18n.t('回滚分支到此提交（会移动分支）')}
+                  onClick={() => { setActionCommit(commit); setActionKind('rollback'); }}
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />{i18n.t('回滚')}
+                </Button>
+                <a
+                  href={commit.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Button
+                    variant="ghost" size="sm"
+                    className="h-8 px-2 text-xs gap-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    title={i18n.t('在 GitHub 打开')}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />{i18n.t('打开')}
+                  </Button>
+                </a>
+              </div>
+            </div>
+          ))
         )}
       </div>
 

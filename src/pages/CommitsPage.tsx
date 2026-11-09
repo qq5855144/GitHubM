@@ -32,7 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { getCommits, getBranches, formatRelativeTime, revertCommit, rollbackBranchToCommit } from '@/services/github';
+import { getCommits, getAllBranches, getRepo, formatRelativeTime, revertCommit, rollbackBranchToCommit } from '@/services/github';
 import type { GitHubCommit, GitHubBranch } from '@/types/types';
 import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
@@ -47,6 +47,7 @@ export default function CommitsPage() {
   const pathFilter = searchParams.get('path') || '';
   const [commits, setCommits] = useState<GitHubCommit[]>([]);
   const [branches, setBranches] = useState<GitHubBranch[]>([]);
+  const [defaultBranch, setDefaultBranch] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
   const [loading, setLoading] = useState(true);
   const [hasNextPage, setHasNextPage] = useState(false);
@@ -57,16 +58,33 @@ export default function CommitsPage() {
 
   useEffect(() => {
     if (!owner || !repo) return;
-    getBranches(owner, repo)
-      .then((result) => {
-        setBranches(result.data);
-        const preferred = branchParam && result.data.some((branch) => branch.name === branchParam)
-          ? branchParam
-          : result.data[0]?.name || '';
-        setSelectedBranch(preferred);
+    let cancelled = false;
+    Promise.all([getRepo(owner, repo), getAllBranches(owner, repo)])
+      .then(([repoInfo, allBranches]) => {
+        if (cancelled) return;
+        const preferredBranch = repoInfo.default_branch || allBranches[0]?.name || '';
+        const ordered = [...allBranches].sort((a, b) => {
+          if (a.name === preferredBranch) return -1;
+          if (b.name === preferredBranch) return 1;
+          return 0;
+        });
+        setBranches(ordered);
+        setDefaultBranch(preferredBranch);
       })
       .catch(console.error);
-  }, [owner, repo, branchParam]);
+    return () => {
+      cancelled = true;
+    };
+  }, [owner, repo]);
+
+  // 默认使用仓库默认分支；URL 指定有效分支时才覆盖。
+  useEffect(() => {
+    if (branches.length === 0) return;
+    const preferred = branchParam && branches.some((branch) => branch.name === branchParam)
+      ? branchParam
+      : defaultBranch || branches[0]?.name || '';
+    setSelectedBranch(preferred);
+  }, [branchParam, branches, defaultBranch]);
 
   const loadCommits = useCallback(async (pageNum = 1, append = false, force = false) => {
     if (!owner || !repo || !selectedBranch) return;

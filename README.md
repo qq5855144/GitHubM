@@ -51,7 +51,7 @@ GitHubM 把 GitHub 的日常操作集中到一个界面里：仓库、Issue、Pu
 | **可离线可用** | APK 内嵌全部前端资源，弱网下仍可浏览已加载内容与本地缓存 |
 
 > **在线体验**：
-> - Cloudflare Pages（全球 CDN）：<https://githubm-web.pages.dev/>
+> - Cloudflare Pages ：<https://githubm-web.pages.dev/>
 > - GitHub Pages：<https://qq5855144.github.io/GitHubM/>
 
 ---

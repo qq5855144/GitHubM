@@ -1,7 +1,7 @@
 // 代码浏览页（含在线编辑 + 文件树 + 右键上下文菜单 + 全屏编辑 + 文件图标 + 图片预览）
 
 import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import FileTree from '@/components/code/FileTree';
 import { CodeEditor } from '@/components/code/CodeEditor';
 import type { CodeEditorRef } from '@/components/code/CodeEditor';
@@ -306,6 +306,8 @@ function QuickSymbolButton({ label, value, onInsert }: { label: string; value: s
 export default function CodeBrowserPage() {
   const { owner, repo, '*': filePath = '' } = useParams<{ owner: string; repo: string; '*': string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const branchParam = searchParams.get('branch') || '';
   const { token } = useAuth();
   const [contents, setContents] = useState<GitHubContent[]>([]);
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -495,6 +497,13 @@ export default function CodeBrowserPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owner, repo, filePath]);
 
+  const handleBranchChange = useCallback((branch: string) => {
+    setCurrentBranch(branch);
+    const next = new URLSearchParams(searchParams);
+    next.set('branch', branch);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   useEffect(() => {
     if (!owner || !repo) return;
     let cancelled = false;
@@ -514,12 +523,23 @@ export default function CodeBrowserPage() {
           return a.name.localeCompare(b.name);
         });
         setBranches(sorted);
-        const preferred = defaultBranch || sorted[0]?.name || '';
+        const preferred = branchParam && sorted.some((branch) => branch.name === branchParam)
+          ? branchParam
+          : defaultBranch || sorted[0]?.name || '';
         if (preferred) setCurrentBranch(preferred);
       })
       .catch(console.error);
     return () => { cancelled = true; };
+    // 只在仓库变化时重新加载分支；分支切换只更新状态与 URL。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owner, repo]);
+
+  useEffect(() => {
+    if (!branchParam || branches.length === 0) return;
+    if (branches.some((branch) => branch.name === branchParam) && branchParam !== currentBranch) {
+      setCurrentBranch(branchParam);
+    }
+  }, [branchParam, branches, currentBranch]);
 
   useEffect(() => { loadContents(); }, [loadContents]);
 
@@ -1035,7 +1055,7 @@ export default function CodeBrowserPage() {
               repo={repo!}
               branch={currentBranch}
               branches={branches}
-              onBranchChange={setCurrentBranch}
+              onBranchChange={handleBranchChange}
               activePath={filePath || undefined}
               refreshKey={treeRefreshKey}
               onFileClick={(item) => navigate(`/repos/${owner}/${repo}/code/${item.path}`)}
@@ -1072,7 +1092,7 @@ export default function CodeBrowserPage() {
                 repo={repo!}
                 branch={currentBranch}
                 branches={branches}
-                onBranchChange={(b) => { setCurrentBranch(b); setTreeOpen(false); }}
+                onBranchChange={(b) => { handleBranchChange(b); setTreeOpen(false); }}
                 activePath={filePath || undefined}
                 refreshKey={treeRefreshKey}
                 onFileClick={(item) => { navigate(`/repos/${owner}/${repo}/code/${item.path}`); setTreeOpen(false); }}
@@ -1602,7 +1622,7 @@ export default function CodeBrowserPage() {
                     {branches.map((b) => (
                       <DropdownMenuItem
                         key={b.name}
-                        onClick={() => setCurrentBranch(b.name)}
+                        onClick={() => handleBranchChange(b.name)}
                         className={`font-mono text-xs gap-2 items-center ${b.name === currentBranch ? 'text-primary font-semibold' : ''}`}
                       >
                         <GitBranch className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />

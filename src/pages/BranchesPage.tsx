@@ -1,14 +1,16 @@
 // 分支管理页
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   GitBranch,
+  GitCommit,
+  Code2,
+  Star,
   Plus,
   Trash2,
   ChevronRight,
   Shield,
-  Clock,
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
@@ -42,12 +44,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  getBranches,
+  getAllBranches,
   createBranch,
   deleteBranch,
   compareBranches,
   getRepo,
-  formatRelativeTime,
+  updateRepo,
 } from '@/services/github';
 import type { GitHubBranch } from '@/types/types';
 import { toast } from 'sonner';
@@ -60,104 +62,117 @@ interface BranchWithCompare extends GitHubBranch {
   lastCommitDate?: string;
 }
 
+const CARD_ACTION_BUTTON_CLASS = 'h-8 px-2 text-xs gap-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground';
+
 export default function BranchesPage() {
   const { owner, repo } = useParams<{ owner: string; repo: string }>();
   const navigate = useNavigate();
   const [branches, setBranches] = useState<BranchWithCompare[]>([]);
   const [defaultBranch, setDefaultBranch] = useState('main');
   const [loading, setLoading] = useState(true);
-  const [hasNextPage, setHasNextPage] = useState(false);
-  const [page, setPage] = useState(1);
+  const [canPush, setCanPush] = useState(false);
+  const [canAdmin, setCanAdmin] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newBranchName, setNewBranchName] = useState('');
   const [newBranchFrom, setNewBranchFrom] = useState('');
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [defaultTarget, setDefaultTarget] = useState<string | null>(null);
+  const [settingDefault, setSettingDefault] = useState(false);
+  const requestSeq = useRef(0);
 
-  const loadBranches = useCallback(async (pageNum = 1, append = false, force = false) => {
+  const loadBranches = useCallback(async (force = false, showLoading = true) => {
     if (!owner || !repo) return;
-    if (pageNum === 1) setLoading(true);
+    const requestId = ++requestSeq.current;
+    if (showLoading) setLoading(true);
 
-    const cacheKey = `branches:${owner}/${repo}:p1`;
-    if (pageNum === 1 && !append && !force) {
+    const cacheKey = `branches:${owner}/${repo}:all-v2`;
+    if (!force) {
       const cached = pageCache.get<{
         branches: BranchWithCompare[];
         defaultBranch: string;
-        hasNextPage: boolean;
+        canPush: boolean;
+        canAdmin: boolean;
       }>(cacheKey);
       if (cached) {
         setBranches(cached.branches);
         setDefaultBranch(cached.defaultBranch);
         setNewBranchFrom(cached.defaultBranch);
-        setHasNextPage(cached.hasNextPage);
-        setPage(1);
+        setCanPush(cached.canPush);
+        setCanAdmin(cached.canAdmin);
         setLoading(false);
         return;
       }
     }
 
     try {
-      const [result, repoData] = await Promise.all([
-        getBranches(owner, repo, pageNum),
-        pageNum === 1 ? getRepo(owner, repo) : Promise.resolve(null),
+      const [branchList, repoData] = await Promise.all([
+        getAllBranches(owner, repo),
+        getRepo(owner, repo),
       ]);
-      const branchList = result.data as BranchWithCompare[];
-      if (repoData) {
-        setDefaultBranch(repoData.default_branch);
-        setNewBranchFrom(repoData.default_branch);
-        // 获取与默认分支的比较信息（只针对非默认分支，最多 10 条）
-        const comparePromises = branchList
-          .filter((b) => b.name !== repoData.default_branch)
-          .slice(0, 10)
-          .map((b) =>
-            compareBranches(owner, repo, repoData.default_branch, b.name)
-              .then((comp) => ({ name: b.name, ahead: comp.ahead_by, behind: comp.behind_by }))
-              .catch(() => ({ name: b.name, ahead: 0, behind: 0 }))
-          );
-        Promise.all(comparePromises).then((comparisons) => {
-          setBranches((prev) => {
-            const enriched = prev.map((b) => {
-              const comp = comparisons.find((c) => c.name === b.name);
-              return comp ? { ...b, ahead_by: comp.ahead, behind_by: comp.behind } : b;
-            });
-            // 写入携带比较数据的完整缓存
-            if (pageNum === 1 && !append) {
-              pageCache.set(cacheKey, {
-                branches: enriched,
-                defaultBranch: repoData.default_branch,
-                hasNextPage: result.hasNextPage,
-              });
-            }
-            return enriched;
+      if (requestId !== requestSeq.current) return;
+
+      const defaultName = repoData.default_branch || branchList[0]?.name || 'main';
+      const pushPermission = !!repoData.permissions?.push;
+      const adminPermission = !!repoData.permissions?.admin;
+      const ordered = [...branchList].sort((a, b) => {
+        if (a.name === defaultName) return -1;
+        if (b.name === defaultName) return 1;
+        return 0;
+      });
+
+      setDefaultBranch(defaultName);
+      setNewBranchFrom(defaultName);
+      setCanPush(pushPermission);
+      setCanAdmin(adminPermission);
+      setBranches(ordered);
+      pageCache.set(cacheKey, {
+        branches: ordered,
+        defaultBranch: defaultName,
+        canPush: pushPermission,
+        canAdmin: adminPermission,
+      });
+
+      // 仅比较前 10 个非默认分支，避免分支较多时触发大量 API 请求。
+      const compareTargets = ordered.filter((b) => b.name !== defaultName).slice(0, 10);
+      Promise.all(
+        compareTargets.map((b) =>
+          compareBranches(owner, repo, defaultName, b.name)
+            .then((comp) => ({ name: b.name, ahead: comp.ahead_by, behind: comp.behind_by }))
+            .catch(() => ({ name: b.name, ahead: undefined, behind: undefined }))
+        )
+      ).then((comparisons) => {
+        if (requestId !== requestSeq.current) return;
+        setBranches((prev) => {
+          const enriched = prev.map((b) => {
+            const comp = comparisons.find((c) => c.name === b.name);
+            return comp ? { ...b, ahead_by: comp.ahead, behind_by: comp.behind } : b;
           });
-        });
-      }
-      if (append) {
-        setBranches((prev) => [...prev, ...branchList]);
-      } else {
-        setBranches(branchList);
-        // 先写一次不含比较数据的缓存，比较数据回来后再覆盖
-        if (!repoData) {
           pageCache.set(cacheKey, {
-            branches: branchList,
-            defaultBranch,
-            hasNextPage: result.hasNextPage,
+            branches: enriched,
+            defaultBranch: defaultName,
+            canPush: pushPermission,
+            canAdmin: adminPermission,
           });
-        }
-      }
-      setHasNextPage(result.hasNextPage);
-      setPage(pageNum);
+          return enriched;
+        });
+      });
     } catch (err) {
-      toast.error(i18n.t('加载分支列表失败'));
-      console.error(err);
+      if (requestId === requestSeq.current) {
+        toast.error(i18n.t('加载分支列表失败'));
+        console.error(err);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === requestSeq.current && showLoading) setLoading(false);
     }
-  }, [owner, repo, defaultBranch]);
+  }, [owner, repo]);
 
   useEffect(() => {
-    loadBranches(1);
+    loadBranches();
+    return () => {
+      requestSeq.current += 1;
+    };
   }, [loadBranches]);
 
   const handleCreateBranch = async () => {
@@ -182,7 +197,7 @@ export default function BranchesPage() {
       setCreateDialogOpen(false);
       setNewBranchName('');
       pageCache.invalidate(`branches:${owner}/${repo}:`);
-      loadBranches(1, false, true);
+      await loadBranches(true, false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : i18n.t('创建分支失败'));
     } finally {
@@ -197,10 +212,11 @@ export default function BranchesPage() {
       await deleteBranch(owner, repo, deleteTarget);
       setBranches((prev) => {
         const updated = prev.filter((b) => b.name !== deleteTarget);
-        pageCache.set(`branches:${owner}/${repo}:p1`, {
+        pageCache.set(`branches:${owner}/${repo}:all-v2`, {
           branches: updated,
           defaultBranch,
-          hasNextPage,
+          canPush,
+          canAdmin,
         });
         return updated;
       });
@@ -210,6 +226,22 @@ export default function BranchesPage() {
       toast.error(err instanceof Error ? err.message : i18n.t('删除失败'));
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleSetDefaultBranch = async () => {
+    if (!owner || !repo || !defaultTarget) return;
+    setSettingDefault(true);
+    try {
+      await updateRepo(owner, repo, { default_branch: defaultTarget });
+      toast.success(`分支 ${defaultTarget} 已设为默认分支`);
+      setDefaultTarget(null);
+      pageCache.invalidate(`branches:${owner}/${repo}:`);
+      await loadBranches(true, false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : i18n.t('设置默认分支失败'));
+    } finally {
+      setSettingDefault(false);
     }
   };
 
@@ -224,10 +256,17 @@ export default function BranchesPage() {
         <span className="text-foreground">{i18n.t('分支管理')}</span>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <GitBranch className="w-5 h-5 text-primary" />
-          {i18n.t('分支管理')}</h1>
+          {i18n.t('分支管理')}
+          {!loading && (
+            <span className="text-xs font-normal text-muted-foreground">
+              {branches.length} {i18n.t('个分支')}
+            </span>
+          )}
+        </h1>
+        {canPush && (
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
@@ -281,84 +320,112 @@ export default function BranchesPage() {
             </div>
           </DialogContent>
         </Dialog>
-      </div>
-
-      {/* 分支列表 */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        {loading ? (
-          <div className="divide-y divide-border">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="p-4">
-                <Skeleton className="h-5 w-1/3 bg-muted mb-2" />
-                <Skeleton className="h-4 w-1/4 bg-muted" />
-              </div>
-            ))}
-          </div>
-        ) : branches.length === 0 ? (
-          <div className="py-12 text-center text-muted-foreground">{i18n.t('暂无分支')}</div>
-        ) : (
-          <div className="divide-y divide-border">
-            {/* 默认分支排在最前 */}
-            {[
-              ...branches.filter((b) => b.name === defaultBranch),
-              ...branches.filter((b) => b.name !== defaultBranch),
-            ].map((branch) => (
-              <div key={branch.name} className="p-4 flex items-center gap-3 group">
-                <GitBranch className="w-4 h-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <code className="text-sm font-mono text-foreground">{branch.name}</code>
-                    {branch.name === defaultBranch && (
-                      <Badge variant="outline" className="text-xs border-primary/50 text-primary bg-primary/10">{i18n.t('默认')}</Badge>
-                    )}
-                    {branch.protected && (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Shield className="w-3 h-3" />
-                        {i18n.t('受保护')}</div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
-                    <span className="font-mono text-xs">{branch.commit.sha.substring(0, 7)}</span>
-                    {branch.ahead_by !== undefined && branch.behind_by !== undefined && branch.name !== defaultBranch && (
-                      <>
-                        {branch.ahead_by > 0 && (
-                          <span className="flex items-center gap-0.5 text-primary">
-                            <ArrowUp className="w-3 h-3" />{branch.ahead_by} {i18n.t('领先')}</span>
-                        )}
-                        {branch.behind_by > 0 && (
-                          <span className="flex items-center gap-0.5 text-muted-foreground">
-                            <ArrowDown className="w-3 h-3" />{branch.behind_by} {i18n.t('落后')}</span>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-                {branch.name !== defaultBranch && !branch.protected && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-8 h-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all"
-                    onClick={() => setDeleteTarget(branch.name)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
         )}
       </div>
 
-      {hasNextPage && !loading && (
-        <div className="text-center">
-          <Button
-            variant="outline"
-            className="border-border hover:bg-secondary"
-            onClick={() => loadBranches(page + 1, true)}
-          >
-            {i18n.t('加载更多')}</Button>
-        </div>
-      )}
+      {/* 分支列表 */}
+      <div className="space-y-2">
+        {loading ? (
+          <>
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+                <Skeleton className="w-8 h-8 rounded-lg bg-muted shrink-0" />
+                <div className="flex-1">
+                  <Skeleton className="h-5 w-1/3 bg-muted mb-1.5" />
+                  <Skeleton className="h-4 w-1/4 bg-muted" />
+                </div>
+              </div>
+            ))}
+          </>
+        ) : branches.length === 0 ? (
+          <div className="bg-card border border-border rounded-xl py-16 text-center text-muted-foreground">
+            {i18n.t('暂无分支')}
+          </div>
+        ) : (
+          branches.map((branch) => (
+            <div
+              key={branch.name}
+              className="bg-card border border-border rounded-xl overflow-hidden group"
+            >
+              <div className="px-4 pt-3 pb-2.5 min-w-0">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <GitBranch className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <code className="text-sm font-semibold font-mono text-foreground break-all">
+                        {branch.name}
+                      </code>
+                      {branch.name === defaultBranch && (
+                        <Badge variant="outline" className="text-xs border-primary/50 text-primary bg-primary/10">
+                          {i18n.t('默认')}
+                        </Badge>
+                      )}
+                      {branch.protected && (
+                        <Badge variant="outline" className="text-xs gap-1 text-muted-foreground border-border">
+                          <Shield className="w-3 h-3" />{i18n.t('受保护')}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                      <span className="font-mono text-[11px]">{branch.commit.sha.substring(0, 7)}</span>
+                      {branch.name !== defaultBranch && branch.ahead_by !== undefined && branch.ahead_by > 0 && (
+                        <span className="flex items-center gap-0.5 text-primary">
+                          <ArrowUp className="w-3 h-3" />{branch.ahead_by} {i18n.t('领先')}
+                        </span>
+                      )}
+                      {branch.name !== defaultBranch && branch.behind_by !== undefined && branch.behind_by > 0 && (
+                        <span className="flex items-center gap-0.5 text-muted-foreground">
+                          <ArrowDown className="w-3 h-3" />{branch.behind_by} {i18n.t('落后')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-1 px-3 py-2 border-t border-border bg-secondary/20">
+                <Button
+                  variant="ghost" size="sm"
+                  className={CARD_ACTION_BUTTON_CLASS}
+                  title={i18n.t('查看该分支代码')}
+                  onClick={() => navigate(`/repos/${owner}/${repo}/code?branch=${encodeURIComponent(branch.name)}`)}
+                >
+                  <Code2 className="w-3.5 h-3.5" />{i18n.t('代码')}
+                </Button>
+                <Button
+                  variant="ghost" size="sm"
+                  className={CARD_ACTION_BUTTON_CLASS}
+                  title={i18n.t('查看该分支提交历史')}
+                  onClick={() => navigate(`/repos/${owner}/${repo}/commits?branch=${encodeURIComponent(branch.name)}`)}
+                >
+                  <GitCommit className="w-3.5 h-3.5" />{i18n.t('提交')}
+                </Button>
+                {canAdmin && branch.name !== defaultBranch && (
+                  <Button
+                    variant="ghost" size="sm"
+                    className={CARD_ACTION_BUTTON_CLASS}
+                    title={i18n.t('设为默认分支')}
+                    onClick={() => setDefaultTarget(branch.name)}
+                  >
+                    <Star className="w-3.5 h-3.5" />{i18n.t('默认')}
+                  </Button>
+                )}
+                {canPush && branch.name !== defaultBranch && !branch.protected && (
+                  <Button
+                    variant="ghost" size="sm"
+                    className={`${CARD_ACTION_BUTTON_CLASS} hover:text-destructive hover:bg-destructive/10`}
+                    title={i18n.t('删除分支')}
+                    onClick={() => setDeleteTarget(branch.name)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />{i18n.t('删除')}
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
 
       {/* 删除确认 */}
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
@@ -376,6 +443,37 @@ export default function BranchesPage() {
               disabled={deleting}
             >
               {deleting ? i18n.t('删除中...') : i18n.t('确认删除')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 设为默认分支确认 */}
+      <AlertDialog
+        open={!!defaultTarget}
+        onOpenChange={(open) => {
+          if (!open && !settingDefault) setDefaultTarget(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">{i18n.t('设为默认分支？')}</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground space-y-1">
+              <span className="block font-mono text-xs break-all text-foreground">{defaultTarget}</span>
+              <span className="block">{i18n.t('设为默认分支后，克隆和 PR 将默认使用该分支。')}</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={(event) => {
+                event.preventDefault();
+                void handleSetDefaultBranch();
+              }}
+              disabled={settingDefault}
+            >
+              {settingDefault ? i18n.t('设置中...') : i18n.t('确认设置')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

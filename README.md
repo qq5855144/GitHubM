@@ -8,12 +8,12 @@
 </p>
 
 <p align="center">
+  <a   href="https://github.com/qq5855144/GitHubM/actions/workflows/deploy.yml"><img src="https://github.com/qq5855144/GitHubM/actions/workflows/deploy.yml/badge.svg" alt="CI/CD"></a>
   <a href="https://githubm-web.pages.dev/"><img src="https://img.shields.io/badge/Cloudflare%20Pages-在线体验-F38020?logo=cloudflare" alt="Cloudflare Pages"></a>
   <a href="https://qq5855144.github.io/GitHubM/"><img src="https://img.shields.io/badge/GitHub%20Pages-在线体验-222?logo=github" alt="Pages"></a>
   <a href="https://github.com/qq5855144/GitHubM/releases"><img src="https://img.shields.io/github/v/release/qq5855144/GitHubM?label=Release&logo=android&color=blue" alt="Release"></a>
-  <a href="https://github.com/qq5855144/GitHubM/actions/workflows/deploy.yml"><img src="https://github.com/qq5855144/GitHubM/actions/workflows/deploy.yml/badge.svg" alt="CI/CD"></a>
-  <img src="https://img.shields.io/badge/React-18-61dafb?logo=react" alt="React">
   <img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript">
+  <img src="https://img.shields.io/badge/React-18-61dafb?logo=react" alt="React">  
   <img src="https://img.shields.io/github/stars/qq5855144/GitHubM?style=social" alt="Stars">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 </p>

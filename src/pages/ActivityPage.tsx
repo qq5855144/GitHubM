@@ -79,6 +79,14 @@ function getEventDescription(event: GitHubEvent): string {
   }
 }
 
+function sortEventsNewestFirst(events: GitHubEvent[]): GitHubEvent[] {
+  const byId = new Map<string, GitHubEvent>();
+  for (const event of events) byId.set(event.id, event);
+  return [...byId.values()].sort(
+    (a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)
+  );
+}
+
 export default function ActivityPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -138,9 +146,9 @@ export default function ActivityPage() {
     try {
       const data = await getUserEvents(user.login, pageNum);
       if (append) {
-        setEvents((prev) => [...prev, ...data]);
+        setEvents((prev) => sortEventsNewestFirst([...prev, ...data]));
       } else {
-        setEvents(data);
+        setEvents(sortEventsNewestFirst(data));
       }
       setPage(pageNum);
     } catch (err) {

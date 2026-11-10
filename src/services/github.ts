@@ -486,8 +486,12 @@ export async function getUserEvents(
   login: string,
   page = 1
 ): Promise<GitHubEvent[]> {
-  return request<GitHubEvent[]>(
+  const events = await request<GitHubEvent[]>(
     `/users/${login}/events?per_page=30&page=${page}`
+  );
+  // GitHub Events API 偶尔不按时间排序；统一按时间倒序，确保最新活动在最前。
+  return [...events].sort(
+    (a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)
   );
 }
 

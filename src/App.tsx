@@ -6,6 +6,7 @@ import MainLayout from '@/components/layouts/MainLayout';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import LaunchUpdateChecker from '@/components/system/LaunchUpdateChecker';
+import RouteScrollManager from '@/components/system/RouteScrollManager';
 import { routes } from './routes';
 import { recordVisit, recordGlobalVisit } from '@/lib/visitStats';
 
@@ -74,6 +75,7 @@ function AppContent() {
   return (
     <>
       <VisitTracker />
+      <RouteScrollManager />
       <LaunchUpdateChecker />
       <Routes>
         {/* 公开路由（登录页） */}

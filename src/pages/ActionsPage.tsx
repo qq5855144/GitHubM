@@ -464,9 +464,9 @@ function LogPanel({
 
   return (
     <div className="bg-[#0d1117] border border-border rounded-lg overflow-hidden">
-      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border bg-secondary/20 flex-wrap">
+      <div className="flex flex-nowrap items-center gap-1.5 px-3 py-2 border-b border-border bg-secondary/20 overflow-hidden">
         <Terminal className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-        <span className="text-xs text-muted-foreground flex-1 min-w-[96px]">{i18n.t('日志输出')}</span>
+        <span className="text-xs text-muted-foreground flex-1 min-w-0 truncate">{i18n.t('日志输出')}</span>
         {isRunning && (
           <span className="hidden sm:flex items-center gap-1 text-[10px] text-warning">
             <Loader2 className="w-3 h-3 animate-spin" />{i18n.t('实时刷新')}
@@ -475,7 +475,7 @@ function LogPanel({
         <Button
           variant="ghost"
           size="sm"
-          className={`h-6 px-1.5 sm:px-2 text-[10px] gap-1 ${follow ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'}`}
+          className={`h-6 px-1.5 sm:px-2 text-[10px] gap-1 shrink-0 whitespace-nowrap ${follow ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'}`}
           onClick={() => setFollow((prev) => !prev)}
           title={i18n.t('跟随最新日志')}
         >
@@ -485,7 +485,7 @@ function LogPanel({
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 px-1.5 sm:px-2 text-xs text-primary hover:text-primary hover:bg-primary/10 gap-1"
+            className="h-6 px-1.5 sm:px-2 text-xs text-primary hover:text-primary hover:bg-primary/10 gap-1 shrink-0 whitespace-nowrap"
             onClick={handleAnalyzeWithAi}
             disabled={loading || !logs}
             title={i18n.t('发送失败日志给 AI 分析')}
@@ -497,7 +497,7 @@ function LogPanel({
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 px-1.5 sm:px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+          className="h-6 px-1.5 sm:px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0 whitespace-nowrap"
           onClick={handleCopy}
           disabled={loading || !logs}
         >
@@ -589,20 +589,6 @@ function JobItem({
               {showLogs ? i18n.t('收起日志') : i18n.t('查看日志')}
               {isRunning && <span className="text-warning text-[10px]">{i18n.t('● 实时')}</span>}
             </Button>
-            {job.status === 'completed' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs gap-1.5 border border-border text-muted-foreground hover:bg-secondary"
-                onClick={() => downloadApiResource(
-                  `https://api.github.com/repos/${owner}/${repo}/actions/jobs/${job.id}/logs`,
-                  `${safeFileName(job.name)}-logs.txt`,
-                  job.html_url,
-                )}
-              >
-                <Download className="w-3 h-3" />{i18n.t('下载日志')}
-              </Button>
-            )}
             {job.status === 'completed' && (
               <Button
                 variant="ghost"

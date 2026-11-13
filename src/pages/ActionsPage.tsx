@@ -33,6 +33,7 @@ import {
   ShieldX,
   Save,
   KeyRound,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -113,6 +114,8 @@ import { toast } from 'sonner';
 import { copyToClipboard } from '@/lib/utils';
 import { decodeBase64Content } from '@/lib/utils';
 import { parse as parseYaml } from 'yaml';
+import { buildActionsFailurePrompt } from '@/lib/actionsAiPrompt';
+import { setAiTaskHandoff } from '@/lib/aiTaskHandoff';
 import i18n from "@/i18n";
 
 function RunStatusBadge({ status, conclusion }: { status: string | null; conclusion: string | null }) {
@@ -349,17 +352,30 @@ interface LogPanelProps {
   owner: string;
   repo: string;
   isRunning: boolean;
+  jobName: string;
+  jobConclusion?: string | null;
+  jobHtmlUrl?: string;
+  branch?: string;
+  failedSteps?: string[];
 }
-
 const MAX_LOG_LINES = 2000;
-
 function trimLogLines(text: string): string {
   const lines = text.split('\n');
   if (lines.length <= MAX_LOG_LINES) return text;
   return `${i18n.t('… 日志过长，仅显示最后')} ${MAX_LOG_LINES} ${i18n.t('行')}\n${lines.slice(-MAX_LOG_LINES).join('\n')}`;
 }
-
-function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
+function LogPanel({
+  jobId,
+  owner,
+  repo,
+  isRunning,
+  jobName,
+  jobConclusion,
+  jobHtmlUrl,
+  branch,
+  failedSteps,
+}: LogPanelProps) {
+  const navigate = useNavigate();
   const [logs, setLogs] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -423,6 +439,28 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
       toast.error(i18n.t('复制失败'));
     }
   };
+  const handleAnalyzeWithAi = () => {
+    const prompt = buildActionsFailurePrompt({
+      repoFullName: `${owner}/${repo}`,
+      branch,
+      jobName,
+      conclusion: jobConclusion,
+      htmlUrl: jobHtmlUrl,
+      failedSteps,
+      logs: stripAnsi(logs),
+    });
+    if (!setAiTaskHandoff({
+      prompt,
+      repoFullName: `${owner}/${repo}`,
+      branch,
+      source: 'actions',
+    })) {
+      toast.error(i18n.t('无法传递给 AI 助手，请重试'));
+      return;
+    }
+    toast.success(i18n.t('已发送失败日志到 AI 助手'));
+    navigate('/ai-assistant');
+  };
 
   return (
     <div className="bg-[#0d1117] border border-border rounded-lg overflow-hidden">
@@ -443,6 +481,19 @@ function LogPanel({ jobId, owner, repo, isRunning }: LogPanelProps) {
         >
           <ArrowDown className="w-3 h-3" /><span className="hidden sm:inline">{follow ? i18n.t('跟随中') : i18n.t('跟随')}</span>
         </Button>
+        {!isRunning && (jobConclusion === 'failure' || jobConclusion === 'timed_out') && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1.5 sm:px-2 text-xs text-primary hover:text-primary hover:bg-primary/10 gap-1"
+            onClick={handleAnalyzeWithAi}
+            disabled={loading || !logs}
+            title={i18n.t('发送失败日志给 AI 分析')}
+          >
+            <Sparkles className="w-3 h-3" />
+            <span>{i18n.t('AI分析')}</span>
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"
@@ -482,12 +533,14 @@ function JobItem({
   job,
   owner,
   repo,
+  branch,
   onRerun,
   isRerunning,
 }: {
   job: GitHubWorkflowJob;
   owner: string;
   repo: string;
+  branch?: string;
   onRerun: (job: GitHubWorkflowJob) => void;
   isRerunning: boolean;
 }) {
@@ -564,7 +617,17 @@ function JobItem({
             )}
           </div>
           {showLogs && (
-            <LogPanel jobId={job.id} owner={owner} repo={repo} isRunning={isRunning} />
+            <LogPanel
+              jobId={job.id}
+              owner={owner}
+              repo={repo}
+              isRunning={isRunning}
+              jobName={job.name}
+              jobConclusion={job.conclusion}
+              jobHtmlUrl={job.html_url}
+              branch={branch}
+              failedSteps={job.steps.filter((step) => step.conclusion === 'failure').map((step) => step.name)}
+            />
           )}
         </div>
       </CollapsibleContent>
@@ -862,6 +925,7 @@ function RunDetail({
               job={job}
               owner={owner}
               repo={repo}
+              branch={liveRun.head_branch || ''}
               onRerun={handleRerunJob}
               isRerunning={rerunningJobId === job.id}
             />

@@ -1,7 +1,7 @@
 // AI 助手页面 v8 - SSE 协议 v2：seq/stream_id/turn_id、idle timeout、TTFT 埋点
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { getRepoBranches } from '@/services/github';
+import { getRepoBranches, getRepo } from '@/services/github';
 import { runAiAgent } from '@/lib/aiAgentCore';
 import { startAgentBackgroundTask, stopAgentBackgroundTask } from '@/lib/agentBackground';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,7 @@ import {
 import { upsertSession, replaceSessionMessages, insertToolExecutionLogs, upsertWorkflowSnapshot, fetchLatestSnapshot, type PersistMessageInput } from '@/components/ai/aiSupabase';
 import type { Message, ModelConfig, ChatSession, ChatSessionMessage, ToolHistoryItem, TaskPlanStep, InlineStep, InlineTool, Attachment, FileRequest, StreamMetrics } from '@/components/ai/aiTypes';
 import { buildModelHistory, compactMessageForStorage } from '@/lib/agent/conversationMemory';
+import { consumeAiTaskHandoff } from '@/lib/aiTaskHandoff';
 import { appendUsageRecord } from '@/components/ai/usageStats';
 import i18n from "@/i18n";
 
@@ -507,17 +508,20 @@ export default function AiAssistantPage() {
   }, [messages]);
 
   // 加载分支列表
-  const loadBranches = useCallback(async (repo: GitHubRepo) => {
+  const loadBranches = useCallback(async (repo: GitHubRepo, preferredBranch?: string) => {
     setBranchesLoading(true);
     try {
       const list = await getRepoBranches(repo.owner.login, repo.name);
       const names = (list as Array<{ name: string }>).map(b => b.name);
       setBranches(names);
       const def = repo.default_branch || 'main';
-      setSelectedBranch(names.includes(def) ? def : (names[0] || def));
+      const preferred = preferredBranch && names.includes(preferredBranch)
+        ? preferredBranch
+        : names.includes(def) ? def : (names[0] || def);
+      setSelectedBranch(preferred);
     } catch {
       setBranches([]);
-      setSelectedBranch(repo.default_branch || 'main');
+      setSelectedBranch(preferredBranch || repo.default_branch || 'main');
     } finally {
       setBranchesLoading(false);
     }
@@ -548,6 +552,70 @@ export default function AiAssistantPage() {
     loadBranches(repo);
     setStep('chat');
   }, [loadBranches]);
+
+  // Actions 失败日志 → AI 助手：载入仓库/分支，并把分析请求预填到输入框。
+  useEffect(() => {
+    if (!user?.login) return;
+    const handoff = consumeAiTaskHandoff();
+    if (!handoff) return;
+
+    let cancelled = false;
+    const applyHandoff = async () => {
+      const [ownerLogin, repoName] = handoff.repoFullName.split('/');
+      if (!ownerLogin || !repoName) return;
+
+      let repo = selectedRepo;
+      if (!repo || repo.full_name !== handoff.repoFullName) {
+        try {
+          repo = await getRepo(ownerLogin, repoName);
+        } catch (err) {
+          if (!cancelled) {
+            setInput(handoff.prompt);
+            toast.error(err instanceof Error ? err.message : i18n.t('加载仓库失败'));
+          }
+          return;
+        }
+      }
+      if (cancelled) return;
+
+      const switchingRepo = !selectedRepo || selectedRepo.full_name !== repo.full_name;
+      setSelectedRepo(repo);
+      setStep('chat');
+      setInput(handoff.prompt);
+      autoFollowRef.current = true;
+
+      if (switchingRepo) {
+        setSessionId(null);
+        setActiveWorkflowId(null);
+        activeWorkflowIdRef.current = null;
+        setPendingResumeInfo(null);
+        pendingMsgsRef.current = [];
+        setTaskPlanSteps([]);
+        setStepStatuses({});
+        setCurrentStepId(null);
+        setMessages([{
+          id: 'welcome',
+          role: 'assistant',
+          content: `你好！我已连接到仓库 **${repo.full_name}**。\n\n下面的输入框已填入 Actions 失败分析请求，确认后发送即可。`,
+        }]);
+      } else if (messages.length === 0) {
+        setMessages([{
+          id: 'welcome',
+          role: 'assistant',
+          content: `你好！我已连接到仓库 **${repo.full_name}**。\n\n下面的输入框已填入 Actions 失败分析请求，确认后发送即可。`,
+        }]);
+      }
+
+      await loadBranches(repo, handoff.branch);
+      if (!cancelled) toast.info(i18n.t('已载入 Actions 日志，可直接发送分析'));
+    };
+
+    void applyHandoff();
+    return () => { cancelled = true; };
+    // 只在进入页面时消费一次 handoff
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.login]);
+
   // 加载历史对话
   const handleLoadHistory = useCallback((session: ChatSession, histMsgs: ChatSessionMessage[]) => {
     // 找到对应仓库信息（只设置必要字段）

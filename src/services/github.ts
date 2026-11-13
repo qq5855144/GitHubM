@@ -1191,6 +1191,12 @@ export async function markNotificationRead(threadId: string): Promise<void> {
   await request<void>(`/notifications/threads/${threadId}`, { method: 'PATCH' });
 }
 
+export async function deleteNotification(threadId: string): Promise<void> {
+  await request<void>(`/notifications/threads/${threadId}`, { method: 'DELETE' });
+  // 删除后通知列表可能被其他 GET 请求缓存，主动失效。
+  invalidateAndBust('/notifications');
+}
+
 export async function markAllNotificationsRead(): Promise<void> {
   await request<void>('/notifications', {
     method: 'PUT',

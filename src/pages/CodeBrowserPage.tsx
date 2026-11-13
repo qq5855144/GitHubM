@@ -117,6 +117,7 @@ import { toast } from 'sonner';
 import { decodeBase64Content, copyToClipboard } from '@/lib/utils';
 import { getFileIconInfo, isImageFile } from '@/components/common/FileIcon';
 import { downloadGithubFile, downloadRepoDirectoryZip } from '@/lib/githubDownload';
+import { clearEditorDraft, readEditorDraft, saveEditorDraft, type EditorDraft } from '@/lib/editorDraft';
 import i18n from "@/i18n";
 
 /**
@@ -351,6 +352,10 @@ export default function CodeBrowserPage() {
   // 语法错误状态
   const [syntaxErrors, setSyntaxErrors] = useState<EditorSyntaxError[]>([]);
   const [showSyntaxWarning, setShowSyntaxWarning] = useState(false);
+  const [draftRestored, setDraftRestored] = useState<EditorDraft | null>(null);
+  const [saveConflict, setSaveConflict] = useState<{ remoteSha: string } | null>(null);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const pendingLeaveRef = useRef<(() => void) | null>(null);
 
   // 编辑器搜索
   const editorRef = useRef<CodeEditorRef | null>(null);
@@ -400,6 +405,57 @@ export default function CodeBrowserPage() {
   // 判断当前文件是否是图片
   const currentIsImage = currentFile ? isImageFile(currentFile.name) : false;
 
+  const hasUnsavedChanges =
+    actionMode === 'edit' &&
+    !!currentFile &&
+    !!owner &&
+    !!repo &&
+    !!currentBranch &&
+    editContent !== (fileContent ?? '');
+
+  const saveCurrentDraftNow = useCallback((): boolean => {
+    if (!owner || !repo || !currentBranch || !currentFile || editContent === (fileContent ?? '')) {
+      return false;
+    }
+    return saveEditorDraft({
+      owner,
+      repo,
+      branch: currentBranch,
+      path: currentFile.path,
+      baseSha: draftRestored?.baseSha || currentFile.sha,
+      content: editContent,
+      commitMessage: commitMsg,
+    });
+  }, [owner, repo, currentBranch, currentFile, editContent, fileContent, commitMsg, draftRestored]);
+
+  const clearCurrentDraft = useCallback(() => {
+    if (!owner || !repo || !currentBranch || !currentFile) return;
+    clearEditorDraft(owner, repo, currentBranch, currentFile.path);
+  }, [owner, repo, currentBranch, currentFile]);
+
+  useEffect(() => {
+    if (!currentFile || actionMode !== 'edit') return;
+    if (editContent === (fileContent ?? '')) {
+      clearCurrentDraft();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      saveCurrentDraftNow();
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [actionMode, currentFile, editContent, fileContent, commitMsg, clearCurrentDraft, saveCurrentDraftNow]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      saveCurrentDraftNow();
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges, saveCurrentDraftNow]);
+
   // 文件树状态
   const [treeRefreshKey, setTreeRefreshKey] = useState(0);
   const [treeOpen, setTreeOpen] = useState(false);       // 移动端 Sheet 展开
@@ -419,6 +475,8 @@ export default function CodeBrowserPage() {
     setActionMode(null);
     setEditContent('');
     setCommitMsg('');
+    setDraftRestored(null);
+    setSaveConflict(null);
     try {
       const data = await getRepoContents(owner, repo, filePath, currentBranch);
       if (Array.isArray(data)) {
@@ -435,10 +493,19 @@ export default function CodeBrowserPage() {
           setFileBase64(raw);
           if (!isImageFile(data.name)) {
             const decoded = decodeBase64Content(data.content);
+            const draft = readEditorDraft(owner, repo, currentBranch, data.path);
+            const restored = draft && draft.content !== decoded ? draft : null;
             setFileContent(decoded);
             // 文本文件：直接在此原子性地打开编辑器，避免 useEffect 竞态
-            setEditContent(decoded);
-            setCommitMsg(`Update ${data.name}`);
+            setEditContent(restored?.content ?? decoded);
+            setCommitMsg(restored?.commitMessage || `Update ${data.name}`);
+            setDraftRestored(restored);
+            if (restored) {
+              toast.info(i18n.t('已恢复未提交的本地草稿'));
+              if (restored.baseSha !== data.sha) {
+                toast.warning(i18n.t('草稿基于旧版本，保存时会检查远端冲突'));
+              }
+            }
             setActionMode('edit');
             setEditorFullscreen(window.innerWidth < 768);
           }
@@ -497,12 +564,34 @@ export default function CodeBrowserPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owner, repo, filePath]);
 
+  const requestLeave = useCallback((action: () => void) => {
+    if (!hasUnsavedChanges) {
+      action();
+      return;
+    }
+    saveCurrentDraftNow();
+    pendingLeaveRef.current = action;
+    setLeaveConfirmOpen(true);
+  }, [hasUnsavedChanges, saveCurrentDraftNow]);
+
+  const guardedNavigate = useCallback((target: string | number, options?: { replace?: boolean }) => {
+    requestLeave(() => {
+      if (typeof target === 'number') {
+        navigate(target);
+      } else {
+        navigate(target, options);
+      }
+    });
+  }, [navigate, requestLeave]);
+
   const handleBranchChange = useCallback((branch: string) => {
-    setCurrentBranch(branch);
-    const next = new URLSearchParams(searchParams);
-    next.set('branch', branch);
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
+    requestLeave(() => {
+      setCurrentBranch(branch);
+      const next = new URLSearchParams(searchParams);
+      next.set('branch', branch);
+      setSearchParams(next, { replace: true });
+    });
+  }, [requestLeave, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!owner || !repo) return;
@@ -557,6 +646,8 @@ export default function CodeBrowserPage() {
     setDeleteProgress(null);
     setEditorFullscreen(false);
     setIsReadingMode(false);
+    setDraftRestored(null);
+    setSaveConflict(null);
     if (returnToParent && filePath) {
       const parentParts = filePath.split('/').slice(0, -1);
       // replace: true 将当前文件路由条目替换为父目录，而非新增入栈，
@@ -567,6 +658,10 @@ export default function CodeBrowserPage() {
       );
     }
   };
+
+  const requestCloseEditor = useCallback(() => {
+    requestLeave(() => closeAction(true));
+  }, [requestLeave]);
 
   const openAction = (mode: ActionMode, target?: GitHubContent, dirPath?: string) => {
     setActionMode(mode);
@@ -588,25 +683,48 @@ export default function CodeBrowserPage() {
   };
 
   // ─── 保存编辑 ───
-  const handleSaveEdit = async (force = false) => {
+  const handleSaveEdit = async (options: { forceSyntax?: boolean; overwriteSha?: string } = {}) => {
     if (!owner || !repo || !currentFile || !commitMsg.trim()) { toast.error(i18n.t('请填写提交信息')); return; }
-    if (syntaxErrors.length > 0 && !force) {
+    if (syntaxErrors.length > 0 && !options.forceSyntax) {
       setShowSyntaxWarning(true);
       return;
     }
     setShowSyntaxWarning(false);
     setActionBusy(true);
     try {
+      if (!options.overwriteSha) {
+        const remote = await getFileInfo(owner, repo, currentFile.path, currentBranch);
+        if (!remote) {
+          saveCurrentDraftNow();
+          setSaveConflict({ remoteSha: '' });
+          return;
+        }
+        if (remote.sha !== currentFile.sha) {
+          saveCurrentDraftNow();
+          setSaveConflict({ remoteSha: remote.sha });
+          return;
+        }
+      }
       await updateFileContent(owner, repo, currentFile.path, {
         message: commitMsg.trim(),
         content: btoa(unescape(encodeURIComponent(editContent))),
-        sha: currentFile.sha,
+        sha: options.overwriteSha || currentFile.sha,
         branch: currentBranch,
       });
+      clearCurrentDraft();
+      setDraftRestored(null);
       toast.success(i18n.t('文件已保存并提交'));
       // 直接导航到上级目录，不更新 fileContent（避免触发响应式副作用）
       closeAction(true);
-    } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('保存失败')); }
+    } catch (err) {
+      saveCurrentDraftNow();
+      const message = err instanceof Error ? err.message : i18n.t('保存失败');
+      if (/409|sha|conflict/i.test(message)) {
+        toast.error(i18n.t('远端文件已更新，草稿已保留'));
+      } else {
+        toast.error(message);
+      }
+    }
     finally { setActionBusy(false); }
   };
   const handleQuickSave = () => {
@@ -838,12 +956,12 @@ export default function CodeBrowserPage() {
   const FileContextMenuContent = ({ item }: { item: GitHubContent }) => (
     <ContextMenuContent className="bg-popover border-border w-48">
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-        onClick={() => navigate(`/repos/${owner}/${repo}/code/${item.path}`)}>
+        onClick={() => guardedNavigate(`/repos/${owner}/${repo}/code/${item.path}`)}>
         <FileItemIcon filename={item.name} isDir={false} size="w-3.5 h-3.5 mr-2" />
         {i18n.t('查看文件')}</ContextMenuItem>
       {!isImageFile(item.name) && (
         <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-          onClick={() => navigate(`/repos/${owner}/${repo}/code/${item.path}`)}>
+          onClick={() => guardedNavigate(`/repos/${owner}/${repo}/code/${item.path}`)}>
           <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('编辑文件')}</ContextMenuItem>
       )}
       {item.download_url && (
@@ -871,7 +989,7 @@ export default function CodeBrowserPage() {
         onClick={() => openAction('move', item)}>
         <MoveRight className="w-3.5 h-3.5 mr-2" />{i18n.t('移动到...')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-        onClick={() => navigate(`/repos/${owner}/${repo}/commits?branch=${encodeURIComponent(currentBranch)}&path=${encodeURIComponent(item.path)}`)}>
+        onClick={() => guardedNavigate(`/repos/${owner}/${repo}/commits?branch=${encodeURIComponent(currentBranch)}&path=${encodeURIComponent(item.path)}`)}>
         <History className="w-3.5 h-3.5 mr-2" />{i18n.t('查看历史')}</ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-destructive cursor-pointer text-sm focus:text-destructive"
@@ -884,20 +1002,20 @@ export default function CodeBrowserPage() {
   const FolderContextMenuContent = ({ item }: { item: GitHubContent }) => (
     <ContextMenuContent className="bg-popover border-border w-52">
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-        onClick={() => navigate(`/repos/${owner}/${repo}/code/${item.path}`)}>
+        onClick={() => guardedNavigate(`/repos/${owner}/${repo}/code/${item.path}`)}>
         <FolderOpen className="w-3.5 h-3.5 mr-2 text-yellow-400" />{i18n.t('打开文件夹')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
         onClick={() => void handleDownloadDirectory(item.path)}>
         <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('下载文件夹 ZIP')}</ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-        onClick={() => { navigate(`/repos/${owner}/${repo}/code/${item.path}`); setTimeout(() => openAction('new-file'), 100); }}>
+        onClick={() => { guardedNavigate(`/repos/${owner}/${repo}/code/${item.path}`); setTimeout(() => openAction('new-file'), 100); }}>
         <FilePlus className="w-3.5 h-3.5 mr-2" />{i18n.t('新建文件')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-        onClick={() => { navigate(`/repos/${owner}/${repo}/code/${item.path}`); setTimeout(() => openAction('new-folder'), 100); }}>
+        onClick={() => { guardedNavigate(`/repos/${owner}/${repo}/code/${item.path}`); setTimeout(() => openAction('new-folder'), 100); }}>
         <FolderPlus className="w-3.5 h-3.5 mr-2" />{i18n.t('新建子文件夹')}</ContextMenuItem>
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-        onClick={() => { navigate(`/repos/${owner}/${repo}/code/${item.path}`); setTimeout(() => openAction('upload'), 100); }}>
+        onClick={() => { guardedNavigate(`/repos/${owner}/${repo}/code/${item.path}`); setTimeout(() => openAction('upload'), 100); }}>
         <Upload className="w-3.5 h-3.5 mr-2" />{i18n.t('上传文件')}</ContextMenuItem>
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-foreground cursor-pointer text-sm"
@@ -968,7 +1086,7 @@ export default function CodeBrowserPage() {
           <Search className="w-5 h-5" />
         </Button>
         <div className="mt-auto mb-2 flex flex-col gap-4">
-          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => navigate('/repos')} title={i18n.t('返回仓库列表')}>
+          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => guardedNavigate('/repos')} title={i18n.t('返回仓库列表')}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
         </div>
@@ -991,15 +1109,15 @@ export default function CodeBrowserPage() {
           </Button>
           {/* 移动端保留面包屑等 */}
 <div ref={breadcrumbRef} className="flex items-center gap-1 text-sm text-muted-foreground flex-1 min-w-0 overflow-x-auto whitespace-nowrap scrollbar-none scroll-smooth">
-           <button type="button" className="hover:text-primary transition-colors shrink-0" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
+           <button type="button" className="hover:text-primary transition-colors shrink-0" onClick={() => guardedNavigate('/repos')}>{i18n.t('仓库')}</button>
            <ChevronRight className="w-3 h-3 shrink-0" />
-           <button type="button" className="hover:text-primary transition-colors shrink-0 max-w-[120px] truncate" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
+           <button type="button" className="hover:text-primary transition-colors shrink-0 max-w-[120px] truncate" onClick={() => guardedNavigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
            <ChevronRight className="w-3 h-3 shrink-0" />
            <button
              type="button"
              data-breadcrumb-current={pathParts.length === 0 ? 'true' : undefined}
              className={`shrink-0 rounded px-1.5 py-0.5 transition-colors ${pathParts.length === 0 ? 'bg-primary/10 text-primary font-semibold' : 'hover:text-primary'}`}
-             onClick={() => navigate(`/repos/${owner}/${repo}/code`)}
+             onClick={() => guardedNavigate(`/repos/${owner}/${repo}/code`)}
            >{i18n.t('根')}</button>
           {pathParts.map((part, i) => {
             // 渲染时预计算目标路径字符串，onClick 绑定不可变常量，消除闭包时序问题
@@ -1013,9 +1131,9 @@ export default function CodeBrowserPage() {
               const targetIdx = stack.lastIndexOf(targetFullPath);
               const currentIdx = stack.length - 1;
               if (targetIdx >= 0 && targetIdx < currentIdx) {
-                navigate(targetIdx - currentIdx); // 负数 = 回溯 N 步
+                guardedNavigate(targetIdx - currentIdx); // 负数 = 回溯 N 步
               } else {
-                navigate(targetFullPath); // 历史中没有则正常 push
+                guardedNavigate(targetFullPath); // 历史中没有则正常 push
               }
             };
             return (
@@ -1058,7 +1176,7 @@ export default function CodeBrowserPage() {
               onBranchChange={handleBranchChange}
               activePath={filePath || undefined}
               refreshKey={treeRefreshKey}
-              onFileClick={(item) => navigate(`/repos/${owner}/${repo}/code/${item.path}`)}
+              onFileClick={(item) => guardedNavigate(`/repos/${owner}/${repo}/code/${item.path}`)}
               onNewFile={(dirPath) => openAction('new-file', undefined, dirPath)}
               onNewFolder={(dirPath) => openAction('new-folder', undefined, dirPath)}
               onUpload={(dirPath) => { setPendingDirPath(dirPath); openAction('upload', undefined, dirPath); }}
@@ -1095,7 +1213,7 @@ export default function CodeBrowserPage() {
                 onBranchChange={(b) => { handleBranchChange(b); setTreeOpen(false); }}
                 activePath={filePath || undefined}
                 refreshKey={treeRefreshKey}
-                onFileClick={(item) => { navigate(`/repos/${owner}/${repo}/code/${item.path}`); setTreeOpen(false); }}
+                onFileClick={(item) => { guardedNavigate(`/repos/${owner}/${repo}/code/${item.path}`); setTreeOpen(false); }}
                 onNewFile={(dirPath) => { openAction('new-file', undefined, dirPath); setTreeOpen(false); }}
                 onNewFolder={(dirPath) => { openAction('new-folder', undefined, dirPath); setTreeOpen(false); }}
                 onUpload={(dirPath) => { setPendingDirPath(dirPath); openAction('upload', undefined, dirPath); setTreeOpen(false); }}
@@ -1129,15 +1247,15 @@ export default function CodeBrowserPage() {
                 <div className="flex items-center gap-2 px-3 h-7 bg-background border-t border-x border-border rounded-t-sm text-sm text-foreground shrink-0 cursor-pointer min-w-[120px] max-w-[200px]">
                   <FileItemIcon filename={currentFile?.name ?? ''} isDir={false} size="w-4 h-4" />
                   <span className="truncate flex-1">{currentFile?.name}</span>
-                  <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full p-0.5" onClick={(e) => { e.stopPropagation(); closeAction(true); }} />
+                  <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full p-0.5" onClick={(e) => { e.stopPropagation(); requestCloseEditor(); }} />
                 </div>
               </div>
               <div className="flex items-center px-4 h-7 border-b border-border bg-background text-xs text-muted-foreground shrink-0 overflow-x-auto whitespace-nowrap scrollbar-none">
-                <span className="hover:text-foreground cursor-pointer" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</span>
+                <span className="hover:text-foreground cursor-pointer" onClick={() => guardedNavigate('/repos')}>{i18n.t('仓库')}</span>
                 <ChevronRight className="w-3 h-3 mx-1 opacity-50" />
-                <span className="hover:text-foreground cursor-pointer" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</span>
+                <span className="hover:text-foreground cursor-pointer" onClick={() => guardedNavigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</span>
                 <ChevronRight className="w-3 h-3 mx-1 opacity-50" />
-                <span className="hover:text-foreground cursor-pointer" onClick={() => navigate(`/repos/${owner}/${repo}/code`)}>{i18n.t('代码')}</span>
+                <span className="hover:text-foreground cursor-pointer" onClick={() => guardedNavigate(`/repos/${owner}/${repo}/code`)}>{i18n.t('代码')}</span>
                 {pathParts.map((part, i) => {
                   const targetPath = pathParts.slice(0, i + 1).join('/');
                   const targetFullPath = `/repos/${owner}/${repo}/code/${targetPath}`;
@@ -1147,9 +1265,9 @@ export default function CodeBrowserPage() {
                     const targetIdx = stack.lastIndexOf(targetFullPath);
                     const currentIdx = stack.length - 1;
                     if (targetIdx >= 0 && targetIdx < currentIdx) {
-                      navigate(targetIdx - currentIdx);
+                      guardedNavigate(targetIdx - currentIdx);
                     } else {
-                      navigate(targetFullPath);
+                      guardedNavigate(targetFullPath);
                     }
                   };
                   return (
@@ -1179,7 +1297,7 @@ export default function CodeBrowserPage() {
                 <div className="flex flex-col">
                   {/* 移动端工具栏 */}
                   <div className="flex md:hidden items-center gap-1 px-1.5 h-12 bg-[#2d2d2d] text-white shrink-0 border-b border-white/10 select-none">
-                    <Button variant="ghost" size="icon" className="w-10 h-10 shrink-0 text-white hover:bg-white/10" onClick={() => closeAction(true)} title={i18n.t('返回')}>
+                    <Button variant="ghost" size="icon" className="w-10 h-10 shrink-0 text-white hover:bg-white/10" onClick={() => requestCloseEditor()} title={i18n.t('返回')}>
                       <ArrowLeft className="w-5 h-5" />
                     </Button>
                     <div className="flex-1 min-w-0 px-1 text-center">
@@ -1314,12 +1432,35 @@ export default function CodeBrowserPage() {
                     </DropdownMenu>
                     <div className="w-px h-4 bg-border shrink-0 mx-0.5" />
                     <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
-                      onClick={() => closeAction(true)} title={i18n.t('关闭编辑器')}>
+                      onClick={() => requestCloseEditor()} title={i18n.t('关闭编辑器')}>
                       <X className="w-3.5 h-3.5" />
                     </Button>
                   </div>
                   {/* 桌面端工具栏闭合 */}
                   </div>
+                </div>
+              )}
+
+              {draftRestored && !isReadingMode && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-warning/10 border-b border-warning/20 text-xs text-warning shrink-0">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span className="flex-1 min-w-0 text-pretty">
+                    {i18n.t('已恢复未提交的本地草稿')}
+                    {draftRestored.baseSha !== currentFile?.sha && ` · ${i18n.t('草稿基于旧版本')}`}
+                  </span>
+                  <button
+                    type="button"
+                    className="shrink-0 underline underline-offset-2 hover:text-foreground"
+                    onClick={() => {
+                      clearCurrentDraft();
+                      setEditContent(fileContent ?? '');
+                      setCommitMsg(`Update ${currentFile?.name || 'file'}`);
+                      setDraftRestored(null);
+                      toast.info(i18n.t('已放弃本地草稿'));
+                    }}
+                  >
+                    {i18n.t('放弃草稿')}
+                  </button>
                 </div>
               )}
 
@@ -1371,7 +1512,7 @@ export default function CodeBrowserPage() {
                     <AlertDialogFooter>
                       <AlertDialogCancel>{i18n.t('返回修改')}</AlertDialogCancel>
                       <AlertDialogAction onClick={() => {
-                        handleSaveEdit(true);
+                        handleSaveEdit({ forceSyntax: true });
                       }}>{i18n.t('强行保存')}</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -1467,7 +1608,7 @@ export default function CodeBrowserPage() {
                   </div>
                   <Button variant="ghost" size="sm"
                     className="h-8 text-xs text-muted-foreground border border-border hover:bg-secondary shrink-0 px-3"
-                    onClick={() => closeAction(true)}>
+                    onClick={() => requestCloseEditor()}>
                     <X className="w-3 h-3 mr-1" />{i18n.t('取消')}</Button>
                   <Button size="sm" className={`h-8 text-xs shrink-0 px-3 ${syntaxErrors.length > 0 ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}
                     onClick={() => handleSaveEdit()} disabled={actionBusy || !commitMsg.trim()}>
@@ -1490,10 +1631,10 @@ export default function CodeBrowserPage() {
                   // 若导航栈少于 2 条（直接访问的 URL），则退回计算的父目录
                   const stack = getCodeNavStack(owner!, repo!);
                   if (stack.length >= 2) {
-                    navigate(-1);
+                    guardedNavigate(-1);
                   } else {
                     const parentParts = pathParts.slice(0, -1);
-                    navigate(`/repos/${owner}/${repo}/code${parentParts.length > 0 ? '/' + parentParts.join('/') : ''}`);
+                    guardedNavigate(`/repos/${owner}/${repo}/code${parentParts.length > 0 ? '/' + parentParts.join('/') : ''}`);
                   }
                 }}>
                 <ArrowLeft className="w-3.5 h-3.5" />
@@ -1572,7 +1713,7 @@ export default function CodeBrowserPage() {
                 </Button>
                 <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 px-2"
                   title={i18n.t('查看提交历史')}
-                  onClick={() => navigate(`/repos/${owner}/${repo}/commits?branch=${encodeURIComponent(currentBranch)}&path=${encodeURIComponent(currentFile.path)}`)}>
+                  onClick={() => guardedNavigate(`/repos/${owner}/${repo}/commits?branch=${encodeURIComponent(currentBranch)}&path=${encodeURIComponent(currentFile.path)}`)}>
                   <History className="w-3.5 h-3.5" /><span className="hidden md:inline">{i18n.t('历史')}</span>
                 </Button>
                 <DropdownMenu>
@@ -1729,7 +1870,7 @@ export default function CodeBrowserPage() {
                         <button
                           type="button"
                           className="flex-1 flex items-center gap-3 px-4 py-2.5 text-left min-w-0"
-                          onClick={() => navigate(`/repos/${owner}/${repo}/code/${item.path}`)}
+                          onClick={() => guardedNavigate(`/repos/${owner}/${repo}/code/${item.path}`)}
                         >
                           <FileItemIcon filename={item.name} isDir={isDir} size="w-4 h-4" />
                           <span className={`text-sm font-mono flex-1 min-w-0 truncate ${isDir ? 'text-foreground font-medium' : 'text-foreground/90'} group-hover:text-primary transition-colors`}>
@@ -1775,7 +1916,7 @@ export default function CodeBrowserPage() {
                                   <Link className="w-3.5 h-3.5 mr-2" />{i18n.t('复制 Raw 链接')}</DropdownMenuItem>
                               )}
                               {!isDir && (
-                                <DropdownMenuItem onClick={() => navigate(`/repos/${owner}/${repo}/commits?branch=${encodeURIComponent(currentBranch)}&path=${encodeURIComponent(item.path)}`)}>
+                                <DropdownMenuItem onClick={() => guardedNavigate(`/repos/${owner}/${repo}/commits?branch=${encodeURIComponent(currentBranch)}&path=${encodeURIComponent(item.path)}`)}>
                                   <History className="w-3.5 h-3.5 mr-2" />{i18n.t('查看历史')}</DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />
@@ -2107,6 +2248,84 @@ export default function CodeBrowserPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={leaveConfirmOpen} onOpenChange={(open) => {
+        setLeaveConfirmOpen(open);
+        if (!open) pendingLeaveRef.current = null;
+      }}>
+        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-md bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">{i18n.t('有未保存的修改')}</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              {i18n.t('修改已自动保存为本地草稿，下次打开该文件时可恢复。是否暂时离开？')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">
+              {i18n.t('继续编辑')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => {
+                const action = pendingLeaveRef.current;
+                pendingLeaveRef.current = null;
+                setLeaveConfirmOpen(false);
+                action?.();
+              }}
+            >
+              {i18n.t('暂存并离开')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!saveConflict} onOpenChange={(open) => { if (!open) setSaveConflict(null); }}>
+        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">
+              {saveConflict?.remoteSha === ''
+                ? i18n.t('远端文件已不存在')
+                : i18n.t('文件已在远端更新')}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground space-y-2">
+              {saveConflict?.remoteSha === '' ? (
+                <span className="block">{i18n.t('远端文件已被删除或移动，无法直接覆盖。你的修改已保存为本地草稿。')}</span>
+              ) : (
+                <span className="block">{i18n.t('文件在编辑期间被其他设备修改。直接覆盖会丢失远端的新修改。')}</span>
+              )}
+              <span className="block text-xs">{i18n.t('本地草稿已保留。')}</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 flex-wrap">
+            <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">
+              {i18n.t('继续编辑')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="border border-border bg-transparent text-muted-foreground hover:bg-secondary"
+              onClick={() => {
+                clearCurrentDraft();
+                setDraftRestored(null);
+                setSaveConflict(null);
+                void loadContents();
+              }}
+            >
+              {i18n.t('放弃本地并加载最新')}
+            </AlertDialogAction>
+            {saveConflict?.remoteSha !== '' && (
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => {
+                  const remoteSha = saveConflict?.remoteSha;
+                  setSaveConflict(null);
+                  if (remoteSha) void handleSaveEdit({ forceSyntax: true, overwriteSha: remoteSha });
+                }}
+              >
+                {i18n.t('仍然覆盖')}
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </div>
       </div>
       </div>

@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   Package,
   RefreshCw,
+  Loader2,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +22,7 @@ import {
   getNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  deleteNotification,
   formatRelativeTime,
 } from '@/services/github';
 import type { GitHubNotification } from '@/types/types';
@@ -33,6 +36,7 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadNotifications = useCallback(async (force = false) => {
     const cacheKey = `notifications:${showAll}`;
@@ -139,6 +143,38 @@ export default function NotificationsPage() {
       console.error(err);
     } finally {
       setMarkingAll(false);
+    }
+  };
+
+  const handleDeleteNotification = async (notification: GitHubNotification) => {
+    if (deletingId) return;
+    const index = notifications.findIndex((item) => item.id === notification.id);
+    if (index < 0) return;
+    const removed = notifications[index];
+    const cacheKey = `notifications:${showAll}`;
+
+    setDeletingId(notification.id);
+    setNotifications((prev) => {
+      const updated = prev.filter((item) => item.id !== notification.id);
+      pageCache.set(cacheKey, updated, 2 * 60 * 1000);
+      return updated;
+    });
+
+    try {
+      await deleteNotification(notification.id);
+      toast.success(i18n.t('通知已删除'));
+    } catch (err) {
+      setNotifications((prev) => {
+        if (prev.some((item) => item.id === removed.id)) return prev;
+        const rollback = [...prev];
+        rollback.splice(Math.min(index, rollback.length), 0, removed);
+        pageCache.set(cacheKey, rollback, 2 * 60 * 1000);
+        return rollback;
+      });
+      toast.error(i18n.t('删除通知失败，已恢复'));
+      console.error(err);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -278,15 +314,32 @@ export default function NotificationsPage() {
                     </div>
                   </div>
                   {/* 操作 */}
-                  {notification.unread && (
+                  <div className="shrink-0 flex items-center gap-0.5">
+                    {notification.unread && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:bg-secondary h-7 text-xs"
+                        onClick={(e) => { e.stopPropagation(); handleMarkRead(notification.id); }}
+                      >
+                        {i18n.t('标为已读')}</Button>
+                    )}
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="shrink-0 text-muted-foreground hover:bg-secondary h-7 text-xs"
-                      onClick={(e) => { e.stopPropagation(); handleMarkRead(notification.id); }}
+                      size="icon"
+                      className="w-7 h-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      title={i18n.t('删除通知')}
+                      disabled={deletingId === notification.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleDeleteNotification(notification);
+                      }}
                     >
-                      {i18n.t('标为已读')}</Button>
-                  )}
+                      {deletingId === notification.id
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <Trash2 className="w-3.5 h-3.5" />}
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}

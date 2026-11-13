@@ -1319,11 +1319,26 @@ class MainActivity : AppCompatActivity() {
             val targetId = item.itemId
             if (targetId == currentNavItemId) return@setOnItemSelectedListener false
 
-            // 通过修改 location.hash 触发 HashRouter 路由跳转
+            // 通过修改 location.hash 触发 HashRouter 路由跳转。
+            // WebView 在 hash 变化后可能沿用上一个页面的原生滚动偏移，
+            // 因此显式多次归零，避免底部导航切换后停留在上一页的滚动位置。
             val safeHash = path.replace("'", "\\'")
-            webView.evaluateJavascript(
-                "(function(){ window.location.hash = '$safeHash'; })()", null
-            )
+            val js = """
+                (function(){
+                    window.location.hash = '$safeHash';
+                    function resetScroll(){
+                        try {
+                            window.scrollTo(0, 0);
+                            if (document.documentElement) document.documentElement.scrollTop = 0;
+                            if (document.body) document.body.scrollTop = 0;
+                        } catch (e) {}
+                    }
+                    resetScroll();
+                    setTimeout(resetScroll, 60);
+                    setTimeout(resetScroll, 180);
+                })();
+            """.trimIndent()
+            webView.evaluateJavascript(js, null)
             true
         }
     }

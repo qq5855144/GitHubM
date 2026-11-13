@@ -1303,7 +1303,7 @@ export default function CodeBrowserPage() {
                     <div className="flex-1 min-w-0 px-1 text-center">
                       <div className="text-sm font-medium truncate text-white">{currentFile?.name || i18n.t('编辑')}</div>
                       <div className="text-[10px] text-gray-400 truncate">
-                        {editContent !== currentFile?.content ? i18n.t('未保存') : currentBranch}
+                        {editContent !== (fileContent ?? '') ? i18n.t('未保存') : currentBranch}
                       </div>
                     </div>
                     <DropdownMenu>

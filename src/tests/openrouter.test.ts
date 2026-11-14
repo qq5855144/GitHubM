@@ -38,7 +38,7 @@ describe('OpenRouter free model provider', () => {
   });
 
   it('uses a provider-specific model when testing without a selection', async () => {
-    expect(getDefaultProviderModel('openrouter')).toBe('openrouter/free');
+    expect(getDefaultProviderModel('openrouter')).toBe('particle-ai/particle-1:free');
 
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ choices: [] }), {
       status: 200,
@@ -50,6 +50,6 @@ describe('OpenRouter free model provider', () => {
 
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const body = JSON.parse(String(init.body)) as { model: string };
-    expect(body.model).toBe('openrouter/free');
+    expect(body.model).toBe('particle-ai/particle-1:free');
   });
 });

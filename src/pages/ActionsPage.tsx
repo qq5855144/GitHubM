@@ -20,7 +20,6 @@ import {
   Terminal,
   Copy,
   Check,
-  ArrowDown,
   ExternalLink,
   Search,
   Tag,
@@ -364,6 +363,40 @@ function trimLogLines(text: string): string {
   if (lines.length <= MAX_LOG_LINES) return text;
   return `${i18n.t('… 日志过长，仅显示最后')} ${MAX_LOG_LINES} ${i18n.t('行')}\n${lines.slice(-MAX_LOG_LINES).join('\n')}`;
 }
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      resolve(result.includes(',') ? result.slice(result.indexOf(',') + 1) : '');
+    };
+    reader.onerror = () => reject(reader.error || new Error(i18n.t('读取日志失败')));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** 直接保存当前已加载的日志文本，避免再次请求需要鉴权的 GitHub 日志接口。 */
+async function downloadLogText(text: string, fileName: string): Promise<void> {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const bridge = (window as unknown as {
+    AndroidBridge?: { saveBlobData?: (name: string, mime: string, base64: string) => void };
+  }).AndroidBridge;
+  if (bridge?.saveBlobData) {
+    const base64 = await blobToBase64(blob);
+    if (!base64) throw new Error(i18n.t('日志内容为空'));
+    bridge.saveBlobData(fileName, 'text/plain', base64);
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
 function LogPanel({
   jobId,
   owner,
@@ -379,6 +412,7 @@ function LogPanel({
   const [logs, setLogs] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [downloadingLog, setDownloadingLog] = useState(false);
   const [follow, setFollow] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -439,6 +473,18 @@ function LogPanel({
       toast.error(i18n.t('复制失败'));
     }
   };
+  const handleDownloadLog = async () => {
+    if (!logs || downloadingLog) return;
+    setDownloadingLog(true);
+    try {
+      await downloadLogText(stripAnsi(logs), `${safeFileName(jobName)}-logs.txt`);
+      toast.success(i18n.t('日志已保存'));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : i18n.t('下载日志失败'));
+    } finally {
+      setDownloadingLog(false);
+    }
+  };
   const handleAnalyzeWithAi = () => {
     const prompt = buildActionsFailurePrompt({
       repoFullName: `${owner}/${repo}`,
@@ -475,11 +521,15 @@ function LogPanel({
         <Button
           variant="ghost"
           size="sm"
-          className={`h-6 px-1.5 sm:px-2 text-[10px] gap-1 shrink-0 whitespace-nowrap ${follow ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'}`}
-          onClick={() => setFollow((prev) => !prev)}
-          title={i18n.t('跟随最新日志')}
+          className="h-6 px-1.5 sm:px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0 whitespace-nowrap"
+          onClick={handleDownloadLog}
+          disabled={loading || !logs || downloadingLog}
+          title={i18n.t('下载日志')}
         >
-          <ArrowDown className="w-3 h-3" /><span className="hidden sm:inline">{follow ? i18n.t('跟随中') : i18n.t('跟随')}</span>
+          {downloadingLog
+            ? <Loader2 className="w-3 h-3 animate-spin" />
+            : <Download className="w-3 h-3" />}
+          <span className="hidden sm:inline">{i18n.t('下载')}</span>
         </Button>
         {!isRunning && (jobConclusion === 'failure' || jobConclusion === 'timed_out') && (
           <Button

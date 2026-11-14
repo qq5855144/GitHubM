@@ -107,6 +107,8 @@ export interface UiToolRun {
   arguments: string;
   status: 'running' | 'done' | 'error';
   content?: string;
+  startedAt?: number;
+  endedAt?: number;
 }
 
 export interface UiChatMessage {

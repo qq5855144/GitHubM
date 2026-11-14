@@ -1,6 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildSystemPrompt, runGeneralAgent } from '@/ai-v2/agent';
 import { buildProviderRequest, streamProvider } from '@/ai-v2/providers';
+import { resolveCapabilities } from '@/ai-v2/capabilities';
+import { readArtifact } from '@/ai-v2/artifacts';
 import type {
   AgentEvent,
   AgentTool,
@@ -28,7 +30,9 @@ function fakeTool(): AgentTool {
 }
 
 describe('AI Assistant V2 agent loop', () => {
-  it('does not force planning or tools for a plain chat', async () => {
+  beforeEach(() => localStorage.clear());
+
+  it('does not force planning and only exposes the core artifact tool for plain chat', async () => {
     let seenTools: V2ToolDefinition[] = [];
     const events: AgentEvent[] = [];
     await runGeneralAgent({
@@ -50,7 +54,7 @@ describe('AI Assistant V2 agent loop', () => {
       },
     });
 
-    expect(seenTools).toHaveLength(0);
+    expect(seenTools.map(tool => tool.function.name)).toEqual(['artifact_read']);
     expect(events.some(event => event.type === 'done')).toBe(true);
   });
 
@@ -132,12 +136,86 @@ describe('AI Assistant V2 agent loop', () => {
     expect(events.some(event => event.type === 'done' && event.steps === 21)).toBe(true);
   });
 
+  it('does not execute a write tool when approval is rejected', async () => {
+    const execute = vi.fn(async () => ({ ok: true, content: 'written' }));
+    const writeTool: AgentTool = {
+      name: 'write_test',
+      description: 'Write test',
+      parameters: { type: 'object', properties: {} },
+      risk: 'write',
+      execute,
+    };
+    const events: AgentEvent[] = [];
+    let call = 0;
+    await runGeneralAgent({
+      token: 'github-token',
+      userLogin: 'approval-user',
+      history: [{ role: 'user', content: '写入' }],
+      config,
+      signal: new AbortController().signal,
+      onEvent: event => events.push(event),
+      tools: [writeTool],
+      requestApproval: async () => false,
+      callModel: async (): Promise<ProviderStreamResult> => {
+        call++;
+        return call === 1
+          ? { content: '', reasoning: '', toolCalls: [{ id: 'w1', name: 'write_test', arguments: '{}' }], model: 'test-model' }
+          : { content: '已取消', reasoning: '', toolCalls: [], model: 'test-model' };
+      },
+    });
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(events.some(event => event.type === 'tool_end' && !event.ok)).toBe(true);
+  });
+
+  it('stores oversized tool results as artifacts and can page them', async () => {
+    const huge = 'x'.repeat(13000);
+    const bigTool: AgentTool = {
+      name: 'big_result',
+      description: 'Big result',
+      parameters: { type: 'object', properties: {} },
+      risk: 'read',
+      execute: async () => ({ ok: true, content: huge }),
+    };
+    const events: AgentEvent[] = [];
+    let call = 0;
+    await runGeneralAgent({
+      token: 'github-token',
+      userLogin: 'artifact-user',
+      history: [{ role: 'user', content: '大结果' }],
+      config,
+      signal: new AbortController().signal,
+      onEvent: event => events.push(event),
+      tools: [bigTool],
+      callModel: async (): Promise<ProviderStreamResult> => {
+        call++;
+        return call === 1
+          ? { content: '', reasoning: '', toolCalls: [{ id: 'b1', name: 'big_result', arguments: '{}' }], model: 'test-model' }
+          : { content: '已处理', reasoning: '', toolCalls: [], model: 'test-model' };
+      },
+    });
+
+    const toolEnd = events.find(event => event.type === 'tool_end');
+    expect(toolEnd && toolEnd.type === 'tool_end' ? toolEnd.artifact?.size : 0).toBe(13000);
+    const artifactId = toolEnd && toolEnd.type === 'tool_end' ? toolEnd.artifact?.id : '';
+    expect(artifactId).toBeTruthy();
+    const slice = readArtifact('artifact-user', artifactId!, 0, 100);
+    expect(slice.total).toBe(13000);
+    expect(slice.content).toHaveLength(100);
+    expect(slice.hasMore).toBe(true);
+  });
+
   it('loads GitHub tools only when a repo context exists', () => {
     const withoutRepo = buildSystemPrompt();
     const withRepo = buildSystemPrompt({ fullName: 'owner/repo', defaultBranch: 'main', branch: 'dev' });
     expect(withoutRepo).toContain('没有选择仓库');
     expect(withRepo).toContain('owner/repo');
-    expect(withRepo).toContain('只读工具');
+    expect(withRepo).toContain('github_write_file');
+    expect(withRepo).toContain('artifact_read');
+    const noRepoTools = resolveCapabilities().tools.map(tool => tool.name);
+    const repoTools = resolveCapabilities({ fullName: 'owner/repo', defaultBranch: 'main' }).tools.map(tool => tool.name);
+    expect(noRepoTools).toEqual(['artifact_read']);
+    expect(repoTools).toContain('github_write_file');
   });
 });
 

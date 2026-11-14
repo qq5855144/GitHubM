@@ -50,6 +50,32 @@ export interface ProviderStreamResult {
 export interface ToolRunResult {
   ok: boolean;
   content: string;
+  artifact?: ArtifactMeta;
+}
+
+export interface ArtifactMeta {
+  id: string;
+  title: string;
+  mime: string;
+  size: number;
+  createdAt: string;
+  runId?: string;
+  toolName?: string;
+  preview: string;
+}
+
+export interface ApprovalRequest {
+  id: string;
+  toolName: string;
+  description: string;
+  arguments: Record<string, unknown>;
+  risk: AgentTool['risk'];
+}
+
+export interface CapabilityInfo {
+  id: string;
+  label: string;
+  description: string;
 }
 
 export interface AgentTool {
@@ -62,16 +88,17 @@ export interface AgentTool {
 
 export interface ToolRuntimeContext {
   token: string;
+  userLogin?: string;
   repo?: RepoContext;
   signal?: AbortSignal;
 }
 
 export type AgentEvent =
-  | { type: 'run_start'; runId: string }
+  | { type: 'run_start'; runId: string; capabilities?: string[] }
   | { type: 'text_delta'; text: string }
   | { type: 'reasoning_delta'; text: string }
   | { type: 'tool_start'; call: V2ToolCall }
-  | { type: 'tool_end'; call: V2ToolCall; ok: boolean; content: string }
+  | { type: 'tool_end'; call: V2ToolCall; ok: boolean; content: string; artifact?: ArtifactMeta }
   | { type: 'usage'; usage: NonNullable<ProviderStreamResult['usage']> }
   | { type: 'done'; text: string; steps: number }
   | { type: 'error'; message: string };
@@ -83,11 +110,15 @@ export interface AgentHistoryMessage {
 
 export interface RunAgentOptions {
   token: string;
+  userLogin?: string;
+  runId?: string;
   repo?: RepoContext;
   config: ModelConfig;
   history: AgentHistoryMessage[];
   signal: AbortSignal;
   onEvent: (event: AgentEvent) => void;
+  /** 写操作前的用户确认；未提供时写工具默认拒绝 */
+  requestApproval?: (request: ApprovalRequest) => Promise<boolean>;
   /** 测试注入：默认使用真实 provider */
   callModel?: (
     config: ModelConfig,
@@ -106,6 +137,7 @@ export interface UiToolRun {
   arguments: string;
   status: 'running' | 'done' | 'error';
   content?: string;
+  artifact?: ArtifactMeta;
   startedAt?: number;
   endedAt?: number;
 }

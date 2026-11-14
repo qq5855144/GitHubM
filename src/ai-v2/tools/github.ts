@@ -21,12 +21,15 @@ async function githubFetch(
   ctx: ToolRuntimeContext,
   path: string,
   accept = 'application/vnd.github+json',
+  init: Pick<RequestInit, 'method' | 'body'> = {},
 ): Promise<unknown> {
   const res = await fetch(`${API}${path}`, {
+    ...init,
     headers: {
       Authorization: `Bearer ${ctx.token}`,
       Accept: accept,
       'X-GitHub-Api-Version': '2022-11-28',
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
     },
     signal: ctx.signal,
   });
@@ -205,9 +208,84 @@ const repoInfo: AgentTool = {
   },
 };
 
+const writeFile: AgentTool = {
+  name: 'github_write_file',
+  description: '创建或更新当前仓库中的一个文本文件。这是写操作，执行前必须经过用户确认。更新已有文件时会自动读取最新 SHA。',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: '文件路径，例如 src/App.tsx' },
+      content: { type: 'string', description: '完整的新文件内容' },
+      message: { type: 'string', description: '提交信息' },
+      branch: { type: 'string', description: '目标分支；默认当前分支' },
+      sha: { type: 'string', description: '可选：已知的文件 blob SHA' },
+    },
+    required: ['path', 'content', 'message'],
+  },
+  risk: 'write',
+  async execute(args, ctx): Promise<ToolRunResult> {
+    const { owner, name, branch: defaultBranch } = repoParts(ctx.repo);
+    const path = String(args.path || '').replace(/^\/+/, '');
+    const content = String(args.content ?? '');
+    const message = String(args.message || '').trim() || `Update ${path}`;
+    const branch = String(args.branch || defaultBranch);
+    if (!path) throw new Error('path 不能为空');
+
+    let sha = String(args.sha || '').trim();
+    if (!sha) {
+      try {
+        const existing = await githubFetch(
+          ctx,
+          `/repos/${owner}/${name}/contents/${encodePath(path)}?ref=${encodeURIComponent(branch)}`,
+        ) as { sha?: string; type?: string };
+        if (existing?.type === 'file' && existing.sha) sha = existing.sha;
+      } catch {
+        // 文件不存在或不可读，按新建处理；GitHub 会返回最终错误
+      }
+    }
+
+    const data = await githubFetch(
+      ctx,
+      `/repos/${owner}/${name}/contents/${encodePath(path)}`,
+      'application/vnd.github+json',
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          message,
+          content: base64EncodeUtf8(content),
+          branch,
+          ...(sha ? { sha } : {}),
+        }),
+      },
+    ) as { content?: { html_url?: string; sha?: string }; commit?: { sha?: string; html_url?: string } };
+
+    return {
+      ok: true,
+      content: [
+        `已写入：${path}`,
+        `分支：${branch}`,
+        `提交：${data.commit?.sha || '-'}`,
+        `链接：${data.commit?.html_url || data.content?.html_url || '-'}`,
+        `文件 SHA：${data.content?.sha || '-'}`,
+      ].join('\n'),
+    };
+  },
+};
+
+function base64EncodeUtf8(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
 export const GITHUB_READ_TOOLS: AgentTool[] = [repoInfo, listFiles, readFile, searchCode];
+export const GITHUB_WRITE_TOOLS: AgentTool[] = [writeFile];
 
 /** 只有选择了仓库才暴露 GitHub 工具 */
 export function getToolsForContext(repo?: RepoContext): AgentTool[] {
-  return repo ? GITHUB_READ_TOOLS : [];
+  return repo ? [...GITHUB_READ_TOOLS, ...GITHUB_WRITE_TOOLS] : [];
 }

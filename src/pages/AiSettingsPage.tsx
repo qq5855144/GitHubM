@@ -17,6 +17,8 @@ import {
   testProviderConnection,
 } from '@/components/ai/aiProviders';
 import type { ModelConfig } from '@/components/ai/aiTypes';
+import { clearArtifacts, listArtifacts } from '@/ai-v2/artifacts';
+import { clearRuns, listRuns } from '@/ai-v2/runStore';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -46,6 +48,7 @@ import {
   RefreshCw,
   Save,
   ShieldCheck,
+  ShieldAlert,
   SlidersHorizontal,
   Timer,
   Trash2,
@@ -260,6 +263,9 @@ export default function AiSettingsPage() {
       return [];
     }
   }, [section, storageVersion]);
+
+  const runs = useMemo(() => listRuns(user?.login, 6), [user?.login, storageVersion]);
+  const artifacts = useMemo(() => listArtifacts(user?.login, 20), [user?.login, storageVersion]);
 
   if (!activeSection) {
     return (
@@ -494,11 +500,17 @@ export default function AiSettingsPage() {
 
   if (activeSection.id === 'context') {
     const totalSessions = sessions.reduce((sum, item) => sum + item.count, 0);
+    const clearUserArtifacts = () => {
+      if (!window.confirm(i18n.t('确定清除当前账号的 Artifact 缓存？'))) return;
+      clearArtifacts(user?.login);
+      setStorageVersion(version => version + 1);
+      toast.success(i18n.t('已清除 Artifact'));
+    };
     return (
       <div className="mx-auto min-h-full w-full max-w-2xl px-3 py-4 sm:px-4">
         <SectionHeader title={i18n.t('上下文与记忆')} desc={i18n.t('管理本机会话和 AI 上下文数据。')} onBack={() => go('')} />
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <div className="rounded-xl border border-border bg-card p-3">
               <p className="text-[10px] text-muted-foreground">{i18n.t('本机会话')}</p>
               <p className="mt-1 text-xl font-semibold">{totalSessions}</p>
@@ -506,6 +518,10 @@ export default function AiSettingsPage() {
             <div className="rounded-xl border border-border bg-card p-3">
               <p className="text-[10px] text-muted-foreground">{i18n.t('存储账号')}</p>
               <p className="mt-1 text-xl font-semibold">{sessions.length}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-3">
+              <p className="text-[10px] text-muted-foreground">Artifacts</p>
+              <p className="mt-1 text-xl font-semibold">{artifacts.length}</p>
             </div>
           </div>
           <div className="rounded-xl border border-border bg-card p-4">
@@ -517,10 +533,16 @@ export default function AiSettingsPage() {
               <HardDrive className="h-3.5 w-3.5" />
               {i18n.t('当前账号')}：{user?.login || '-'}
             </div>
-            <Button type="button" variant="destructive" size="sm" className="mt-4 h-8 gap-1.5 text-xs" onClick={clearSessions}>
-              <Trash2 className="h-3.5 w-3.5" />
-              {i18n.t('清除所有本机会话')}
-            </Button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button type="button" variant="destructive" size="sm" className="h-8 gap-1.5 text-xs" onClick={clearSessions}>
+                <Trash2 className="h-3.5 w-3.5" />
+                {i18n.t('清除所有本机会话')}
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={clearUserArtifacts}>
+                <Trash2 className="h-3.5 w-3.5" />
+                {i18n.t('清除 Artifact')}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -529,10 +551,12 @@ export default function AiSettingsPage() {
 
   if (activeSection.id === 'tools') {
     const tools = [
-      { name: 'github_repo_info', desc: '仓库基本信息', icon: Database },
-      { name: 'github_list_files', desc: '列出目录文件', icon: HardDrive },
-      { name: 'github_read_file', desc: '读取文本文件', icon: Wrench },
-      { name: 'github_search_code', desc: '搜索代码与文本', icon: Cpu },
+      { name: 'artifact_read', desc: '读取大型工具结果', icon: Database, risk: 'read', group: '核心' },
+      { name: 'github_repo_info', desc: '仓库基本信息', icon: Database, risk: 'read', group: 'GitHub 只读' },
+      { name: 'github_list_files', desc: '列出目录文件', icon: HardDrive, risk: 'read', group: 'GitHub 只读' },
+      { name: 'github_read_file', desc: '读取文本文件', icon: Wrench, risk: 'read', group: 'GitHub 只读' },
+      { name: 'github_search_code', desc: '搜索代码与文本', icon: Cpu, risk: 'read', group: 'GitHub 只读' },
+      { name: 'github_write_file', desc: '创建或更新文件', icon: Wrench, risk: 'write', group: 'GitHub 写入' },
     ];
     return (
       <div className="mx-auto min-h-full w-full max-w-2xl px-3 py-4 sm:px-4">
@@ -541,8 +565,8 @@ export default function AiSettingsPage() {
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">{i18n.t('GitHub 只读工具')}</p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">{i18n.t('仅在添加仓库上下文后加载')}</p>
+                <p className="text-sm font-medium">{i18n.t('已注册工具')}</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">{i18n.t('核心工具始终可用；GitHub 工具仅在添加仓库后加载。')}</p>
               </div>
               <Badge variant="secondary" className="text-[9px]">{tools.length} {i18n.t('项')}</Badge>
             </div>
@@ -553,17 +577,19 @@ export default function AiSettingsPage() {
                   <div key={item.name} className="flex items-center gap-2 rounded-lg bg-muted/30 px-2.5 py-2">
                     <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="min-w-0 flex-1 font-mono text-[11px]">{item.name}</span>
-                    <span className="text-[10px] text-muted-foreground">{i18n.t(item.desc)}</span>
-                    <Badge variant="outline" className="px-1.5 py-0 text-[9px]">{i18n.t('只读')}</Badge>
+                    <span className="hidden text-[10px] text-muted-foreground sm:inline">{i18n.t(item.desc)}</span>
+                    <Badge variant={item.risk === 'write' ? 'destructive' : 'outline'} className="px-1.5 py-0 text-[9px]">
+                      {item.risk === 'write' ? i18n.t('写操作') : i18n.t('只读')}
+                    </Badge>
                   </div>
                 );
               })}
             </div>
           </div>
-          <div className="rounded-xl border border-dashed border-border bg-muted/15 p-4">
-            <p className="flex items-center gap-1.5 text-sm font-medium"><Wrench className="h-4 w-4" />{i18n.t('写操作尚未开放')}</p>
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4">
+            <p className="flex items-center gap-1.5 text-sm font-medium"><ShieldAlert className="h-4 w-4 text-amber-500" />{i18n.t('写操作逐次确认')}</p>
             <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-              {i18n.t('后续会增加创建、修改、删除文件以及提交操作；写操作将逐次确认，默认不自动执行。')}
+              {i18n.t('github_write_file 会修改仓库。每次调用都会弹出确认，拒绝后不会执行。')}
             </p>
           </div>
         </div>
@@ -623,6 +649,58 @@ export default function AiSettingsPage() {
                   >
                     {i18n.t('选择')}
                   </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <Activity className="h-4 w-4 text-primary" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">{i18n.t('最近运行')}</p>
+              <p className="text-[10px] text-muted-foreground">{i18n.t('持久化保存的运行摘要，用于诊断与恢复。')}</p>
+            </div>
+            {runs.length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-[10px] text-muted-foreground"
+                onClick={() => {
+                  if (!window.confirm(i18n.t('确定清除运行记录？'))) return;
+                  clearRuns(user?.login);
+                  setStorageVersion(version => version + 1);
+                  toast.success(i18n.t('已清除运行记录'));
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
+                {i18n.t('清除')}
+              </Button>
+            )}
+          </div>
+          {runs.length === 0 ? (
+            <p className="py-3 text-center text-[11px] text-muted-foreground">{i18n.t('暂无运行记录')}</p>
+          ) : (
+            <div className="space-y-1.5">
+              {runs.map(run => (
+                <div key={run.id} className="rounded-lg bg-muted/25 px-2.5 py-2 text-[10px]">
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn(
+                      'h-1.5 w-1.5 shrink-0 rounded-full',
+                      run.status === 'done' ? 'bg-green-500' : run.status === 'running' ? 'bg-primary' : 'bg-destructive',
+                    )} />
+                    <span className="min-w-0 flex-1 truncate text-xs">{run.title}</span>
+                    <span className="shrink-0 text-muted-foreground">{i18n.t(run.status)}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground">
+                    <span>{new Date(run.startedAt).toLocaleString()}</span>
+                    <span>{run.toolCalls} {i18n.t('工具')}</span>
+                    <span>{run.steps} {i18n.t('轮')}</span>
+                    {run.capabilities.length > 0 && <span className="truncate">{run.capabilities.join(' · ')}</span>}
+                  </div>
+                  {run.error && <p className="mt-1 break-words text-destructive">{run.error.slice(0, 160)}</p>}
                 </div>
               ))}
             </div>

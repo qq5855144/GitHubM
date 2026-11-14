@@ -3,6 +3,7 @@ import type {
   AgentEvent,
   AgentHistoryMessage,
   AgentTool,
+  ApprovalRequest,
   RunAgentOptions,
   ToolRunResult,
   V2ProviderMessage,
@@ -10,7 +11,11 @@ import type {
   V2ToolDefinition,
 } from './types';
 import { streamProvider } from './providers';
-import { getToolsForContext } from './tools/github';
+import { resolveCapabilities } from './capabilities';
+import { saveArtifact } from './artifacts';
+
+const MAX_INLINE_TOOL_RESULT = 12000;
+const TOOL_PREVIEW_CHARS = 4000;
 
 export function buildSystemPrompt(repo?: { fullName: string; branch?: string; defaultBranch: string }): string {
   return [
@@ -28,12 +33,14 @@ export function buildSystemPrompt(repo?: { fullName: string; branch?: string; de
       ? [
           `当前可选仓库上下文：${repo.fullName}`,
           `当前分支：${repo.branch || repo.defaultBranch || 'main'}`,
-          '你可以使用 GitHub 只读工具查看仓库信息、目录、文件和代码搜索结果。',
-          '当前版本不提供写操作；如果用户要求修改文件，请明确说明需要进入写操作模式。',
+          '你可以使用 GitHub 工具查看仓库信息、目录、文件和代码搜索结果。',
+          '需要修改文件时可以调用 github_write_file；该工具会先请求用户确认，未确认不会执行。',
+          '大型工具结果会保存为 Artifact，可通过 artifact_read 分页读取。',
         ].join('\n')
       : [
           '当前没有选择仓库。默认以通用助手身份聊天。',
           '如果用户需要仓库能力，可以提示用户在输入框上方添加仓库上下文。',
+          '大型工具结果可通过 artifact_read 读取。',
         ].join('\n'),
   ].join('\n');
 }
@@ -65,19 +72,27 @@ function toolErrorMessage(error: unknown): string {
 export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
   const {
     token,
+    userLogin,
+    runId: providedRunId,
     repo,
     config,
     history,
     signal,
     onEvent,
+    requestApproval,
     callModel = streamProvider,
   } = options;
 
-  const runId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const runId = providedRunId || (
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  );
 
-  const tools = options.tools ?? getToolsForContext(repo);
+  const capabilityState = options.tools
+    ? { tools: options.tools, capabilities: [] }
+    : resolveCapabilities(repo);
+  const tools = capabilityState.tools;
   const toolMap = new Map(tools.map(tool => [tool.name, tool]));
   const toolDefs = toToolDefinitions(tools);
   const messages: V2ProviderMessage[] = [
@@ -92,7 +107,7 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
   let finalText = '';
   let steps = 0;
 
-  onEvent({ type: 'run_start', runId });
+  onEvent({ type: 'run_start', runId, capabilities: capabilityState.capabilities.map(item => item.id) });
 
   // 不设置固定工具轮数上限：由用户停止、网络错误或重复调用保护来结束。
   while (true) {
@@ -130,7 +145,7 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
       const count = (repeatedCalls.get(signature) || 0) + 1;
       repeatedCalls.set(signature, count);
 
-      let outcome: ToolRunResult;
+      let outcome: ToolRunResult = { ok: false, content: '工具未执行' };
       if (count >= 3) {
         outcome = { ok: false, content: '检测到重复调用相同工具和参数，已停止重复执行。' };
       } else {
@@ -140,15 +155,60 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
         } else {
           try {
             const args = safeParseArgs(call.arguments);
-            outcome = await tool.execute(args, { token, repo, signal });
+            if (tool.risk === 'write') {
+              if (!requestApproval) {
+                outcome = {
+                  ok: false,
+                  content: '写操作未执行：当前运行没有提供用户确认通道。',
+                };
+              } else {
+                const approval: ApprovalRequest = {
+                  id: call.id,
+                  toolName: tool.name,
+                  description: tool.description,
+                  arguments: args,
+                  risk: tool.risk,
+                };
+                const approved = await requestApproval(approval);
+                outcome = approved
+                  ? await tool.execute(args, { token, userLogin, repo, signal })
+                  : { ok: false, content: '用户拒绝了本次写操作，未修改仓库。' };
+              }
+            } else {
+              outcome = await tool.execute(args, { token, userLogin, repo, signal });
+            }
           } catch (error) {
             outcome = { ok: false, content: `工具执行失败：${toolErrorMessage(error)}` };
           }
         }
       }
 
-      const content = outcome.content || (outcome.ok ? '（无输出）' : '（工具执行失败，未返回详情）');
-      onEvent({ type: 'tool_end', call, ok: outcome.ok, content });
+      let artifact = outcome.artifact;
+      let content = outcome.content || (outcome.ok ? '（无输出）' : '（工具执行失败，未返回详情）');
+      if (call.name !== 'artifact_read' && content.length > MAX_INLINE_TOOL_RESULT) {
+        const saved = saveArtifact({
+          login: userLogin,
+          runId,
+          toolName: call.name,
+          title: `${call.name} 结果`,
+          mime: 'text/plain',
+          content,
+        });
+        if (saved) {
+          artifact = saved;
+          content = [
+            `[结果过大，已保存为 Artifact]`,
+            `ID：${saved.id}`,
+            `总长度：${saved.size} 字符`,
+            `继续读取：{"tool":"artifact_read","id":"${saved.id}","offset":0,"limit":12000}`,
+            '',
+            `--- 预览（前 ${TOOL_PREVIEW_CHARS} 字符）---`,
+            content.slice(0, TOOL_PREVIEW_CHARS),
+          ].join('\n');
+        }
+      }
+
+      onEvent({ type: 'tool_end', call, ok: outcome.ok, content, artifact });
       messages.push({
         role: 'tool',
         tool_call_id: call.id,

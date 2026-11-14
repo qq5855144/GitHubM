@@ -39,6 +39,7 @@ import StargazersPage from './pages/StargazersPage';
 import PrDiffPage from './pages/PrDiffPage';
 import AiAssistantPage from './pages/AiAssistantPage';
 import AiAssistantV2Page from './pages/AiAssistantV2Page';
+import AiSettingsPage from './pages/AiSettingsPage';
 import MorePage from './pages/MorePage';
 import i18n from "@/i18n";
 
@@ -99,5 +100,7 @@ export const routes: RouteConfig[] = [
   { name: 'GraphQL Playground', path: '/graphql-playground', element: <GraphQLPlaygroundPage /> },
   { name: i18n.t('AI 助手'), path: '/ai-assistant', element: <AiAssistantV2Page /> },
   { name: i18n.t('AI 助手经典版'), path: '/ai-assistant-v1', element: <AiAssistantPage /> },
+  { name: i18n.t('AI 设置'), path: '/ai-settings', element: <AiSettingsPage /> },
+  { name: i18n.t('AI 设置'), path: '/ai-settings/:section', element: <AiSettingsPage /> },
   { name: '全部功能', path: '/more', element: <MorePage /> },
 ];

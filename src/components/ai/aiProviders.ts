@@ -13,6 +13,7 @@ export function getProviderChatUrl(type: ModelType, endpoint?: string): string {
     case 'gemini':   return 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
     case 'qwen':     return 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
     case 'openai':   return 'https://api.openai.com/v1/chat/completions';
+    case 'openrouter': return 'https://openrouter.ai/api/v1/chat/completions';
     case 'custom':   return endpoint || '';
     case 'wenxin':   // 平台内置免费通道已随后端移除，不再支持
       return '';
@@ -26,6 +27,7 @@ export function getProviderModelsUrl(type: ModelType, endpoint?: string): string
     case 'gemini':   return 'https://generativelanguage.googleapis.com/v1beta/openai/models';
     case 'qwen':     return 'https://dashscope.aliyuncs.com/compatible-mode/v1/models';
     case 'openai':   return 'https://api.openai.com/v1/models';
+    case 'openrouter': return 'https://openrouter.ai/api/v1/models';
     case 'custom':   return (endpoint || '').replace(/\/chat\/completions$/, '') + '/models';
     case 'wenxin':   return '';
   }
@@ -104,7 +106,7 @@ export async function testProviderConnection(
 ): Promise<TestConnectionResult> {
   if (type === 'wenxin') return { success: false, error: i18n.t('该平台已不再支持') };
   const proxyBase = proxyUrl?.trim().replace(/\/+$/, '') ||
-    (type !== 'custom' ? 'https://llm.callact.xyz' : '');
+    (type !== 'custom' && type !== 'openrouter' ? 'https://llm.callact.xyz' : '');
   const url = proxyBase
     ? `${proxyBase}/v1/chat/completions`
     : getProviderChatUrl(type, endpoint);

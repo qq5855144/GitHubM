@@ -1,5 +1,5 @@
 // AI 助手核心引擎（浏览器端直连版，由 supabase/functions/ai-assistant 移植）
-// 支持多模型：DeepSeek / Gemini / Qwen / OpenAI / 自定义兼容接口（文心已移除）
+// 支持多模型：DeepSeek / Gemini / Qwen / OpenAI / OpenRouter（含免费模型）/ 自定义兼容接口（文心已移除）
 // ReAct Agent：AI 通过工具链读取/写入 GitHub 仓库文件
 // 浏览器端直接调用各家 LLM API 与 GitHub API（均支持 CORS），无需任何后端。
 // 任务计划/快照持久化改为 localStorage，断点恢复同样可用。
@@ -115,7 +115,7 @@ function supportsFunctionCalling(type: string, model?: string): boolean {
   // DeepSeek 思考模型（deepseek-reasoner / deepseek-v4-pro）不支持 Function Calling
   // DeepSeek 新文档说明：思考模式下 tools 参数被忽略，会产生兼容性问题
   if (type === "deepseek" && isDeepSeekThinkingModel(model)) return false;
-  return ["deepseek", "openai", "gemini", "qwen"].includes(type);
+  return ["deepseek", "openai", "gemini", "qwen", "openrouter"].includes(type);
 }
 
 // 单个工具的 Schema 定义（OpenAI function 格式）
@@ -866,7 +866,7 @@ function buildLLMRequest(cfg: ModelConfig, disableTools = false): {
     bodyExtra: Record<string, unknown>;
   }) => {
     const base = cfg.proxy_url?.trim().replace(/\/+$/, '') ||
-      (cfg.type !== 'custom' ? DEFAULT_LLM_PROXY_URL : '');
+      (cfg.type !== 'custom' && cfg.type !== 'openrouter' ? DEFAULT_LLM_PROXY_URL : '');
     if (!base) return request;
     const headers: Record<string, string> = {
       ...request.headers,
@@ -956,6 +956,24 @@ function buildLLMRequest(cfg: ModelConfig, disableTools = false): {
           ...(cfg.reasoning_effort && cfg.reasoning_effort !== 'off' && /^(o1|o3|o4|gpt-5)/i.test(cfg.model || '')
             ? { reasoning_effort: cfg.reasoning_effort }
             : {}),
+        },
+      });
+    case "openrouter":
+      // OpenRouter 支持浏览器 CORS，默认直连，避免默认代理不认识该 provider。
+      // 免费模型以 :free 结尾，实际可用列表以 OpenRouter 控制台为准。
+      return withProxy({
+        url: "https://openrouter.ai/api/v1/chat/completions",
+        headers: {
+          Authorization: `Bearer ${cfg.api_key}`,
+          'HTTP-Referer': 'https://githubm-web.pages.dev',
+          'X-Title': 'GitHubM',
+        },
+        bodyExtra: {
+          model: cfg.model || "openrouter/free",
+          stream: true,
+          max_tokens: 16384,
+          ...tempExtra,
+          ...fcExtra,
         },
       });
     case "custom":

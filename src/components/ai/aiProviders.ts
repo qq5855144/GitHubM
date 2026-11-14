@@ -41,6 +41,21 @@ function authHeaders(apiKey: string): Record<string, string> {
   };
 }
 
+// ── 默认模型 ────────────────────────────────────────────────────────────────
+/** 各平台未显式选择模型时用于连接测试和首次请求的默认值 */
+export function getDefaultProviderModel(type: ModelType): string {
+  switch (type) {
+    case 'deepseek': return 'deepseek-v4-flash';
+    case 'gemini': return 'gemini-2.5-flash-preview-05-20';
+    case 'qwen': return 'qwen2.5-coder-32b-instruct';
+    case 'openai': return 'gpt-4o-mini';
+    case 'openrouter': return 'openrouter/free';
+    case 'custom':
+    case 'wenxin':
+      return 'default';
+  }
+}
+
 // ── 模型列表 ───────────────────────────────────────────────────────────────
 
 /** 解析各家 /models 响应（兼容 {data:[{id}]} 与直接数组两种格式） */
@@ -122,7 +137,7 @@ export async function testProviderConnection(
       method: 'POST',
       headers,
       body: JSON.stringify({
-        model: model || 'default',
+        model: model || getDefaultProviderModel(type),
         messages: [{ role: 'user', content: 'ping' }],
         max_tokens: 1,
         stream: false,

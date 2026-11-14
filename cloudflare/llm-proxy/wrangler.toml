@@ -8,6 +8,9 @@ routes = [
 ]
 
 # 不保存任何密钥；模型 API Key 由 App 每次请求携带。
+[ai]
+binding = "AI"
+
 [vars]
 ALLOWED_ORIGIN = "*"
 # custom provider 上游白名单（按需填写，逗号分隔域名）

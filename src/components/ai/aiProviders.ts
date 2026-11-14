@@ -14,6 +14,7 @@ export function getProviderChatUrl(type: ModelType, endpoint?: string): string {
     case 'qwen':     return 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
     case 'openai':   return 'https://api.openai.com/v1/chat/completions';
     case 'openrouter': return 'https://openrouter.ai/api/v1/chat/completions';
+    case 'cloudflare': return 'https://llm.callact.xyz/v1/chat/completions';
     case 'custom':   return endpoint || '';
     case 'wenxin':   // 平台内置免费通道已随后端移除，不再支持
       return '';
@@ -28,6 +29,7 @@ export function getProviderModelsUrl(type: ModelType, endpoint?: string): string
     case 'qwen':     return 'https://dashscope.aliyuncs.com/compatible-mode/v1/models';
     case 'openai':   return 'https://api.openai.com/v1/models';
     case 'openrouter': return 'https://openrouter.ai/api/v1/models';
+    case 'cloudflare': return '';
     case 'custom':   return (endpoint || '').replace(/\/chat\/completions$/, '') + '/models';
     case 'wenxin':   return '';
   }
@@ -50,6 +52,7 @@ export function getDefaultProviderModel(type: ModelType): string {
     case 'qwen': return 'qwen2.5-coder-32b-instruct';
     case 'openai': return 'gpt-4o-mini';
     case 'openrouter': return 'particle-ai/particle-1:free';
+    case 'cloudflare': return '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
     case 'custom':
     case 'wenxin':
       return 'default';

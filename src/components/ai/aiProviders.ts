@@ -49,7 +49,7 @@ export function getDefaultProviderModel(type: ModelType): string {
     case 'gemini': return 'gemini-2.5-flash-preview-05-20';
     case 'qwen': return 'qwen2.5-coder-32b-instruct';
     case 'openai': return 'gpt-4o-mini';
-    case 'openrouter': return 'openrouter/free';
+    case 'openrouter': return 'particle-ai/particle-1:free';
     case 'custom':
     case 'wenxin':
       return 'default';

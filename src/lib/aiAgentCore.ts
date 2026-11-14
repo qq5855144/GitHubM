@@ -969,7 +969,7 @@ function buildLLMRequest(cfg: ModelConfig, disableTools = false): {
           'X-Title': 'GitHubM',
         },
         bodyExtra: {
-          model: cfg.model || "openrouter/free",
+          model: cfg.model || "particle-ai/particle-1:free",
           stream: true,
           max_tokens: 16384,
           ...tempExtra,

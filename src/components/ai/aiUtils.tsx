@@ -122,7 +122,9 @@ export const MODEL_DEFS: ModelDef[] = [
     desc: i18n.t('免费模型聚合，注册即可获取 Key，按平台免费额度调用'),
     badge: i18n.t('免费'),
     models: [
-      { value: 'openrouter/free', label: i18n.t('自动选择免费模型（推荐）') },
+      { value: 'particle-ai/particle-1:free', label: i18n.t('Particle-1（代码专用 · 推荐）') },
+      { value: 'openrouter/free', label: i18n.t('自动选择免费模型') },
+      { value: 'nvidia/nemotron-3-ultra-550b-a55b:free', label: i18n.t('Nemotron 3 Ultra（复杂推理）') },
       { value: 'inclusionai/ling-3.2-flash:free', label: 'Ling 3.2 Flash (free)' },
       { value: 'google/gemma-4-31b-it:free', label: 'Gemma 4 31B (free)' },
       { value: 'baidu/ernie-5.5-flash-preview:free', label: 'ERNIE 5.5 Flash Preview (free)' },

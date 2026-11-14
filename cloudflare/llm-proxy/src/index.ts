@@ -71,8 +71,8 @@ function resolveUpstream(req: Request, env: Env): string | null {
   return url.toString();
 }
 
-function openAiChunk(content: string): string {
-  return `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
+function openAiChunk(content: string | number): string {
+  return `data: ${JSON.stringify({ choices: [{ delta: { content: String(content) } }] })}\n\n`;
 }
 
 /**
@@ -122,8 +122,10 @@ async function handleCloudflareAI(req: Request, env: Env): Promise<Response> {
             const data = raw.startsWith('data:') ? raw.slice(5).trim() : raw;
             if (!data || data === '[DONE]') continue;
             try {
-              const parsed = JSON.parse(data) as { response?: string; tool_calls?: unknown; usage?: unknown };
-              if (parsed.response) controller.enqueue(encoder.encode(openAiChunk(parsed.response)));
+              const parsed = JSON.parse(data) as { response?: string | number; tool_calls?: unknown; usage?: unknown };
+              if (parsed.response !== undefined && parsed.response !== null && parsed.response !== '') {
+                controller.enqueue(encoder.encode(openAiChunk(parsed.response)));
+              }
             } catch {
               // 跳过无法解析的心跳/注释
             }
@@ -132,8 +134,10 @@ async function handleCloudflareAI(req: Request, env: Env): Promise<Response> {
         flush(controller) {
           if (buffer.trim()) {
             try {
-              const parsed = JSON.parse(buffer.trim().replace(/^data:\s*/, '')) as { response?: string };
-              if (parsed.response) controller.enqueue(encoder.encode(openAiChunk(parsed.response)));
+              const parsed = JSON.parse(buffer.trim().replace(/^data:\s*/, '')) as { response?: string | number };
+              if (parsed.response !== undefined && parsed.response !== null && parsed.response !== '') {
+                controller.enqueue(encoder.encode(openAiChunk(parsed.response)));
+              }
             } catch {
               // ignore
             }

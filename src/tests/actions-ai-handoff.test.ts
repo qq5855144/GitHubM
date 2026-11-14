@@ -10,6 +10,8 @@ describe('Actions to AI handoff', () => {
       repoFullName: 'owner/repo',
       branch: 'main',
       jobName: 'build',
+      jobId: 123456,
+      runId: 7890,
       conclusion: 'failure',
       htmlUrl: 'https://github.com/owner/repo/actions/runs/1',
       failedSteps: ['Run tests'],
@@ -19,6 +21,9 @@ describe('Actions to AI handoff', () => {
     expect(prompt).toContain('仓库：owner/repo');
     expect(prompt).toContain('分支：main');
     expect(prompt).toContain('Job：build');
+    expect(prompt).toContain('Job ID：123456');
+    expect(prompt).toContain('Run ID：7890');
+    expect(prompt).toContain('{"tool":"get_job_logs","job_id":"123456"}');
     expect(prompt).toContain('失败步骤：Run tests');
     expect(prompt).toContain('Error: test failed');
   });

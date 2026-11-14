@@ -348,6 +348,7 @@ function AnsiLine({ raw }: { raw: string }) {
 
 interface LogPanelProps {
   jobId: number;
+  runId?: number;
   owner: string;
   repo: string;
   isRunning: boolean;
@@ -399,6 +400,7 @@ async function downloadLogText(text: string, fileName: string): Promise<void> {
 }
 function LogPanel({
   jobId,
+  runId,
   owner,
   repo,
   isRunning,
@@ -490,6 +492,8 @@ function LogPanel({
       repoFullName: `${owner}/${repo}`,
       branch,
       jobName,
+      jobId,
+      runId,
       conclusion: jobConclusion,
       htmlUrl: jobHtmlUrl,
       failedSteps,
@@ -655,6 +659,7 @@ function JobItem({
           {showLogs && (
             <LogPanel
               jobId={job.id}
+              runId={job.run_id}
               owner={owner}
               repo={repo}
               isRunning={isRunning}

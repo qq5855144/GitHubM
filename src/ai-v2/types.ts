@@ -98,7 +98,6 @@ export interface RunAgentOptions {
   ) => Promise<ProviderStreamResult>;
   /** 测试注入：覆盖默认工具集合 */
   tools?: AgentTool[];
-  maxSteps?: number;
 }
 
 export interface UiToolRun {

@@ -98,6 +98,40 @@ describe('AI Assistant V2 agent loop', () => {
     expect(events.some(event => event.type === 'done')).toBe(true);
   });
 
+  it('keeps running beyond twelve tool rounds until the model finishes', async () => {
+    const events: AgentEvent[] = [];
+    let modelCall = 0;
+    await runGeneralAgent({
+      token: 'github-token',
+      history: [{ role: 'user', content: '多轮工具任务' }],
+      config,
+      signal: new AbortController().signal,
+      onEvent: event => events.push(event),
+      tools: [fakeTool()],
+      callModel: async (): Promise<ProviderStreamResult> => {
+        modelCall++;
+        if (modelCall <= 20) {
+          return {
+            content: '',
+            reasoning: '',
+            toolCalls: [{ id: `call-${modelCall}`, name: 'echo', arguments: `{"text":"${modelCall}"}` }],
+            model: 'test-model',
+          };
+        }
+        return {
+          content: '长任务完成',
+          reasoning: '',
+          toolCalls: [],
+          model: 'test-model',
+        };
+      },
+    });
+
+    expect(modelCall).toBe(21);
+    expect(events.filter(event => event.type === 'tool_start')).toHaveLength(20);
+    expect(events.some(event => event.type === 'done' && event.steps === 21)).toBe(true);
+  });
+
   it('loads GitHub tools only when a repo context exists', () => {
     const withoutRepo = buildSystemPrompt();
     const withRepo = buildSystemPrompt({ fullName: 'owner/repo', defaultBranch: 'main', branch: 'dev' });

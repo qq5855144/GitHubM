@@ -4,14 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { runGeneralAgent, toAgentHistory, toolCallLabel } from '@/ai-v2/agent';
 import type { AgentEvent, RepoContext, UiChatMessage, UiToolRun } from '@/ai-v2/types';
-import ModelSettingsDialog from '@/components/ai/ModelSettingsDialog';
 import RepoSelector from '@/components/ai/RepoSelector';
 import {
   ModelAvatar,
   getModelDef,
   loadModelConfig,
   renderMarkdown,
-  saveModelConfig,
 } from '@/components/ai/aiUtils';
 import type { ModelConfig } from '@/components/ai/aiTypes';
 import type { GitHubRepo } from '@/types/types';
@@ -517,8 +515,7 @@ export default function AiAssistantV2Page() {
   const [activeId, setActiveId] = useState('');
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
-  const [modelConfig, setModelConfig] = useState<ModelConfig>(() => loadModelConfig());
-  const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  const [modelConfig] = useState<ModelConfig>(() => loadModelConfig());
   const [repoDialogOpen, setRepoDialogOpen] = useState(false);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
@@ -690,7 +687,7 @@ export default function AiAssistantV2Page() {
       return;
     }
     if (!hasModelKey) {
-      setModelDialogOpen(true);
+      navigate('/ai-settings/model');
       toast.error(i18n.t('请先配置模型 API Key'));
       return;
     }
@@ -1004,7 +1001,7 @@ export default function AiAssistantV2Page() {
         {!hasModelKey && (
           <button
             type="button"
-            onClick={() => setModelDialogOpen(true)}
+            onClick={() => navigate('/ai-settings/model')}
             className="mx-2 mt-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-700 dark:text-amber-300 sm:mx-3"
           >
             <Settings className="h-4 w-4 shrink-0" />
@@ -1114,7 +1111,7 @@ export default function AiAssistantV2Page() {
               <div className="flex items-center gap-1 px-1 pt-1">
                 <button
                   type="button"
-                  onClick={() => setModelDialogOpen(true)}
+                  onClick={() => navigate('/ai-settings')}
                   className="flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   <ModelAvatar modelDef={modelDef} size="sm" />
@@ -1154,16 +1151,6 @@ export default function AiAssistantV2Page() {
           />
         </div>
       </aside>
-
-      <ModelSettingsDialog
-        open={modelDialogOpen}
-        onClose={() => setModelDialogOpen(false)}
-        config={modelConfig}
-        onSave={(config) => {
-          setModelConfig(config);
-          saveModelConfig(config);
-        }}
-      />
 
       <Dialog open={repoDialogOpen} onOpenChange={setRepoDialogOpen}>
         <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-xl">

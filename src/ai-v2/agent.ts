@@ -71,7 +71,6 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
     signal,
     onEvent,
     callModel = streamProvider,
-    maxSteps = 12,
   } = options;
 
   const runId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -95,7 +94,8 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
 
   onEvent({ type: 'run_start', runId });
 
-  for (; steps < maxSteps; steps++) {
+  // 不设置固定工具轮数上限：由用户停止、网络错误或重复调用保护来结束。
+  while (true) {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
     const result = await callModel(config, messages, toolDefs, signal, onEvent);
@@ -117,7 +117,8 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
 
     if (result.toolCalls.length === 0) {
       finalText = result.content;
-      onEvent({ type: 'done', text: finalText, steps: steps + 1 });
+      steps++;
+      onEvent({ type: 'done', text: finalText, steps });
       return;
     }
 
@@ -155,12 +156,8 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
         content,
       });
     }
+    steps++;
   }
-
-  onEvent({
-    type: 'error',
-    message: `已达到最大工具轮数（${maxSteps}），任务可能尚未完成。`,
-  });
 }
 
 /** 给 UI 的轻量历史：只保留最终文本，工具轨迹不进入下一轮上下文 */

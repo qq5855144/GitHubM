@@ -222,17 +222,6 @@ function ToolActivity({ tools }: { tools: UiToolRun[] }) {
   );
 }
 
-function UserTurn({ message }: { message: UiChatMessage }) {
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <span className="pr-1 text-[10px] text-muted-foreground">{i18n.t('你')}</span>
-      <div className="max-w-[88%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-6 text-primary-foreground break-words">
-        {message.content}
-      </div>
-    </div>
-  );
-}
-
 function AssistantTurn({ message }: { message: UiChatMessage }) {
   const hasBody = Boolean(message.content || message.reasoning || (message.tools || []).length);
   const copy = async () => {
@@ -245,56 +234,126 @@ function AssistantTurn({ message }: { message: UiChatMessage }) {
   };
 
   return (
-    <div className="flex gap-2.5">
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <Sparkles className="h-4 w-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 flex items-center gap-1.5">
-          <span className="text-[11px] font-medium text-foreground">AI</span>
+    <div className="min-w-0">
+      <ReasoningPanel text={message.reasoning || ''} streaming={message.streaming} />
+      <ToolActivity tools={message.tools || []} />
+
+      {message.content ? (
+        <div className={cn(
+          'min-w-0 text-sm leading-6 break-words',
+          message.error ? 'text-destructive' : 'text-foreground',
+        )}>
+          {renderMarkdown(message.content)}
           {message.streaming && (
+            <span className="ml-0.5 inline-block h-4 w-1 animate-pulse rounded-sm bg-primary align-middle" />
+          )}
+        </div>
+      ) : message.streaming && !hasBody ? (
+        <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          {i18n.t('思考中…')}
+        </div>
+      ) : null}
+
+      {message.content && !message.streaming && (
+        <div className="mt-1.5 flex items-center gap-1">
+          <button
+            type="button"
+            onClick={copy}
+            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Copy className="h-3 w-3" />
+            {i18n.t('复制')}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ConversationTurn {
+  id: string;
+  user: UiChatMessage | null;
+  assistants: UiChatMessage[];
+}
+
+function buildTurns(messages: UiChatMessage[]): ConversationTurn[] {
+  const turns: ConversationTurn[] = [];
+  let current: ConversationTurn | null = null;
+  for (const message of messages) {
+    if (message.role === 'user') {
+      current = { id: message.id, user: message, assistants: [] };
+      turns.push(current);
+      continue;
+    }
+    if (!current) {
+      current = { id: message.id, user: null, assistants: [] };
+      turns.push(current);
+    }
+    current.assistants.push(message);
+  }
+  return turns;
+}
+
+function ConversationTurnView({ turn, index }: { turn: ConversationTurn; index: number }) {
+  const streaming = turn.assistants.some(message => message.streaming);
+  const hasError = turn.assistants.some(message => message.error);
+
+  return (
+    <section
+      className={cn(
+        'rounded-xl border p-3 transition-colors sm:p-4',
+        streaming
+          ? 'border-primary/25 bg-card/60 shadow-sm'
+          : 'border-border/80 bg-card/35',
+      )}
+    >
+      {turn.user && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Prompt
+            </span>
+            <span className="text-[9px] text-muted-foreground/70">
+              {formatTime(turn.user.createdAt)}
+            </span>
+          </div>
+          <div className="flex justify-end">
+            <div className="max-w-[90%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-6 text-primary-foreground break-words">
+              {turn.user.content}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={cn(turn.user && 'mt-3 border-t border-border/60 pt-3')}>
+        <div className="mb-1.5 flex items-center gap-1.5">
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            Response
+          </span>
+          {streaming && (
             <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
               {i18n.t('正在生成')}
             </span>
           )}
-          {message.error && <Badge variant="destructive" className="px-1.5 py-0 text-[9px]">{i18n.t('失败')}</Badge>}
+          {hasError && <Badge variant="destructive" className="px-1.5 py-0 text-[9px]">{i18n.t('失败')}</Badge>}
+          <span className="ml-auto text-[9px] text-muted-foreground/60">#{index + 1}</span>
         </div>
 
-        <ReasoningPanel text={message.reasoning || ''} streaming={message.streaming} />
-        <ToolActivity tools={message.tools || []} />
-
-        {message.content ? (
-          <div className={cn(
-            'min-w-0 text-sm leading-6 break-words',
-            message.error ? 'text-destructive' : 'text-foreground',
-          )}>
-            {renderMarkdown(message.content)}
-            {message.streaming && (
-              <span className="ml-0.5 inline-block h-4 w-1 animate-pulse rounded-sm bg-primary align-middle" />
-            )}
+        {turn.assistants.length > 0 ? (
+          <div className="space-y-3">
+            {turn.assistants.map(message => <AssistantTurn key={message.id} message={message} />)}
           </div>
-        ) : message.streaming && !hasBody ? (
+        ) : (
           <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             {i18n.t('思考中…')}
           </div>
-        ) : null}
-
-        {message.content && !message.streaming && (
-          <div className="mt-1.5 flex items-center gap-1">
-            <button
-              type="button"
-              onClick={copy}
-              className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <Copy className="h-3 w-3" />
-              {i18n.t('复制')}
-            </button>
-          </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -448,6 +507,10 @@ export default function AiAssistantV2Page() {
   const storeKey = user?.login ? `${STORE_PREFIX}${user.login}` : '';
   const legacyKey = user?.login ? `${LEGACY_PREFIX}${user.login}` : '';
   const modelDef = useMemo(() => getModelDef(modelConfig.type), [modelConfig.type]);
+  const isAndroid = useMemo(
+    () => typeof window !== 'undefined' && !!(window as unknown as { AndroidBridge?: unknown }).AndroidBridge,
+    [],
+  );
   const hasModelKey = Boolean(modelConfig.api_key?.trim());
   const activeSession = useMemo(
     () => sessions.find(session => session.id === activeId) || sessions[0] || null,
@@ -782,7 +845,10 @@ export default function AiAssistantV2Page() {
       ];
 
   return (
-    <div className="flex h-[calc(100dvh-8rem)] min-h-[540px] w-full overflow-hidden">
+    <div
+      className="flex min-h-0 w-full overflow-hidden bg-background"
+      style={{ height: `calc(100dvh - ${isAndroid ? 56 : 120}px)` }}
+    >
       {/* 桌面端会话侧栏 */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-muted/10 2xl:flex">
         <div className="flex h-12 items-center justify-between border-b border-border px-3">
@@ -927,9 +993,9 @@ export default function AiAssistantV2Page() {
                 )}
               </div>
             ) : (
-              messages.map(message => message.role === 'user'
-                ? <UserTurn key={message.id} message={message} />
-                : <AssistantTurn key={message.id} message={message} />)
+              buildTurns(messages).map((turn, index) => (
+                <ConversationTurnView key={turn.id} turn={turn} index={index} />
+              ))
             )}
             <div ref={bottomRef} />
           </div>
@@ -946,7 +1012,7 @@ export default function AiAssistantV2Page() {
           )}
         </div>
 
-        <div className="shrink-0 border-t border-border bg-background/95 px-2 pb-1 pt-2 sm:px-3">
+        <div className="shrink-0 border-t border-border bg-background/95 px-2 pb-2 pt-2 sm:px-3">
           <div className="mx-auto w-full max-w-3xl">
             <div className="rounded-2xl border border-border bg-card p-2 shadow-sm transition-colors focus-within:border-primary/40">
               <div className="mb-1 flex flex-wrap items-center gap-1.5 px-1">
@@ -1009,12 +1075,9 @@ export default function AiAssistantV2Page() {
                   {streaming ? <Square className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
                 </Button>
               </div>
-            </div>
-            <p className="mt-1 px-1 text-[9px] text-muted-foreground">
-              {i18n.t('AI 可能会出错，重要内容请自行核实。')}
-            </p>
           </div>
         </div>
+      </div>
       </div>
 
       {/* 大屏上下文档 */}

@@ -9,7 +9,7 @@
 // 部署后前端调用：
 //   POST https://<worker>.workers.dev/v1/chat/completions
 //   Header: Authorization: Bearer <用户自己的模型 API Key>
-//   Header: x-llm-provider: deepseek | openai | gemini | qwen | custom
+//   Header: x-llm-provider: deepseek | openai | gemini | qwen | github | custom
 //   Header: x-llm-upstream: https://...   （仅 custom 使用）
 
 interface Env {
@@ -24,6 +24,7 @@ const PROVIDERS: Record<string, string> = {
   openai: 'https://api.openai.com/v1/chat/completions',
   gemini: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
   qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+  github: 'https://models.github.ai/inference/chat/completions',
 };
 
 function corsHeaders(env: Env): Record<string, string> {

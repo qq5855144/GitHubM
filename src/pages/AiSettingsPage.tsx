@@ -163,13 +163,13 @@ export default function AiSettingsPage() {
     navigate(next ? `/ai-settings/${next}` : '/ai-settings');
   };
 
-  const saveConfig = (next: ModelConfig) => {
+  const saveConfig = (next: ModelConfig, validateProvider = true) => {
     const def = getModelDef(next.type);
-    if (def.needKey && !next.api_key?.trim()) {
+    if (validateProvider && def.needKey && !next.api_key?.trim()) {
       toast.error(i18n.t('请先填写 API Key'));
       return;
     }
-    if (def.needEndpoint && !next.endpoint?.trim()) {
+    if (validateProvider && def.needEndpoint && !next.endpoint?.trim()) {
       toast.error(i18n.t('请先填写接口地址'));
       return;
     }
@@ -413,7 +413,7 @@ export default function AiSettingsPage() {
           title={i18n.t('生成参数')}
           desc={i18n.t('控制单次请求等待时间和模型思考强度。')}
           onBack={() => go('')}
-          onSave={() => saveConfig(config)}
+          onSave={() => saveConfig(config, false)}
         />
         <div className="space-y-5 rounded-xl border border-border bg-card p-4">
           <SettingRow label={i18n.t('请求超时')} desc={i18n.t('模型在规定时间内没有完成响应时会中止请求。')}>
@@ -464,7 +464,7 @@ export default function AiSettingsPage() {
           title={i18n.t('模型代理')}
           desc={i18n.t('用于解决 WebView CORS、网络不可达或统一转发。')}
           onBack={() => go('')}
-          onSave={() => saveConfig(config)}
+          onSave={() => saveConfig(config, false)}
         />
         <div className="space-y-5 rounded-xl border border-border bg-card p-4">
           <SettingRow label={i18n.t('代理地址')} desc={i18n.t('留空使用内置无状态代理；OpenRouter 默认直连。')}>
@@ -573,7 +573,7 @@ export default function AiSettingsPage() {
 
   return (
     <div className="mx-auto min-h-full w-full max-w-2xl px-3 py-4 sm:px-4">
-      <SectionHeader title={i18n.t('诊断与测试')} desc={i18n.t('检查 Key、端点和模型列表，不修改当前配置。')} onBack={() => go('')} onSave={() => saveConfig(config)} />
+      <SectionHeader title={i18n.t('诊断与测试')} desc={i18n.t('检查 Key、端点和模型列表，不修改当前配置。')} onBack={() => go('')} onSave={() => saveConfig(config, false)} />
       <div className="space-y-4">
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-center gap-2">

@@ -97,6 +97,7 @@ const navItems: NavItem[] = [
   { label: i18n.t('数据导出'), path: '/export', icon: Download },
   { label: 'GraphQL', path: '/graphql-playground', icon: Braces },
   { label: i18n.t('AI 助手'), path: '/ai-assistant', icon: Sparkles },
+  { label: i18n.t('AI 设置'), path: '/ai-settings', icon: Settings },
   { label: '全部功能', path: '/more', icon: LayoutGrid },
 ];
 

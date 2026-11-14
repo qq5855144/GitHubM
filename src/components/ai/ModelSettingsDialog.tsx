@@ -25,7 +25,7 @@ import {
 import type { ModelConfig } from './aiTypes';
 import { MODEL_DEFS, getModelDef, loadProviderKey, saveProviderKey } from './aiUtils';
 import type { ModelType } from './aiUtils';
-import { fetchModelsFromAPI, testProviderConnection } from './aiProviders';
+import { fetchModelsFromAPI, getDefaultProviderModel, testProviderConnection } from './aiProviders';
 import i18n from "@/i18n";
 
 type FetchState = 'idle' | 'loading' | 'success' | 'error';
@@ -65,9 +65,14 @@ const ModelSettingsDialog = memo(function ModelSettingsDialog({
   }, [open, config]);
 
   const handleTypeChange = (type: ModelType) => {
-    // 切换平台时自动预填该平台已存储的 API Key
+    // 切换平台时自动预填该平台已存储的 API Key 和默认模型，
+    // 避免未选择模型就测试连接时把 "default" 发给真实接口。
     const savedKey = loadProviderKey(type);
-    setDraft({ type, api_key: savedKey || undefined });
+    setDraft({
+      type,
+      api_key: savedKey || undefined,
+      model: getDefaultProviderModel(type),
+    });
     setFetchState('idle');
     setFetchError('');
     setTestState('idle');

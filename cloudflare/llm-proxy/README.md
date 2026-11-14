@@ -18,6 +18,7 @@ x-llm-upstream: https://...   # 仅 custom
 - `gemini` → `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
 - `qwen` → `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions`
 - `github` → `https://models.github.ai/inference/chat/completions`
+- `cloudflare` → Cloudflare Workers AI 免费额度（无需用户 Key）
 - `custom` 必须配置 `ALLOWED_UPSTREAMS`，否则拒绝
 
 健康检查：

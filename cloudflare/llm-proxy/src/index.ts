@@ -13,6 +13,10 @@
 //   Header: x-llm-upstream: https://...   （仅 custom 使用）
 
 interface Env {
+  /** Cloudflare Workers AI binding（免费额度，用于 OpenRouter 限额后的通用聊天兜底） */
+  AI?: {
+    run: (model: string, input: Record<string, unknown>) => Promise<unknown>;
+  };
   /** 允许的前端 Origin；不配置则 *（WebView / 本地页面） */
   ALLOWED_ORIGIN?: string;
   /** custom 允许的上游域名，逗号分隔，例如 api.example.com,llm.example.com */
@@ -67,6 +71,104 @@ function resolveUpstream(req: Request, env: Env): string | null {
   return url.toString();
 }
 
+function openAiChunk(content: string): string {
+  return `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
+}
+
+/**
+ * Cloudflare Workers AI 兜底：把 Workers AI 的 SSE / JSON 转换成 OpenAI 兼容格式。
+ * 不依赖用户 API Key，适合 OpenRouter 免费日限额用尽后的普通聊天。
+ */
+async function handleCloudflareAI(req: Request, env: Env): Promise<Response> {
+  if (!env.AI?.run) {
+    return json({ error: 'Cloudflare Workers AI binding is not configured' }, 503, env);
+  }
+
+  let body: {
+    model?: string;
+    messages?: Array<{ role: string; content: unknown }>;
+    stream?: boolean;
+    max_tokens?: number;
+  };
+  try {
+    body = JSON.parse(await req.text()) as typeof body;
+  } catch {
+    return json({ error: 'Invalid JSON body' }, 400, env);
+  }
+
+  const model = body.model || '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  const stream = body.stream !== false;
+
+  try {
+    const result = await env.AI.run(model, {
+      messages,
+      stream,
+      max_tokens: body.max_tokens ?? 4096,
+    });
+
+    if (stream && result instanceof ReadableStream) {
+      const decoder = new TextDecoder();
+      const encoder = new TextEncoder();
+      let buffer = '';
+      const transformed = result.pipeThrough(new TransformStream({
+        transform(chunk, controller) {
+          buffer += decoder.decode(chunk as Uint8Array, { stream: true });
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            const raw = line.trim();
+            if (!raw) continue;
+            const data = raw.startsWith('data:') ? raw.slice(5).trim() : raw;
+            if (!data || data === '[DONE]') continue;
+            try {
+              const parsed = JSON.parse(data) as { response?: string; tool_calls?: unknown; usage?: unknown };
+              if (parsed.response) controller.enqueue(encoder.encode(openAiChunk(parsed.response)));
+            } catch {
+              // 跳过无法解析的心跳/注释
+            }
+          }
+        },
+        flush(controller) {
+          if (buffer.trim()) {
+            try {
+              const parsed = JSON.parse(buffer.trim().replace(/^data:\s*/, '')) as { response?: string };
+              if (parsed.response) controller.enqueue(encoder.encode(openAiChunk(parsed.response)));
+            } catch {
+              // ignore
+            }
+          }
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        },
+      }));
+
+      return new Response(transformed, {
+        status: 200,
+        headers: {
+          ...corsHeaders(env),
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'X-Accel-Buffering': 'no',
+        },
+      });
+    }
+
+    const content = typeof result === 'object' && result && 'response' in result
+      ? String((result as { response?: unknown }).response || '')
+      : String(result || '');
+    return json({
+      model,
+      choices: [{ message: { role: 'assistant', content }, finish_reason: 'stop' }],
+    }, 200, env);
+  } catch (err) {
+    return json(
+      { error: 'Cloudflare AI request failed', detail: err instanceof Error ? err.message : String(err) },
+      502,
+      env,
+    );
+  }
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
@@ -81,6 +183,11 @@ export default {
 
     if (req.method !== 'POST' || url.pathname !== '/v1/chat/completions') {
       return json({ error: 'Not Found' }, 404, env);
+    }
+
+    const provider = (req.headers.get('x-llm-provider') || 'deepseek').toLowerCase();
+    if (provider === 'cloudflare') {
+      return handleCloudflareAI(req, env);
     }
 
     const upstream = resolveUpstream(req, env);

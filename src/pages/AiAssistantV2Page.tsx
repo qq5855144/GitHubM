@@ -61,6 +61,31 @@ const MAX_SESSIONS = 20;
 const MAX_SAVED_MESSAGES = 40;
 const MAX_TOOL_RESULT = 4000;
 
+const CLOUDFLARE_FALLBACK_CONFIG: ModelConfig = {
+  type: 'cloudflare',
+  api_key: 'cloudflare-free',
+  model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+  proxy_url: 'https://llm.callact.xyz',
+};
+
+function isOpenRouterDailyLimit(message: string): boolean {
+  return /429/.test(message) && /free-models-per-day|free model requests per day/i.test(message);
+}
+
+function friendlyModelError(message: string): string {
+  if (message.includes('Cloudflare AI 兜底也失败：')) {
+    const detail = message.split('Cloudflare AI 兜底也失败：').pop() || '';
+    return `OpenRouter 免费额度已用完，Cloudflare AI 兜底也失败：${detail}`;
+  }
+  if (isOpenRouterDailyLimit(message)) {
+    return 'OpenRouter 免费模型今日额度已用完。可等待额度重置，或切换到其他模型平台。';
+  }
+  if (/HTTP 429/.test(message)) {
+    return '请求过于频繁，已触发模型平台限流，请稍后再试。';
+  }
+  return message;
+}
+
 interface V2Session {
   id: string;
   title: string;
@@ -747,12 +772,14 @@ export default function AiAssistantV2Page() {
       }
     };
 
+    const history = [...previousHistory, { role: 'user' as const, content: text }];
+
     try {
       await runGeneralAgent({
         token,
         repo: repoContext || undefined,
         config: modelConfig,
-        history: [...previousHistory, { role: 'user', content: text }],
+        history,
         signal: controller.signal,
         onEvent,
       });
@@ -760,13 +787,46 @@ export default function AiAssistantV2Page() {
       if ((error as Error)?.name === 'AbortError') {
         patchAssistant(assistantId, { streaming: false });
       } else {
-        const message = (error as Error)?.message || String(error);
-        patchAssistant(assistantId, {
-          content: `${i18n.t('请求失败：')}${message}`,
-          streaming: false,
-          error: true,
-        });
-        toast.error(message.slice(0, 160));
+        let message = (error as Error)?.message || String(error);
+
+        // OpenRouter 免费额度用尽：无仓库上下文时自动切到 Cloudflare Workers AI 免费额度。
+        if (isOpenRouterDailyLimit(message) && modelConfig.type === 'openrouter' && !repoContext) {
+          toast.info(i18n.t('OpenRouter 免费额度已用尽，正在切换 Cloudflare AI 重试'));
+          patchAssistant(assistantId, {
+            content: `> ${i18n.t('OpenRouter 免费额度已用尽，已切换到 Cloudflare AI 重试。')}\n\n`,
+            reasoning: '',
+            tools: [],
+            streaming: true,
+            error: false,
+          });
+          try {
+            await runGeneralAgent({
+              token,
+              config: CLOUDFLARE_FALLBACK_CONFIG,
+              history,
+              signal: controller.signal,
+              onEvent,
+            });
+            message = '';
+          } catch (fallbackError) {
+            if ((fallbackError as Error)?.name === 'AbortError') {
+              patchAssistant(assistantId, { streaming: false });
+              message = '';
+            } else {
+              const fallbackMessage = (fallbackError as Error)?.message || String(fallbackError);
+              message = `${message}\n\nCloudflare AI 兜底也失败：${fallbackMessage}`;
+            }
+          }
+        }
+
+        if (message) {
+          patchAssistant(assistantId, {
+            content: `${i18n.t('请求失败：')}${friendlyModelError(message)}`,
+            streaming: false,
+            error: true,
+          });
+          toast.error(friendlyModelError(message).slice(0, 160));
+        }
       }
     } finally {
       setStreaming(false);

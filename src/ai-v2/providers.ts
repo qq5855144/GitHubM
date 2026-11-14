@@ -82,6 +82,7 @@ function defaultModelFor(type: string): string {
     case 'qwen': return 'qwen2.5-coder-32b-instruct';
     case 'openai': return 'gpt-4o-mini';
     case 'openrouter': return 'particle-ai/particle-1:free';
+    case 'cloudflare': return '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
     default: return 'default';
   }
 }
@@ -162,9 +163,11 @@ export async function streamProvider(
 
     const text = typeof delta.content === 'string'
       ? delta.content
-      : Array.isArray(delta.content)
-        ? delta.content.map(p => p.text || '').join('')
-        : '';
+      : typeof delta.content === 'number'
+        ? String(delta.content)
+        : Array.isArray(delta.content)
+          ? delta.content.map(p => p.text || '').join('')
+          : '';
     if (text) {
       content += text;
       onEvent({ type: 'text_delta', text });

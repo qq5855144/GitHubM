@@ -119,6 +119,18 @@ describe('AI Assistant V2 provider', () => {
     expect(request.body.model).toBe('test-model');
   });
 
+  it('builds the Cloudflare AI fallback request without a user key', () => {
+    const request = buildProviderRequest({
+      type: 'cloudflare',
+      api_key: 'cloudflare-free',
+      model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+      proxy_url: 'https://llm.callact.xyz',
+    }, [{ role: 'user', content: 'hi' }], []);
+    expect(request.url).toBe('https://llm.callact.xyz/v1/chat/completions');
+    expect(request.headers['x-llm-provider']).toBe('cloudflare');
+    expect(request.body.model).toBe('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  });
+
   it('parses streaming text, reasoning and tool call fragments', async () => {
     const chunks = [
       'data: {"choices":[{"delta":{"reasoning":"思考"}}]}\n\n',

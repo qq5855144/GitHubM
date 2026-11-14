@@ -48,6 +48,10 @@ android/*.jks
 # 平台内部上下文文件（含敏感 token 记录，不纳入版本控制）
 historical_context.txt
 /.skills
+# 本地环境变量，禁止提交
+.env
+.env.*
+!.env.example
 /tasks
 package.json.[0-9]*
 .native-wind-cache

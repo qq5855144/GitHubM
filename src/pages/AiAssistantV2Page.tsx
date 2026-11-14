@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { runGeneralAgent, toAgentHistory, toolCallLabel } from '@/ai-v2/agent';
-import type { AgentEvent, RepoContext, UiChatMessage, UiToolRun } from '@/ai-v2/types';
+import type { AgentEvent, ApprovalRequest, ArtifactMeta, RepoContext, UiChatMessage, UiToolRun } from '@/ai-v2/types';
+import { readArtifact } from '@/ai-v2/artifacts';
+import { appendRunEvent, finishRun, startRun } from '@/ai-v2/runStore';
 import RepoSelector from '@/components/ai/RepoSelector';
 import {
   ModelAvatar,
@@ -28,11 +30,14 @@ import i18n from '@/i18n';
 import {
   ArrowDown,
   BookOpen,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Code2,
   Copy,
+  Eye,
+  FileText,
   GitBranch,
   History,
   Layers,
@@ -44,6 +49,7 @@ import {
   RefreshCw,
   Send,
   Settings,
+  ShieldAlert,
   Sparkles,
   Square,
   Trash2,
@@ -184,7 +190,7 @@ function ReasoningPanel({ text, streaming }: { text: string; streaming?: boolean
   );
 }
 
-function ToolCard({ tool }: { tool: UiToolRun }) {
+function ToolCard({ tool, onOpenArtifact }: { tool: UiToolRun; onOpenArtifact: (meta: ArtifactMeta) => void }) {
   const [open, setOpen] = useState(false);
   const duration = tool.startedAt && tool.endedAt
     ? `${Math.max(0.1, (tool.endedAt - tool.startedAt) / 1000).toFixed(1)}s`
@@ -224,6 +230,16 @@ function ToolCard({ tool }: { tool: UiToolRun }) {
             ) : (
               <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/50 p-2 text-[10px] font-mono">{tool.content || i18n.t('无输出')}</pre>
             )}
+            {tool.artifact && (
+              <button
+                type="button"
+                onClick={() => onOpenArtifact(tool.artifact!)}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-primary/25 bg-primary/5 px-2 py-1 text-[10px] text-primary hover:bg-primary/10"
+              >
+                <Eye className="h-3 w-3" />
+                {i18n.t('查看完整结果')} · {tool.artifact.size.toLocaleString()} {i18n.t('字符')}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -231,7 +247,7 @@ function ToolCard({ tool }: { tool: UiToolRun }) {
   );
 }
 
-function ToolActivity({ tools }: { tools: UiToolRun[] }) {
+function ToolActivity({ tools, onOpenArtifact }: { tools: UiToolRun[]; onOpenArtifact: (meta: ArtifactMeta) => void }) {
   if (!tools.length) return null;
   return (
     <div className="my-2 space-y-1.5 border-l-2 border-primary/20 pl-2.5">
@@ -240,12 +256,12 @@ function ToolActivity({ tools }: { tools: UiToolRun[] }) {
         {i18n.t('工具调用')}
         <span className="rounded-full bg-muted px-1.5 text-[9px]">{tools.length}</span>
       </div>
-      {tools.map(tool => <ToolCard key={tool.id} tool={tool} />)}
+      {tools.map(tool => <ToolCard key={tool.id} tool={tool} onOpenArtifact={onOpenArtifact} />)}
     </div>
   );
 }
 
-function AssistantTurn({ message }: { message: UiChatMessage }) {
+function AssistantTurn({ message, onOpenArtifact }: { message: UiChatMessage; onOpenArtifact: (meta: ArtifactMeta) => void }) {
   const hasBody = Boolean(message.content || message.reasoning || (message.tools || []).length);
   const copy = async () => {
     try {
@@ -259,7 +275,7 @@ function AssistantTurn({ message }: { message: UiChatMessage }) {
   return (
     <div className="min-w-0">
       <ReasoningPanel text={message.reasoning || ''} streaming={message.streaming} />
-      <ToolActivity tools={message.tools || []} />
+      <ToolActivity tools={message.tools || []} onOpenArtifact={onOpenArtifact} />
 
       {message.content ? (
         <div className={cn(
@@ -318,7 +334,7 @@ function buildTurns(messages: UiChatMessage[]): ConversationTurn[] {
   return turns;
 }
 
-function ConversationTurnView({ turn, index }: { turn: ConversationTurn; index: number }) {
+function ConversationTurnView({ turn, index, onOpenArtifact }: { turn: ConversationTurn; index: number; onOpenArtifact: (meta: ArtifactMeta) => void }) {
   const streaming = turn.assistants.some(message => message.streaming);
   const hasError = turn.assistants.some(message => message.error);
 
@@ -367,7 +383,7 @@ function ConversationTurnView({ turn, index }: { turn: ConversationTurn; index: 
 
         {turn.assistants.length > 0 ? (
           <div className="space-y-3">
-            {turn.assistants.map(message => <AssistantTurn key={message.id} message={message} />)}
+            {turn.assistants.map(message => <AssistantTurn key={message.id} message={message} onOpenArtifact={onOpenArtifact} />)}
           </div>
         ) : (
           <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
@@ -483,6 +499,7 @@ function ContextContent({
               <p className="flex items-center gap-1.5"><BookOpen className="h-3 w-3" /> github_list_files</p>
               <p className="flex items-center gap-1.5"><Code2 className="h-3 w-3" /> github_read_file</p>
               <p className="flex items-center gap-1.5"><RefreshCw className="h-3 w-3" /> github_search_code</p>
+              <p className="flex items-center gap-1.5"><Wrench className="h-3 w-3" /> github_write_file <span className="text-amber-600">写操作需确认</span></p>
             </div>
           </div>
         ) : (
@@ -520,6 +537,11 @@ export default function AiAssistantV2Page() {
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
+  const [artifactMeta, setArtifactMeta] = useState<ArtifactMeta | null>(null);
+  const [artifactContent, setArtifactContent] = useState('');
+  const [artifactDialogOpen, setArtifactDialogOpen] = useState(false);
+  const approvalResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -603,7 +625,11 @@ export default function AiAssistantV2Page() {
   }, [sessions, activeId, storeKey]);
 
   useEffect(() => {
-    return () => abortRef.current?.abort();
+    return () => {
+      approvalResolverRef.current?.(false);
+      approvalResolverRef.current = null;
+      abortRef.current?.abort();
+    };
   }, []);
 
   const scrollToBottom = useCallback((force = false) => {
@@ -623,6 +649,26 @@ export default function AiAssistantV2Page() {
     stickToBottomRef.current = nearBottom;
     setShowScrollButton(!nearBottom);
   };
+
+  const requestApproval = useCallback((request: ApprovalRequest) => (
+    new Promise<boolean>(resolve => {
+      approvalResolverRef.current = resolve;
+      setApprovalRequest(request);
+    })
+  ), []);
+
+  const resolveApproval = useCallback((approved: boolean) => {
+    approvalResolverRef.current?.(approved);
+    approvalResolverRef.current = null;
+    setApprovalRequest(null);
+  }, []);
+
+  const openArtifact = useCallback((meta: ArtifactMeta) => {
+    const result = readArtifact(user?.login, meta.id, 0, 100000);
+    setArtifactMeta(meta);
+    setArtifactContent(result.content || i18n.t('无法读取 Artifact 内容'));
+    setArtifactDialogOpen(true);
+  }, [user?.login]);
 
   const updateActiveSession = useCallback((
     updater: (session: V2Session) => V2Session,
@@ -714,6 +760,13 @@ export default function AiAssistantV2Page() {
       role: message.role,
       content: message.content,
     })));
+    const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    startRun({
+      login: user?.login,
+      id: runId,
+      sessionId: activeSession?.id,
+      title: text,
+    });
     setMessages(prev => [...prev, userMessage, assistantMessage]);
     setInput('');
     setStreaming(true);
@@ -723,6 +776,7 @@ export default function AiAssistantV2Page() {
     abortRef.current = controller;
 
     const onEvent = (event: AgentEvent) => {
+      appendRunEvent(user?.login, runId, event);
       switch (event.type) {
         case 'text_delta':
           appendAssistant(assistantId, { content: event.text });
@@ -751,6 +805,7 @@ export default function AiAssistantV2Page() {
           patchTool(assistantId, event.call.id, {
             status: event.ok ? 'done' : 'error',
             content: event.content,
+            artifact: event.artifact,
             endedAt: Date.now(),
           });
           break;
@@ -770,18 +825,24 @@ export default function AiAssistantV2Page() {
     };
 
     const history = [...previousHistory, { role: 'user' as const, content: text }];
+    let runStatus: 'done' | 'error' | 'stopped' = 'done';
+    let runError: string | undefined;
 
     try {
       await runGeneralAgent({
         token,
+        userLogin: user?.login,
+        runId,
         repo: repoContext || undefined,
         config: modelConfig,
         history,
         signal: controller.signal,
+        requestApproval,
         onEvent,
       });
     } catch (error) {
       if ((error as Error)?.name === 'AbortError') {
+        runStatus = 'stopped';
         patchAssistant(assistantId, { streaming: false });
       } else {
         let message = (error as Error)?.message || String(error);
@@ -799,17 +860,22 @@ export default function AiAssistantV2Page() {
           try {
             await runGeneralAgent({
               token,
+              userLogin: user?.login,
+              runId,
               config: CLOUDFLARE_FALLBACK_CONFIG,
               history,
               signal: controller.signal,
+              requestApproval,
               onEvent,
             });
             message = '';
           } catch (fallbackError) {
             if ((fallbackError as Error)?.name === 'AbortError') {
+              runStatus = 'stopped';
               patchAssistant(assistantId, { streaming: false });
               message = '';
             } else {
+              runStatus = 'error';
               const fallbackMessage = (fallbackError as Error)?.message || String(fallbackError);
               message = `${message}\n\nCloudflare AI 兜底也失败：${fallbackMessage}`;
             }
@@ -817,6 +883,8 @@ export default function AiAssistantV2Page() {
         }
 
         if (message) {
+          runStatus = runStatus === 'stopped' ? 'stopped' : 'error';
+          runError = message;
           patchAssistant(assistantId, {
             content: `${i18n.t('请求失败：')}${friendlyModelError(message)}`,
             streaming: false,
@@ -826,6 +894,7 @@ export default function AiAssistantV2Page() {
         }
       }
     } finally {
+      finishRun(user?.login, runId, runStatus, runError);
       setStreaming(false);
       abortRef.current = null;
       scrollToBottom(true);
@@ -833,6 +902,9 @@ export default function AiAssistantV2Page() {
   };
 
   const handleStop = () => {
+    approvalResolverRef.current?.(false);
+    approvalResolverRef.current = null;
+    setApprovalRequest(null);
     abortRef.current?.abort();
     setStreaming(false);
   };
@@ -1051,7 +1123,7 @@ export default function AiAssistantV2Page() {
               </div>
             ) : (
               buildTurns(messages).map((turn, index) => (
-                <ConversationTurnView key={turn.id} turn={turn} index={index} />
+                <ConversationTurnView key={turn.id} turn={turn} index={index} onOpenArtifact={openArtifact} />
               ))
             )}
             <div ref={bottomRef} />
@@ -1119,7 +1191,7 @@ export default function AiAssistantV2Page() {
                   <ChevronDown className="h-3 w-3 shrink-0" />
                 </button>
                 <span className="ml-auto text-[9px] text-muted-foreground">
-                  {repoContext ? i18n.t('只读仓库工具') : i18n.t('纯聊天')}
+                  {repoContext ? i18n.t('仓库工具 · 写操作需确认') : i18n.t('纯聊天')}
                 </span>
                 <Button
                   type="button"
@@ -1151,6 +1223,89 @@ export default function AiAssistantV2Page() {
           />
         </div>
       </aside>
+
+      <Dialog
+        open={Boolean(approvalRequest)}
+        onOpenChange={open => {
+          if (!open) resolveApproval(false);
+        }}
+      >
+        <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <ShieldAlert className="h-4 w-4 text-amber-500" />
+              {i18n.t('需要确认写操作')}
+            </DialogTitle>
+          </DialogHeader>
+          {approvalRequest && (() => {
+            const args = approvalRequest.arguments as Record<string, unknown>;
+            const content = String(args.content || '');
+            return (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-5 text-amber-700 dark:text-amber-300">
+                  {i18n.t('该工具会修改仓库。确认后才会执行，本次允许仅对当前调用有效。')}
+                </div>
+                <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3 text-xs">
+                  <p className="flex items-center gap-1.5 font-mono font-medium"><Wrench className="h-3.5 w-3.5" />{approvalRequest.toolName}</p>
+                  <p className="text-[11px] leading-5 text-muted-foreground">{approvalRequest.description}</p>
+                  {args.path !== undefined && <p><span className="text-muted-foreground">{i18n.t('路径')}：</span><span className="font-mono">{String(args.path)}</span></p>}
+                  {args.branch !== undefined && <p><span className="text-muted-foreground">{i18n.t('分支')}：</span><span className="font-mono">{String(args.branch)}</span></p>}
+                  {args.message !== undefined && <p><span className="text-muted-foreground">{i18n.t('提交信息')}：</span>{String(args.message)}</p>}
+                  {content && (
+                    <div>
+                      <p className="mb-1 text-[10px] text-muted-foreground">{i18n.t('内容预览')} · {content.length} {i18n.t('字符')}</p>
+                      <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-background/70 p-2 font-mono text-[10px]">{content.slice(0, 2000)}</pre>
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => resolveApproval(false)}>
+                    <X className="h-3.5 w-3.5" />
+                    {i18n.t('拒绝')}
+                  </Button>
+                  <Button type="button" size="sm" className="h-8 gap-1 text-xs" onClick={() => resolveApproval(true)}>
+                    <Check className="h-3.5 w-3.5" />
+                    {i18n.t('允许一次')}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={artifactDialogOpen} onOpenChange={setArtifactDialogOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <FileText className="h-4 w-4 text-primary" />
+              {artifactMeta?.title || i18n.t('工具结果')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <Badge variant="secondary" className="text-[9px]">{artifactMeta?.mime || 'text/plain'}</Badge>
+            <span>{artifactMeta?.size.toLocaleString()} {i18n.t('字符')}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-7 gap-1 px-2 text-[10px]"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(artifactContent);
+                  toast.success(i18n.t('已复制 Artifact'));
+                } catch {
+                  toast.error(i18n.t('复制失败'));
+                }
+              }}
+            >
+              <Copy className="h-3 w-3" />
+              {i18n.t('复制')}
+            </Button>
+          </div>
+          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-muted/25 p-3 font-mono text-[11px] leading-5">{artifactContent}</pre>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={repoDialogOpen} onOpenChange={setRepoDialogOpen}>
         <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-xl">

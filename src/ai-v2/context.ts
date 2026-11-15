@@ -13,8 +13,39 @@ export interface BuiltContext {
 
 export function estimateTokens(text: string): number {
   if (!text) return 0;
-  // 中文/代码混合的粗略估算：3 个字符约 1 token
-  return Math.ceil(text.length / 3);
+  let tokens = 0;
+  for (const char of text) {
+    const code = char.codePointAt(0) || 0;
+    if (code >= 0x2e80 && code <= 0x9fff) tokens += 1;
+    else if (code >= 0xac00 && code <= 0xd7af) tokens += 1;
+    else if (code >= 0xf900 && code <= 0xfaff) tokens += 1;
+    else if (code >= 0x3040 && code <= 0x30ff) tokens += 1;
+    else if (/\s/.test(char)) tokens += 0.1;
+    else tokens += 0.28;
+  }
+  return Math.max(1, Math.ceil(tokens));
+}
+
+export function truncateTextToTokens(text: string, maxTokens: number): string {
+  if (maxTokens <= 0 || !text) return '';
+  let tokens = 0;
+  let index = 0;
+  for (const char of text) {
+    const code = char.codePointAt(0) || 0;
+    const cost = code >= 0x2e80
+      ? 1
+      : /\s/.test(char) ? 0.1 : 0.28;
+    if (tokens + cost > maxTokens) break;
+    tokens += cost;
+    index += char.length;
+  }
+  if (index >= text.length) return text;
+  return `${text.slice(0, index)}\n\n…（内容因上下文预算被截断，原长度 ${text.length} 字符）`;
+}
+
+function messageTokens(message: V2ProviderMessage): number {
+  const toolCalls = message.tool_calls ? JSON.stringify(message.tool_calls) : '';
+  return estimateTokens(`${message.content || ''}\n${message.reasoning_content || ''}\n${toolCalls}`);
 }
 
 /**
@@ -27,7 +58,7 @@ export function compactProviderMessages(
 ): V2ProviderMessage[] {
   if (!messages.length) return messages;
   const safeBudget = Math.max(4000, budget);
-  if (estimateTokens(messages.map(item => String(item.content ?? '')).join('\n')) <= safeBudget) {
+  if (messages.reduce((sum, item) => sum + messageTokens(item), 0) <= safeBudget) {
     return messages;
   }
 
@@ -52,7 +83,7 @@ export function compactProviderMessages(
     }
   }
 
-  const total = () => estimateTokens([...systemPrefix, ...body].map(item => String(item.content ?? '')).join('\n'));
+  const total = () => [...systemPrefix, ...body].reduce((sum, item) => sum + messageTokens(item), 0);
   if (total() <= safeBudget) return [...systemPrefix, ...body];
 
   const userIndexes = body
@@ -62,7 +93,7 @@ export function compactProviderMessages(
   let compacted: V2ProviderMessage[] | null = null;
   for (const index of userIndexes) {
     const candidate = [...systemPrefix, ...body.slice(index)];
-    if (estimateTokens(candidate.map(item => String(item.content ?? '')).join('\n')) <= safeBudget) {
+    if (candidate.reduce((sum, item) => sum + messageTokens(item), 0) <= safeBudget) {
       compacted = candidate;
       break;
     }
@@ -77,7 +108,7 @@ export function compactProviderMessages(
   }
 
   const overBudget = (items: V2ProviderMessage[]) =>
-    estimateTokens(items.map(item => String(item.content ?? '')).join('\n')) > safeBudget;
+    items.reduce((sum, item) => sum + messageTokens(item), 0) > safeBudget;
 
   // 仍超预算时，从最早的完整工具回合开始丢弃，保留最近几轮。
   while (overBudget(compacted) && compacted.length > 8) {
@@ -93,11 +124,11 @@ export function compactProviderMessages(
 
   // 最后一个用户消息本身仍然过大时，截断非系统消息正文。
   return compacted.map(item => {
-    if (item.role === 'tool' && typeof item.content === 'string' && item.content.length > 3000) {
-      return { ...item, content: `${item.content.slice(0, 3000)}\n\n…（工具结果已截断）` };
+    if (item.role === 'tool' && typeof item.content === 'string' && estimateTokens(item.content) > 1500) {
+      return { ...item, content: truncateTextToTokens(item.content, 1500) };
     }
-    if (item.role !== 'system' && typeof item.content === 'string' && item.content.length > 12000) {
-      return { ...item, content: `${item.content.slice(0, 12000)}\n\n…（消息已截断）` };
+    if (item.role !== 'system' && typeof item.content === 'string' && estimateTokens(item.content) > 4000) {
+      return { ...item, content: truncateTextToTokens(item.content, 4000) };
     }
     return item;
   });
@@ -140,6 +171,11 @@ export function buildAgentContext(params: {
 
   let systemContent = [params.systemPrompt, ...extraSections].filter(Boolean).join('\n\n');
   let systemTokens = estimateTokens(systemContent);
+  const maxSystemTokens = Math.max(1000, budget - 6000);
+  if (systemTokens > maxSystemTokens) {
+    systemContent = truncateTextToTokens(systemContent, maxSystemTokens);
+    systemTokens = estimateTokens(systemContent);
+  }
 
   // 给本轮输出和工具结果预留空间
   const historyBudget = Math.max(1500, budget - systemTokens - 6000);
@@ -155,6 +191,9 @@ export function buildAgentContext(params: {
   const trimmedMessages = params.history.length - selected.length;
   if (trimmedMessages > 0) {
     systemContent += `\n\n# 上下文说明\n较早的 ${trimmedMessages} 条历史消息因预算限制已省略；如需细节请让用户补充。`;
+    if (estimateTokens(systemContent) > maxSystemTokens) {
+      systemContent = truncateTextToTokens(systemContent, maxSystemTokens);
+    }
     systemTokens = estimateTokens(systemContent);
   }
 

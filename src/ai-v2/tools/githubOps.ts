@@ -160,11 +160,13 @@ const listJobs: AgentTool = {
 
 const getJobLogs: AgentTool = {
   name: 'github_get_job_logs',
-  description: '读取指定 Actions Job 的完整日志。日志较长时会由 Artifact Store 自动保存，可继续分页读取。',
+  description: '读取指定 Actions Job 的日志。默认返回前 50,000 字符；支持 offset/limit 分页，完整日志可按需继续读取。',
   parameters: {
     type: 'object',
     properties: {
       job_id: { type: 'number', description: 'Actions job ID，可从 github_list_workflow_jobs 获取' },
+      offset: { type: 'number', description: '起始字符位置，默认 0' },
+      limit: { type: 'number', description: '本次读取字符数，1000-100000，默认 50000' },
     },
     required: ['job_id'],
   },
@@ -175,9 +177,22 @@ const getJobLogs: AgentTool = {
     if (!Number.isFinite(jobId)) throw new Error('job_id 必须是数字');
     const text = await requestText(ctx, `/repos/${owner}/${name}/actions/jobs/${jobId}/logs`);
     if (!text.trim()) return { ok: true, content: `job ${jobId} 没有日志。` };
+    const total = text.length;
+    const offset = clamp(args.offset, 0, total, 0);
+    const limit = clamp(args.limit, 1000, 100000, 50000);
+    const segment = text.slice(offset, offset + limit);
+    const nextOffset = offset + segment.length;
     return {
       ok: true,
-      content: `job ${jobId} 日志（${text.length} 字符）：\n\n${text.slice(0, 30000)}`,
+      content: [
+        `job ${jobId} 日志：${total} 字符`,
+        `本次范围：${offset}-${nextOffset}`,
+        '',
+        segment,
+        ...(nextOffset < total
+          ? ['', `[日志未结束] 继续读取：{"tool":"github_get_job_logs","job_id":${jobId},"offset":${nextOffset},"limit":${limit}}`]
+          : ['', '[日志结束]']),
+      ].join('\n'),
     };
   },
 };

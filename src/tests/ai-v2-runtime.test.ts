@@ -76,7 +76,8 @@ describe('AI V2 memory and context', () => {
     expect(built.memoryIds.length).toBeGreaterThan(0);
     expect(String(built.messages[0].content)).toContain('相关技能');
     expect(String(built.messages[0].content)).toContain('长期记忆');
-    expect(estimateTokens('你好世界')).toBeGreaterThan(0);
+    expect(estimateTokens('你好世界')).toBe(4);
+    expect(estimateTokens('hello world')).toBeLessThan(estimateTokens('你好世界'));
   });
 
   it('compacts old tool results during long runs', () => {
@@ -145,8 +146,19 @@ describe('AI V2 run store', () => {
     const run = startRun({ login: 'bob', id: 'run-b', title: '中断任务' });
     finishRun('bob', run.id, 'stopped');
     expect(listRuns('bob')[0].status).toBe('stopped');
+    saveRunSnapshot('bob', {
+      runId: run.id,
+      sessionId: 'session-b',
+      assistantId: 'assistant-b',
+      title: '中断任务',
+      messages: [{ role: 'user', content: '继续' }],
+      steps: 1,
+      capabilities: ['core'],
+      savedAt: new Date().toISOString(),
+    });
     clearRuns('bob');
     expect(listRuns('bob')).toHaveLength(0);
+    expect(latestRunSnapshot('bob', 'session-b')).toBeNull();
   });
 
   it('saves and loads resumable run snapshots', () => {

@@ -256,10 +256,32 @@ export function clearRunSnapshot(login: string | undefined, runId: string): void
   }
 }
 
+export function clearRunSnapshots(login: string | undefined, sessionId?: string): void {
+  try {
+    const prefix = `${SNAPSHOT_PREFIX}${safeLogin(login)}:`;
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith(prefix)) continue;
+      if (!sessionId) {
+        localStorage.removeItem(key);
+        continue;
+      }
+      try {
+        const snapshot = JSON.parse(localStorage.getItem(key) || 'null') as RunSnapshot | null;
+        if (snapshot?.sessionId === sessionId) localStorage.removeItem(key);
+      } catch {
+        // ignore malformed snapshot
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export function clearRuns(login?: string): void {
   try {
     localStorage.removeItem(key(login));
   } catch {
     // ignore
   }
+  clearRunSnapshots(login);
 }

@@ -20,6 +20,8 @@ import {
   MAX_ATTACHMENT_BYTES,
 } from '@/ai-v2/attachments';
 import type { UiAttachment } from '@/ai-v2/attachments';
+import { loadActiveCharacter } from '@/ai-v2/characters';
+import type { CharacterCard } from '@/ai-v2/characters';
 import RepoSelector from '@/components/ai/RepoSelector';
 import {
   ModelAvatar,
@@ -38,6 +40,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import i18n from '@/i18n';
@@ -894,11 +901,13 @@ function SessionList({
 function ContextContent({
   repo,
   modelLabel,
+  characterLabel,
   onAddRepo,
   onRemoveRepo,
 }: {
   repo: RepoContext | null;
   modelLabel: string;
+  characterLabel: string;
   onAddRepo: () => void;
   onRemoveRepo: () => void;
 }) {
@@ -911,6 +920,19 @@ function ContextContent({
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium">{repo ? i18n.t('通用 + 仓库') : i18n.t('通用聊天')}</p>
             <p className="truncate text-[10px] text-muted-foreground">{modelLabel}</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{i18n.t('角色卡')}</p>
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2.5">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium">{characterLabel}</p>
+            <button type="button" onClick={() => window.location.hash = '#/ai-settings/characters'} className="mt-0.5 text-[10px] text-muted-foreground hover:text-primary">
+              {i18n.t('更换角色卡')}
+            </button>
           </div>
         </div>
       </div>
@@ -967,6 +989,7 @@ export default function AiAssistantV2Page() {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [modelConfig] = useState<ModelConfig>(() => loadModelConfig());
+  const [character, setCharacter] = useState<CharacterCard>(() => loadActiveCharacter(user?.login));
   const [v2Settings] = useState(() => loadV2Settings());
   const [repoDialogOpen, setRepoDialogOpen] = useState(false);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
@@ -1007,6 +1030,10 @@ export default function AiAssistantV2Page() {
   const messages = activeSession?.messages || [];
   const repoContext = activeSession?.repo || null;
   const hasConversation = messages.length > 0;
+
+  useEffect(() => {
+    setCharacter(loadActiveCharacter(user?.login));
+  }, [user?.login]);
 
   useEffect(() => {
     hydratedRef.current = false;
@@ -1435,6 +1462,7 @@ export default function AiAssistantV2Page() {
         history,
         contextBudget: v2Settings.contextBudget,
         memoryEnabled: v2Settings.memoryEnabled,
+        persona: character.prompt,
         signal: controller.signal,
         requestApproval,
         onSnapshot: persistRunSnapshot(runId, assistantId, activeSession?.id || '', text),
@@ -1466,6 +1494,7 @@ export default function AiAssistantV2Page() {
               history,
               contextBudget: v2Settings.contextBudget,
               memoryEnabled: v2Settings.memoryEnabled,
+              persona: character.prompt,
               signal: controller.signal,
               requestApproval,
               onSnapshot: persistRunSnapshot(runId, assistantId, activeSession?.id || '', text),
@@ -1543,6 +1572,7 @@ export default function AiAssistantV2Page() {
         resumeSteps: snapshot.steps,
         contextBudget: v2Settings.contextBudget,
         memoryEnabled: v2Settings.memoryEnabled,
+        persona: character.prompt,
         signal: controller.signal,
         requestApproval,
         onSnapshot: persistRunSnapshot(snapshot.runId, assistantId, snapshot.sessionId || activeSession?.id || '', snapshot.title),
@@ -1977,6 +2007,7 @@ export default function AiAssistantV2Page() {
           <ContextContent
             repo={repoContext}
             modelLabel={modelDef.label}
+            characterLabel={character.name}
             onAddRepo={() => setRepoDialogOpen(true)}
             onRemoveRepo={() => setRepoContext(null)}
           />
@@ -2138,18 +2169,16 @@ const args = approvalRequest.arguments as Record<string, unknown>;
         onClose={() => setPatchRequest(null)}
       />
 
-      <Dialog open={sessionDialogOpen} onOpenChange={setSessionDialogOpen}>
-        <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between text-base">
-              <span>{i18n.t('对话')}</span>
-              <Button type="button" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={handleNewSession} disabled={streaming}>
-                <Plus className="h-3.5 w-3.5" />
-                {i18n.t('新对话')}
-              </Button>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="max-h-[55vh] overflow-y-auto">
+      <Sheet open={sessionDialogOpen} onOpenChange={setSessionDialogOpen}>
+        <SheetContent side="left" className="flex w-[86vw] max-w-sm flex-col gap-0 p-0">
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3 pr-9">
+            <SheetTitle className="text-sm font-semibold">{i18n.t('对话历史')}</SheetTitle>
+            <Button type="button" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={handleNewSession} disabled={streaming}>
+              <Plus className="h-3.5 w-3.5" />
+              {i18n.t('新对话')}
+            </Button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <SessionList
               sessions={sessions}
               activeId={activeSession?.id || ''}
@@ -2159,8 +2188,8 @@ const args = approvalRequest.arguments as Record<string, unknown>;
               onDelete={handleDeleteSession}
             />
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={contextDialogOpen} onOpenChange={setContextDialogOpen}>
         <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-sm">
@@ -2170,6 +2199,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
           <ContextContent
             repo={repoContext}
             modelLabel={modelDef.label}
+            characterLabel={character.name}
             onAddRepo={() => {
               setContextDialogOpen(false);
               setRepoDialogOpen(true);

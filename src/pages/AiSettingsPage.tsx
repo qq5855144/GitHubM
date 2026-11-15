@@ -22,11 +22,20 @@ import { clearRuns, listRuns } from '@/ai-v2/runStore';
 import { clearMemories, deleteMemory, listMemories } from '@/ai-v2/memory';
 import { SKILLS } from '@/ai-v2/skills';
 import { loadV2Settings, saveV2Settings } from '@/ai-v2/settings';
+import {
+  deleteCustomCharacter,
+  loadActiveCharacter,
+  loadCharacters,
+  saveActiveCharacterId,
+  saveCustomCharacter,
+} from '@/ai-v2/characters';
+import type { CharacterCard } from '@/ai-v2/characters';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -52,6 +61,7 @@ import {
   KeyRound,
   Loader2,
   Network,
+  Plus,
   RefreshCw,
   Save,
   ShieldCheck,
@@ -59,11 +69,12 @@ import {
   SlidersHorizontal,
   Timer,
   Trash2,
+  UserRound,
   Wrench,
   XCircle,
 } from 'lucide-react';
 
-type Section = 'model' | 'generation' | 'proxy' | 'context' | 'tools' | 'skills' | 'diagnostics';
+type Section = 'model' | 'generation' | 'proxy' | 'context' | 'tools' | 'skills' | 'characters' | 'diagnostics';
 
 const SECTIONS: Array<{
   id: Section;
@@ -77,6 +88,7 @@ const SECTIONS: Array<{
   { id: 'context', title: '上下文与记忆', desc: '会话存储、清理与本地数据', icon: Database },
   { id: 'tools', title: '工具与权限', desc: '当前可用工具和风险边界', icon: Wrench },
   { id: 'skills', title: '技能', desc: '按任务自动加载的内置技能', icon: BrainCircuit },
+  { id: 'characters', title: '角色卡', desc: '内置工程师角色与自定义人格', icon: UserRound },
   { id: 'diagnostics', title: '诊断与测试', desc: '连接测试、模型列表与错误排查', icon: Activity },
 ];
 
@@ -165,6 +177,14 @@ export default function AiSettingsPage() {
   const { user } = useAuth();
   const [config, setConfig] = useState<ModelConfig>(() => loadModelConfig());
   const [v2Settings, setV2Settings] = useState(() => loadV2Settings());
+  const [characters, setCharacters] = useState<CharacterCard[]>(() => loadCharacters(user?.login));
+  const [activeCharacterId, setActiveCharacterId] = useState(() => loadActiveCharacter(user?.login).id);
+  const [editingCharacter, setEditingCharacter] = useState<{
+    id?: string;
+    name: string;
+    description: string;
+    prompt: string;
+  } | null>(null);
   const [testState, setTestState] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testResult, setTestResult] = useState('');
   const [modelsState, setModelsState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -179,6 +199,9 @@ export default function AiSettingsPage() {
   useEffect(() => {
     setConfig(loadModelConfig());
     setV2Settings(loadV2Settings());
+    setCharacters(loadCharacters(user?.login));
+    setActiveCharacterId(loadActiveCharacter(user?.login).id);
+    setEditingCharacter(null);
     setTestState('idle');
     setTestResult('');
     setModelsState('idle');
@@ -739,6 +762,169 @@ export default function AiSettingsPage() {
               {i18n.t('默认逐次确认；开启全局权限后直接执行。')}
             </p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (activeSection.id === 'characters') {
+    const refresh = () => {
+      setCharacters(loadCharacters(user?.login));
+      setActiveCharacterId(loadActiveCharacter(user?.login).id);
+    };
+    const active = characters.find(card => card.id === activeCharacterId) || characters[0];
+    return (
+      <div className="mx-auto min-h-full w-full max-w-2xl px-3 py-4 sm:px-4">
+        <SectionHeader
+          title={i18n.t('角色卡')}
+          desc={i18n.t('角色卡会作为系统设定注入每次新对话。内置工程师角色可直接使用，也可以创建自定义人格。')}
+          onBack={() => go('')}
+        />
+        <div className="space-y-3">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{i18n.t('当前角色')}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <UserRound className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">{active.name}</span>
+              {active.builtin && <Badge variant="secondary" className="text-[9px]">{i18n.t('内置')}</Badge>}
+            </div>
+          </div>
+
+          {editingCharacter ? (
+            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">{editingCharacter.id ? i18n.t('编辑角色卡') : i18n.t('新建角色卡')}</p>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setEditingCharacter(null)}>{i18n.t('取消')}</Button>
+              </div>
+              <div className="space-y-1.5">
+                <Label>{i18n.t('名称')}</Label>
+                <Input
+                  value={editingCharacter.name}
+                  onChange={event => setEditingCharacter({ ...editingCharacter, name: event.target.value })}
+                  maxLength={40}
+                  placeholder={i18n.t('例如：严格代码审查员')}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>{i18n.t('简介')}</Label>
+                <Input
+                  value={editingCharacter.description}
+                  onChange={event => setEditingCharacter({ ...editingCharacter, description: event.target.value })}
+                  maxLength={200}
+                  placeholder={i18n.t('一句话说明这个角色的工作方式')}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>{i18n.t('人格设定 / 系统提示词')}</Label>
+                <Textarea
+                  value={editingCharacter.prompt}
+                  onChange={event => setEditingCharacter({ ...editingCharacter, prompt: event.target.value })}
+                  rows={10}
+                  maxLength={12000}
+                  className="text-xs leading-5"
+                  placeholder={i18n.t('描述角色、工作原则、输出要求…')}
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!editingCharacter.name.trim() || !editingCharacter.prompt.trim()}
+                  onClick={() => {
+                    const saved = saveCustomCharacter(user?.login, editingCharacter);
+                    if (!saved) {
+                      toast.error(i18n.t('名称和人格设定不能为空'));
+                      return;
+                    }
+                    refresh();
+                    setEditingCharacter(null);
+                    toast.success(i18n.t('角色卡已保存'));
+                  }}
+                >
+                  {i18n.t('保存角色卡')}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-1.5"
+                onClick={() => setEditingCharacter({ name: '', description: '', prompt: '' })}
+              >
+                <Plus className="h-4 w-4" />
+                {i18n.t('新建自定义角色卡')}
+              </Button>
+
+              {characters.map(card => (
+                <div key={card.id} className={cn('rounded-xl border bg-card p-4', card.id === activeCharacterId ? 'border-primary/35' : 'border-border')}>
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="text-sm font-medium">{card.name}</p>
+                        {card.builtin && <Badge variant="secondary" className="text-[9px]">{i18n.t('内置')}</Badge>}
+                        {card.id === activeCharacterId && <Badge className="text-[9px]">{i18n.t('使用中')}</Badge>}
+                      </div>
+                      {card.description && <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{card.description}</p>}
+                    </div>
+                  </div>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground">{i18n.t('查看人格设定')}</summary>
+                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/30 p-2 font-sans text-[10px] leading-5 text-muted-foreground">{card.prompt}</pre>
+                  </details>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {card.id !== activeCharacterId && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          saveActiveCharacterId(user?.login, card.id);
+                          setActiveCharacterId(card.id);
+                          toast.success(i18n.t('已切换到 {{name}}', { name: card.name }));
+                        }}
+                      >
+                        {i18n.t('使用此角色')}
+                      </Button>
+                    )}
+                    {!card.builtin && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => setEditingCharacter({
+                            id: card.id,
+                            name: card.name,
+                            description: card.description,
+                            prompt: card.prompt,
+                          })}
+                        >
+                          {i18n.t('编辑')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-destructive"
+                          onClick={() => {
+                            if (!window.confirm(i18n.t('确定删除角色卡「{{name}}」？', { name: card.name }))) return;
+                            deleteCustomCharacter(user?.login, card.id);
+                            refresh();
+                            toast.success(i18n.t('角色卡已删除'));
+                          }}
+                        >
+                          {i18n.t('删除')}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
     );

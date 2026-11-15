@@ -118,6 +118,8 @@ export interface RunAgentOptions {
   history: AgentHistoryMessage[];
   contextBudget?: number;
   memoryEnabled?: boolean;
+  /** 当前角色卡的人格设定 */
+  persona?: string;
   signal: AbortSignal;
   onEvent: (event: AgentEvent) => void;
   /** 写操作前的用户确认；未提供时写工具默认拒绝 */

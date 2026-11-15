@@ -3,6 +3,7 @@ import { buildSystemPrompt, runGeneralAgent } from '@/ai-v2/agent';
 import { buildProviderRequest, streamProvider } from '@/ai-v2/providers';
 import { resolveCapabilities } from '@/ai-v2/capabilities';
 import { readArtifact } from '@/ai-v2/artifacts';
+import { GITHUB_WRITE_TOOLS } from '@/ai-v2/tools/github';
 import type {
   AgentEvent,
   AgentTool,
@@ -203,6 +204,60 @@ describe('AI Assistant V2 agent loop', () => {
     expect(slice.total).toBe(13000);
     expect(slice.content).toHaveLength(100);
     expect(slice.hasMore).toBe(true);
+  });
+
+  it('executes an approved write tool', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'PUT') {
+        return new Response(JSON.stringify({
+          content: { sha: 'new-sha', html_url: 'https://github.com/owner/repo/blob/main/test.txt' },
+          commit: { sha: 'commit-sha', html_url: 'https://github.com/owner/repo/commit/commit-sha' },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/contents/test.txt')) {
+        return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 });
+      }
+      return new Response('{}', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const approval = vi.fn(async () => true);
+    const events: AgentEvent[] = [];
+    let call = 0;
+    await runGeneralAgent({
+      token: 'github-token',
+      userLogin: 'write-user',
+      repo: { fullName: 'owner/repo', defaultBranch: 'main' },
+      history: [{ role: 'user', content: '写文件' }],
+      config,
+      signal: new AbortController().signal,
+      onEvent: event => events.push(event),
+      tools: GITHUB_WRITE_TOOLS,
+      requestApproval: approval,
+      callModel: async (): Promise<ProviderStreamResult> => {
+        call++;
+        return call === 1
+          ? {
+              content: '',
+              reasoning: '',
+              toolCalls: [{
+                id: 'write-1',
+                name: 'github_write_file',
+                arguments: JSON.stringify({ path: 'test.txt', content: 'hello 世界', message: 'test' }),
+              }],
+              model: 'test-model',
+            }
+          : { content: '写入完成', reasoning: '', toolCalls: [], model: 'test-model' };
+      },
+    });
+
+    expect(approval).toHaveBeenCalledTimes(1);
+    const putCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT');
+    expect(putCall).toBeTruthy();
+    const body = JSON.parse(String(putCall?.[1]?.body)) as { content: string; message: string };
+    expect(body.message).toBe('test');
+    expect(atob(body.content)).toContain('hello');
+    expect(events.some(event => event.type === 'tool_end' && event.ok)).toBe(true);
   });
 
   it('loads GitHub tools only when a repo context exists', () => {

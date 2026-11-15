@@ -3,6 +3,15 @@ import type { AgentEvent } from './types';
 
 export type RunStatus = 'running' | 'done' | 'error' | 'stopped';
 
+export interface RunEventRecord {
+  at: string;
+  type: 'run_start' | 'tool_start' | 'tool_end' | 'done' | 'error';
+  tool?: string;
+  ok?: boolean;
+  message?: string;
+  artifact?: boolean;
+}
+
 export interface RunRecord {
   id: string;
   sessionId?: string;
@@ -14,6 +23,7 @@ export interface RunRecord {
   toolCalls: number;
   failedTools: number;
   capabilities: string[];
+  events: RunEventRecord[];
   error?: string;
 }
 
@@ -58,6 +68,7 @@ export function startRun(params: {
     toolCalls: 0,
     failedTools: 0,
     capabilities: [],
+    events: [],
   };
   try {
     writeRuns(params.login, [run, ...listRuns(params.login, MAX_RUNS)]);
@@ -74,25 +85,36 @@ export function appendRunEvent(login: string | undefined, runId: string, event: 
     const index = runs.findIndex(run => run.id === runId);
     if (index < 0) return;
     const run = { ...runs[index] };
+    run.events = Array.isArray(run.events) ? [...run.events] : [];
+    const at = new Date().toISOString();
+    const pushEvent = (event: RunEventRecord) => {
+      run.events.push(event);
+      if (run.events.length > 100) run.events = run.events.slice(-100);
+    };
     switch (event.type) {
       case 'run_start':
         run.capabilities = event.capabilities || [];
+        pushEvent({ at, type: 'run_start', message: run.capabilities.join(',') });
         break;
       case 'tool_start':
         run.toolCalls += 1;
+        pushEvent({ at, type: 'tool_start', tool: event.call.name });
         break;
       case 'tool_end':
         if (!event.ok) run.failedTools += 1;
+        pushEvent({ at, type: 'tool_end', tool: event.call.name, ok: event.ok, artifact: Boolean(event.artifact) });
         break;
       case 'done':
         run.steps = event.steps;
         run.status = 'done';
-        run.finishedAt = new Date().toISOString();
+        run.finishedAt = at;
+        pushEvent({ at, type: 'done', message: `steps=${event.steps}` });
         break;
       case 'error':
         run.status = 'error';
         run.error = event.message;
-        run.finishedAt = new Date().toISOString();
+        run.finishedAt = at;
+        pushEvent({ at, type: 'error', message: event.message.slice(0, 500) });
         break;
       default:
         break;

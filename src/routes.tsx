@@ -36,8 +36,8 @@ import StarredPage from './pages/StarredPage';
 import UserProfilePage from './pages/UserProfilePage';
 import RepoForksPage from './pages/RepoForksPage';
 import StargazersPage from './pages/StargazersPage';
+import { Navigate } from 'react-router-dom';
 import PrDiffPage from './pages/PrDiffPage';
-import AiAssistantPage from './pages/AiAssistantPage';
 import AiAssistantV2Page from './pages/AiAssistantV2Page';
 import AiSettingsPage from './pages/AiSettingsPage';
 import MorePage from './pages/MorePage';
@@ -99,7 +99,7 @@ export const routes: RouteConfig[] = [
   { name: i18n.t('设置'), path: '/settings', element: <SettingsPage /> },
   { name: 'GraphQL Playground', path: '/graphql-playground', element: <GraphQLPlaygroundPage /> },
   { name: i18n.t('AI 助手'), path: '/ai-assistant', element: <AiAssistantV2Page /> },
-  { name: i18n.t('AI 助手经典版'), path: '/ai-assistant-v1', element: <AiAssistantPage /> },
+  { name: i18n.t('AI 助手经典版'), path: '/ai-assistant-v1', element: <Navigate to="/ai-assistant" replace /> },
   { name: i18n.t('AI 设置'), path: '/ai-settings', element: <AiSettingsPage /> },
   { name: i18n.t('AI 设置'), path: '/ai-settings/:section', element: <AiSettingsPage /> },
   { name: '全部功能', path: '/more', element: <MorePage /> },

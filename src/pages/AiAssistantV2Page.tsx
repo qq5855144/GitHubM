@@ -9,6 +9,7 @@ import { appendRunEvent, clearRunSnapshot, finishRun, latestRunSnapshot, resumeR
 import type { RunSnapshot } from '@/ai-v2/runStore';
 import { loadV2Settings } from '@/ai-v2/settings';
 import { buildUnifiedDiff } from '@/ai-v2/diff';
+import { applyUnifiedDiff, diffStats } from '@/ai-v2/patch';
 import {
   buildModelUserContent,
   filterRepoFiles,
@@ -298,7 +299,11 @@ function ToolActivity({ tools, onOpenArtifact }: { tools: UiToolRun[]; onOpenArt
   );
 }
 
-function AssistantTurn({ message, onOpenArtifact }: { message: UiChatMessage; onOpenArtifact: (meta: ArtifactMeta) => void }) {
+function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
+  message: UiChatMessage;
+  onOpenArtifact: (meta: ArtifactMeta) => void;
+  onApplyDiff: (path: string, diff: string) => void;
+}) {
   const hasBody = Boolean(message.content || message.reasoning || (message.tools || []).length);
   const copy = async () => {
     try {
@@ -319,7 +324,7 @@ function AssistantTurn({ message, onOpenArtifact }: { message: UiChatMessage; on
           'min-w-0 text-sm leading-6 break-words',
           message.error ? 'text-destructive' : 'text-foreground',
         )}>
-          {renderMarkdown(message.content)}
+          {renderMarkdown(message.content, onApplyDiff)}
           {message.streaming && (
             <span className="ml-0.5 inline-block h-4 w-1 animate-pulse rounded-sm bg-primary align-middle" />
           )}
@@ -371,7 +376,12 @@ function buildTurns(messages: UiChatMessage[]): ConversationTurn[] {
   return turns;
 }
 
-function ConversationTurnView({ turn, index, onOpenArtifact }: { turn: ConversationTurn; index: number; onOpenArtifact: (meta: ArtifactMeta) => void }) {
+function ConversationTurnView({ turn, index, onOpenArtifact, onApplyDiff }: {
+  turn: ConversationTurn;
+  index: number;
+  onOpenArtifact: (meta: ArtifactMeta) => void;
+  onApplyDiff: (path: string, diff: string) => void;
+}) {
   const streaming = turn.assistants.some(message => message.streaming);
   const hasError = turn.assistants.some(message => message.error);
 
@@ -435,7 +445,7 @@ function ConversationTurnView({ turn, index, onOpenArtifact }: { turn: Conversat
 
         {turn.assistants.length > 0 ? (
           <div className="space-y-3">
-            {turn.assistants.map(message => <AssistantTurn key={message.id} message={message} onOpenArtifact={onOpenArtifact} />)}
+            {turn.assistants.map(message => <AssistantTurn key={message.id} message={message} onOpenArtifact={onOpenArtifact} onApplyDiff={onApplyDiff} />)}
           </div>
         ) : (
           <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
@@ -445,6 +455,133 @@ function ConversationTurnView({ turn, index, onOpenArtifact }: { turn: Conversat
         )}
       </div>
     </section>
+  );
+}
+
+function ApplyPatchDialog({
+  request,
+  repo,
+  token,
+  onClose,
+}: {
+  request: { path: string; diff: string } | null;
+  repo: RepoContext | null;
+  token: string;
+  onClose: () => void;
+}) {
+  const [message, setMessage] = useState('');
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!request) return;
+    setMessage(`Apply AI patch to ${request.path}`);
+    setApplying(false);
+    setError('');
+  }, [request]);
+
+  const stats = useMemo(() => request ? diffStats(request.diff) : { additions: 0, deletions: 0 }, [request]);
+
+  const apply = async () => {
+    if (!request || !repo || !token || applying) return;
+    const branch = repo.branch || repo.defaultBranch || 'main';
+    setApplying(true);
+    setError('');
+    try {
+      const encodedPath = request.path.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
+      const response = await fetch(
+        `https://api.github.com/repos/${repo.fullName}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+        },
+      );
+      if (response.status === 404) throw new Error(i18n.t('目标文件不存在，无法应用补丁'));
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json() as { content?: string; encoding?: string; sha?: string };
+      if (!data.content || data.encoding !== 'base64' || !data.sha) throw new Error(i18n.t('无法读取目标文件'));
+      const binary = atob(data.content.replace(/\s/g, ''));
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+      const original = new TextDecoder().decode(bytes);
+      const next = applyUnifiedDiff(original, request.diff);
+
+      const encoded = new TextEncoder().encode(next);
+      let text = '';
+      for (let index = 0; index < encoded.length; index += 0x8000) {
+        text += String.fromCharCode(...encoded.subarray(index, index + 0x8000));
+      }
+      const put = await fetch(`https://api.github.com/repos/${repo.fullName}/contents/${encodedPath}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify({
+          message: message.trim() || `Apply AI patch to ${request.path}`,
+          content: btoa(text),
+          branch,
+          sha: data.sha,
+        }),
+      });
+      if (!put.ok) {
+        const detail = await put.text();
+        throw new Error(`HTTP ${put.status}: ${detail.slice(0, 200)}`);
+      }
+      toast.success(i18n.t('补丁已应用'));
+      onClose();
+    } catch (reason) {
+      setError((reason as Error).message || String(reason));
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  return (
+    <Dialog open={Boolean(request)} onOpenChange={open => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <GitBranch className="h-4 w-4 text-primary" />
+            {i18n.t('应用 AI 补丁')}
+          </DialogTitle>
+        </DialogHeader>
+        {request && (
+          <div className="space-y-3">
+            <div className="space-y-1 rounded-lg border border-border bg-muted/20 p-3 text-xs">
+              <p><span className="text-muted-foreground">{i18n.t('文件')}：</span><span className="font-mono">{request.path}</span></p>
+              <p><span className="text-muted-foreground">{i18n.t('分支')}：</span><span className="font-mono">{repo?.branch || repo?.defaultBranch || 'main'}</span></p>
+              <p className="text-[11px] text-muted-foreground">+{stats.additions} / -{stats.deletions}</p>
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] text-muted-foreground">{i18n.t('Diff 预览')}</p>
+              <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-background p-2 font-mono text-[10px] leading-4">{request.diff.slice(0, 20000)}</pre>
+            </div>
+            <input
+              value={message}
+              onChange={event => setMessage(event.target.value)}
+              placeholder={i18n.t('提交信息')}
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-primary/50"
+            />
+            {error && <p className="rounded-lg bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={applying}>
+                {i18n.t('取消')}
+              </Button>
+              <Button type="button" size="sm" onClick={() => void apply()} disabled={applying || !message.trim()}>
+                {applying && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                {i18n.t('应用补丁')}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -845,6 +982,7 @@ export default function AiAssistantV2Page() {
   const [resumableSnapshot, setResumableSnapshot] = useState<RunSnapshot | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<UiAttachment[]>([]);
   const [repoFileDialogOpen, setRepoFileDialogOpen] = useState(false);
+  const [patchRequest, setPatchRequest] = useState<{ path: string; diff: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const runCapabilitiesRef = useRef<string[]>([]);
   const approvalResolverRef = useRef<((approved: boolean) => void) | null>(null);
@@ -978,6 +1116,18 @@ export default function AiAssistantV2Page() {
     approvalResolverRef.current = null;
     setApprovalRequest(null);
   }, []);
+
+  const handleApplyDiff = useCallback((path: string, diff: string) => {
+    if (!repoContext || !token) {
+      toast.warning(i18n.t('请先选择仓库并登录，再应用补丁'));
+      return;
+    }
+    if (!path || path === '/dev/null') {
+      toast.warning(i18n.t('无法确定补丁目标文件'));
+      return;
+    }
+    setPatchRequest({ path: path.replace(/^\/+/, ''), diff });
+  }, [repoContext, token]);
 
   const openArtifact = useCallback(async (meta: ArtifactMeta) => {
     const result = await readArtifact(user?.login, meta.id, 0, 100000);
@@ -1667,7 +1817,7 @@ export default function AiAssistantV2Page() {
               </div>
             ) : (
               buildTurns(messages).map((turn, index) => (
-                <ConversationTurnView key={turn.id} turn={turn} index={index} onOpenArtifact={openArtifact} />
+                <ConversationTurnView key={turn.id} turn={turn} index={index} onOpenArtifact={openArtifact} onApplyDiff={handleApplyDiff} />
               ))
             )}
             <div ref={bottomRef} />
@@ -1979,6 +2129,13 @@ const args = approvalRequest.arguments as Record<string, unknown>;
             return `${base}${separator}@${attachment.path || attachment.name} `;
           });
         }}
+      />
+
+      <ApplyPatchDialog
+        request={patchRequest}
+        repo={repoContext}
+        token={token || ''}
+        onClose={() => setPatchRequest(null)}
       />
 
       <Dialog open={sessionDialogOpen} onOpenChange={setSessionDialogOpen}>

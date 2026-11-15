@@ -310,7 +310,7 @@ export function ThinkingBlock({ content, done }: { content: string; done?: boole
  * - 所有文本强制 break-words + whitespace-pre-wrap，防止超出视口
  * - 支持 # / ## / ### 标题、有序/无序列表、粗体、行内代码
  */
-export function renderMarkdown(text: string, onApplyDiff?: (filePath: string) => void): React.ReactNode {
+export function renderMarkdown(text: string, onApplyDiff?: (filePath: string, diff: string) => void): React.ReactNode {
   if (!text) return null;
   const lines = text.split('\n');
   const result: React.ReactNode[] = [];

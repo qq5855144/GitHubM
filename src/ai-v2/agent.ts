@@ -20,10 +20,14 @@ import { buildAgentContext, compactProviderMessages } from './context';
 const MAX_INLINE_TOOL_RESULT = 12000;
 const TOOL_PREVIEW_CHARS = 4000;
 
-export function buildSystemPrompt(repo?: { fullName: string; branch?: string; defaultBranch: string }): string {
+export function buildSystemPrompt(
+  repo?: { fullName: string; branch?: string; defaultBranch: string },
+  persona?: string,
+): string {
   return [
     '你是 GitHubM 内置的通用 AI 助手。',
     '',
+    ...(persona?.trim() ? ['# 角色设定', persona.trim(), ''] : []),
     '工作原则：',
     '1. 简单问题直接回答，不要为了展示流程而规划、验证或调用工具。',
     '2. 需要仓库事实时使用工具读取；不要编造文件内容、分支或运行结果。',
@@ -82,6 +86,7 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
     history,
     contextBudget,
     memoryEnabled,
+    persona,
     signal,
     onEvent,
     requestApproval,
@@ -107,7 +112,7 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
   const builtContext = resumeMessages
     ? null
     : buildAgentContext({
-        systemPrompt: buildSystemPrompt(repo),
+        systemPrompt: buildSystemPrompt(repo, persona),
         history,
         query: lastUserQuery,
         userLogin,

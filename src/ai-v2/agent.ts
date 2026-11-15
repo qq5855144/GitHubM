@@ -13,7 +13,7 @@ import type {
 import { streamProvider } from './providers';
 import { resolveCapabilities } from './capabilities';
 import { saveArtifact } from './artifacts';
-import { buildAgentContext } from './context';
+import { buildAgentContext, compactProviderMessages } from './context';
 
 const MAX_INLINE_TOOL_RESULT = 12000;
 const TOOL_PREVIEW_CHARS = 4000;
@@ -113,7 +113,7 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
         contextBudget,
         memoryEnabled,
       });
-  const messages: V2ProviderMessage[] = resumeMessages || builtContext!.messages;
+  let messages: V2ProviderMessage[] = resumeMessages || builtContext!.messages;
 
   const repeatedCalls = new Map<string, number>();
   let finalText = '';
@@ -132,6 +132,7 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
   while (true) {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
+    messages = compactProviderMessages(messages, contextBudget || 32000);
     const result = await callModel(config, messages, toolDefs, signal, onEvent);
     if (result.usage) onEvent({ type: 'usage', usage: result.usage });
 

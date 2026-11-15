@@ -48,8 +48,10 @@ import {
   Menu,
   MessageSquarePlus,
   PanelRight,
+  Pencil,
   Plus,
   RefreshCw,
+  Search,
   Send,
   Settings,
   ShieldAlert,
@@ -404,59 +406,147 @@ function SessionList({
   activeId,
   streaming,
   onSelect,
+  onRename,
   onDelete,
 }: {
   sessions: V2Session[];
   activeId: string;
   streaming: boolean;
   onSelect: (id: string) => void;
+  onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
 }) {
-  const groups = groupSessions(sessions);
-  if (!groups.length) {
-    return <p className="px-3 py-6 text-center text-xs text-muted-foreground">{i18n.t('暂无对话')}</p>;
-  }
+  const [query, setQuery] = useState('');
+  const [renameTarget, setRenameTarget] = useState<V2Session | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const normalized = query.trim().toLowerCase();
+  const filtered = normalized
+    ? sessions.filter(session => {
+        if ((session.title || '').toLowerCase().includes(normalized)) return true;
+        return session.messages.some(message => message.content.toLowerCase().includes(normalized));
+      })
+    : sessions;
+  const groups = groupSessions(filtered);
+
   return (
-    <div className="space-y-3">
-      {groups.map(group => (
-        <div key={group.label}>
-          <p className="mb-1 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{group.label}</p>
-          <div className="space-y-0.5">
-            {group.items.map(session => (
-              <div
-                key={session.id}
-                className={cn(
-                  'group flex items-center gap-1 rounded-lg px-2 py-2 text-xs transition-colors',
-                  session.id === activeId ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => onSelect(session.id)}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <span className="block truncate">{session.title || i18n.t('新对话')}</span>
-                  <span className="mt-0.5 block text-[9px] opacity-70">
-                    {session.messages.length ? i18n.t('{{count}} 条消息', { count: session.messages.length }) : i18n.t('空对话')}
-                    {' · '}
-                    {formatTime(session.updatedAt)}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDelete(session.id)}
-                  disabled={streaming}
-                  className="shrink-0 rounded p-1 opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                  title={i18n.t('删除对话')}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-          </div>
+    <>
+      <div className="sticky top-0 z-10 bg-background/95 px-2 pb-2 backdrop-blur">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder={i18n.t('搜索对话')}
+            className="h-8 w-full rounded-lg border border-border bg-muted/30 pl-7 pr-7 text-[11px] outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/40"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
         </div>
-      ))}
-    </div>
+      </div>
+
+      {!groups.length ? (
+        <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+          {normalized ? i18n.t('没有匹配的对话') : i18n.t('暂无对话')}
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {groups.map(group => (
+            <div key={group.label}>
+              <p className="mb-1 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{group.label}</p>
+              <div className="space-y-0.5">
+                {group.items.map(session => (
+                  <div
+                    key={session.id}
+                    className={cn(
+                      'group flex items-center gap-0.5 rounded-lg px-2 py-2 text-xs transition-colors',
+                      session.id === activeId ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onSelect(session.id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <span className="block truncate">{session.title || i18n.t('新对话')}</span>
+                      <span className="mt-0.5 block text-[9px] opacity-70">
+                        {session.messages.length ? i18n.t('{{count}} 条消息', { count: session.messages.length }) : i18n.t('空对话')}
+                        {' · '}
+                        {formatTime(session.updatedAt)}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRenameTarget(session);
+                        setRenameValue(session.title || '');
+                      }}
+                      className="shrink-0 rounded p-1 opacity-100 hover:bg-primary/10 hover:text-primary sm:opacity-0 sm:group-hover:opacity-100"
+                      title={i18n.t('重命名对话')}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(session.id)}
+                      disabled={streaming}
+                      className="shrink-0 rounded p-1 opacity-100 hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
+                      title={i18n.t('删除对话')}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={Boolean(renameTarget)} onOpenChange={open => { if (!open) setRenameTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{i18n.t('重命名对话')}</DialogTitle>
+          </DialogHeader>
+          <input
+            value={renameValue}
+            onChange={event => setRenameValue(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && renameTarget && renameValue.trim()) {
+                onRename(renameTarget.id, renameValue.trim());
+                setRenameTarget(null);
+              }
+            }}
+            autoFocus
+            maxLength={80}
+            className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-primary/50"
+            placeholder={i18n.t('输入对话名称')}
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setRenameTarget(null)}>
+              {i18n.t('取消')}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                if (!renameTarget || !renameValue.trim()) return;
+                onRename(renameTarget.id, renameValue.trim());
+                setRenameTarget(null);
+              }}
+            >
+              {i18n.t('保存')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -1100,6 +1190,15 @@ export default function AiAssistantV2Page() {
     requestAnimationFrame(() => scrollToBottom(true));
   };
 
+  const handleRenameSession = (id: string, title: string) => {
+    const nextTitle = title.trim().slice(0, 80);
+    if (!nextTitle) return;
+    setSessions(prev => prev.map(session => session.id === id
+      ? { ...session, title: nextTitle, updatedAt: new Date().toISOString() }
+      : session));
+    toast.success(i18n.t('对话已重命名'));
+  };
+
   const handleDeleteSession = (id: string) => {
     if (streaming) return;
     const remaining = sessions.filter(session => session.id !== id);
@@ -1169,6 +1268,7 @@ export default function AiAssistantV2Page() {
             activeId={activeSession?.id || ''}
             streaming={streaming}
             onSelect={handleSelectSession}
+            onRename={handleRenameSession}
             onDelete={handleDeleteSession}
           />
         </div>
@@ -1550,6 +1650,7 @@ export default function AiAssistantV2Page() {
               activeId={activeSession?.id || ''}
               streaming={streaming}
               onSelect={handleSelectSession}
+              onRename={handleRenameSession}
               onDelete={handleDeleteSession}
             />
           </div>

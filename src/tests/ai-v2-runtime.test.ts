@@ -13,7 +13,7 @@ import {
 } from '@/ai-v2/runStore';
 import { listMemories, saveMemory, searchMemories } from '@/ai-v2/memory';
 import { selectSkills } from '@/ai-v2/skills';
-import { buildAgentContext, estimateTokens } from '@/ai-v2/context';
+import { buildAgentContext, compactProviderMessages, estimateTokens } from '@/ai-v2/context';
 import { buildUnifiedDiff } from '@/ai-v2/diff';
 import { loadV2Settings, saveV2Settings } from '@/ai-v2/settings';
 
@@ -77,6 +77,26 @@ describe('AI V2 memory and context', () => {
     expect(String(built.messages[0].content)).toContain('相关技能');
     expect(String(built.messages[0].content)).toContain('长期记忆');
     expect(estimateTokens('你好世界')).toBeGreaterThan(0);
+  });
+
+  it('compacts old tool results during long runs', () => {
+    const messages = [
+      { role: 'system' as const, content: 'system' },
+      { role: 'user' as const, content: 'do a long task' },
+      ...Array.from({ length: 8 }, (_, index) => ([
+        { role: 'assistant' as const, content: `step ${index}` },
+        { role: 'tool' as const, content: `${index}`.repeat(20000), tool_call_id: `call-${index}`, name: 'github_read_file' },
+      ])).flat(),
+    ];
+    const compacted = compactProviderMessages(messages, 6000);
+    expect(compacted[0].role).toBe('system');
+    expect(compacted.some(item => item.role === 'user')).toBe(true);
+    expect(compacted.length).toBeLessThan(messages.length);
+    const toolContents = compacted.filter(item => item.role === 'tool').map(item => String(item.content));
+    expect(Math.max(...toolContents.map(item => item.length))).toBeLessThan(20000);
+    expect(estimateTokens(toolContents.join('\n'))).toBeLessThan(estimateTokens(
+      messages.filter(item => item.role === 'tool').map(item => String(item.content)).join('\n'),
+    ));
   });
 
   it('builds a unified diff for write approval', () => {

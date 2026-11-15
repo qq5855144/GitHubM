@@ -22,6 +22,8 @@ import {
 import type { UiAttachment } from '@/ai-v2/attachments';
 import { loadActiveCharacter } from '@/ai-v2/characters';
 import type { CharacterCard } from '@/ai-v2/characters';
+import { loadSessionStore, saveSessionStore } from '@/ai-v2/sessionStore';
+import type { SessionStore, V2Session } from '@/ai-v2/sessionStore';
 import RepoSelector from '@/components/ai/RepoSelector';
 import {
   ModelAvatar,
@@ -83,7 +85,6 @@ import {
   Zap,
 } from 'lucide-react';
 
-const STORE_PREFIX = 'githubm_ai_v2_store:';
 const LEGACY_PREFIX = 'githubm_ai_v2_session:';
 const MAX_SESSIONS = 20;
 const MAX_SAVED_MESSAGES = 40;
@@ -112,20 +113,6 @@ function friendlyModelError(message: string): string {
     return '请求过于频繁，已触发模型平台限流，请稍后再试。';
   }
   return message;
-}
-
-interface V2Session {
-  id: string;
-  title: string;
-  messages: UiChatMessage[];
-  repo: RepoContext | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface SessionStore {
-  sessions: V2Session[];
-  activeId: string;
 }
 
 function makeId(prefix: string): string {
@@ -592,6 +579,110 @@ function ApplyPatchDialog({
   );
 }
 
+function BranchPickerDialog({
+  open,
+  onOpenChange,
+  repo,
+  token,
+  onSelect,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  repo: RepoContext | null;
+  token: string;
+  onSelect: (branch: string) => void;
+}) {
+  const [branches, setBranches] = useState<string[]>([]);
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!open || !repo || !token) return;
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    setQuery('');
+    fetch(`https://api.github.com/repos/${repo.fullName}/branches?per_page=100`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    }).then(async response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json() as Promise<Array<{ name?: string }>>;
+    }).then(data => {
+      if (!cancelled) setBranches(data.map(item => item.name).filter((name): name is string => Boolean(name)));
+    }).catch(reason => {
+      if (!cancelled) setError((reason as Error).message || String(reason));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [open, repo, token]);
+
+  const visible = branches.filter(name => !query.trim() || name.toLowerCase().includes(query.trim().toLowerCase()));
+  const current = repo?.branch || repo?.defaultBranch || '';
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <GitBranch className="h-4 w-4 text-primary" />
+            {i18n.t('切换分支')}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="relative">
+          <input
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder={i18n.t('搜索分支')}
+            autoFocus
+            className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-primary/50"
+          />
+        </div>
+        <div className="max-h-[50vh] min-h-[180px] overflow-y-auto rounded-lg border border-border">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {i18n.t('读取分支…')}
+            </div>
+          ) : error ? (
+            <p className="px-3 py-6 text-center text-xs text-destructive">{error}</p>
+          ) : visible.length === 0 ? (
+            <p className="px-3 py-6 text-center text-xs text-muted-foreground">{i18n.t('没有匹配的分支')}</p>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {visible.map(branch => (
+                <button
+                  key={branch}
+                  type="button"
+                  onClick={() => {
+                    onSelect(branch);
+                    onOpenChange(false);
+                  }}
+                  className={cn(
+                    'flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted/50',
+                    branch === current && 'bg-primary/10 text-primary',
+                  )}
+                >
+                  <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate font-mono">{branch}</span>
+                  {branch === repo?.defaultBranch && <Badge variant="secondary" className="text-[9px]">{i18n.t('默认')}</Badge>}
+                  {branch === current && <Check className="h-3.5 w-3.5 shrink-0" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <p className="text-[10px] text-muted-foreground">{i18n.t('显示前 100 个分支')}</p>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function RepoFilePicker({
   open,
   onOpenChange,
@@ -904,12 +995,14 @@ function ContextContent({
   characterLabel,
   onAddRepo,
   onRemoveRepo,
+  onSwitchBranch,
 }: {
   repo: RepoContext | null;
   modelLabel: string;
   characterLabel: string;
   onAddRepo: () => void;
   onRemoveRepo: () => void;
+  onSwitchBranch: () => void;
 }) {
   return (
     <div className="space-y-4">
@@ -946,6 +1039,9 @@ function ContextContent({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-medium text-primary">{repo.fullName}</p>
                 <p className="mt-0.5 text-[10px] text-muted-foreground">{i18n.t('分支')}：{repo.branch || repo.defaultBranch}</p>
+                <button type="button" onClick={onSwitchBranch} className="mt-1 text-[10px] text-primary hover:underline">
+                  {i18n.t('切换分支')}
+                </button>
               </div>
               <button type="button" onClick={onRemoveRepo} className="rounded p-1 text-muted-foreground hover:bg-primary/10">
                 <X className="h-3.5 w-3.5" />
@@ -956,6 +1052,7 @@ function ContextContent({
               <p className="flex items-center gap-1.5"><Code2 className="h-3 w-3" /> github_read_file</p>
               <p className="flex items-center gap-1.5"><RefreshCw className="h-3 w-3" /> github_search_code</p>
               <p className="flex items-center gap-1.5"><Wrench className="h-3 w-3" /> github_write_file <span className="text-amber-600">写操作需确认</span></p>
+              <p className="flex items-center gap-1.5"><GitBranch className="h-3 w-3" /> github_write_files / PR / 分支</p>
             </div>
           </div>
         ) : (
@@ -992,6 +1089,7 @@ export default function AiAssistantV2Page() {
   const [character, setCharacter] = useState<CharacterCard>(() => loadActiveCharacter(user?.login));
   const [v2Settings] = useState(() => loadV2Settings());
   const [repoDialogOpen, setRepoDialogOpen] = useState(false);
+  const [branchDialogOpen, setBranchDialogOpen] = useState(false);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -1006,6 +1104,7 @@ export default function AiAssistantV2Page() {
   const [pendingAttachments, setPendingAttachments] = useState<UiAttachment[]>([]);
   const [repoFileDialogOpen, setRepoFileDialogOpen] = useState(false);
   const [patchRequest, setPatchRequest] = useState<{ path: string; diff: string } | null>(null);
+  const [storageError, setStorageError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const runCapabilitiesRef = useRef<string[]>([]);
   const approvalResolverRef = useRef<((approved: boolean) => void) | null>(null);
@@ -1015,7 +1114,6 @@ export default function AiAssistantV2Page() {
   const stickToBottomRef = useRef(true);
   const hydratedRef = useRef(false);
 
-  const storeKey = user?.login ? `${STORE_PREFIX}${user.login}` : '';
   const legacyKey = user?.login ? `${LEGACY_PREFIX}${user.login}` : '';
   const modelDef = useMemo(() => getModelDef(modelConfig.type), [modelConfig.type]);
   const isAndroid = useMemo(
@@ -1037,71 +1135,77 @@ export default function AiAssistantV2Page() {
 
   useEffect(() => {
     hydratedRef.current = false;
-    if (!storeKey) {
+    let cancelled = false;
+    if (!user?.login) {
       setSessions([]);
       setActiveId('');
       hydratedRef.current = true;
       return;
     }
-    let loaded: SessionStore | null = null;
-    try {
-      const raw = localStorage.getItem(storeKey);
-      if (raw) loaded = JSON.parse(raw) as SessionStore;
-    } catch {
-      loaded = null;
-    }
 
-    if (!loaded?.sessions?.length) {
-      try {
-        const legacyRaw = legacyKey ? localStorage.getItem(legacyKey) : null;
-        if (legacyRaw) {
-          const legacy = JSON.parse(legacyRaw) as { messages?: UiChatMessage[]; repo?: RepoContext | null };
-          const migrated = newSession();
-          migrated.messages = Array.isArray(legacy.messages) ? legacy.messages : [];
-          migrated.repo = legacy.repo || null;
-          migrated.title = deriveTitle(migrated.messages);
-          loaded = { sessions: [migrated], activeId: migrated.id };
+    void (async () => {
+      let loaded = await loadSessionStore(user.login);
+      if (cancelled) return;
+
+      if (!loaded?.sessions?.length) {
+        try {
+          const legacyRaw = legacyKey ? localStorage.getItem(legacyKey) : null;
+          if (legacyRaw) {
+            const legacy = JSON.parse(legacyRaw) as { messages?: UiChatMessage[]; repo?: RepoContext | null };
+            const migrated = newSession();
+            migrated.messages = Array.isArray(legacy.messages) ? legacy.messages : [];
+            migrated.repo = legacy.repo || null;
+            migrated.title = deriveTitle(migrated.messages);
+            loaded = { sessions: [migrated], activeId: migrated.id };
+            if (legacyKey) localStorage.removeItem(legacyKey);
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
       }
-    }
 
-    const nextSessions = (loaded?.sessions?.length ? loaded.sessions : [newSession()])
-      .map(session => ({ ...session, messages: migrateLegacyRoundLimit(session.messages || []) }));
-    const nextActive = loaded?.activeId && nextSessions.some(session => session.id === loaded?.activeId)
-      ? loaded.activeId
-      : nextSessions[0].id;
-    setSessions(nextSessions);
-    setActiveId(nextActive);
-    hydratedRef.current = true;
-  }, [storeKey, legacyKey]);
+      const nextSessions = (loaded?.sessions?.length ? loaded.sessions : [newSession()])
+        .map(session => ({ ...session, messages: migrateLegacyRoundLimit(session.messages || []) }));
+      const nextActive = loaded?.activeId && nextSessions.some(session => session.id === loaded?.activeId)
+        ? loaded.activeId
+        : nextSessions[0].id;
+      setSessions(nextSessions);
+      setActiveId(nextActive);
+      hydratedRef.current = true;
+    })();
+
+    return () => { cancelled = true; };
+  }, [user?.login, legacyKey]);
 
   useEffect(() => {
-    if (!hydratedRef.current || !storeKey) return;
+    if (!hydratedRef.current || !user?.login) return;
+    let cancelled = false;
     const timer = window.setTimeout(() => {
-      try {
-        const payload: SessionStore = {
-          sessions: sessions.slice(0, MAX_SESSIONS).map(session => ({
-            ...session,
-            messages: compactMessages(session.messages),
-          })),
-          activeId,
-        };
-        localStorage.setItem(storeKey, JSON.stringify(payload));
-      } catch {
-        // ignore quota errors
-      }
+      const payload: SessionStore = {
+        sessions: sessions.slice(0, MAX_SESSIONS).map(session => ({
+          ...session,
+          messages: compactMessages(session.messages),
+        })),
+        activeId,
+      };
+      void saveSessionStore(user.login, payload).then(result => {
+        if (cancelled) return;
+        if (result.ok) setStorageError('');
+        else setStorageError(result.error || i18n.t('会话保存失败，可能存储空间不足'));
+      });
     }, 400);
-    return () => window.clearTimeout(timer);
-  }, [sessions, activeId, storeKey]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [sessions, activeId, user?.login]);
 
   useEffect(() => {
     if (!user?.login || !activeId) {
       setResumableSnapshot(null);
       return;
     }
-    setResumableSnapshot(latestRunSnapshot(user.login, activeId));
+    void latestRunSnapshot(user.login, activeId).then(snapshot => setResumableSnapshot(snapshot));
   }, [user?.login, activeId]);
 
   useEffect(() => {
@@ -1312,7 +1416,7 @@ export default function AiAssistantV2Page() {
         break;
       case 'done':
         patchAssistant(assistantId, { streaming: false });
-        if (user?.login) clearRunSnapshot(user.login, runId);
+        if (user?.login) void clearRunSnapshot(user.login, runId);
         setResumableSnapshot(null);
         break;
       default:
@@ -1327,7 +1431,7 @@ export default function AiAssistantV2Page() {
     title: string,
   ) => (snapshot: { messages: V2ProviderMessage[]; steps: number }) => {
     if (!user?.login) return;
-    saveRunSnapshot(user.login, {
+    void saveRunSnapshot(user.login, {
       runId,
       assistantId,
       sessionId,
@@ -1529,7 +1633,7 @@ export default function AiAssistantV2Page() {
     } finally {
       finishRun(user?.login, runId, runStatus, runError);
       if (runStatus !== 'done' && user?.login) {
-        setResumableSnapshot(latestRunSnapshot(user.login, activeSession?.id));
+        void latestRunSnapshot(user.login, activeSession?.id).then(snapshot => setResumableSnapshot(snapshot));
       }
       setStreaming(false);
       abortRef.current = null;
@@ -1543,7 +1647,7 @@ export default function AiAssistantV2Page() {
     const assistantId = snapshot.assistantId;
     const assistantExists = assistantId && messages.some(message => message.id === assistantId);
     if (!assistantId || !assistantExists) {
-      if (user?.login) clearRunSnapshot(user.login, snapshot.runId);
+      if (user?.login) void clearRunSnapshot(user.login, snapshot.runId);
       setResumableSnapshot(null);
       toast.error(i18n.t('原会话消息已不存在，无法继续'));
       return;
@@ -1597,7 +1701,7 @@ export default function AiAssistantV2Page() {
     } finally {
       finishRun(user?.login, snapshot.runId, runStatus, runError);
       if (runStatus !== 'done' && user?.login) {
-        setResumableSnapshot(latestRunSnapshot(user.login, activeSession?.id));
+        void latestRunSnapshot(user.login, activeSession?.id).then(snapshot => setResumableSnapshot(snapshot));
       }
       setStreaming(false);
       abortRef.current = null;
@@ -1651,7 +1755,7 @@ export default function AiAssistantV2Page() {
     const target = sessions.find(session => session.id === id);
     if (!target) return;
     if (!window.confirm(i18n.t('确定删除对话「{{title}}」？此操作不可恢复。', { title: target.title || i18n.t('新对话') }))) return;
-    if (user?.login) clearRunSnapshots(user.login, id);
+    if (user?.login) void clearRunSnapshots(user.login, id);
     const remaining = sessions.filter(session => session.id !== id);
     if (remaining.length === 0) {
       const session = newSession();
@@ -1669,7 +1773,7 @@ export default function AiAssistantV2Page() {
     setMessages([]);
     setInput('');
     setPendingAttachments([]);
-    if (user?.login && activeSession?.id) clearRunSnapshots(user.login, activeSession.id);
+    if (user?.login && activeSession?.id) void clearRunSnapshots(user.login, activeSession.id);
     setResumableSnapshot(null);
   };
 
@@ -1789,6 +1893,15 @@ export default function AiAssistantV2Page() {
             <ChevronRight className="h-4 w-4 shrink-0" />
           </button>
         )}
+        {storageError && (
+          <div className="mx-2 mt-2 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive sm:mx-3">
+            <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1">{storageError}</span>
+            <button type="button" onClick={() => setStorageError('')} className="shrink-0 opacity-70 hover:opacity-100">
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
         {resumableSnapshot && !streaming && (
           <div className="mx-2 mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs sm:mx-3">
             <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
@@ -1804,7 +1917,7 @@ export default function AiAssistantV2Page() {
               size="sm"
               className="h-7 px-2 text-[10px] text-muted-foreground"
               onClick={() => {
-                if (user?.login) clearRunSnapshot(user.login, resumableSnapshot.runId);
+                if (user?.login) void clearRunSnapshot(user.login, resumableSnapshot.runId);
                 setResumableSnapshot(null);
               }}
             >
@@ -1879,7 +1992,9 @@ export default function AiAssistantV2Page() {
                 {repoContext ? (
                   <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] text-primary">
                     <GitBranch className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{repoContext.fullName}</span>
+                    <button type="button" onClick={() => setBranchDialogOpen(true)} className="truncate hover:underline" title={i18n.t('切换分支')}>
+                      {repoContext.fullName} · {repoContext.branch || repoContext.defaultBranch}
+                    </button>
                     <button type="button" onClick={() => setRepoContext(null)} className="rounded-full p-0.5 hover:bg-primary/10">
                       <X className="h-2.5 w-2.5" />
                     </button>
@@ -2017,6 +2132,7 @@ export default function AiAssistantV2Page() {
             characterLabel={character.name}
             onAddRepo={() => setRepoDialogOpen(true)}
             onRemoveRepo={() => setRepoContext(null)}
+            onSwitchBranch={() => setBranchDialogOpen(true)}
           />
         </div>
       </aside>
@@ -2154,6 +2270,18 @@ const args = approvalRequest.arguments as Record<string, unknown>;
         </DialogContent>
       </Dialog>
 
+      <BranchPickerDialog
+        open={branchDialogOpen}
+        onOpenChange={setBranchDialogOpen}
+        repo={repoContext}
+        token={token || ''}
+        onSelect={branch => {
+          if (!repoContext) return;
+          setRepoContext({ ...repoContext, branch });
+          toast.success(i18n.t('已切换到分支 {{branch}}', { branch }));
+        }}
+      />
+
       <RepoFilePicker
         open={repoFileDialogOpen}
         onOpenChange={setRepoFileDialogOpen}
@@ -2212,6 +2340,10 @@ const args = approvalRequest.arguments as Record<string, unknown>;
               setRepoDialogOpen(true);
             }}
             onRemoveRepo={() => setRepoContext(null)}
+            onSwitchBranch={() => {
+              setContextDialogOpen(false);
+              setBranchDialogOpen(true);
+            }}
           />
         </DialogContent>
       </Dialog>

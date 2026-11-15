@@ -1030,7 +1030,7 @@ export default function AiSettingsPage() {
                 className="h-7 px-2 text-[10px] text-muted-foreground"
                 onClick={() => {
                   if (!window.confirm(i18n.t('确定清除运行记录？'))) return;
-                  clearRuns(user?.login);
+                  void clearRuns(user?.login);
                   setStorageVersion(version => version + 1);
                   toast.success(i18n.t('已清除运行记录'));
                 }}

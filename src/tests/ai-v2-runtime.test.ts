@@ -142,11 +142,11 @@ describe('AI V2 run store', () => {
     expect(record.events[2].artifact).toBe(false);
   });
 
-  it('can finish an interrupted run and clear history', () => {
+  it('can finish an interrupted run and clear history', async () => {
     const run = startRun({ login: 'bob', id: 'run-b', title: '中断任务' });
     finishRun('bob', run.id, 'stopped');
     expect(listRuns('bob')[0].status).toBe('stopped');
-    saveRunSnapshot('bob', {
+    await saveRunSnapshot('bob', {
       runId: run.id,
       sessionId: 'session-b',
       assistantId: 'assistant-b',
@@ -156,13 +156,13 @@ describe('AI V2 run store', () => {
       capabilities: ['core'],
       savedAt: new Date().toISOString(),
     });
-    clearRuns('bob');
+    await clearRuns('bob');
     expect(listRuns('bob')).toHaveLength(0);
-    expect(latestRunSnapshot('bob', 'session-b')).toBeNull();
+    expect(await latestRunSnapshot('bob', 'session-b')).toBeNull();
   });
 
-  it('saves and loads resumable run snapshots', () => {
-    saveRunSnapshot('alice', {
+  it('saves and loads resumable run snapshots', async () => {
+    await saveRunSnapshot('alice', {
       runId: 'run-snap',
       sessionId: 'session-1',
       assistantId: 'assistant-1',
@@ -172,10 +172,10 @@ describe('AI V2 run store', () => {
       capabilities: ['core'],
       savedAt: new Date().toISOString(),
     });
-    const loaded = loadRunSnapshot('alice', 'run-snap');
+    const loaded = await loadRunSnapshot('alice', 'run-snap');
     expect(loaded?.steps).toBe(3);
-    expect(latestRunSnapshot('alice', 'session-1')?.runId).toBe('run-snap');
-    clearRunSnapshot('alice', 'run-snap');
-    expect(loadRunSnapshot('alice', 'run-snap')).toBeNull();
+    expect((await latestRunSnapshot('alice', 'session-1'))?.runId).toBe('run-snap');
+    await clearRunSnapshot('alice', 'run-snap');
+    expect(await loadRunSnapshot('alice', 'run-snap')).toBeNull();
   });
 });

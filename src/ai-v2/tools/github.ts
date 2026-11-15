@@ -137,7 +137,7 @@ const readFile: AgentTool = {
 
 const searchCode: AgentTool = {
   name: 'github_search_code',
-  description: '在当前仓库中搜索代码或文本。返回匹配文件、路径和文本片段。',
+  description: '在当前仓库中搜索代码或文本。GitHub 搜索索引通常基于默认分支；读取非默认分支请使用 github_read_file 或 github_list_files。',
   parameters: {
     type: 'object',
     properties: {

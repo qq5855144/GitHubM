@@ -51,5 +51,6 @@ describe('AI character cards', () => {
     expect(prompt).toContain('# 角色设定');
     expect(prompt).toContain('严格审查代码');
     expect(prompt).toContain('工作原则');
+    expect(prompt).toContain('不可信数据');
   });
 });

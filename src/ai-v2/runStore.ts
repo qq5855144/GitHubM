@@ -1,5 +1,6 @@
 // AI V2 — Run Store：持久化运行摘要，用于历史、诊断和后续恢复
 import type { AgentEvent } from './types';
+import { idbDelete, idbGet, idbKeys, idbSet } from './idbKv';
 
 export type RunStatus = 'running' | 'done' | 'error' | 'stopped';
 
@@ -185,40 +186,92 @@ export interface RunSnapshot {
 }
 
 const SNAPSHOT_PREFIX = 'githubm_ai_run_snapshot:';
+const SNAPSHOT_IDB_PREFIX = 'run_snapshot:';
 const MAX_SNAPSHOTS = 10;
+const snapshotWriteQueues = new Map<string, Promise<void>>();
+
+function idbSnapshotKey(login: string | undefined, runId: string): string {
+  return `${SNAPSHOT_IDB_PREFIX}${safeLogin(login)}:${runId}`;
+}
 
 function snapshotKey(login: string | undefined, runId: string): string {
   return `${SNAPSHOT_PREFIX}${safeLogin(login)}:${runId}`;
 }
 
-export function saveRunSnapshot(login: string | undefined, snapshot: RunSnapshot): void {
+async function listSnapshots(login: string | undefined): Promise<RunSnapshot[]> {
+  const idbPrefix = `${SNAPSHOT_IDB_PREFIX}${safeLogin(login)}:`;
+  const localPrefix = `${SNAPSHOT_PREFIX}${safeLogin(login)}:`;
+  const fromDb = (await Promise.all(
+    (await idbKeys(idbPrefix)).map(key => idbGet<RunSnapshot>(key)),
+  )).filter((item): item is RunSnapshot => Boolean(item?.runId));
+  const byRun = new Map(fromDb.map(item => [item.runId, item]));
   try {
-    const compact: RunSnapshot = {
-      ...snapshot,
-      messages: snapshot.messages.slice(-60).map(message => ({
-        ...message,
-        content: typeof message.content === 'string' ? message.content.slice(0, 30000) : message.content,
-      })),
-      savedAt: new Date().toISOString(),
-    };
-    localStorage.setItem(snapshotKey(login, snapshot.runId), JSON.stringify(compact));
-
-    const prefix = `${SNAPSHOT_PREFIX}${safeLogin(login)}:`;
-    const keys = Object.keys(localStorage).filter(key => key.startsWith(prefix));
-    if (keys.length > MAX_SNAPSHOTS) {
-      keys.sort((a, b) => {
-        const ta = Date.parse((JSON.parse(localStorage.getItem(a) || '{}') as RunSnapshot).savedAt || '') || 0;
-        const tb = Date.parse((JSON.parse(localStorage.getItem(b) || '{}') as RunSnapshot).savedAt || '') || 0;
-        return ta - tb;
-      });
-      for (const key of keys.slice(0, keys.length - MAX_SNAPSHOTS)) localStorage.removeItem(key);
+    for (const key of Object.keys(localStorage).filter(key => key.startsWith(localPrefix))) {
+      try {
+        const item = JSON.parse(localStorage.getItem(key) || 'null') as RunSnapshot | null;
+        if (item?.runId) {
+          const existing = byRun.get(item.runId);
+          if (!existing || Date.parse(item.savedAt) > Date.parse(existing.savedAt)) byRun.set(item.runId, item);
+        }
+      } catch {
+        // ignore malformed
+      }
     }
   } catch {
     // ignore
   }
+  return [...byRun.values()];
 }
 
-export function loadRunSnapshot(login: string | undefined, runId: string): RunSnapshot | null {
+async function pruneSnapshots(login: string | undefined): Promise<void> {
+  const snapshots = await listSnapshots(login);
+  if (snapshots.length <= MAX_SNAPSHOTS) return;
+  snapshots.sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt));
+  for (const snapshot of snapshots.slice(MAX_SNAPSHOTS)) {
+    await idbDelete(idbSnapshotKey(login, snapshot.runId));
+    try {
+      localStorage.removeItem(snapshotKey(login, snapshot.runId));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+async function writeRunSnapshot(login: string | undefined, snapshot: RunSnapshot): Promise<void> {
+  const compact: RunSnapshot = {
+    ...snapshot,
+    messages: snapshot.messages.slice(-60).map(message => ({
+      ...message,
+      content: typeof message.content === 'string' ? message.content.slice(0, 30000) : message.content,
+    })),
+    savedAt: new Date().toISOString(),
+  };
+  const persisted = await idbSet(idbSnapshotKey(login, compact.runId), compact);
+  if (!persisted) {
+    try {
+      localStorage.setItem(snapshotKey(login, compact.runId), JSON.stringify(compact));
+    } catch {
+      return;
+    }
+  }
+  await pruneSnapshots(login);
+}
+
+export function saveRunSnapshot(login: string | undefined, snapshot: RunSnapshot): Promise<void> {
+  const key = idbSnapshotKey(login, snapshot.runId);
+  const previous = snapshotWriteQueues.get(key) || Promise.resolve();
+  const next = previous.catch(() => undefined).then(() => writeRunSnapshot(login, snapshot));
+  snapshotWriteQueues.set(key, next);
+  void next.then(
+    () => { if (snapshotWriteQueues.get(key) === next) snapshotWriteQueues.delete(key); },
+    () => { if (snapshotWriteQueues.get(key) === next) snapshotWriteQueues.delete(key); },
+  );
+  return next;
+}
+
+export async function loadRunSnapshot(login: string | undefined, runId: string): Promise<RunSnapshot | null> {
+  const fromDb = await idbGet<RunSnapshot>(idbSnapshotKey(login, runId));
+  if (fromDb) return fromDb;
   try {
     const raw = localStorage.getItem(snapshotKey(login, runId));
     return raw ? JSON.parse(raw) as RunSnapshot : null;
@@ -227,28 +280,15 @@ export function loadRunSnapshot(login: string | undefined, runId: string): RunSn
   }
 }
 
-export function latestRunSnapshot(login: string | undefined, sessionId?: string): RunSnapshot | null {
-  try {
-    const prefix = `${SNAPSHOT_PREFIX}${safeLogin(login)}:`;
-    const snapshots = Object.keys(localStorage)
-      .filter(key => key.startsWith(prefix))
-      .map(key => {
-        try {
-          return JSON.parse(localStorage.getItem(key) || 'null') as RunSnapshot | null;
-        } catch {
-          return null;
-        }
-      })
-      .filter((item): item is RunSnapshot => Boolean(item))
-      .filter(item => !sessionId || item.sessionId === sessionId)
-      .sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt));
-    return snapshots[0] || null;
-  } catch {
-    return null;
-  }
+export async function latestRunSnapshot(login: string | undefined, sessionId?: string): Promise<RunSnapshot | null> {
+  const snapshots = (await listSnapshots(login))
+    .filter(item => !sessionId || item.sessionId === sessionId)
+    .sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt));
+  return snapshots[0] || null;
 }
 
-export function clearRunSnapshot(login: string | undefined, runId: string): void {
+export async function clearRunSnapshot(login: string | undefined, runId: string): Promise<void> {
+  await idbDelete(idbSnapshotKey(login, runId));
   try {
     localStorage.removeItem(snapshotKey(login, runId));
   } catch {
@@ -256,32 +296,19 @@ export function clearRunSnapshot(login: string | undefined, runId: string): void
   }
 }
 
-export function clearRunSnapshots(login: string | undefined, sessionId?: string): void {
-  try {
-    const prefix = `${SNAPSHOT_PREFIX}${safeLogin(login)}:`;
-    for (const key of Object.keys(localStorage)) {
-      if (!key.startsWith(prefix)) continue;
-      if (!sessionId) {
-        localStorage.removeItem(key);
-        continue;
-      }
-      try {
-        const snapshot = JSON.parse(localStorage.getItem(key) || 'null') as RunSnapshot | null;
-        if (snapshot?.sessionId === sessionId) localStorage.removeItem(key);
-      } catch {
-        // ignore malformed snapshot
-      }
-    }
-  } catch {
-    // ignore
+export async function clearRunSnapshots(login: string | undefined, sessionId?: string): Promise<void> {
+  const snapshots = await listSnapshots(login);
+  for (const snapshot of snapshots) {
+    if (sessionId && snapshot.sessionId !== sessionId) continue;
+    await clearRunSnapshot(login, snapshot.runId);
   }
 }
 
-export function clearRuns(login?: string): void {
+export async function clearRuns(login?: string): Promise<void> {
   try {
     localStorage.removeItem(key(login));
   } catch {
     // ignore
   }
-  clearRunSnapshots(login);
+  await clearRunSnapshots(login);
 }

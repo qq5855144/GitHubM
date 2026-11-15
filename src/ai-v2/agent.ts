@@ -10,6 +10,8 @@ import type {
   V2ToolCall,
   V2ToolDefinition,
 } from './types';
+import { buildModelUserContent } from './attachments';
+import type { UiAttachment } from './attachments';
 import { streamProvider } from './providers';
 import { resolveCapabilities } from './capabilities';
 import { saveArtifact } from './artifacts';
@@ -242,11 +244,16 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
 }
 
 /** 给 UI 的轻量历史：只保留最终文本，工具轨迹不进入下一轮上下文 */
-export function toAgentHistory(messages: Array<{ role: 'user' | 'assistant'; content: string }>): AgentHistoryMessage[] {
+export function toAgentHistory(messages: Array<{ role: 'user' | 'assistant'; content: string; modelContent?: string; attachments?: UiAttachment[] }>): AgentHistoryMessage[] {
   return messages
-    .filter(message => message.content.trim().length > 0)
+    .filter(message => message.content.trim().length > 0 || Boolean(message.modelContent?.trim()) || Boolean(message.attachments?.length))
     .slice(-20)
-    .map(message => ({ role: message.role, content: message.content.slice(0, 12000) }));
+    .map(message => ({
+      role: message.role,
+      content: (message.modelContent
+        || (message.attachments?.length ? buildModelUserContent(message.content, message.attachments) : message.content)
+      ).slice(0, 50000),
+    }));
 }
 
 export function collectToolDefinitions(tools: AgentTool[]): V2ToolDefinition[] {

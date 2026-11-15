@@ -45,7 +45,13 @@ export function truncateTextToTokens(text: string, maxTokens: number): string {
 
 function messageTokens(message: V2ProviderMessage): number {
   const toolCalls = message.tool_calls ? JSON.stringify(message.tool_calls) : '';
-  return estimateTokens(`${message.content || ''}\n${message.reasoning_content || ''}\n${toolCalls}`);
+  const content = Array.isArray(message.content)
+    ? message.content.map(part => part.type === 'text' ? part.text : '__IMAGE__').join('\n')
+    : (message.content || '');
+  const imageTokens = Array.isArray(message.content)
+    ? message.content.filter(part => part.type === 'image_url').length * 1000
+    : 0;
+  return estimateTokens(`${content}\n${message.reasoning_content || ''}\n${toolCalls}`) + imageTokens;
 }
 
 /**

@@ -12,6 +12,7 @@ import type {
 } from './types';
 import { buildModelUserContent } from './attachments';
 import type { UiAttachment } from './attachments';
+import type { V2ContentPart } from './types';
 import { streamProvider } from './providers';
 import { resolveCapabilities } from './capabilities';
 import { saveArtifact } from './artifacts';
@@ -93,6 +94,8 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
     contextBudget,
     memoryEnabled,
     persona,
+    currentUserContent,
+    currentUserText,
     signal,
     onEvent,
     requestApproval,
@@ -120,13 +123,16 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
     : buildAgentContext({
         systemPrompt: buildSystemPrompt(repo, persona),
         history,
-        query: lastUserQuery,
+        query: currentUserText || lastUserQuery,
         userLogin,
         capabilities: capabilityState.capabilities,
         contextBudget,
         memoryEnabled,
       });
   let messages: V2ProviderMessage[] = resumeMessages || builtContext!.messages;
+  if (!resumeMessages && currentUserContent) {
+    messages = [...messages, { role: 'user', content: currentUserContent }];
+  }
 
   const repeatedCalls = new Map<string, number>();
   let finalText = '';
@@ -255,14 +261,20 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
 }
 
 /** 给 UI 的轻量历史：只保留最终文本，工具轨迹不进入下一轮上下文 */
-export function toAgentHistory(messages: Array<{ role: 'user' | 'assistant'; content: string; modelContent?: string; attachments?: UiAttachment[] }>): AgentHistoryMessage[] {
+export function toAgentHistory(messages: Array<{ role: 'user' | 'assistant'; content: string; modelContent?: string | V2ContentPart[]; attachments?: UiAttachment[] }>): AgentHistoryMessage[] {
+  const contentText = (content: string | V2ContentPart[]): string => typeof content === 'string'
+    ? content
+    : content.map(part => part.type === 'text' ? part.text : '[图片附件]').join('\n');
   return messages
-    .filter(message => message.content.trim().length > 0 || Boolean(message.modelContent?.trim()) || Boolean(message.attachments?.length))
+    .filter(message => message.content.trim().length > 0
+      || Boolean(message.modelContent && contentText(message.modelContent).trim())
+      || Boolean(message.attachments?.length))
     .slice(-20)
     .map(message => ({
       role: message.role,
       content: (message.modelContent
-        || (message.attachments?.length ? buildModelUserContent(message.content, message.attachments) : message.content)
+        ? contentText(message.modelContent)
+        : (message.attachments?.length ? buildModelUserContent(message.content, message.attachments) : message.content)
       ).slice(0, 50000),
     }));
 }

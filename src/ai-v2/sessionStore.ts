@@ -7,6 +7,9 @@ export interface V2Session {
   title: string;
   messages: UiChatMessage[];
   repo: RepoContext | null;
+  /** 会话级模型覆盖；不设置时使用全局模型 */
+  modelType?: string;
+  model?: string;
   createdAt: string;
   updatedAt: string;
 }

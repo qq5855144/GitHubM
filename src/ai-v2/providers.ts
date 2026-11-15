@@ -1,5 +1,6 @@
 // AI Assistant V2 — OpenAI 兼容 Provider 层
 import type { ModelConfig } from '@/components/ai/aiTypes';
+import { getModelCapabilities } from './modelCapabilities';
 import type {
   AgentEvent,
   ProviderStreamResult,
@@ -65,7 +66,7 @@ export function buildProviderRequest(
     model: config.model || defaultModelFor(config.type),
     messages,
     stream: true,
-    max_tokens: 8192,
+    max_tokens: getModelCapabilities(config.type, config.model).maxOutput,
   };
   const effort = config.reasoning_effort;
   if (effort) {

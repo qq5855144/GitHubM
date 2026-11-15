@@ -1,5 +1,6 @@
 // AI Assistant V2 — GitHub 只读工具包（按需加载）
 import type { AgentTool, RepoContext, ToolRunResult, ToolRuntimeContext } from '../types';
+import { isTextFilePath } from '../attachments';
 
 const API = 'https://api.github.com';
 
@@ -135,9 +136,73 @@ const readFile: AgentTool = {
   },
 };
 
+async function searchBranchCode(
+  ctx: ToolRuntimeContext,
+  owner: string,
+  name: string,
+  branch: string,
+  query: string,
+): Promise<ToolRunResult> {
+  const tree = await githubFetch(
+    ctx,
+    `/repos/${owner}/${name}/git/trees/${encodePath(branch)}?recursive=1`,
+  ) as {
+    truncated?: boolean;
+    tree?: Array<{ path?: string; type?: string; sha?: string; size?: number }>;
+  };
+  const files = (tree.tree || [])
+    .filter(item => item.type === 'blob' && item.path && item.sha && isTextFilePath(item.path))
+    .filter(item => !/(^|\/)(node_modules|dist|build|vendor|\.git)\//.test(String(item.path)))
+    .filter(item => Number(item.size || 0) <= 100_000)
+    .slice(0, 160);
+
+  const needle = query.toLowerCase();
+  const matches: string[] = [];
+  let scannedChars = 0;
+
+  for (const file of files) {
+    if (matches.length >= 10 || scannedChars > 1_500_000) break;
+    try {
+      const blob = await githubFetch(
+        ctx,
+        `/repos/${owner}/${name}/git/blobs/${file.sha}`,
+      ) as { content?: string; encoding?: string };
+      if (!blob.content || blob.encoding !== 'base64') continue;
+      const text = decodeBase64Utf8(blob.content);
+      scannedChars += text.length;
+      const lines = text.split('\n');
+      const hitLines = lines
+        .map((line, index) => line.toLowerCase().includes(needle) ? { line, index: index + 1 } : null)
+        .filter((item): item is { line: string; index: number } => Boolean(item))
+        .slice(0, 3);
+      if (hitLines.length) {
+        matches.push([
+          `### ${file.path}`,
+          ...hitLines.map(hit => `- 第 ${hit.index} 行：\`${hit.line.trim().slice(0, 300)}\``),
+        ].join('\n'));
+      }
+    } catch {
+      // skip unreadable blobs
+    }
+  }
+
+  return {
+    ok: true,
+    content: matches.length
+      ? [
+          `分支搜索：${branch}`,
+          `扫描文件：${files.length}${tree.truncated ? '（仓库树已截断）' : ''}`,
+          `命中文件：${matches.length}`,
+          '',
+          ...matches,
+        ].join('\n')
+      : `分支 ${branch} 中未找到 “${query}”。扫描文件：${files.length}${tree.truncated ? '（仓库树已截断）' : ''}`,
+  };
+}
+
 const searchCode: AgentTool = {
   name: 'github_search_code',
-  description: '在当前仓库中搜索代码或文本。GitHub 搜索索引通常基于默认分支；读取非默认分支请使用 github_read_file 或 github_list_files。',
+  description: '在当前仓库中搜索代码或文本。非默认分支会扫描该分支的文本文件；默认分支使用 GitHub 搜索索引。',
   parameters: {
     type: 'object',
     properties: {
@@ -147,9 +212,12 @@ const searchCode: AgentTool = {
   },
   risk: 'read',
   async execute(args, ctx): Promise<ToolRunResult> {
-    const { owner, name } = repoParts(ctx.repo);
+    const { owner, name, branch } = repoParts(ctx.repo);
     const query = String(args.query || '').trim();
     if (!query) throw new Error('query 不能为空');
+    if (branch !== (ctx.repo?.defaultBranch || 'main')) {
+      return searchBranchCode(ctx, owner, name, branch, query);
+    }
     const data = await githubFetch(
       ctx,
       `/search/code?q=${encodeURIComponent(`${query} repo:${owner}/${name}`)}&per_page=10`,

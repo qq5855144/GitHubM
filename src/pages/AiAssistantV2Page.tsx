@@ -307,7 +307,10 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
   onOpenArtifact: (meta: ArtifactMeta) => void;
   onApplyDiff: (path: string, diff: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const hasBody = Boolean(message.content || message.reasoning || (message.tools || []).length);
+  const isLong = message.content.length > 12000;
+  const displayContent = isLong && !expanded ? `${message.content.slice(0, 12000)}\n\n…` : message.content;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -327,7 +330,16 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
           'min-w-0 text-sm leading-6 break-words',
           message.error ? 'text-destructive' : 'text-foreground',
         )}>
-          {renderMarkdown(message.content, onApplyDiff)}
+          {renderMarkdown(displayContent, onApplyDiff)}
+          {isLong && !message.streaming && (
+            <button
+              type="button"
+              onClick={() => setExpanded(value => !value)}
+              className="mt-1 text-[10px] text-primary hover:underline"
+            >
+              {expanded ? i18n.t('收起内容') : i18n.t('展开全文')}
+            </button>
+          )}
           {message.streaming && (
             <span className="ml-0.5 inline-block h-4 w-1 animate-pulse rounded-sm bg-primary align-middle" />
           )}
@@ -1196,6 +1208,8 @@ export default function AiAssistantV2Page() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const runCapabilitiesRef = useRef<string[]>([]);
   const runMetricsRef = useRef<{ runId: string; startedAt: number; firstTokenAt?: number } | null>(null);
+  const pendingStreamRef = useRef<{ assistantId: string; content: string; reasoning: string } | null>(null);
+  const streamFlushTimerRef = useRef<number | null>(null);
   const approvalResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1331,6 +1345,7 @@ export default function AiAssistantV2Page() {
       approvalResolverRef.current?.(false);
       approvalResolverRef.current = null;
       abortRef.current?.abort();
+      if (streamFlushTimerRef.current !== null) window.clearTimeout(streamFlushTimerRef.current);
     };
   }, []);
 
@@ -1472,16 +1487,39 @@ export default function AiAssistantV2Page() {
       : message));
   }, [setMessages]);
 
-  const appendAssistant = useCallback((id: string, patch: { content?: string; reasoning?: string }) => {
+  const flushStreamDelta = useCallback(() => {
+    if (streamFlushTimerRef.current !== null) {
+      window.clearTimeout(streamFlushTimerRef.current);
+      streamFlushTimerRef.current = null;
+    }
+    const pending = pendingStreamRef.current;
+    pendingStreamRef.current = null;
+    if (!pending) return;
     setMessages(prev => prev.map(message => {
-      if (message.id !== id) return message;
+      if (message.id !== pending.assistantId) return message;
       return {
         ...message,
-        content: patch.content ? message.content + patch.content : message.content,
-        reasoning: patch.reasoning ? (message.reasoning || '') + patch.reasoning : message.reasoning,
+        content: pending.content ? message.content + pending.content : message.content,
+        reasoning: pending.reasoning ? (message.reasoning || '') + pending.reasoning : message.reasoning,
       };
     }));
   }, [setMessages]);
+
+  const queueStreamDelta = useCallback((id: string, patch: { content?: string; reasoning?: string }) => {
+    if (pendingStreamRef.current && pendingStreamRef.current.assistantId !== id) {
+      flushStreamDelta();
+    }
+    const pending = pendingStreamRef.current || { assistantId: id, content: '', reasoning: '' };
+    pending.content += patch.content || '';
+    pending.reasoning += patch.reasoning || '';
+    pendingStreamRef.current = pending;
+    if (streamFlushTimerRef.current === null) {
+      streamFlushTimerRef.current = window.setTimeout(() => {
+        streamFlushTimerRef.current = null;
+        flushStreamDelta();
+      }, 80);
+    }
+  }, [flushStreamDelta]);
 
   const patchTool = useCallback((assistantId: string, callId: string, patch: Partial<UiToolRun>) => {
     setMessages(prev => prev.map(message => {
@@ -1504,16 +1542,17 @@ export default function AiAssistantV2Page() {
           runMetricsRef.current.firstTokenAt = Date.now();
           patchMetrics(assistantId, { firstTokenMs: runMetricsRef.current.firstTokenAt - runMetricsRef.current.startedAt });
         }
-        appendAssistant(assistantId, { content: event.text });
+        queueStreamDelta(assistantId, { content: event.text });
         break;
       case 'reasoning_delta':
         if (runMetricsRef.current?.runId === runId && !runMetricsRef.current.firstTokenAt) {
           runMetricsRef.current.firstTokenAt = Date.now();
           patchMetrics(assistantId, { firstTokenMs: runMetricsRef.current.firstTokenAt - runMetricsRef.current.startedAt });
         }
-        appendAssistant(assistantId, { reasoning: event.text });
+        queueStreamDelta(assistantId, { reasoning: event.text });
         break;
       case 'tool_start':
+        flushStreamDelta();
         setMessages(prev => prev.map(message => message.id === assistantId
           ? {
               ...message,
@@ -1531,6 +1570,7 @@ export default function AiAssistantV2Page() {
           : message));
         break;
       case 'tool_end':
+        flushStreamDelta();
         patchTool(assistantId, event.call.id, {
           status: event.ok ? 'done' : 'error',
           content: event.content,
@@ -1546,6 +1586,7 @@ export default function AiAssistantV2Page() {
         });
         break;
       case 'error':
+        flushStreamDelta();
         patchAssistant(assistantId, {
           content: event.message,
           streaming: false,
@@ -1556,6 +1597,7 @@ export default function AiAssistantV2Page() {
         }
         break;
       case 'done':
+        flushStreamDelta();
         patchAssistant(assistantId, { streaming: false });
         if (runMetricsRef.current?.runId === runId) {
           patchMetrics(assistantId, { durationMs: Date.now() - runMetricsRef.current.startedAt });
@@ -1566,7 +1608,7 @@ export default function AiAssistantV2Page() {
       default:
         break;
     }
-  }, [appendAssistant, patchAssistant, patchMetrics, patchTool, setMessages, user?.login]);
+  }, [flushStreamDelta, patchAssistant, patchMetrics, patchTool, queueStreamDelta, setMessages, user?.login]);
 
   const persistRunSnapshot = useCallback((
     runId: string,
@@ -1834,6 +1876,7 @@ export default function AiAssistantV2Page() {
         }
       }
     } finally {
+      flushStreamDelta();
       finishRun(user?.login, runId, runStatus, runError);
       if (runStatus !== 'done' && user?.login) {
         void latestRunSnapshot(user.login, activeSession?.id).then(snapshot => setResumableSnapshot(snapshot));
@@ -1903,6 +1946,7 @@ export default function AiAssistantV2Page() {
         toast.error(friendlyModelError(message).slice(0, 160));
       }
     } finally {
+      flushStreamDelta();
       finishRun(user?.login, snapshot.runId, runStatus, runError);
       if (runStatus !== 'done' && user?.login) {
         void latestRunSnapshot(user.login, activeSession?.id).then(snapshot => setResumableSnapshot(snapshot));
@@ -1914,6 +1958,7 @@ export default function AiAssistantV2Page() {
   };
 
   const handleStop = () => {
+    flushStreamDelta();
     approvalResolverRef.current?.(false);
     approvalResolverRef.current = null;
     setApprovalRequest(null);

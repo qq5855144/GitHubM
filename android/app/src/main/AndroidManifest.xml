@@ -54,6 +54,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.GitHubManager"
         android:hardwareAccelerated="true"
+        android:largeHeap="true"
         android:usesCleartextTraffic="false">
         <!--
           requestLegacyExternalStorage 在 API 30+ 无效，已移除。

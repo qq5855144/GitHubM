@@ -47,6 +47,8 @@ import {
   Database,
   FileText,
   HardDrive,
+  GitBranch,
+  GitPullRequest,
   KeyRound,
   Loader2,
   Network,
@@ -669,7 +671,11 @@ export default function AiSettingsPage() {
       { name: 'github_list_issues', desc: '列出 Issues', icon: Database, risk: 'read', group: 'GitHub 协作' },
       { name: 'github_list_pulls', desc: '列出 Pull Request', icon: Database, risk: 'read', group: 'GitHub 协作' },
       { name: 'github_get_pull', desc: '读取 PR 详情', icon: Database, risk: 'read', group: 'GitHub 协作' },
-      { name: 'github_write_file', desc: '创建或更新文件', icon: Wrench, risk: 'write', group: 'GitHub 写入' },
+      { name: 'github_write_file', desc: '创建或更新单个文件', icon: Wrench, risk: 'write', group: 'GitHub 写入' },
+      { name: 'github_write_files', desc: '批量提交多个文件', icon: Wrench, risk: 'write', group: 'GitHub 写入' },
+      { name: 'github_create_branch', desc: '创建分支', icon: GitBranch, risk: 'write', group: 'GitHub 写入' },
+      { name: 'github_create_pull_request', desc: '创建 Pull Request', icon: GitPullRequest, risk: 'write', group: 'GitHub 写入' },
+      { name: 'github_merge_pull_request', desc: '合并 Pull Request', icon: GitPullRequest, risk: 'write', group: 'GitHub 写入' },
     ];
     return (
       <div className="mx-auto min-h-full w-full max-w-2xl px-3 py-4 sm:px-4">

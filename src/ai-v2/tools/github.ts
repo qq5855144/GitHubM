@@ -272,6 +272,236 @@ const writeFile: AgentTool = {
   },
 };
 
+const writeFiles: AgentTool = {
+  name: 'github_write_files',
+  description: '在一次提交中创建或更新多个文件。适合批量修改；目标分支不存在时会从 base_branch 自动创建。这是写操作，执行前必须确认。',
+  parameters: {
+    type: 'object',
+    properties: {
+      files: {
+        type: 'array',
+        description: '文件列表，最多 20 个',
+        items: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: '文件路径' },
+            content: { type: 'string', description: '完整文件内容' },
+          },
+          required: ['path', 'content'],
+        },
+      },
+      message: { type: 'string', description: '提交信息' },
+      branch: { type: 'string', description: '目标分支；默认当前分支' },
+      base_branch: { type: 'string', description: '目标分支不存在时从该分支创建' },
+    },
+    required: ['files', 'message'],
+  },
+  risk: 'write',
+  async execute(args, ctx): Promise<ToolRunResult> {
+    const { owner, name, branch: defaultBranch } = repoParts(ctx.repo);
+    const targetBranch = normalizeBranch(String(args.branch || defaultBranch));
+    const baseBranch = normalizeBranch(String(args.base_branch || defaultBranch));
+    const message = String(args.message || '').trim() || `Update files on ${targetBranch}`;
+    const rawFiles = Array.isArray(args.files) ? args.files : [];
+    if (rawFiles.length > 20) throw new Error('一次最多提交 20 个文件');
+    const seen = new Set<string>();
+    const files = rawFiles.slice(0, 20).map(item => {
+      const file = item as { path?: unknown; content?: unknown };
+      const path = String(file.path || '').replace(/^\/+/, '').trim();
+      const content = String(file.content ?? '');
+      if (!path) throw new Error('文件路径不能为空');
+      if (path.split('/').includes('..')) throw new Error(`文件路径不合法：${path}`);
+      if (seen.has(path)) throw new Error(`重复文件路径：${path}`);
+      if (content.length > 200_000) throw new Error(`文件过大（${content.length} 字符）：${path}`);
+      seen.add(path);
+      return { path, content };
+    });
+    if (!files.length) throw new Error('files 不能为空');
+
+    let headSha = '';
+    try {
+      const ref = await githubFetch(ctx, `/repos/${owner}/${name}/git/ref/heads/${encodePath(targetBranch)}`) as {
+        object?: { sha?: string };
+      };
+      headSha = String(ref.object?.sha || '');
+    } catch (error) {
+      if (!String((error as Error).message || error).includes('HTTP 404')) throw error;
+      const baseRef = await githubFetch(ctx, `/repos/${owner}/${name}/git/ref/heads/${encodePath(baseBranch)}`) as {
+        object?: { sha?: string };
+      };
+      const baseSha = String(baseRef.object?.sha || '');
+      if (!baseSha) throw new Error(`无法读取基础分支：${baseBranch}`);
+      const created = await githubFetch(ctx, `/repos/${owner}/${name}/git/refs`, 'application/vnd.github+json', {
+        method: 'POST',
+        body: JSON.stringify({ ref: `refs/heads/${targetBranch}`, sha: baseSha }),
+      }) as { object?: { sha?: string } };
+      headSha = String(created.object?.sha || baseSha);
+    }
+    if (!headSha) throw new Error(`无法读取分支：${targetBranch}`);
+
+    const headCommit = await githubFetch(ctx, `/repos/${owner}/${name}/git/commits/${headSha}`) as {
+      tree?: { sha?: string };
+    };
+    const baseTree = String(headCommit.tree?.sha || '');
+    if (!baseTree) throw new Error('无法读取分支的最新 tree');
+
+    const blobs: Array<{ path: string; sha: string }> = [];
+    for (const file of files) {
+      const blob = await githubFetch(ctx, `/repos/${owner}/${name}/git/blobs`, 'application/vnd.github+json', {
+        method: 'POST',
+        body: JSON.stringify({ content: file.content, encoding: 'utf-8' }),
+      }) as { sha?: string };
+      if (!blob.sha) throw new Error(`创建 blob 失败：${file.path}`);
+      blobs.push({ path: file.path, sha: blob.sha });
+    }
+
+    const tree = await githubFetch(ctx, `/repos/${owner}/${name}/git/trees`, 'application/vnd.github+json', {
+      method: 'POST',
+      body: JSON.stringify({
+        base_tree: baseTree,
+        tree: blobs.map(file => ({ path: file.path, mode: '100644', type: 'blob', sha: file.sha })),
+      }),
+    }) as { sha?: string };
+    if (!tree.sha) throw new Error('创建 tree 失败');
+
+    const commit = await githubFetch(ctx, `/repos/${owner}/${name}/git/commits`, 'application/vnd.github+json', {
+      method: 'POST',
+      body: JSON.stringify({ message, tree: tree.sha, parents: [headSha] }),
+    }) as { sha?: string; html_url?: string };
+    if (!commit.sha) throw new Error('创建 commit 失败');
+
+    await githubFetch(ctx, `/repos/${owner}/${name}/git/refs/heads/${encodePath(targetBranch)}`, 'application/vnd.github+json', {
+      method: 'PATCH',
+      body: JSON.stringify({ sha: commit.sha, force: false }),
+    });
+
+    return {
+      ok: true,
+      content: [
+        `已提交 ${files.length} 个文件`,
+        `分支：${targetBranch}`,
+        `提交：${commit.sha}`,
+        `链接：${commit.html_url || '-'}`,
+        '',
+        ...files.map(file => `- ${file.path}`),
+      ].join('\n'),
+    };
+  },
+};
+
+const createBranch: AgentTool = {
+  name: 'github_create_branch',
+  description: '从指定基础分支创建新分支。这是写操作，执行前必须确认。',
+  parameters: {
+    type: 'object',
+    properties: {
+      branch: { type: 'string', description: '新分支名，例如 feat/ai-change' },
+      base_branch: { type: 'string', description: '基础分支；默认当前分支' },
+    },
+    required: ['branch'],
+  },
+  risk: 'write',
+  async execute(args, ctx): Promise<ToolRunResult> {
+    const { owner, name, branch: defaultBranch } = repoParts(ctx.repo);
+    const branch = normalizeBranch(String(args.branch || ''));
+    const base = normalizeBranch(String(args.base_branch || defaultBranch));
+    const baseRef = await githubFetch(ctx, `/repos/${owner}/${name}/git/ref/heads/${encodePath(base)}`) as {
+      object?: { sha?: string };
+    };
+    const sha = String(baseRef.object?.sha || '');
+    if (!sha) throw new Error(`无法读取基础分支：${base}`);
+    await githubFetch(ctx, `/repos/${owner}/${name}/git/refs`, 'application/vnd.github+json', {
+      method: 'POST',
+      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha }),
+    });
+    return { ok: true, content: `已从 ${base} 创建分支：${branch}\n起点提交：${sha}` };
+  },
+};
+
+const createPullRequest: AgentTool = {
+  name: 'github_create_pull_request',
+  description: '创建 Pull Request。这是写操作，执行前必须确认。',
+  parameters: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'PR 标题' },
+      head: { type: 'string', description: '来源分支' },
+      base: { type: 'string', description: '目标分支；默认当前分支' },
+      body: { type: 'string', description: 'PR 描述' },
+      draft: { type: 'boolean', description: '是否创建草稿 PR' },
+    },
+    required: ['title', 'head'],
+  },
+  risk: 'write',
+  async execute(args, ctx): Promise<ToolRunResult> {
+    const { owner, name, branch: defaultBranch } = repoParts(ctx.repo);
+    const title = String(args.title || '').trim();
+    const head = normalizeBranch(String(args.head || ''));
+    const base = normalizeBranch(String(args.base || defaultBranch));
+    if (!title) throw new Error('title 不能为空');
+    const pr = await githubFetch(ctx, `/repos/${owner}/${name}/pulls`, 'application/vnd.github+json', {
+      method: 'POST',
+      body: JSON.stringify({
+        title,
+        head,
+        base,
+        body: String(args.body || ''),
+        draft: Boolean(args.draft),
+      }),
+    }) as { number?: number; html_url?: string };
+    return {
+      ok: true,
+      content: [`已创建 PR #${pr.number || '-'}`, `分支：${head} → ${base}`, `链接：${pr.html_url || '-'}`].join('\n'),
+    };
+  },
+};
+
+const mergePullRequest: AgentTool = {
+  name: 'github_merge_pull_request',
+  description: '合并 Pull Request。这是写操作，执行前必须确认。',
+  parameters: {
+    type: 'object',
+    properties: {
+      number: { type: 'number', description: 'Pull Request 编号' },
+      merge_method: { type: 'string', description: 'merge / squash / rebase，默认 squash' },
+      commit_title: { type: 'string', description: '可选：合并提交标题' },
+      commit_message: { type: 'string', description: '可选：合并提交说明' },
+    },
+    required: ['number'],
+  },
+  risk: 'write',
+  async execute(args, ctx): Promise<ToolRunResult> {
+    const { owner, name } = repoParts(ctx.repo);
+    const number = Number(args.number);
+    if (!Number.isFinite(number)) throw new Error('number 必须是数字');
+    const method = ['merge', 'squash', 'rebase'].includes(String(args.merge_method))
+      ? String(args.merge_method)
+      : 'squash';
+    const data = await githubFetch(ctx, `/repos/${owner}/${name}/pulls/${number}/merge`, 'application/vnd.github+json', {
+      method: 'PUT',
+      body: JSON.stringify({
+        merge_method: method,
+        ...(args.commit_title ? { commit_title: String(args.commit_title) } : {}),
+        ...(args.commit_message ? { commit_message: String(args.commit_message) } : {}),
+      }),
+    }) as { merged?: boolean; sha?: string; message?: string };
+    return {
+      ok: Boolean(data.merged),
+      content: data.merged
+        ? `已合并 PR #${number}\n方式：${method}\n提交：${data.sha || '-'}`
+        : `未合并 PR #${number}：${data.message || '未知原因'}`,
+    };
+  },
+};
+
+function normalizeBranch(branch: string): string {
+  const value = branch.trim().replace(/^refs\/heads\//, '');
+  if (!value || value.startsWith('/') || value.includes('..') || /\s/.test(value)) {
+    throw new Error(`分支名不合法：${branch}`);
+  }
+  return value;
+}
+
 function base64EncodeUtf8(text: string): string {
   const bytes = new TextEncoder().encode(text);
   let binary = '';
@@ -283,7 +513,13 @@ function base64EncodeUtf8(text: string): string {
 }
 
 export const GITHUB_READ_TOOLS: AgentTool[] = [repoInfo, listFiles, readFile, searchCode];
-export const GITHUB_WRITE_TOOLS: AgentTool[] = [writeFile];
+export const GITHUB_WRITE_TOOLS: AgentTool[] = [
+  writeFile,
+  writeFiles,
+  createBranch,
+  createPullRequest,
+  mergePullRequest,
+];
 
 /** 只有选择了仓库才暴露 GitHub 工具 */
 export function getToolsForContext(repo?: RepoContext): AgentTool[] {

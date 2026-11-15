@@ -42,7 +42,6 @@ import {
   Eye,
   FileText,
   GitBranch,
-  History,
   Layers,
   Loader2,
   Menu,
@@ -129,6 +128,17 @@ function deriveTitle(messages: UiChatMessage[]): string {
   const first = messages.find(message => message.role === 'user')?.content.trim();
   if (!first) return i18n.t('新对话');
   return first.replace(/\s+/g, ' ').slice(0, 32);
+}
+function migrateLegacyRoundLimit(messages: UiChatMessage[]): UiChatMessage[] {
+  return messages.map(message => {
+    if (message.role !== 'assistant' || !message.content.includes('已达到最大工具轮数')) return message;
+    return {
+      ...message,
+      content: i18n.t('这条消息来自旧版 AI（v1.0.528 之前）。V2 已移除固定工具轮数限制，可以直接继续任务。'),
+      error: false,
+      streaming: false,
+    };
+  });
 }
 
 function compactMessages(messages: UiChatMessage[]): UiChatMessage[] {
@@ -695,7 +705,8 @@ export default function AiAssistantV2Page() {
       }
     }
 
-    const nextSessions = loaded?.sessions?.length ? loaded.sessions : [newSession()];
+    const nextSessions = (loaded?.sessions?.length ? loaded.sessions : [newSession()])
+      .map(session => ({ ...session, messages: migrateLegacyRoundLimit(session.messages || []) }));
     const nextActive = loaded?.activeId && nextSessions.some(session => session.id === loaded?.activeId)
       ? loaded.activeId
       : nextSessions[0].id;
@@ -1272,16 +1283,6 @@ export default function AiAssistantV2Page() {
             onDelete={handleDeleteSession}
           />
         </div>
-        <div className="border-t border-border p-2">
-          <button
-            type="button"
-            onClick={() => navigate('/ai-assistant-v1')}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-          >
-            <History className="h-3.5 w-3.5" />
-            {i18n.t('打开经典版')}
-          </button>
-        </div>
       </aside>
 
       {/* 主聊天列 */}
@@ -1331,16 +1332,6 @@ export default function AiAssistantV2Page() {
             title={i18n.t('清空当前对话')}
           >
             <Trash2 className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="hidden h-8 w-8 text-muted-foreground sm:inline-flex"
-            onClick={() => navigate('/ai-assistant-v1')}
-            title={i18n.t('经典版')}
-          >
-            <History className="h-4 w-4" />
           </Button>
         </header>
 
@@ -1539,8 +1530,13 @@ export default function AiAssistantV2Page() {
             </DialogTitle>
           </DialogHeader>
           {approvalRequest && (() => {
-            const args = approvalRequest.arguments as Record<string, unknown>;
-            const content = String(args.content || '');
+const args = approvalRequest.arguments as Record<string, unknown>;
+             const content = String(args.content || '');
+             const files = Array.isArray(args.files)
+               ? args.files as Array<{ path?: unknown; content?: unknown }>
+               : [];
+             const previewContent = content || String(files[0]?.content || '');
+             const isSingleWrite = approvalRequest.toolName === 'github_write_file';
             return (
               <div className="space-y-3">
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-5 text-amber-700 dark:text-amber-300">
@@ -1549,28 +1545,48 @@ export default function AiAssistantV2Page() {
                 <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3 text-xs">
                   <p className="flex items-center gap-1.5 font-mono font-medium"><Wrench className="h-3.5 w-3.5" />{approvalRequest.toolName}</p>
                   <p className="text-[11px] leading-5 text-muted-foreground">{approvalRequest.description}</p>
-                  {args.path !== undefined && <p><span className="text-muted-foreground">{i18n.t('路径')}：</span><span className="font-mono">{String(args.path)}</span></p>}
-                  {args.branch !== undefined && <p><span className="text-muted-foreground">{i18n.t('分支')}：</span><span className="font-mono">{String(args.branch)}</span></p>}
-                  {args.message !== undefined && <p><span className="text-muted-foreground">{i18n.t('提交信息')}：</span>{String(args.message)}</p>}
-                  <div>
-                    <p className="mb-1 text-[10px] text-muted-foreground">
-                      {i18n.t('变更预览')} {approvalRemoteMissing && `· ${i18n.t('新建文件')}`}
-                    </p>
-                    {approvalDiffLoading ? (
-                      <div className="flex items-center gap-2 py-2 text-[11px] text-muted-foreground">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        {i18n.t('正在生成 Diff…')}
-                      </div>
-                    ) : (
-                      <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/70 p-2 font-mono text-[10px] leading-4">{approvalDiff || i18n.t('无法读取远端版本，仅显示新内容预览。')}</pre>
-                    )}
-                  </div>
-                  {content && (
-                    <div>
-                      <p className="mb-1 text-[10px] text-muted-foreground">{i18n.t('内容预览')} · {content.length} {i18n.t('字符')}</p>
-                      <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-background/70 p-2 font-mono text-[10px]">{content.slice(0, 2000)}</pre>
-                    </div>
-                  )}
+{args.path !== undefined && <p><span className="text-muted-foreground">{i18n.t('路径')}：</span><span className="font-mono">{String(args.path)}</span></p>}
+                   {args.branch !== undefined && <p><span className="text-muted-foreground">{i18n.t('分支')}：</span><span className="font-mono">{String(args.branch)}</span></p>}
+                   {args.base_branch !== undefined && <p><span className="text-muted-foreground">{i18n.t('基础分支')}：</span><span className="font-mono">{String(args.base_branch)}</span></p>}
+                   {args.message !== undefined && <p><span className="text-muted-foreground">{i18n.t('提交信息')}：</span>{String(args.message)}</p>}
+                   {args.title !== undefined && <p><span className="text-muted-foreground">{i18n.t('标题')}：</span>{String(args.title)}</p>}
+                   {args.head !== undefined && <p><span className="text-muted-foreground">{i18n.t('来源分支')}：</span><span className="font-mono">{String(args.head)}</span></p>}
+                   {args.base !== undefined && <p><span className="text-muted-foreground">{i18n.t('目标分支')}：</span><span className="font-mono">{String(args.base)}</span></p>}
+                   {args.number !== undefined && <p><span className="text-muted-foreground">{i18n.t('PR 编号')}：</span>#{String(args.number)}</p>}
+                   {args.merge_method !== undefined && <p><span className="text-muted-foreground">{i18n.t('合并方式')}：</span>{String(args.merge_method)}</p>}
+                   {files.length > 0 && (
+                     <div>
+                       <p className="mb-1 text-[10px] text-muted-foreground">{i18n.t('批量文件')} · {files.length} {i18n.t('个')}</p>
+                       <div className="max-h-28 space-y-0.5 overflow-auto rounded bg-background/70 p-2 font-mono text-[10px]">
+                         {files.map((file, index) => (
+                           <p key={`${String(file.path)}-${index}`} className="truncate">
+                             {String(file.path)} <span className="text-muted-foreground">({String(file.content || '').length})</span>
+                           </p>
+                         ))}
+                       </div>
+                     </div>
+                   )}
+                   {isSingleWrite && (
+                     <div>
+                       <p className="mb-1 text-[10px] text-muted-foreground">
+                         {i18n.t('变更预览')} {approvalRemoteMissing && `· ${i18n.t('新建文件')}`}
+                       </p>
+                       {approvalDiffLoading ? (
+                         <div className="flex items-center gap-2 py-2 text-[11px] text-muted-foreground">
+                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                           {i18n.t('正在生成 Diff…')}
+                         </div>
+                       ) : (
+                         <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/70 p-2 font-mono text-[10px] leading-4">{approvalDiff || i18n.t('无法读取远端版本，仅显示新内容预览。')}</pre>
+                       )}
+                     </div>
+                   )}
+                   {previewContent && (
+                     <div>
+                       <p className="mb-1 text-[10px] text-muted-foreground">{files.length > 0 ? i18n.t('首个文件内容') : i18n.t('内容预览')} · {previewContent.length} {i18n.t('字符')}</p>
+                       <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-background/70 p-2 font-mono text-[10px]">{previewContent.slice(0, 2000)}</pre>
+                     </div>
+                   )}
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => resolveApproval(false)}>
@@ -1654,14 +1670,6 @@ export default function AiAssistantV2Page() {
               onDelete={handleDeleteSession}
             />
           </div>
-          <button
-            type="button"
-            onClick={() => navigate('/ai-assistant-v1')}
-            className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted/50"
-          >
-            <History className="h-4 w-4" />
-            {i18n.t('打开经典版')}
-          </button>
         </DialogContent>
       </Dialog>
 

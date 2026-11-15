@@ -1275,7 +1275,8 @@ export default function AiAssistantV2Page() {
       const nextSessions = (loaded?.sessions?.length ? loaded.sessions : [newSession()])
         .map(session => {
           const migratedMessages = migrateLegacyRoundLimit(session.messages || []);
-          const titleSource = session.titleSource || 'auto';
+          const looksLikePrompt = /^(请|帮我|请帮我|解释|阅读|分析|Actions|README|写一个)/.test(session.title);
+          const titleSource: 'auto' | 'manual' = session.titleSource === 'manual' && !looksLikePrompt ? 'manual' : 'auto';
           return {
             ...session,
             messages: migratedMessages,

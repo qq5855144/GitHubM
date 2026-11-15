@@ -89,6 +89,13 @@ const REASONING_OPTIONS = [
   { value: 'max', label: '最大' },
 ];
 
+const RUN_STATUS_LABELS: Record<string, string> = {
+  running: '运行中',
+  done: '完成',
+  error: '失败',
+  stopped: '已停止',
+};
+
 function SectionHeader({
   title,
   desc,
@@ -692,7 +699,7 @@ export default function AiSettingsPage() {
                       run.status === 'done' ? 'bg-green-500' : run.status === 'running' ? 'bg-primary' : 'bg-destructive',
                     )} />
                     <span className="min-w-0 flex-1 truncate text-xs">{run.title}</span>
-                    <span className="shrink-0 text-muted-foreground">{i18n.t(run.status)}</span>
+                    <span className="shrink-0 text-muted-foreground">{i18n.t(RUN_STATUS_LABELS[run.status] || run.status)}</span>
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground">
                     <span>{new Date(run.startedAt).toLocaleString()}</span>

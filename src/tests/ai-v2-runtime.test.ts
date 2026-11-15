@@ -48,6 +48,8 @@ describe('AI V2 run store', () => {
     expect(record.toolCalls).toBe(1);
     expect(record.steps).toBe(2);
     expect(record.capabilities).toEqual(['core', 'github-read']);
+    expect(record.events.map(event => event.type)).toEqual(['run_start', 'tool_start', 'tool_end', 'done']);
+    expect(record.events[2].artifact).toBe(false);
   });
 
   it('can finish an interrupted run and clear history', () => {

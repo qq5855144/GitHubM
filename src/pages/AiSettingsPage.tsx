@@ -705,6 +705,7 @@ export default function AiSettingsPage() {
                     <span>{new Date(run.startedAt).toLocaleString()}</span>
                     <span>{run.toolCalls} {i18n.t('工具')}</span>
                     <span>{run.steps} {i18n.t('轮')}</span>
+                    <span>{run.events?.length || 0} {i18n.t('事件')}</span>
                     {run.capabilities.length > 0 && <span className="truncate">{run.capabilities.join(' · ')}</span>}
                   </div>
                   {run.error && <p className="mt-1 break-words text-destructive">{run.error.slice(0, 160)}</p>}

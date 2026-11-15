@@ -78,6 +78,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Copy,
   Eye,
   FileText,
@@ -231,32 +232,28 @@ function groupSessions(sessions: V2Session[]): Array<{ label: string; items: V2S
 
 function ReasoningPanel({ text, streaming }: { text: string; streaming?: boolean }) {
   const [open, setOpen] = useState(Boolean(streaming));
-
   useEffect(() => {
     if (!streaming) setOpen(false);
   }, [streaming]);
-
   if (!text) return null;
   return (
-    <div className="mb-2 overflow-hidden rounded-lg border border-border/70 bg-muted/25">
+    <div className="min-w-0">
       <button
         type="button"
         onClick={() => setOpen(prev => !prev)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-muted-foreground hover:bg-muted/40"
+        className="inline-flex items-center gap-1 py-0.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
       >
-        <Sparkles className="h-3.5 w-3.5 shrink-0" />
-        <span className="flex-1">{streaming ? i18n.t('思考中…') : i18n.t('已完成思考')}</span>
-        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        <span>{streaming ? i18n.t('思考中') : i18n.t('已思考')}</span>
+        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
       </button>
       {open && (
-        <div className="max-h-64 overflow-y-auto border-t border-border/60 px-3 py-2 text-xs leading-5 text-muted-foreground whitespace-pre-wrap">
+        <div className="mt-1.5 whitespace-pre-wrap border-l-2 border-border/70 pl-3 text-[13px] leading-6 text-muted-foreground">
           {text}
         </div>
       )}
     </div>
   );
 }
-
 function ToolCard({ tool, onOpenArtifact }: { tool: UiToolRun; onOpenArtifact: (meta: ArtifactMeta) => void }) {
   const [open, setOpen] = useState(false);
   const duration = tool.startedAt && tool.endedAt
@@ -346,7 +343,7 @@ ${text.slice(-STREAMING_PLAIN_LIMIT)}`
 …` : base;
   return (
     <div className={cn(
-      'min-w-0 text-sm leading-6 break-words',
+      'min-w-0 text-[15px] leading-7 break-words',
       error ? 'text-destructive' : 'text-foreground',
     )}>
       {streaming ? (
@@ -448,25 +445,26 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
         </div>
       )}
 
-      {message.metrics && !message.streaming && (
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-[9px] text-muted-foreground/70">
-          {message.metrics.totalTokens ? <span>{message.metrics.totalTokens} tokens</span> : null}
-          {message.metrics.firstTokenMs ? <span>首字 {Math.round(message.metrics.firstTokenMs / 100) / 10}s</span> : null}
-          {message.metrics.durationMs ? <span>总耗时 {Math.round(message.metrics.durationMs / 100) / 10}s</span> : null}
-          {message.metrics.model ? <span className="max-w-[180px] truncate font-mono">{message.metrics.model}</span> : null}
-        </div>
-      )}
-
-      {message.content && !message.streaming && (
-        <div className="mt-1.5 flex items-center gap-1">
-          <button
-            type="button"
-            onClick={copy}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <Copy className="h-3 w-3" />
-            {i18n.t('复制')}
-          </button>
+      {!message.streaming && (message.content || message.metrics) && (
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          {message.content && (
+            <button
+              type="button"
+              onClick={copy}
+              title={i18n.t('复制')}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Copy className="h-4 w-4" />
+            </button>
+          )}
+          {message.metrics && (
+            <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground/70">
+              {message.metrics.totalTokens ? <span>{message.metrics.totalTokens} tokens</span> : null}
+              {message.metrics.firstTokenMs ? <span>首字 {Math.round(message.metrics.firstTokenMs / 100) / 10}s</span> : null}
+              {message.metrics.durationMs ? <span>总耗时 {Math.round(message.metrics.durationMs / 100) / 10}s</span> : null}
+              {message.metrics.model ? <span className="max-w-[180px] truncate font-mono">{message.metrics.model}</span> : null}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -497,15 +495,13 @@ function buildTurns(messages: UiChatMessage[]): ConversationTurn[] {
   return turns;
 }
 
-function ConversationTurnView({ turn, index, onOpenArtifact, onApplyDiff }: {
+function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff }: {
   turn: ConversationTurn;
   index: number;
   onOpenArtifact: (meta: ArtifactMeta) => void;
   onApplyDiff: (path: string, diff: string) => void;
 }) {
   const [userExpanded, setUserExpanded] = useState(false);
-  const streaming = turn.assistants.some(message => message.streaming);
-  const hasError = turn.assistants.some(message => message.error);
   const userContent = turn.user?.content || '';
   const userIsLong = userContent.length > MAX_USER_MESSAGE_CHARS;
   const shownUserContent = userIsLong && !userExpanded
@@ -513,14 +509,10 @@ function ConversationTurnView({ turn, index, onOpenArtifact, onApplyDiff }: {
     : userContent;
 
   return (
-    <section className="flex min-w-0 flex-col gap-4">
+    <section className="flex min-w-0 flex-col gap-3">
       {turn.user && (
         <div className="flex min-w-0 flex-col items-end gap-1.5">
-          <div className="flex max-w-[94%] items-center gap-2 text-[10px] text-muted-foreground">
-            <span className="font-medium uppercase tracking-[0.12em]">You</span>
-            <span>{formatTime(turn.user.createdAt)}</span>
-          </div>
-          <div className="max-w-[94%] min-w-0 rounded-2xl rounded-br-md border border-primary/15 bg-primary/[0.08] px-3.5 py-2.5 text-sm leading-6 text-foreground shadow-sm sm:px-4">
+          <div className="max-w-[86%] min-w-0 rounded-2xl rounded-br-md bg-muted px-3.5 py-2.5 text-[15px] leading-7 text-foreground">
             <span className="whitespace-pre-wrap break-words">{shownUserContent}</span>
             {userIsLong && (
               <button
@@ -555,33 +547,17 @@ function ConversationTurnView({ turn, index, onOpenArtifact, onApplyDiff }: {
       )}
 
       <div className="min-w-0 border-t border-border/60 pt-3">
-        <div className="mb-3 flex min-w-0 items-center gap-2">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Sparkles className="h-3.5 w-3.5" />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-xs font-semibold">GitHubM AI</span>
-            <span className="text-[9px] text-muted-foreground/60">#{index + 1}</span>
-            {streaming && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-                {i18n.t('正在生成')}
-              </span>
-            )}
-            {hasError && <Badge variant="destructive" className="px-1.5 py-0 text-[9px]">{i18n.t('失败')}</Badge>}
-          </div>
-        </div>
 
         {turn.assistants.length > 0 ? (
           <div className="min-w-0 space-y-4">
             {turn.assistants.map(message => (
-              <div key={message.id} className="min-w-0 border-l-2 border-primary/15 pl-3 sm:pl-4">
+              <div key={message.id} className="min-w-0">
                 <AssistantTurn message={message} onOpenArtifact={onOpenArtifact} onApplyDiff={onApplyDiff} />
               </div>
             ))}
           </div>
         ) : (
-          <div className="ml-9 flex items-center gap-2 py-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 py-1 text-[13px] text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             {i18n.t('思考中…')}
           </div>

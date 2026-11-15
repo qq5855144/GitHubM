@@ -3,9 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { runGeneralAgent, toAgentHistory, toolCallLabel } from '@/ai-v2/agent';
-import type { AgentEvent, ApprovalRequest, ArtifactMeta, RepoContext, UiChatMessage, UiToolRun } from '@/ai-v2/types';
+import type { AgentEvent, ApprovalRequest, ArtifactMeta, RepoContext, UiChatMessage, UiToolRun, V2ProviderMessage } from '@/ai-v2/types';
 import { readArtifact } from '@/ai-v2/artifacts';
-import { appendRunEvent, finishRun, startRun } from '@/ai-v2/runStore';
+import { appendRunEvent, clearRunSnapshot, finishRun, latestRunSnapshot, resumeRun, saveRunSnapshot, startRun } from '@/ai-v2/runStore';
+import type { RunSnapshot } from '@/ai-v2/runStore';
+import { loadV2Settings } from '@/ai-v2/settings';
+import { buildUnifiedDiff } from '@/ai-v2/diff';
 import RepoSelector from '@/components/ai/RepoSelector';
 import {
   ModelAvatar,
@@ -533,6 +536,7 @@ export default function AiAssistantV2Page() {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [modelConfig] = useState<ModelConfig>(() => loadModelConfig());
+  const [v2Settings] = useState(() => loadV2Settings());
   const [repoDialogOpen, setRepoDialogOpen] = useState(false);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
@@ -541,6 +545,11 @@ export default function AiAssistantV2Page() {
   const [artifactMeta, setArtifactMeta] = useState<ArtifactMeta | null>(null);
   const [artifactContent, setArtifactContent] = useState('');
   const [artifactDialogOpen, setArtifactDialogOpen] = useState(false);
+  const [approvalDiff, setApprovalDiff] = useState('');
+  const [approvalDiffLoading, setApprovalDiffLoading] = useState(false);
+  const [approvalRemoteMissing, setApprovalRemoteMissing] = useState(false);
+  const [resumableSnapshot, setResumableSnapshot] = useState<RunSnapshot | null>(null);
+  const runCapabilitiesRef = useRef<string[]>([]);
   const approvalResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -625,6 +634,14 @@ export default function AiAssistantV2Page() {
   }, [sessions, activeId, storeKey]);
 
   useEffect(() => {
+    if (!user?.login || !activeId) {
+      setResumableSnapshot(null);
+      return;
+    }
+    setResumableSnapshot(latestRunSnapshot(user.login, activeId));
+  }, [user?.login, activeId]);
+
+  useEffect(() => {
     return () => {
       approvalResolverRef.current?.(false);
       approvalResolverRef.current = null;
@@ -650,12 +667,13 @@ export default function AiAssistantV2Page() {
     setShowScrollButton(!nearBottom);
   };
 
-  const requestApproval = useCallback((request: ApprovalRequest) => (
-    new Promise<boolean>(resolve => {
+  const requestApproval = useCallback((request: ApprovalRequest) => {
+    if (v2Settings.allowAllPermissions) return Promise.resolve(true);
+    return new Promise<boolean>(resolve => {
       approvalResolverRef.current = resolve;
       setApprovalRequest(request);
-    })
-  ), []);
+    });
+  }, [v2Settings.allowAllPermissions]);
 
   const resolveApproval = useCallback((approved: boolean) => {
     approvalResolverRef.current?.(approved);
@@ -663,12 +681,60 @@ export default function AiAssistantV2Page() {
     setApprovalRequest(null);
   }, []);
 
-  const openArtifact = useCallback((meta: ArtifactMeta) => {
-    const result = readArtifact(user?.login, meta.id, 0, 100000);
+  const openArtifact = useCallback(async (meta: ArtifactMeta) => {
+    const result = await readArtifact(user?.login, meta.id, 0, 100000);
     setArtifactMeta(meta);
     setArtifactContent(result.content || i18n.t('无法读取 Artifact 内容'));
     setArtifactDialogOpen(true);
   }, [user?.login]);
+
+  useEffect(() => {
+    setApprovalDiff('');
+    setApprovalRemoteMissing(false);
+    if (!approvalRequest || approvalRequest.toolName !== 'github_write_file' || !repoContext || !token) {
+      setApprovalDiffLoading(false);
+      return;
+    }
+    const args = approvalRequest.arguments as Record<string, unknown>;
+    const path = String(args.path || '');
+    const branch = String(args.branch || repoContext.branch || repoContext.defaultBranch || 'main');
+    const nextContent = String(args.content || '');
+    if (!path) return;
+
+    let cancelled = false;
+    setApprovalDiffLoading(true);
+    const encodedPath = path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+    fetch(`https://api.github.com/repos/${repoContext.fullName}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    }).then(async response => {
+      if (cancelled) return;
+      if (response.status === 404) {
+        setApprovalRemoteMissing(true);
+        setApprovalDiff(buildUnifiedDiff('', nextContent));
+        return;
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json() as { content?: string; encoding?: string };
+      if (!data.content || data.encoding !== 'base64') throw new Error('无法读取远端文件');
+      const binary = atob(data.content.replace(/\s/g, ''));
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+      const oldContent = new TextDecoder().decode(bytes);
+      setApprovalDiff(buildUnifiedDiff(oldContent, nextContent));
+    }).catch(error => {
+      if (!cancelled) setApprovalDiff(`无法生成 Diff：${(error as Error).message}`);
+    }).finally(() => {
+      if (!cancelled) setApprovalDiffLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [approvalRequest, repoContext, token]);
 
   const updateActiveSession = useCallback((
     updater: (session: V2Session) => V2Session,
@@ -725,6 +791,79 @@ export default function AiAssistantV2Page() {
     }));
   }, [setMessages]);
 
+  const handleAgentEvent = useCallback((assistantId: string, runId: string, event: AgentEvent) => {
+    appendRunEvent(user?.login, runId, event);
+    switch (event.type) {
+      case 'run_start':
+        runCapabilitiesRef.current = event.capabilities || [];
+        break;
+      case 'text_delta':
+        appendAssistant(assistantId, { content: event.text });
+        break;
+      case 'reasoning_delta':
+        appendAssistant(assistantId, { reasoning: event.text });
+        break;
+      case 'tool_start':
+        setMessages(prev => prev.map(message => message.id === assistantId
+          ? {
+              ...message,
+              tools: [
+                ...(message.tools || []),
+                {
+                  id: event.call.id,
+                  name: event.call.name,
+                  arguments: event.call.arguments,
+                  status: 'running' as const,
+                  startedAt: Date.now(),
+                },
+              ],
+            }
+          : message));
+        break;
+      case 'tool_end':
+        patchTool(assistantId, event.call.id, {
+          status: event.ok ? 'done' : 'error',
+          content: event.content,
+          artifact: event.artifact,
+          endedAt: Date.now(),
+        });
+        break;
+      case 'error':
+        patchAssistant(assistantId, {
+          content: event.message,
+          streaming: false,
+          error: true,
+        });
+        break;
+      case 'done':
+        patchAssistant(assistantId, { streaming: false });
+        if (user?.login) clearRunSnapshot(user.login, runId);
+        setResumableSnapshot(null);
+        break;
+      default:
+        break;
+    }
+  }, [appendAssistant, patchAssistant, patchTool, setMessages, user?.login]);
+
+  const persistRunSnapshot = useCallback((
+    runId: string,
+    assistantId: string,
+    sessionId: string,
+    title: string,
+  ) => (snapshot: { messages: V2ProviderMessage[]; steps: number }) => {
+    if (!user?.login) return;
+    saveRunSnapshot(user.login, {
+      runId,
+      assistantId,
+      sessionId,
+      title,
+      messages: snapshot.messages,
+      steps: snapshot.steps,
+      capabilities: runCapabilitiesRef.current,
+      savedAt: new Date().toISOString(),
+    });
+  }, [user?.login]);
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || streaming) return;
@@ -761,6 +900,7 @@ export default function AiAssistantV2Page() {
       content: message.content,
     })));
     const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    runCapabilitiesRef.current = [];
     startRun({
       login: user?.login,
       id: runId,
@@ -775,54 +915,7 @@ export default function AiAssistantV2Page() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const onEvent = (event: AgentEvent) => {
-      appendRunEvent(user?.login, runId, event);
-      switch (event.type) {
-        case 'text_delta':
-          appendAssistant(assistantId, { content: event.text });
-          break;
-        case 'reasoning_delta':
-          appendAssistant(assistantId, { reasoning: event.text });
-          break;
-        case 'tool_start':
-          setMessages(prev => prev.map(message => message.id === assistantId
-            ? {
-                ...message,
-                tools: [
-                  ...(message.tools || []),
-                  {
-                    id: event.call.id,
-                    name: event.call.name,
-                    arguments: event.call.arguments,
-                    status: 'running' as const,
-                    startedAt: Date.now(),
-                  },
-                ],
-              }
-            : message));
-          break;
-        case 'tool_end':
-          patchTool(assistantId, event.call.id, {
-            status: event.ok ? 'done' : 'error',
-            content: event.content,
-            artifact: event.artifact,
-            endedAt: Date.now(),
-          });
-          break;
-        case 'error':
-          patchAssistant(assistantId, {
-            content: event.message,
-            streaming: false,
-            error: true,
-          });
-          break;
-        case 'done':
-          patchAssistant(assistantId, { streaming: false });
-          break;
-        default:
-          break;
-      }
-    };
+    const onEvent = (event: AgentEvent) => handleAgentEvent(assistantId, runId, event);
 
     const history = [...previousHistory, { role: 'user' as const, content: text }];
     let runStatus: 'done' | 'error' | 'stopped' = 'done';
@@ -836,8 +929,11 @@ export default function AiAssistantV2Page() {
         repo: repoContext || undefined,
         config: modelConfig,
         history,
+        contextBudget: v2Settings.contextBudget,
+        memoryEnabled: v2Settings.memoryEnabled,
         signal: controller.signal,
         requestApproval,
+        onSnapshot: persistRunSnapshot(runId, assistantId, activeSession?.id || '', text),
         onEvent,
       });
     } catch (error) {
@@ -864,8 +960,11 @@ export default function AiAssistantV2Page() {
               runId,
               config: CLOUDFLARE_FALLBACK_CONFIG,
               history,
+              contextBudget: v2Settings.contextBudget,
+              memoryEnabled: v2Settings.memoryEnabled,
               signal: controller.signal,
               requestApproval,
+              onSnapshot: persistRunSnapshot(runId, assistantId, activeSession?.id || '', text),
               onEvent,
             });
             message = '';
@@ -895,6 +994,76 @@ export default function AiAssistantV2Page() {
       }
     } finally {
       finishRun(user?.login, runId, runStatus, runError);
+      if (runStatus !== 'done' && user?.login) {
+        setResumableSnapshot(latestRunSnapshot(user.login, activeSession?.id));
+      }
+      setStreaming(false);
+      abortRef.current = null;
+      scrollToBottom(true);
+    }
+  };
+
+  const handleResume = async () => {
+    const snapshot = resumableSnapshot;
+    if (!snapshot || streaming || !token) return;
+    const assistantId = snapshot.assistantId;
+    const assistantExists = assistantId && messages.some(message => message.id === assistantId);
+    if (!assistantId || !assistantExists) {
+      if (user?.login) clearRunSnapshot(user.login, snapshot.runId);
+      setResumableSnapshot(null);
+      toast.error(i18n.t('原会话消息已不存在，无法继续'));
+      return;
+    }
+
+    setResumableSnapshot(null);
+    setStreaming(true);
+    patchAssistant(assistantId, { streaming: true, error: false });
+    runCapabilitiesRef.current = snapshot.capabilities;
+    if (user?.login) resumeRun(user.login, snapshot.runId);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const onEvent = (event: AgentEvent) => handleAgentEvent(assistantId, snapshot.runId, event);
+    let runStatus: 'done' | 'error' | 'stopped' = 'done';
+    let runError: string | undefined;
+
+    try {
+      await runGeneralAgent({
+        token,
+        userLogin: user?.login,
+        runId: snapshot.runId,
+        repo: repoContext || undefined,
+        config: modelConfig,
+        history: [],
+        resumeMessages: snapshot.messages as V2ProviderMessage[],
+        resumeSteps: snapshot.steps,
+        contextBudget: v2Settings.contextBudget,
+        memoryEnabled: v2Settings.memoryEnabled,
+        signal: controller.signal,
+        requestApproval,
+        onSnapshot: persistRunSnapshot(snapshot.runId, assistantId, snapshot.sessionId || activeSession?.id || '', snapshot.title),
+        onEvent,
+      });
+    } catch (error) {
+      if ((error as Error)?.name === 'AbortError') {
+        runStatus = 'stopped';
+        patchAssistant(assistantId, { streaming: false });
+      } else {
+        runStatus = 'error';
+        const message = (error as Error)?.message || String(error);
+        runError = message;
+        patchAssistant(assistantId, {
+          content: `${i18n.t('恢复失败：')}${friendlyModelError(message)}`,
+          streaming: false,
+          error: true,
+        });
+        toast.error(friendlyModelError(message).slice(0, 160));
+      }
+    } finally {
+      finishRun(user?.login, snapshot.runId, runStatus, runError);
+      if (runStatus !== 'done' && user?.login) {
+        setResumableSnapshot(latestRunSnapshot(user.login, activeSession?.id));
+      }
       setStreaming(false);
       abortRef.current = null;
       scrollToBottom(true);
@@ -1032,6 +1201,11 @@ export default function AiAssistantV2Page() {
             <div className="flex items-center gap-1.5">
               <h1 className="truncate text-sm font-semibold">{activeSession?.title || i18n.t('AI 助手')}</h1>
               <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[9px]">V2</Badge>
+              {v2Settings.allowAllPermissions && (
+                <Badge variant="destructive" className="shrink-0 px-1.5 py-0 text-[9px]">
+                  {i18n.t('全局权限')}
+                </Badge>
+              )}
             </div>
             <p className="truncate text-[10px] text-muted-foreground">
               {repoContext ? `${repoContext.fullName} · ${repoContext.branch || repoContext.defaultBranch}` : i18n.t('通用模式 · 仓库可选')}
@@ -1080,6 +1254,29 @@ export default function AiAssistantV2Page() {
             <span className="flex-1">{i18n.t('还没有配置模型，点击选择 DeepSeek / OpenRouter / Gemini')}</span>
             <ChevronRight className="h-4 w-4 shrink-0" />
           </button>
+        )}
+        {resumableSnapshot && !streaming && (
+          <div className="mx-2 mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs sm:mx-3">
+            <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <span className="min-w-0 flex-1 truncate">
+              {i18n.t('上次运行中断于第 {{step}} 步', { step: resumableSnapshot.steps })}：{resumableSnapshot.title}
+            </span>
+            <Button type="button" size="sm" className="h-7 gap-1 px-2 text-[10px]" onClick={() => void handleResume()}>
+              {i18n.t('继续')}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-[10px] text-muted-foreground"
+              onClick={() => {
+                if (user?.login) clearRunSnapshot(user.login, resumableSnapshot.runId);
+                setResumableSnapshot(null);
+              }}
+            >
+              {i18n.t('忽略')}
+            </Button>
+          </div>
         )}
 
         <div
@@ -1191,7 +1388,11 @@ export default function AiAssistantV2Page() {
                   <ChevronDown className="h-3 w-3 shrink-0" />
                 </button>
                 <span className="ml-auto text-[9px] text-muted-foreground">
-                  {repoContext ? i18n.t('仓库工具 · 写操作需确认') : i18n.t('纯聊天')}
+                  {v2Settings.allowAllPermissions
+                  ? i18n.t('全局权限已允许')
+                  : repoContext
+                    ? i18n.t('仓库工具 · 写操作需确认')
+                    : i18n.t('纯聊天')}
                 </span>
                 <Button
                   type="button"
@@ -1251,6 +1452,19 @@ export default function AiAssistantV2Page() {
                   {args.path !== undefined && <p><span className="text-muted-foreground">{i18n.t('路径')}：</span><span className="font-mono">{String(args.path)}</span></p>}
                   {args.branch !== undefined && <p><span className="text-muted-foreground">{i18n.t('分支')}：</span><span className="font-mono">{String(args.branch)}</span></p>}
                   {args.message !== undefined && <p><span className="text-muted-foreground">{i18n.t('提交信息')}：</span>{String(args.message)}</p>}
+                  <div>
+                    <p className="mb-1 text-[10px] text-muted-foreground">
+                      {i18n.t('变更预览')} {approvalRemoteMissing && `· ${i18n.t('新建文件')}`}
+                    </p>
+                    {approvalDiffLoading ? (
+                      <div className="flex items-center gap-2 py-2 text-[11px] text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        {i18n.t('正在生成 Diff…')}
+                      </div>
+                    ) : (
+                      <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/70 p-2 font-mono text-[10px] leading-4">{approvalDiff || i18n.t('无法读取远端版本，仅显示新内容预览。')}</pre>
+                    )}
+                  </div>
                   {content && (
                     <div>
                       <p className="mb-1 text-[10px] text-muted-foreground">{i18n.t('内容预览')} · {content.length} {i18n.t('字符')}</p>

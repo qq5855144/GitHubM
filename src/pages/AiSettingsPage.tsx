@@ -19,10 +19,14 @@ import {
 import type { ModelConfig } from '@/components/ai/aiTypes';
 import { clearArtifacts, listArtifacts } from '@/ai-v2/artifacts';
 import { clearRuns, listRuns } from '@/ai-v2/runStore';
+import { clearMemories, deleteMemory, listMemories } from '@/ai-v2/memory';
+import { SKILLS } from '@/ai-v2/skills';
+import { loadV2Settings, saveV2Settings } from '@/ai-v2/settings';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -56,7 +60,7 @@ import {
   XCircle,
 } from 'lucide-react';
 
-type Section = 'model' | 'generation' | 'proxy' | 'context' | 'tools' | 'diagnostics';
+type Section = 'model' | 'generation' | 'proxy' | 'context' | 'tools' | 'skills' | 'diagnostics';
 
 const SECTIONS: Array<{
   id: Section;
@@ -69,6 +73,7 @@ const SECTIONS: Array<{
   { id: 'proxy', title: '模型代理', desc: '内置代理或自定义 Worker 地址', icon: Network },
   { id: 'context', title: '上下文与记忆', desc: '会话存储、清理与本地数据', icon: Database },
   { id: 'tools', title: '工具与权限', desc: '当前可用工具和风险边界', icon: Wrench },
+  { id: 'skills', title: '技能', desc: '按任务自动加载的内置技能', icon: BrainCircuit },
   { id: 'diagnostics', title: '诊断与测试', desc: '连接测试、模型列表与错误排查', icon: Activity },
 ];
 
@@ -95,6 +100,13 @@ const RUN_STATUS_LABELS: Record<string, string> = {
   error: '失败',
   stopped: '已停止',
 };
+
+const CONTEXT_BUDGET_OPTIONS = [
+  { value: 16000, label: '16K（轻量）' },
+  { value: 32000, label: '32K（推荐）' },
+  { value: 64000, label: '64K' },
+  { value: 128000, label: '128K（长任务）' },
+];
 
 function SectionHeader({
   title,
@@ -149,6 +161,7 @@ export default function AiSettingsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [config, setConfig] = useState<ModelConfig>(() => loadModelConfig());
+  const [v2Settings, setV2Settings] = useState(() => loadV2Settings());
   const [testState, setTestState] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testResult, setTestResult] = useState('');
   const [modelsState, setModelsState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -162,6 +175,7 @@ export default function AiSettingsPage() {
 
   useEffect(() => {
     setConfig(loadModelConfig());
+    setV2Settings(loadV2Settings());
     setTestState('idle');
     setTestResult('');
     setModelsState('idle');
@@ -273,6 +287,13 @@ export default function AiSettingsPage() {
 
   const runs = useMemo(() => listRuns(user?.login, 6), [user?.login, storageVersion]);
   const artifacts = useMemo(() => listArtifacts(user?.login, 20), [user?.login, storageVersion]);
+  const memories = useMemo(() => listMemories(user?.login, 50), [user?.login, storageVersion]);
+
+  const updateV2Settings = (patch: Partial<typeof v2Settings>) => {
+    const next = { ...v2Settings, ...patch };
+    setV2Settings(next);
+    saveV2Settings(next);
+  };
 
   if (!activeSection) {
     return (
@@ -424,9 +445,12 @@ export default function AiSettingsPage() {
       <div className="mx-auto min-h-full w-full max-w-2xl px-3 py-4 sm:px-4">
         <SectionHeader
           title={i18n.t('生成参数')}
-          desc={i18n.t('控制单次请求等待时间和模型思考强度。')}
+          desc={i18n.t('控制单次请求等待时间、上下文预算和模型思考强度。')}
           onBack={() => go('')}
-          onSave={() => saveConfig(config, false)}
+          onSave={() => {
+            saveV2Settings(v2Settings);
+            saveConfig(config, false);
+          }}
         />
         <div className="space-y-5 rounded-xl border border-border bg-card p-4">
           <SettingRow label={i18n.t('请求超时')} desc={i18n.t('模型在规定时间内没有完成响应时会中止请求。')}>
@@ -440,6 +464,29 @@ export default function AiSettingsPage() {
               </SelectContent>
             </Select>
           </SettingRow>
+
+          <SettingRow label={i18n.t('上下文预算')} desc={i18n.t('消息、技能和记忆合计超出预算时，会从最旧的历史消息开始省略。')}>
+            <Select
+              value={String(v2Settings.contextBudget)}
+              onValueChange={value => updateV2Settings({ contextBudget: Number(value) })}
+            >
+              <SelectTrigger className="px-3"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CONTEXT_BUDGET_OPTIONS.map(option => <SelectItem key={option.value} value={String(option.value)}>{i18n.t(option.label)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </SettingRow>
+
+          <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm">{i18n.t('注入长期记忆')}</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">{i18n.t('根据当前问题自动检索相关记忆。')}</p>
+            </div>
+            <Switch
+              checked={v2Settings.memoryEnabled}
+              onCheckedChange={checked => updateV2Settings({ memoryEnabled: checked })}
+            />
+          </div>
 
           <SettingRow label={i18n.t('思考强度')} desc={i18n.t('仅对支持 thinking / reasoning_effort 的模型生效。')}>
             <Select
@@ -550,6 +597,56 @@ export default function AiSettingsPage() {
                 {i18n.t('清除 Artifact')}
               </Button>
             </div>
+            </div>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">{i18n.t('长期记忆')}</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">{i18n.t('按当前问题自动检索并注入上下文。')}</p>
+              </div>
+              <Badge variant="secondary" className="text-[9px]">{memories.length} {i18n.t('条')}</Badge>
+            </div>
+            {memories.length === 0 ? (
+              <p className="py-2 text-[11px] text-muted-foreground">{i18n.t('暂无长期记忆')}</p>
+            ) : (
+              <div className="max-h-64 space-y-1.5 overflow-y-auto">
+                {memories.slice(0, 20).map(memory => (
+                  <div key={memory.id} className="flex items-start gap-2 rounded-lg bg-muted/25 px-2.5 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] leading-5">{memory.content}</p>
+                      {memory.tags.length > 0 && <p className="mt-0.5 text-[9px] text-muted-foreground">{memory.tags.join(' · ')}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => {
+                        deleteMemory(user?.login, memory.id);
+                        setStorageVersion(version => version + 1);
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {memories.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3 h-8 gap-1.5 text-xs"
+                onClick={() => {
+                  if (!window.confirm(i18n.t('确定清除当前账号的长期记忆？'))) return;
+                  clearMemories(user?.login);
+                  setStorageVersion(version => version + 1);
+                  toast.success(i18n.t('已清除长期记忆'));
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {i18n.t('清除长期记忆')}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -559,6 +656,8 @@ export default function AiSettingsPage() {
   if (activeSection.id === 'tools') {
     const tools = [
       { name: 'artifact_read', desc: '读取大型工具结果', icon: Database, risk: 'read', group: '核心' },
+      { name: 'memory_save', desc: '保存长期记忆', icon: Database, risk: 'read', group: '核心' },
+      { name: 'memory_search', desc: '搜索长期记忆', icon: Database, risk: 'read', group: '核心' },
       { name: 'github_repo_info', desc: '仓库基本信息', icon: Database, risk: 'read', group: 'GitHub 只读' },
       { name: 'github_list_files', desc: '列出目录文件', icon: HardDrive, risk: 'read', group: 'GitHub 只读' },
       { name: 'github_read_file', desc: '读取文本文件', icon: Wrench, risk: 'read', group: 'GitHub 只读' },
@@ -569,6 +668,34 @@ export default function AiSettingsPage() {
       <div className="mx-auto min-h-full w-full max-w-2xl px-3 py-4 sm:px-4">
         <SectionHeader title={i18n.t('工具与权限')} desc={i18n.t('当前 Agent 可以调用的能力和风险边界。')} onBack={() => go('')} />
         <div className="space-y-3">
+          <div className={cn(
+            'rounded-xl border p-4',
+            v2Settings.allowAllPermissions ? 'border-destructive/40 bg-destructive/5' : 'border-border bg-card',
+          )}>
+            <div className="flex items-start gap-3">
+              <ShieldAlert className={cn('mt-0.5 h-4 w-4 shrink-0', v2Settings.allowAllPermissions ? 'text-destructive' : 'text-muted-foreground')} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{i18n.t('全局允许全部权限')}</p>
+                <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                  {i18n.t('开启后，写操作和后续高风险工具不再逐次弹窗确认，直接执行。仅建议在你完全信任当前任务时使用。')}
+                </p>
+              </div>
+              <Switch
+                checked={v2Settings.allowAllPermissions}
+                onCheckedChange={checked => {
+                  updateV2Settings({ allowAllPermissions: checked });
+                  if (checked) toast.warning(i18n.t('已开启全局权限，写操作将不再确认'));
+                  else toast.success(i18n.t('已恢复逐次确认'));
+                }}
+              />
+            </div>
+            {v2Settings.allowAllPermissions && (
+              <p className="mt-2 rounded-md bg-destructive/10 px-2.5 py-1.5 text-[10px] text-destructive">
+                {i18n.t('当前处于全局放权状态：工具可以直接修改仓库。')}
+              </p>
+            )}
+          </div>
+
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
               <div>
@@ -596,9 +723,36 @@ export default function AiSettingsPage() {
           <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4">
             <p className="flex items-center gap-1.5 text-sm font-medium"><ShieldAlert className="h-4 w-4 text-amber-500" />{i18n.t('写操作逐次确认')}</p>
             <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-              {i18n.t('github_write_file 会修改仓库。每次调用都会弹出确认，拒绝后不会执行。')}
+              {i18n.t('默认逐次确认；开启全局权限后直接执行。')}
             </p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (activeSection.id === 'skills') {
+    return (
+      <div className="mx-auto min-h-full w-full max-w-2xl px-3 py-4 sm:px-4">
+        <SectionHeader title={i18n.t('技能')} desc={i18n.t('按问题关键词自动加载，不一次性占用系统提示词。')} onBack={() => go('')} />
+        <div className="space-y-2">
+          {SKILLS.map(skill => (
+            <div key={skill.id} className="rounded-xl border border-border bg-card p-4">
+              <div className="flex items-start gap-2">
+                <BrainCircuit className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{i18n.t(skill.title)}</p>
+                  <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{i18n.t(skill.description)}</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {skill.keywords.map(keyword => (
+                      <span key={keyword} className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">{keyword}</span>
+                    ))}
+                  </div>
+                </div>
+                <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[9px]">{i18n.t('自动加载')}</Badge>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );

@@ -1,6 +1,6 @@
-// AI 助手 — 执行过程：DeepSeek 风格的折叠行，默认只显示一行摘要
-import { useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronRight, Eye, Loader2, XCircle } from 'lucide-react';
+// AI 助手 — 执行过程：折叠摘要 + 步骤时间线 + 失败筛选 + 复制记录
+import { useMemo, useState } from 'react';
+import { Check, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, Loader2, XCircle } from 'lucide-react';
 import i18n from '@/i18n';
 import { toolCallLabel } from '@/ai-v2/agent';
 import type { ArtifactMeta, UiToolRun } from '@/ai-v2/types';
@@ -22,7 +22,20 @@ function StepRow({ tool, onOpenArtifact }: {
   onOpenArtifact: (meta: ArtifactMeta) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const duration = stepDuration(tool);
+  const label = toolCallLabel({ id: tool.id, name: tool.name, arguments: tool.arguments });
+
+  const copyResult = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(tool.content || '');
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // 忽略
+    }
+  };
 
   return (
     <div className="min-w-0">
@@ -32,9 +45,7 @@ function StepRow({ tool, onOpenArtifact }: {
         className="flex w-full min-w-0 items-center gap-2 rounded-md py-1 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
       >
         <StatusIcon status={tool.status} />
-        <span className="min-w-0 flex-1 truncate font-mono text-[12px]">
-          {toolCallLabel({ id: tool.id, name: tool.name, arguments: tool.arguments })}
-        </span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{label}</span>
         {duration && <span className="shrink-0 text-[10px] text-muted-foreground/70">{duration}</span>}
         {open
           ? <ChevronDown className="h-3 w-3 shrink-0" />
@@ -50,7 +61,17 @@ function StepRow({ tool, onOpenArtifact }: {
             </pre>
           </div>
           <div>
-            <p className="mb-1 text-[10px] text-muted-foreground">{i18n.t('结果')}</p>
+            <div className="mb-1 flex items-center justify-between">
+              <p className="text-[10px] text-muted-foreground">{i18n.t('结果')}</p>
+              <button
+                type="button"
+                onClick={copyResult}
+                className="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+              >
+                {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                {copied ? i18n.t('已复制') : i18n.t('复制')}
+              </button>
+            </div>
             {tool.status === 'running' ? (
               <p className="text-xs text-muted-foreground">{i18n.t('正在执行…')}</p>
             ) : (
@@ -80,13 +101,35 @@ export default function AiExecutionPanel({ tools, onOpenArtifact }: {
   onOpenArtifact: (meta: ArtifactMeta) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'failed'>('all');
+  const [copied, setCopied] = useState(false);
+
+  const failed = useMemo(() => tools.filter(tool => tool.status === 'error'), [tools]);
+  const shown = filter === 'failed' ? failed : tools;
+  const running = tools.find(tool => tool.status === 'running');
   if (!tools.length) return null;
 
-  const running = tools.find(tool => tool.status === 'running');
-  const failed = tools.filter(tool => tool.status === 'error').length;
+  const startedAt = Math.min(...tools.map(tool => tool.startedAt || Date.now()));
+  const endedAt = Math.max(...tools.map(tool => tool.endedAt || Date.now()));
+  const total = `${Math.max(0.1, (endedAt - startedAt) / 1000).toFixed(1)}s`;
   const activeLabel = running
     ? toolCallLabel({ id: running.id, name: running.name, arguments: running.arguments })
     : '';
+
+  const copyTranscript = async () => {
+    const text = tools.map(tool => {
+      const label = toolCallLabel({ id: tool.id, name: tool.name, arguments: tool.arguments });
+      const status = tool.status === 'done' ? i18n.t('完成') : tool.status === 'error' ? i18n.t('失败') : i18n.t('执行中');
+      return `[${status}] ${label} ${stepDuration(tool)}\n${tool.content || ''}`.trim();
+    }).join('\n\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // 忽略
+    }
+  };
 
   return (
     <div className="min-w-0">
@@ -103,10 +146,10 @@ export default function AiExecutionPanel({ tools, onOpenArtifact }: {
         <span className="min-w-0 truncate">
           {running
             ? `${i18n.t('正在调用')} ${activeLabel}`
-            : `${i18n.t('执行过程')} · ${i18n.t('{{count}} 次调用', { count: tools.length })}`}
+            : `${i18n.t('执行过程')} · ${i18n.t('{{count}} 次调用', { count: tools.length })} · ${total}`}
         </span>
-        {failed > 0 && (
-          <span className="shrink-0 text-[11px] text-destructive">{i18n.t('失败 {{count}}', { count: failed })}</span>
+        {failed.length > 0 && (
+          <span className="shrink-0 text-[11px] text-destructive">{i18n.t('失败 {{count}}', { count: failed.length })}</span>
         )}
         {open
           ? <ChevronDown className="h-3.5 w-3.5 shrink-0" />
@@ -115,9 +158,38 @@ export default function AiExecutionPanel({ tools, onOpenArtifact }: {
 
       {open && (
         <div className="mt-1.5 border-l-2 border-border/70 pl-3">
-          {tools.map(tool => (
-            <StepRow key={tool.id} tool={tool} onOpenArtifact={onOpenArtifact} />
-          ))}
+          <div className="mb-1 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFilter('all')}
+              className={`rounded-full px-2 py-0.5 text-[10px] ${filter === 'all' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              {i18n.t('全部 {{count}}', { count: tools.length })}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter('failed')}
+              className={`rounded-full px-2 py-0.5 text-[10px] ${filter === 'failed' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              {i18n.t('失败 {{count}}', { count: failed.length })}
+            </button>
+            <button
+              type="button"
+              onClick={copyTranscript}
+              className="ml-auto flex items-center gap-1 rounded px-1 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+              {copied ? i18n.t('已复制') : i18n.t('复制记录')}
+            </button>
+          </div>
+
+          {shown.length === 0 ? (
+            <p className="py-1 text-[11px] text-muted-foreground">{i18n.t('没有失败的步骤')}</p>
+          ) : (
+            shown.map(tool => (
+              <StepRow key={tool.id} tool={tool} onOpenArtifact={onOpenArtifact} />
+            ))
+          )}
         </div>
       )}
     </div>

@@ -507,42 +507,29 @@ function ConversationTurnView({ turn, index, onOpenArtifact, onApplyDiff }: {
     : userContent;
 
   return (
-    <section
-      className={cn(
-        'rounded-xl border p-3 transition-colors sm:p-4',
-        streaming
-          ? 'border-primary/25 bg-card/60 shadow-sm'
-          : 'border-border/80 bg-card/35',
-      )}
-    >
+    <section className="flex min-w-0 flex-col gap-4">
       {turn.user && (
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Prompt
-            </span>
-            <span className="text-[9px] text-muted-foreground/70">
-              {formatTime(turn.user.createdAt)}
-            </span>
+        <div className="flex min-w-0 flex-col items-end gap-1.5">
+          <div className="flex max-w-[94%] items-center gap-2 text-[10px] text-muted-foreground">
+            <span className="font-medium uppercase tracking-[0.12em]">You</span>
+            <span>{formatTime(turn.user.createdAt)}</span>
           </div>
-          <div className="flex justify-end">
-            <div className="max-w-[90%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-6 text-primary-foreground break-words">
-              <span className="whitespace-pre-wrap break-words">{shownUserContent}</span>
-              {userIsLong && (
-                <button
-                  type="button"
-                  onClick={() => setUserExpanded(value => !value)}
-                  className="mt-1 block text-[10px] text-primary-foreground/80 underline-offset-2 hover:underline"
-                >
-                  {userExpanded
-                    ? i18n.t('收起内容')
-                    : i18n.t('展开全部（共 {{count}} 字）', { count: userContent.length })}
-                </button>
-              )}
-            </div>
+          <div className="max-w-[94%] min-w-0 rounded-2xl rounded-br-md border border-primary/15 bg-primary/[0.08] px-3.5 py-2.5 text-sm leading-6 text-foreground shadow-sm sm:px-4">
+            <span className="whitespace-pre-wrap break-words">{shownUserContent}</span>
+            {userIsLong && (
+              <button
+                type="button"
+                onClick={() => setUserExpanded(value => !value)}
+                className="mt-1 block text-[10px] text-primary underline-offset-2 hover:underline"
+              >
+                {userExpanded
+                  ? i18n.t('收起内容')
+                  : i18n.t('展开全部（共 {{count}} 字）', { count: userContent.length })}
+              </button>
+            )}
           </div>
           {turn.user.attachments && turn.user.attachments.length > 0 && (
-            <div className="flex flex-wrap justify-end gap-1">
+            <div className="flex max-w-[94%] flex-wrap justify-end gap-1">
               {turn.user.attachments.map(attachment => (
                 <span
                   key={attachment.id}
@@ -561,28 +548,34 @@ function ConversationTurnView({ turn, index, onOpenArtifact, onApplyDiff }: {
         </div>
       )}
 
-      <div className={cn(turn.user && 'mt-3 border-t border-border/60 pt-3')}>
-        <div className="mb-1.5 flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
-          <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            Response
-          </span>
-          {streaming && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-              {i18n.t('正在生成')}
-            </span>
-          )}
-          {hasError && <Badge variant="destructive" className="px-1.5 py-0 text-[9px]">{i18n.t('失败')}</Badge>}
-          <span className="ml-auto text-[9px] text-muted-foreground/60">#{index + 1}</span>
+      <div className="min-w-0 border-t border-border/60 pt-3">
+        <div className="mb-3 flex min-w-0 items-center gap-2">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Sparkles className="h-3.5 w-3.5" />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-xs font-semibold">GitHubM AI</span>
+            <span className="text-[9px] text-muted-foreground/60">#{index + 1}</span>
+            {streaming && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                {i18n.t('正在生成')}
+              </span>
+            )}
+            {hasError && <Badge variant="destructive" className="px-1.5 py-0 text-[9px]">{i18n.t('失败')}</Badge>}
+          </div>
         </div>
 
         {turn.assistants.length > 0 ? (
-          <div className="space-y-3">
-            {turn.assistants.map(message => <AssistantTurn key={message.id} message={message} onOpenArtifact={onOpenArtifact} onApplyDiff={onApplyDiff} />)}
+          <div className="min-w-0 space-y-4">
+            {turn.assistants.map(message => (
+              <div key={message.id} className="min-w-0 border-l-2 border-primary/15 pl-3 sm:pl-4">
+                <AssistantTurn message={message} onOpenArtifact={onOpenArtifact} onApplyDiff={onApplyDiff} />
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
+          <div className="ml-9 flex items-center gap-2 py-2 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             {i18n.t('思考中…')}
           </div>

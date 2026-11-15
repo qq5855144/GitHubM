@@ -25,6 +25,7 @@ import { loadActiveCharacter } from '@/ai-v2/characters';
 import type { CharacterCard } from '@/ai-v2/characters';
 import { loadSessionStore, saveSessionStore } from '@/ai-v2/sessionStore';
 import type { SessionStore, V2Session } from '@/ai-v2/sessionStore';
+import { deriveSessionTitle } from '@/ai-v2/sessionTitle';
 import { extractPdfText, MAX_PDF_BYTES } from '@/ai-v2/pdf';
 import RepoSelector from '@/components/ai/RepoSelector';
 import {
@@ -59,17 +60,14 @@ import i18n from '@/i18n';
 import {
   ArrowDown,
   AtSign,
-  BookOpen,
   Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Code2,
   Copy,
   Eye,
   FileText,
   GitBranch,
-  Layers,
   Loader2,
   Menu,
   MessageSquarePlus,
@@ -77,7 +75,6 @@ import {
   PanelRight,
   Pencil,
   Plus,
-  RefreshCw,
   Search,
   Send,
   Settings,
@@ -140,6 +137,7 @@ function newSession(): V2Session {
   return {
     id: makeId('s'),
     title: i18n.t('新对话'),
+    titleSource: 'auto',
     messages: [],
     repo: null,
     createdAt: now,
@@ -147,11 +145,6 @@ function newSession(): V2Session {
   };
 }
 
-function deriveTitle(messages: UiChatMessage[]): string {
-  const first = messages.find(message => message.role === 'user')?.content.trim();
-  if (!first) return i18n.t('新对话');
-  return first.replace(/\s+/g, ' ').slice(0, 32);
-}
 function migrateLegacyRoundLimit(messages: UiChatMessage[]): UiChatMessage[] {
   return messages.map(message => {
     if (message.role !== 'assistant' || !message.content.includes('已达到最大工具轮数')) return message;
@@ -1140,7 +1133,7 @@ function ContextContent({
       </div>
 
       <div>
-        <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{i18n.t('仓库上下文')}</p>
+        <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{i18n.t('仓库')}</p>
         {repo ? (
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
             <div className="flex items-start gap-2">
@@ -1156,13 +1149,6 @@ function ContextContent({
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="mt-3 space-y-1 border-t border-primary/10 pt-2 text-[10px] text-muted-foreground">
-              <p className="flex items-center gap-1.5"><BookOpen className="h-3 w-3" /> github_list_files</p>
-              <p className="flex items-center gap-1.5"><Code2 className="h-3 w-3" /> github_read_file</p>
-              <p className="flex items-center gap-1.5"><RefreshCw className="h-3 w-3" /> github_search_code</p>
-              <p className="flex items-center gap-1.5"><Wrench className="h-3 w-3" /> github_write_file <span className="text-amber-600">写操作需确认</span></p>
-              <p className="flex items-center gap-1.5"><GitBranch className="h-3 w-3" /> github_write_files / PR / 分支</p>
-            </div>
           </div>
         ) : (
           <button
@@ -1171,17 +1157,9 @@ function ContextContent({
             className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-3 text-left text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground"
           >
             <Plus className="h-4 w-4" />
-            {i18n.t('添加仓库作为可选上下文')}
+            {i18n.t('选择仓库')}
           </button>
         )}
-      </div>
-
-      <div className="rounded-lg border border-border bg-muted/20 p-3 text-[10px] leading-5 text-muted-foreground">
-        <p className="mb-1 flex items-center gap-1.5 font-medium text-foreground">
-          <Layers className="h-3.5 w-3.5" />
-          {i18n.t('自由对话模式')}
-        </p>
-        {i18n.t('AI 会自行判断是否需要工具，不再强制规划、验证或交付检查。')}
       </div>
     </div>
   );
@@ -1284,7 +1262,8 @@ export default function AiAssistantV2Page() {
             const migrated = newSession();
             migrated.messages = Array.isArray(legacy.messages) ? legacy.messages : [];
             migrated.repo = legacy.repo || null;
-            migrated.title = deriveTitle(migrated.messages);
+            migrated.title = deriveSessionTitle(migrated.messages);
+            migrated.titleSource = 'auto';
             loaded = { sessions: [migrated], activeId: migrated.id };
             if (legacyKey) localStorage.removeItem(legacyKey);
           }
@@ -1294,7 +1273,19 @@ export default function AiAssistantV2Page() {
       }
 
       const nextSessions = (loaded?.sessions?.length ? loaded.sessions : [newSession()])
-        .map(session => ({ ...session, messages: migrateLegacyRoundLimit(session.messages || []) }));
+        .map(session => {
+          const migratedMessages = migrateLegacyRoundLimit(session.messages || []);
+          const firstUser = migratedMessages.find(message => message.role === 'user')?.content.trim();
+          const legacyAutoTitle = firstUser?.replace(/\s+/g, ' ').slice(0, 32);
+          const titleSource = session.titleSource
+            || (session.title === i18n.t('新对话') || (legacyAutoTitle && session.title === legacyAutoTitle) ? 'auto' : 'manual');
+          return {
+            ...session,
+            messages: migratedMessages,
+            titleSource,
+            title: titleSource === 'auto' ? deriveSessionTitle(migratedMessages) : session.title,
+          };
+        });
       const nextActive = loaded?.activeId && nextSessions.some(session => session.id === loaded?.activeId)
         ? loaded.activeId
         : nextSessions[0].id;
@@ -1458,9 +1449,8 @@ export default function AiAssistantV2Page() {
       return {
         ...session,
         messages: nextMessages,
-        title: session.title && session.title !== i18n.t('新对话')
-          ? session.title
-          : deriveTitle(nextMessages),
+        title: session.titleSource === 'manual' ? session.title : deriveSessionTitle(nextMessages),
+        titleSource: session.titleSource || 'auto',
         updatedAt: new Date().toISOString(),
       };
     });
@@ -1971,7 +1961,7 @@ export default function AiAssistantV2Page() {
     const nextTitle = title.trim().slice(0, 80);
     if (!nextTitle) return;
     setSessions(prev => prev.map(session => session.id === id
-      ? { ...session, title: nextTitle, updatedAt: new Date().toISOString() }
+      ? { ...session, title: nextTitle, titleSource: 'manual', updatedAt: new Date().toISOString() }
       : session));
     toast.success(i18n.t('对话已重命名'));
   };
@@ -2010,7 +2000,7 @@ export default function AiAssistantV2Page() {
       branch: repo.default_branch,
     });
     setRepoDialogOpen(false);
-    toast.success(i18n.t('已添加仓库上下文'));
+    toast.success(i18n.t('已选择仓库'));
   };
 
   const quickPrompts = repoContext
@@ -2074,12 +2064,6 @@ export default function AiAssistantV2Page() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <h1 className="truncate text-sm font-semibold">{activeSession?.title || i18n.t('AI 助手')}</h1>
-              <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[9px]">V2</Badge>
-              {v2Settings.allowAllPermissions && (
-                <Badge variant="destructive" className="shrink-0 px-1.5 py-0 text-[9px]">
-                  {i18n.t('全局权限')}
-                </Badge>
-              )}
             </div>
             <p className="truncate text-[10px] text-muted-foreground">
               {repoContext ? `${repoContext.fullName} · ${repoContext.branch || repoContext.defaultBranch}` : i18n.t('通用模式 · 仓库可选')}
@@ -2159,37 +2143,20 @@ export default function AiAssistantV2Page() {
         >
           <div className="mx-auto w-full max-w-3xl space-y-5 px-3 py-4 sm:px-5">
             {!hasConversation ? (
-              <div className="flex min-h-[40vh] flex-col items-center justify-center text-center">
-                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <Sparkles className="h-7 w-7" />
-                </div>
-                <h2 className="text-lg font-semibold">{i18n.t('开始一段对话')}</h2>
-                <p className="mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
-                  {i18n.t('直接提问即可。需要仓库能力时，再把仓库添加为上下文。')}
-                </p>
-                <div className="mt-5 grid w-full max-w-md gap-2 sm:grid-cols-2">
+              <div className="flex min-h-[28vh] flex-col items-center justify-center text-center">
+                <h2 className="text-base font-semibold">{i18n.t('开始一段对话')}</h2>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
                   {quickPrompts.map(prompt => (
                     <button
                       key={prompt.label}
                       type="button"
                       onClick={() => setInput(prompt.text)}
-                      className="rounded-xl border border-border bg-card px-3 py-2.5 text-left text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                      className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
                     >
-                      <span className="mb-0.5 block font-medium text-foreground">{prompt.label}</span>
-                      <span className="line-clamp-1">{prompt.text.replace(/```/g, '').slice(0, 40)}</span>
+                      {prompt.label}
                     </button>
                   ))}
                 </div>
-                {!repoContext && (
-                  <button
-                    type="button"
-                    onClick={() => setRepoDialogOpen(true)}
-                    className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    {i18n.t('添加仓库上下文')}
-                  </button>
-                )}
               </div>
             ) : (
               buildTurns(messages).map((turn, index) => (
@@ -2232,7 +2199,7 @@ export default function AiAssistantV2Page() {
                     className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:border-primary/40 hover:text-foreground"
                   >
                     <Plus className="h-3 w-3" />
-                    {i18n.t('仓库上下文')}
+                    {i18n.t('选择仓库')}
                   </button>
                 )}
               </div>
@@ -2325,17 +2292,10 @@ export default function AiAssistantV2Page() {
                   <span className="max-w-[110px] truncate">{modelLabel}</span>
                   <ChevronDown className="h-3 w-3 shrink-0" />
                 </button>
-                <span className="ml-auto text-[9px] text-muted-foreground">
-                  {v2Settings.allowAllPermissions
-                  ? i18n.t('全局权限已允许')
-                  : repoContext
-                    ? i18n.t('仓库工具 · 写操作需确认')
-                    : i18n.t('纯聊天')}
-                </span>
                 <Button
                   type="button"
                   size="icon"
-                  className="h-8 w-8 shrink-0 rounded-lg"
+                  className="h-8 w-8 shrink-0 rounded-lg ml-auto"
                   onClick={streaming ? handleStop : handleSend}
                   disabled={!streaming && ((!input.trim() && pendingAttachments.length === 0) || !token)}
                   title={streaming ? i18n.t('停止生成') : i18n.t('发送')}
@@ -2489,7 +2449,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
       <Dialog open={repoDialogOpen} onOpenChange={setRepoDialogOpen}>
         <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-xl">
           <DialogHeader>
-            <DialogTitle className="text-base">{i18n.t('选择仓库上下文')}</DialogTitle>
+            <DialogTitle className="text-base">{i18n.t('选择仓库')}</DialogTitle>
           </DialogHeader>
           <p className="-mt-1 text-xs text-muted-foreground">
             {i18n.t('仓库是可选的。选择后会加载只读 GitHub 工具。')}

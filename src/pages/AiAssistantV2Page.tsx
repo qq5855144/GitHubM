@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { runGeneralAgent, toAgentHistory, toolCallLabel } from '@/ai-v2/agent';
-import type { AgentEvent, ApprovalRequest, ArtifactMeta, RepoContext, UiChatMessage, UiToolRun, V2ProviderMessage } from '@/ai-v2/types';
+import type { AgentEvent, ApprovalRequest, ArtifactMeta, RepoContext, UiAssistantBlock, UiChatMessage, UiToolRun, V2ProviderMessage } from '@/ai-v2/types';
 import { readArtifact } from '@/ai-v2/artifacts';
 import { appendRunEvent, clearRunSnapshot, clearRunSnapshots, finishRun, latestRunSnapshot, resumeRun, saveRunSnapshot, startRun } from '@/ai-v2/runStore';
 import type { RunSnapshot } from '@/ai-v2/runStore';
@@ -36,6 +36,7 @@ import {
   toSessionMeta,
 } from '@/ai-v2/sessionStore';
 import type { SessionIndex, V2Session } from '@/ai-v2/sessionStore';
+import { appendBlockDelta, appendToolBlock, ensureBlocks } from '@/ai-v2/blocks';
 import { deriveSessionTitle } from '@/ai-v2/sessionTitle';
 import { extractPdfText, MAX_PDF_BYTES } from '@/ai-v2/pdf';
 import RepoSelector from '@/components/ai/RepoSelector';
@@ -191,6 +192,10 @@ function compactMessages(messages: UiChatMessage[]): UiChatMessage[] {
       modelContent: undefined,
       attachments,
       reasoning: message.reasoning?.slice(0, 8000),
+      blocks: message.blocks?.slice(-20).map(block => ({
+        ...block,
+        text: block.text ? block.text.slice(0, 12000) : undefined,
+      })),
       tools: message.tools?.map(tool => ({
         ...tool,
         content: tool.content?.slice(0, MAX_TOOL_RESULT),
@@ -322,20 +327,58 @@ function ToolActivity({ tools, onOpenArtifact }: { tools: UiToolRun[]; onOpenArt
   );
 }
 
+function AssistantTextBlock({ text, streaming, error, onApplyDiff }: {
+  text: string;
+  streaming?: boolean;
+  error?: boolean;
+  onApplyDiff: (path: string, diff: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  // 流式阶段不解析 Markdown：只渲染纯文本，流结束后再渲染一次
+  const base = streaming && text.length > STREAMING_PLAIN_LIMIT
+    ? `…
+${text.slice(-STREAMING_PLAIN_LIMIT)}`
+    : text;
+  const isLong = !streaming && base.length > 12000;
+  const display = isLong && !expanded ? `${base.slice(0, 12000)}
+
+…` : base;
+  return (
+    <div className={cn(
+      'min-w-0 text-sm leading-6 break-words',
+      error ? 'text-destructive' : 'text-foreground',
+    )}>
+      {streaming ? (
+        <p className="whitespace-pre-wrap break-words">
+          {display}
+          <span className="ml-0.5 inline-block h-4 w-1 animate-pulse rounded-sm bg-primary align-middle" />
+        </p>
+      ) : (
+        renderMarkdown(display, onApplyDiff)
+      )}
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded(value => !value)}
+          className="mt-1 text-[10px] text-primary hover:underline"
+        >
+          {expanded ? i18n.t('收起内容') : i18n.t('展开全文')}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
   message: UiChatMessage;
   onOpenArtifact: (meta: ArtifactMeta) => void;
   onApplyDiff: (path: string, diff: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const hasBody = Boolean(message.content || message.reasoning || (message.tools || []).length);
+  const blocks = message.blocks || [];
+  const tools = message.tools || [];
   const isStreaming = Boolean(message.streaming);
-  const isLong = !isStreaming && message.content.length > 12000;
-  // 流式阶段不解析 Markdown：只渲染纯文本，流结束后再渲染一次
-  const baseContent = isStreaming && message.content.length > STREAMING_PLAIN_LIMIT
-    ? `…\n${message.content.slice(-STREAMING_PLAIN_LIMIT)}`
-    : message.content;
-  const displayContent = isLong && !expanded ? `${baseContent.slice(0, 12000)}\n\n…` : baseContent;
+  const lastIndex = blocks.length - 1;
+  const hasBody = blocks.length > 0 || Boolean(message.content || message.reasoning) || tools.length > 0;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -345,40 +388,59 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
     }
   };
 
+  // 新消息按区块顺序渲染：思考 → 工具 → 正文 → 工具 → 正文…
+  const renderedBlocks = blocks.map((block, index) => {
+    const isLast = index === lastIndex;
+    if (block.type === 'reasoning') {
+      if (!block.text) return null;
+      return <ReasoningPanel key={block.id} text={block.text} streaming={isStreaming && isLast} />;
+    }
+    if (block.type === 'tool') {
+      const tool = tools.find(item => item.id === block.toolId);
+      if (!tool) return null;
+      return (
+        <div key={block.id} className="my-1.5 border-l-2 border-primary/20 pl-2.5">
+          <ToolCard tool={tool} onOpenArtifact={onOpenArtifact} />
+        </div>
+      );
+    }
+    if (!block.text) return null;
+    return (
+      <AssistantTextBlock
+        key={block.id}
+        text={block.text}
+        streaming={isStreaming && isLast}
+        error={message.error && isLast}
+        onApplyDiff={onApplyDiff}
+      />
+    );
+  });
+
   return (
     <div className="min-w-0">
-      <ReasoningPanel text={message.reasoning || ''} streaming={message.streaming} />
-      <ToolActivity tools={message.tools || []} onOpenArtifact={onOpenArtifact} />
+      {blocks.length > 0 ? (
+        <div className="space-y-2">{renderedBlocks}</div>
+      ) : (
+        <>
+          <ReasoningPanel text={message.reasoning || ''} streaming={message.streaming} />
+          <ToolActivity tools={tools} onOpenArtifact={onOpenArtifact} />
+          {message.content ? (
+            <AssistantTextBlock
+              text={message.content}
+              streaming={isStreaming}
+              error={message.error}
+              onApplyDiff={onApplyDiff}
+            />
+          ) : null}
+        </>
+      )}
 
-      {message.content ? (
-        <div className={cn(
-          'min-w-0 text-sm leading-6 break-words',
-          message.error ? 'text-destructive' : 'text-foreground',
-        )}>
-          {isStreaming ? (
-            <p className="whitespace-pre-wrap break-words">{displayContent}</p>
-          ) : (
-            renderMarkdown(displayContent, onApplyDiff)
-          )}
-          {isLong && !message.streaming && (
-            <button
-              type="button"
-              onClick={() => setExpanded(value => !value)}
-              className="mt-1 text-[10px] text-primary hover:underline"
-            >
-              {expanded ? i18n.t('收起内容') : i18n.t('展开全文')}
-            </button>
-          )}
-          {message.streaming && (
-            <span className="ml-0.5 inline-block h-4 w-1 animate-pulse rounded-sm bg-primary align-middle" />
-          )}
-        </div>
-      ) : message.streaming && !hasBody ? (
+      {isStreaming && !hasBody && (
         <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           {i18n.t('思考中…')}
         </div>
-      ) : null}
+      )}
 
       {message.metrics && !message.streaming && (
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[9px] text-muted-foreground/70">
@@ -1583,10 +1645,14 @@ export default function AiAssistantV2Page() {
     if (!pending) return;
     setMessages(prev => prev.map(message => {
       if (message.id !== pending.assistantId) return message;
+      let blocks = message.blocks;
+      if (pending.content) blocks = appendBlockDelta(blocks, 'text', pending.content);
+      if (pending.reasoning) blocks = appendBlockDelta(blocks, 'reasoning', pending.reasoning);
       return {
         ...message,
         content: pending.content ? message.content + pending.content : message.content,
         reasoning: pending.reasoning ? (message.reasoning || '') + pending.reasoning : message.reasoning,
+        blocks,
       };
     }));
   }, [setMessages]);
@@ -1652,6 +1718,7 @@ export default function AiAssistantV2Page() {
                   startedAt: Date.now(),
                 },
               ],
+              blocks: appendToolBlock(ensureBlocks(message), event.call.id),
             }
           : message));
         break;
@@ -1675,6 +1742,7 @@ export default function AiAssistantV2Page() {
         flushStreamDelta();
         patchAssistant(assistantId, {
           content: event.message,
+          blocks: [{ id: makeId('blk'), type: 'text', text: event.message }],
           streaming: false,
           error: true,
         });
@@ -1858,6 +1926,7 @@ export default function AiAssistantV2Page() {
       content: '',
       reasoning: '',
       tools: [],
+      blocks: [],
       streaming: true,
       metrics: { model: effectiveConfig.model },
       createdAt: now,
@@ -1926,6 +1995,7 @@ export default function AiAssistantV2Page() {
             content: `> ${i18n.t('OpenRouter 免费额度已用尽，已切换到 Cloudflare AI 重试。')}\n\n`,
             reasoning: '',
             tools: [],
+            blocks: [],
             streaming: true,
             error: false,
           });
@@ -1963,8 +2033,10 @@ export default function AiAssistantV2Page() {
         if (message) {
           runStatus = runStatus === 'stopped' ? 'stopped' : 'error';
           runError = message;
+          const failureText = `${i18n.t('请求失败：')}${friendlyModelError(message)}`;
           patchAssistant(assistantId, {
-            content: `${i18n.t('请求失败：')}${friendlyModelError(message)}`,
+            content: failureText,
+            blocks: [{ id: makeId('blk'), type: 'text', text: failureText }],
             streaming: false,
             error: true,
           });
@@ -2034,8 +2106,10 @@ export default function AiAssistantV2Page() {
         runStatus = 'error';
         const message = (error as Error)?.message || String(error);
         runError = message;
+        const failureText = `${i18n.t('恢复失败：')}${friendlyModelError(message)}`;
         patchAssistant(assistantId, {
-          content: `${i18n.t('恢复失败：')}${friendlyModelError(message)}`,
+          content: failureText,
+          blocks: [{ id: makeId('blk'), type: 'text', text: failureText }],
           streaming: false,
           error: true,
         });

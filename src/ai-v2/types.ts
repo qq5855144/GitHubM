@@ -159,6 +159,14 @@ export interface UiToolRun {
   endedAt?: number;
 }
 
+/** 助手消息内的有序区块：与 Operit 一样按发生顺序渲染 */
+export interface UiAssistantBlock {
+  id: string;
+  type: 'text' | 'reasoning' | 'tool';
+  text?: string;
+  toolId?: string;
+}
+
 export interface UiChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -168,6 +176,8 @@ export interface UiChatMessage {
   attachments?: UiAttachment[];
   reasoning?: string;
   tools?: UiToolRun[];
+  /** 按发生顺序排列的区块；为空时退回旧版布局 */
+  blocks?: UiAssistantBlock[];
   streaming?: boolean;
   error?: boolean;
   metrics?: {

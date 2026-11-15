@@ -1,5 +1,6 @@
 // AI Assistant V2 — 通用事件驱动 Agent 类型
 import type { ModelConfig } from '@/components/ai/aiTypes';
+import type { UiAttachment } from './attachments';
 
 export interface RepoContext {
   fullName: string;
@@ -153,6 +154,9 @@ export interface UiChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  /** 包含附件正文的模型上下文；UI 仍显示 content */
+  modelContent?: string;
+  attachments?: UiAttachment[];
   reasoning?: string;
   tools?: UiToolRun[];
   streaming?: boolean;

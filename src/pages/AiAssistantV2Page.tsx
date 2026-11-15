@@ -9,6 +9,16 @@ import { appendRunEvent, clearRunSnapshot, finishRun, latestRunSnapshot, resumeR
 import type { RunSnapshot } from '@/ai-v2/runStore';
 import { loadV2Settings } from '@/ai-v2/settings';
 import { buildUnifiedDiff } from '@/ai-v2/diff';
+import {
+  buildModelUserContent,
+  filterRepoFiles,
+  formatFileSize,
+  isTextFilePath,
+  makeAttachmentId,
+  MAX_ATTACHMENTS,
+  MAX_ATTACHMENT_BYTES,
+} from '@/ai-v2/attachments';
+import type { UiAttachment } from '@/ai-v2/attachments';
 import RepoSelector from '@/components/ai/RepoSelector';
 import {
   ModelAvatar,
@@ -32,6 +42,7 @@ import { toast } from 'sonner';
 import i18n from '@/i18n';
 import {
   ArrowDown,
+  AtSign,
   BookOpen,
   Check,
   CheckCircle2,
@@ -46,6 +57,7 @@ import {
   Loader2,
   Menu,
   MessageSquarePlus,
+  Paperclip,
   PanelRight,
   Pencil,
   Plus,
@@ -142,15 +154,25 @@ function migrateLegacyRoundLimit(messages: UiChatMessage[]): UiChatMessage[] {
 }
 
 function compactMessages(messages: UiChatMessage[]): UiChatMessage[] {
-  return messages.slice(-MAX_SAVED_MESSAGES).map(message => ({
-    ...message,
-    content: message.content.slice(0, 20000),
-    reasoning: message.reasoning?.slice(0, 8000),
-    tools: message.tools?.map(tool => ({
-      ...tool,
-      content: tool.content?.slice(0, MAX_TOOL_RESULT),
-    })),
-  }));
+  return messages.slice(-MAX_SAVED_MESSAGES).map(message => {
+    let attachmentBudget = 30_000;
+    const attachments = message.attachments?.map(attachment => {
+      const content = attachment.content.slice(0, Math.max(0, attachmentBudget));
+      attachmentBudget -= content.length;
+      return { ...attachment, content };
+    });
+    return {
+      ...message,
+      content: message.content.slice(0, 20000),
+      modelContent: undefined,
+      attachments,
+      reasoning: message.reasoning?.slice(0, 8000),
+      tools: message.tools?.map(tool => ({
+        ...tool,
+        content: tool.content?.slice(0, MAX_TOOL_RESULT),
+      })),
+    };
+  });
 }
 
 function formatTime(iso: string): string {
@@ -377,6 +399,21 @@ function ConversationTurnView({ turn, index, onOpenArtifact }: { turn: Conversat
               {turn.user.content}
             </div>
           </div>
+          {turn.user.attachments && turn.user.attachments.length > 0 && (
+            <div className="flex flex-wrap justify-end gap-1">
+              {turn.user.attachments.map(attachment => (
+                <span
+                  key={attachment.id}
+                  className="inline-flex max-w-[220px] items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[9px] text-muted-foreground"
+                  title={attachment.path || attachment.name}
+                >
+                  {attachment.source === 'repo' ? <AtSign className="h-2.5 w-2.5 shrink-0 text-primary" /> : <Paperclip className="h-2.5 w-2.5 shrink-0" />}
+                  <span className="truncate">{attachment.path || attachment.name}</span>
+                  <span className="shrink-0 opacity-70">{formatFileSize(attachment.size)}</span>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -408,6 +445,163 @@ function ConversationTurnView({ turn, index, onOpenArtifact }: { turn: Conversat
         )}
       </div>
     </section>
+  );
+}
+
+function RepoFilePicker({
+  open,
+  onOpenChange,
+  repo,
+  token,
+  onSelect,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  repo: RepoContext | null;
+  token: string;
+  onSelect: (attachment: UiAttachment) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [files, setFiles] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [truncated, setTruncated] = useState(false);
+  const [selecting, setSelecting] = useState('');
+
+  useEffect(() => {
+    if (!open || !repo || !token) return;
+    const branch = repo.branch || repo.defaultBranch || 'main';
+    const encodedBranch = branch.split('/').map(encodeURIComponent).join('/');
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    setQuery('');
+    setFiles([]);
+    setTruncated(false);
+    fetch(`https://api.github.com/repos/${repo.fullName}/git/trees/${encodedBranch}?recursive=1`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    }).then(async response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json() as Promise<{
+        tree?: Array<{ path?: string; type?: string }>;
+        truncated?: boolean;
+      }>;
+    }).then(data => {
+      if (cancelled) return;
+      const paths = (data.tree || [])
+        .filter(item => item.type === 'blob' && item.path && isTextFilePath(item.path))
+        .map(item => String(item.path))
+        .sort((a, b) => a.localeCompare(b));
+      setFiles(paths);
+      setTruncated(Boolean(data.truncated));
+    }).catch(reason => {
+      if (!cancelled) setError((reason as Error).message || String(reason));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [open, repo, token]);
+
+  const visible = useMemo(() => filterRepoFiles(files, query, 120), [files, query]);
+
+  const selectFile = async (path: string) => {
+    if (!repo || !token || selecting) return;
+    const branch = repo.branch || repo.defaultBranch || 'main';
+    setSelecting(path);
+    setError('');
+    try {
+      const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+      const response = await fetch(
+        `https://api.github.com/repos/${repo.fullName}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+        },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json() as { content?: string; encoding?: string; size?: number; type?: string };
+      if (data.type === 'dir' || !data.content || data.encoding !== 'base64') throw new Error(i18n.t('该文件无法作为文本读取'));
+      if ((data.size || 0) > MAX_ATTACHMENT_BYTES) throw new Error(i18n.t('文件超过 200 KB'));
+      const binary = atob(data.content.replace(/\s/g, ''));
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+      const content = new TextDecoder().decode(bytes);
+      onSelect({
+        id: makeAttachmentId('repo'),
+        name: path.split('/').pop() || path,
+        path,
+        source: 'repo',
+        size: bytes.length,
+        content,
+      });
+      onOpenChange(false);
+    } catch (reason) {
+      setError((reason as Error).message || String(reason));
+    } finally {
+      setSelecting('');
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <AtSign className="h-4 w-4 text-primary" />
+            {i18n.t('引用仓库文件')}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder={i18n.t('搜索文件路径')}
+            autoFocus
+            className="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-3 text-sm outline-none focus:border-primary/50"
+          />
+        </div>
+        <div className="min-h-[180px] max-h-[50vh] overflow-y-auto rounded-lg border border-border">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {i18n.t('读取仓库文件列表…')}
+            </div>
+          ) : error ? (
+            <p className="px-3 py-6 text-center text-xs text-destructive">{error}</p>
+          ) : !visible.length ? (
+            <p className="px-3 py-6 text-center text-xs text-muted-foreground">{i18n.t('没有匹配的文本文件')}</p>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {visible.map(path => (
+                <button
+                  key={path}
+                  type="button"
+                  onClick={() => void selectFile(path)}
+                  disabled={Boolean(selecting)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted/50 disabled:opacity-60"
+                >
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate font-mono">{path}</span>
+                  {selecting === path && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+          <span>{i18n.t('仅显示文本文件')} · {files.length}</span>
+          {truncated && <span className="text-amber-500">{i18n.t('仓库文件过多，列表已截断')}</span>}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -649,6 +843,9 @@ export default function AiAssistantV2Page() {
   const [approvalDiffLoading, setApprovalDiffLoading] = useState(false);
   const [approvalRemoteMissing, setApprovalRemoteMissing] = useState(false);
   const [resumableSnapshot, setResumableSnapshot] = useState<RunSnapshot | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<UiAttachment[]>([]);
+  const [repoFileDialogOpen, setRepoFileDialogOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const runCapabilitiesRef = useRef<string[]>([]);
   const approvalResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -965,9 +1162,61 @@ export default function AiAssistantV2Page() {
     });
   }, [user?.login]);
 
+  const addAttachment = useCallback((attachment: UiAttachment) => {
+    setPendingAttachments(prev => {
+      if (prev.length >= MAX_ATTACHMENTS) {
+        toast.warning(i18n.t('最多添加 {{count}} 个附件', { count: MAX_ATTACHMENTS }));
+        return prev;
+      }
+      const duplicate = prev.some(item => (item.path || item.name) === (attachment.path || attachment.name));
+      if (duplicate) {
+        toast.warning(i18n.t('该文件已经添加'));
+        return prev;
+      }
+      return [...prev, attachment];
+    });
+  }, []);
+
+  const handleLocalFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const candidates = Array.from(files).slice(0, MAX_ATTACHMENTS);
+    for (const file of candidates) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        toast.error(i18n.t('{{name}} 超过 200 KB', { name: file.name }));
+        continue;
+      }
+      const isText = file.type.startsWith('text/')
+        || ['application/json', 'application/xml', 'application/javascript'].includes(file.type)
+        || /\.(txt|md|markdown|json|jsonc|ya?ml|toml|ini|env|js|jsx|ts|tsx|mjs|cjs|css|scss|html?|xml|svg|vue|svelte|py|go|rs|java|kt|kts|gradle|c|h|cpp|hpp|cs|php|rb|sh|bash|sql|csv|log)$/i.test(file.name)
+        || /^\.env/.test(file.name)
+        || file.name === 'Dockerfile'
+        || file.name === 'Makefile';
+      if (!isText) {
+        toast.error(i18n.t('{{name}} 不是文本文件', { name: file.name }));
+        continue;
+      }
+      try {
+        const content = await file.text();
+        addAttachment({
+          id: makeAttachmentId('file'),
+          name: file.name,
+          source: 'local',
+          size: file.size,
+          content,
+        });
+      } catch {
+        toast.error(i18n.t('读取 {{name}} 失败', { name: file.name }));
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || streaming) return;
+    const attachments = pendingAttachments;
+    if ((!text && !attachments.length) || streaming) return;
+    const modelText = buildModelUserContent(text || i18n.t('请查看附件'), attachments);
+    const displayText = text || `${i18n.t('请查看附件')}：${attachments.map(item => item.path || item.name).join('、')}`;
     if (!token) {
       toast.error(i18n.t('登录状态已失效，请重新登录'));
       return;
@@ -982,7 +1231,9 @@ export default function AiAssistantV2Page() {
     const userMessage: UiChatMessage = {
       id: `u-${Date.now()}`,
       role: 'user',
-      content: text,
+      content: displayText,
+      modelContent: modelText,
+      attachments: attachments.length ? attachments : undefined,
       createdAt: now,
     };
     const assistantId = `a-${Date.now()}`;
@@ -999,6 +1250,7 @@ export default function AiAssistantV2Page() {
     const previousHistory = toAgentHistory(messages.map(message => ({
       role: message.role,
       content: message.content,
+      modelContent: message.modelContent,
     })));
     const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     runCapabilitiesRef.current = [];
@@ -1006,10 +1258,11 @@ export default function AiAssistantV2Page() {
       login: user?.login,
       id: runId,
       sessionId: activeSession?.id,
-      title: text,
+      title: text || `${i18n.t('附件')} ${attachments[0]?.name || ''}`,
     });
     setMessages(prev => [...prev, userMessage, assistantMessage]);
     setInput('');
+    setPendingAttachments([]);
     setStreaming(true);
     stickToBottomRef.current = true;
 
@@ -1018,7 +1271,7 @@ export default function AiAssistantV2Page() {
 
     const onEvent = (event: AgentEvent) => handleAgentEvent(assistantId, runId, event);
 
-    const history = [...previousHistory, { role: 'user' as const, content: text }];
+    const history = [...previousHistory, { role: 'user' as const, content: modelText }];
     let runStatus: 'done' | 'error' | 'stopped' = 'done';
     let runError: string | undefined;
 
@@ -1189,6 +1442,7 @@ export default function AiAssistantV2Page() {
     setSessions(prev => [session, ...prev].slice(0, MAX_SESSIONS));
     setActiveId(session.id);
     setInput('');
+    setPendingAttachments([]);
     setSessionDialogOpen(false);
     requestAnimationFrame(() => scrollToBottom(true));
   };
@@ -1197,6 +1451,7 @@ export default function AiAssistantV2Page() {
     if (streaming) return;
     setActiveId(id);
     setSessionDialogOpen(false);
+    setPendingAttachments([]);
     stickToBottomRef.current = true;
     requestAnimationFrame(() => scrollToBottom(true));
   };
@@ -1228,6 +1483,7 @@ export default function AiAssistantV2Page() {
     if (hasConversation && !window.confirm(i18n.t('确定清空当前对话？'))) return;
     setMessages([]);
     setInput('');
+    setPendingAttachments([]);
   };
 
   const handleSelectRepo = (repo: GitHubRepo) => {
@@ -1452,10 +1708,43 @@ export default function AiAssistantV2Page() {
                   </button>
                 )}
               </div>
-
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".txt,.md,.markdown,.json,.jsonc,.yaml,.yml,.toml,.ini,.env,.js,.jsx,.ts,.tsx,.mjs,.cjs,.css,.scss,.html,.htm,.xml,.svg,.vue,.svelte,.py,.go,.rs,.java,.kt,.kts,.gradle,.c,.h,.cpp,.hpp,.cs,.php,.rb,.sh,.bash,.sql,.csv,.log,Dockerfile,Makefile"
+                className="hidden"
+                onChange={event => void handleLocalFiles(event.target.files)}
+              />
+              {pendingAttachments.length > 0 && (
+                <div className="mb-1.5 flex flex-wrap gap-1 px-1">
+                  {pendingAttachments.map(attachment => (
+                    <span
+                      key={attachment.id}
+                      className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border bg-muted/40 px-2 py-1 text-[10px]"
+                      title={attachment.path || attachment.name}
+                    >
+                      {attachment.source === 'repo' ? <AtSign className="h-3 w-3 shrink-0 text-primary" /> : <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />}
+                      <span className="max-w-[160px] truncate">{attachment.path || attachment.name}</span>
+                      <span className="shrink-0 text-muted-foreground">{formatFileSize(attachment.size)}</span>
+                      <button
+                        type="button"
+                        onClick={() => setPendingAttachments(prev => prev.filter(item => item.id !== attachment.id))}
+                        className="shrink-0 rounded-full p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
               <Textarea
                 value={input}
-                onChange={event => setInput(event.target.value)}
+                onChange={event => {
+                  const next = event.target.value;
+                  setInput(next);
+                  if (next.endsWith('@') && repoContext && !repoFileDialogOpen) setRepoFileDialogOpen(true);
+                }}
                 onKeyDown={event => {
                   if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                     event.preventDefault();
@@ -1469,6 +1758,34 @@ export default function AiAssistantV2Page() {
               />
 
               <div className="flex items-center gap-1 px-1 pt-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0 text-muted-foreground"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={streaming}
+                  title={i18n.t('添加文本附件')}
+                >
+                  <Paperclip className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0 text-muted-foreground"
+                  onClick={() => {
+                    if (!repoContext) {
+                      toast.warning(i18n.t('请先选择仓库，再引用仓库文件'));
+                      return;
+                    }
+                    setRepoFileDialogOpen(true);
+                  }}
+                  disabled={streaming}
+                  title={i18n.t('@ 引用仓库文件')}
+                >
+                  <AtSign className="h-3.5 w-3.5" />
+                </Button>
                 <button
                   type="button"
                   onClick={() => navigate('/ai-settings')}
@@ -1490,7 +1807,7 @@ export default function AiAssistantV2Page() {
                   size="icon"
                   className="h-8 w-8 shrink-0 rounded-lg"
                   onClick={streaming ? handleStop : handleSend}
-                  disabled={!streaming && (!input.trim() || !token)}
+                  disabled={!streaming && ((!input.trim() && pendingAttachments.length === 0) || !token)}
                   title={streaming ? i18n.t('停止生成') : i18n.t('发送')}
                 >
                   {streaming ? <Square className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
@@ -1648,6 +1965,21 @@ const args = approvalRequest.arguments as Record<string, unknown>;
           <RepoSelector onSelect={handleSelectRepo} />
         </DialogContent>
       </Dialog>
+
+      <RepoFilePicker
+        open={repoFileDialogOpen}
+        onOpenChange={setRepoFileDialogOpen}
+        repo={repoContext}
+        token={token || ''}
+        onSelect={attachment => {
+          addAttachment(attachment);
+          setInput(prev => {
+            const base = prev.endsWith('@') ? prev.slice(0, -1) : prev;
+            const separator = base && !/\s$/.test(base) ? ' ' : '';
+            return `${base}${separator}@${attachment.path || attachment.name} `;
+          });
+        }}
+      />
 
       <Dialog open={sessionDialogOpen} onOpenChange={setSessionDialogOpen}>
         <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-md">

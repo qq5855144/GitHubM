@@ -104,7 +104,15 @@ const linePrefix: Record<LineType, string> = {
 
 interface DiffFileBlockProps {
   file: DiffFile;
-  onApply?: (path: string) => void;
+  onApply?: (path: string, diff: string) => void;
+}
+
+function serializeDiffFile(file: DiffFile): string {
+  return [
+    `--- ${file.oldPath}`,
+    `+++ ${file.newPath}`,
+    ...file.hunks.flatMap(hunk => [hunk.header, ...hunk.lines.map(line => line.content)]),
+  ].join('\n');
 }
 
 function DiffFileBlock({ file, onApply }: DiffFileBlockProps) {
@@ -164,7 +172,7 @@ function DiffFileBlock({ file, onApply }: DiffFileBlockProps) {
           </button>
           {onApply && displayPath !== '/dev/null' && (
             <button
-              onClick={() => onApply(displayPath)}
+              onClick={() => onApply(displayPath, serializeDiffFile(file))}
               className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-sans font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
               title={i18n.t('让 AI 将此修改应用到仓库')}
             >
@@ -219,8 +227,8 @@ function DiffFileBlock({ file, onApply }: DiffFileBlockProps) {
 interface DiffBlockProps {
   /** 原始 diff 文本（unified diff 格式） */
   raw: string;
-  /** 点击「应用」时的回调，参数为目标文件路径 */
-  onApply?: (filePath: string) => void;
+  /** 点击「应用」时的回调，参数为目标文件路径和该文件的 unified diff */
+  onApply?: (filePath: string, diff: string) => void;
 }
 
 export default function DiffBlock({ raw, onApply }: DiffBlockProps) {

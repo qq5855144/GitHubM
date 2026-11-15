@@ -165,9 +165,19 @@ function newSession(): V2Session {
 
 function migrateLegacyRoundLimit(messages: UiChatMessage[]): UiChatMessage[] {
   return messages.map(message => {
-    if (message.role !== 'assistant' || !message.content.includes('已达到最大工具轮数')) return message;
+    // 上次运行被中断时，消息可能停在 streaming / running 状态，加载时统一收尾
+    let next = message.streaming ? { ...message, streaming: false } : message;
+    if (next.tools?.some(tool => tool.status === 'running')) {
+      next = {
+        ...next,
+        tools: next.tools.map(tool => (tool.status === 'running'
+          ? { ...tool, status: 'error' as const, content: tool.content || i18n.t('已中断') }
+          : tool)),
+      };
+    }
+    if (next.role !== 'assistant' || !next.content.includes('已达到最大工具轮数')) return next;
     return {
-      ...message,
+      ...next,
       content: i18n.t('这条消息来自旧版 AI（v1.0.528 之前）。V2 已移除固定工具轮数限制，可以直接继续任务。'),
       error: false,
       streaming: false,

@@ -72,6 +72,15 @@ describe('GitHub ops tools', () => {
     expect(result.content).toContain('ERROR: boom');
   });
 
+  it('paginates long job logs instead of dropping content after 30k', async () => {
+    const log = `${'a'.repeat(35000)}\nERROR: near-the-end`;
+    vi.stubGlobal('fetch', vi.fn(async () => mockText(log)));
+    const result = await tool('github_get_job_logs').execute({ job_id: 100, limit: 50000 }, ctx);
+    expect(result.content).toContain('near-the-end');
+    expect(result.content).toContain('[日志结束]');
+    expect(result.content).toContain(`日志：${log.length} 字符`);
+  });
+
   it('lists issues without pull requests and reads PR details', async () => {
     const fetchMock = vi.fn(async (input: unknown) => {
       const url = String(input);

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildSystemPrompt, runGeneralAgent } from '@/ai-v2/agent';
 import { buildProviderRequest, streamProvider } from '@/ai-v2/providers';
 import { resolveCapabilities } from '@/ai-v2/capabilities';
@@ -303,6 +303,29 @@ describe('AI Assistant V2 agent loop', () => {
 });
 
 describe('AI Assistant V2 provider', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('passes reasoning effort in the request body', () => {
+    const request = buildProviderRequest({
+      ...config,
+      reasoning_effort: 'high',
+    }, [{ role: 'user', content: 'hi' }], []);
+    expect(request.body.reasoning_effort).toBe('high');
+  });
+
+  it('times out a stalled model request', async () => {
+    vi.stubGlobal('fetch', vi.fn((_url: unknown, init?: RequestInit) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+    })));
+    await expect(streamProvider(
+      { ...config, timeoutMs: 100 },
+      [{ role: 'user', content: 'hi' }],
+      [],
+      new AbortController().signal,
+      () => undefined,
+    )).rejects.toThrow('请求超时');
+  });
+
   it('uses the official OpenRouter endpoint and passes tools', () => {
     const request = buildProviderRequest(config, [{ role: 'user', content: 'hi' }], [{
       type: 'function',

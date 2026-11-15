@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { runGeneralAgent, toAgentHistory, toolCallLabel } from '@/ai-v2/agent';
 import type { AgentEvent, ApprovalRequest, ArtifactMeta, RepoContext, UiChatMessage, UiToolRun, V2ProviderMessage } from '@/ai-v2/types';
 import { readArtifact } from '@/ai-v2/artifacts';
-import { appendRunEvent, clearRunSnapshot, finishRun, latestRunSnapshot, resumeRun, saveRunSnapshot, startRun } from '@/ai-v2/runStore';
+import { appendRunEvent, clearRunSnapshot, clearRunSnapshots, finishRun, latestRunSnapshot, resumeRun, saveRunSnapshot, startRun } from '@/ai-v2/runStore';
 import type { RunSnapshot } from '@/ai-v2/runStore';
 import { loadV2Settings } from '@/ai-v2/settings';
 import { buildUnifiedDiff } from '@/ai-v2/diff';
@@ -1428,6 +1428,7 @@ export default function AiAssistantV2Page() {
       role: message.role,
       content: message.content,
       modelContent: message.modelContent,
+      attachments: message.attachments,
     })));
     const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     runCapabilitiesRef.current = [];
@@ -1647,6 +1648,10 @@ export default function AiAssistantV2Page() {
 
   const handleDeleteSession = (id: string) => {
     if (streaming) return;
+    const target = sessions.find(session => session.id === id);
+    if (!target) return;
+    if (!window.confirm(i18n.t('确定删除对话「{{title}}」？此操作不可恢复。', { title: target.title || i18n.t('新对话') }))) return;
+    if (user?.login) clearRunSnapshots(user.login, id);
     const remaining = sessions.filter(session => session.id !== id);
     if (remaining.length === 0) {
       const session = newSession();
@@ -1664,6 +1669,8 @@ export default function AiAssistantV2Page() {
     setMessages([]);
     setInput('');
     setPendingAttachments([]);
+    if (user?.login && activeSession?.id) clearRunSnapshots(user.login, activeSession.id);
+    setResumableSnapshot(null);
   };
 
   const handleSelectRepo = (repo: GitHubRepo) => {

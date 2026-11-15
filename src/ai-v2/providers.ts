@@ -67,6 +67,10 @@ export function buildProviderRequest(
     stream: true,
     max_tokens: 8192,
   };
+  const effort = config.reasoning_effort;
+  if (effort) {
+    body.reasoning_effort = effort === 'off' ? 'minimal' : effort === 'max' ? 'high' : effort;
+  }
   if (tools.length > 0) {
     body.tools = tools;
     body.tool_choice = 'auto';
@@ -107,12 +111,24 @@ export async function streamProvider(
   signal: AbortSignal,
   onEvent: (event: AgentEvent) => void,
 ): Promise<ProviderStreamResult> {
+  const timeoutMs = Math.max(100, Number(config.timeoutMs) || 300000);
+  const requestController = new AbortController();
+  let timedOut = false;
+  const onAbort = () => requestController.abort();
+  if (signal.aborted) requestController.abort();
+  else signal.addEventListener('abort', onAbort, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    requestController.abort();
+  }, timeoutMs);
+
+  try {
   const prepared = buildProviderRequest(config, messages, tools);
   const res = await fetch(prepared.url, {
     method: 'POST',
     headers: prepared.headers,
     body: JSON.stringify(prepared.body),
-    signal,
+    signal: requestController.signal,
   });
 
   if (!res.ok) {
@@ -231,4 +247,13 @@ export async function streamProvider(
     model: config.model || '',
     usage,
   };
+  } catch (error) {
+    if (timedOut && !signal.aborted) {
+      throw new Error(`请求超时（${Math.max(1, Math.round(timeoutMs / 1000))} 秒）`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener('abort', onAbort);
+  }
 }

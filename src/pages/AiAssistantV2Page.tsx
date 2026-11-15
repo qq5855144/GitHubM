@@ -15,16 +15,27 @@ import {
   buildModelUserParts,
   filterRepoFiles,
   formatFileSize,
+  hydrateAttachmentImages,
+  hydrateMessageImages,
   isTextFilePath,
   makeAttachmentId,
   MAX_ATTACHMENTS,
   MAX_ATTACHMENT_BYTES,
+  prepareImageAttachment,
 } from '@/ai-v2/attachments';
 import type { UiAttachment } from '@/ai-v2/attachments';
+import { putImageBlob } from '@/ai-v2/imageStore';
 import { loadActiveCharacter } from '@/ai-v2/characters';
 import type { CharacterCard } from '@/ai-v2/characters';
-import { loadSessionStore, saveSessionStore } from '@/ai-v2/sessionStore';
-import type { SessionStore, V2Session } from '@/ai-v2/sessionStore';
+import {
+  deleteSessionMessages,
+  loadSessionIndex,
+  loadSessionMessages,
+  saveSessionIndex,
+  saveSessionMessages,
+  toSessionMeta,
+} from '@/ai-v2/sessionStore';
+import type { SessionIndex, V2Session } from '@/ai-v2/sessionStore';
 import { deriveSessionTitle } from '@/ai-v2/sessionTitle';
 import { extractPdfText, MAX_PDF_BYTES } from '@/ai-v2/pdf';
 import RepoSelector from '@/components/ai/RepoSelector';
@@ -39,6 +50,7 @@ import {
 import type { ModelType } from '@/components/ai/aiTypes';
 import { getModelCapabilities } from '@/ai-v2/modelCapabilities';
 import type { ModelConfig } from '@/components/ai/aiTypes';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import type { GitHubRepo } from '@/types/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -93,13 +105,16 @@ const MAX_SESSIONS = 20;
 const MAX_SAVED_MESSAGES = 40;
 const MAX_TOOL_RESULT = 4000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_USER_MESSAGE_CHARS = 4000;
+const USER_MESSAGE_PREVIEW_CHARS = 2000;
+const STREAMING_PLAIN_LIMIT = 400_000;
 
-function readFileAsDataUrl(file: File): Promise<string> {
+function readFileAsDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(reader.error || new Error('读取图片失败'));
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(blob);
   });
 }
 
@@ -163,7 +178,12 @@ function compactMessages(messages: UiChatMessage[]): UiChatMessage[] {
     const attachments = message.attachments?.map(attachment => {
       const content = attachment.content.slice(0, Math.max(0, attachmentBudget));
       attachmentBudget -= content.length;
-      return { ...attachment, content };
+      return {
+        ...attachment,
+        content,
+        // 图片正文存 IndexedDB（imageBlobId），持久化时只保留缩略图
+        dataUrl: attachment.imageBlobId ? undefined : attachment.dataUrl,
+      };
     });
     return {
       ...message,
@@ -309,8 +329,13 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasBody = Boolean(message.content || message.reasoning || (message.tools || []).length);
-  const isLong = message.content.length > 12000;
-  const displayContent = isLong && !expanded ? `${message.content.slice(0, 12000)}\n\n…` : message.content;
+  const isStreaming = Boolean(message.streaming);
+  const isLong = !isStreaming && message.content.length > 12000;
+  // 流式阶段不解析 Markdown：只渲染纯文本，流结束后再渲染一次
+  const baseContent = isStreaming && message.content.length > STREAMING_PLAIN_LIMIT
+    ? `…\n${message.content.slice(-STREAMING_PLAIN_LIMIT)}`
+    : message.content;
+  const displayContent = isLong && !expanded ? `${baseContent.slice(0, 12000)}\n\n…` : baseContent;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -330,7 +355,11 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
           'min-w-0 text-sm leading-6 break-words',
           message.error ? 'text-destructive' : 'text-foreground',
         )}>
-          {renderMarkdown(displayContent, onApplyDiff)}
+          {isStreaming ? (
+            <p className="whitespace-pre-wrap break-words">{displayContent}</p>
+          ) : (
+            renderMarkdown(displayContent, onApplyDiff)
+          )}
           {isLong && !message.streaming && (
             <button
               type="button"
@@ -406,8 +435,14 @@ function ConversationTurnView({ turn, index, onOpenArtifact, onApplyDiff }: {
   onOpenArtifact: (meta: ArtifactMeta) => void;
   onApplyDiff: (path: string, diff: string) => void;
 }) {
+  const [userExpanded, setUserExpanded] = useState(false);
   const streaming = turn.assistants.some(message => message.streaming);
   const hasError = turn.assistants.some(message => message.error);
+  const userContent = turn.user?.content || '';
+  const userIsLong = userContent.length > MAX_USER_MESSAGE_CHARS;
+  const shownUserContent = userIsLong && !userExpanded
+    ? `${userContent.slice(0, USER_MESSAGE_PREVIEW_CHARS)}\n\n…`
+    : userContent;
 
   return (
     <section
@@ -430,7 +465,18 @@ function ConversationTurnView({ turn, index, onOpenArtifact, onApplyDiff }: {
           </div>
           <div className="flex justify-end">
             <div className="max-w-[90%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-6 text-primary-foreground break-words">
-              {turn.user.content}
+              <span className="whitespace-pre-wrap break-words">{shownUserContent}</span>
+              {userIsLong && (
+                <button
+                  type="button"
+                  onClick={() => setUserExpanded(value => !value)}
+                  className="mt-1 block text-[10px] text-primary-foreground/80 underline-offset-2 hover:underline"
+                >
+                  {userExpanded
+                    ? i18n.t('收起内容')
+                    : i18n.t('展开全部（共 {{count}} 字）', { count: userContent.length })}
+                </button>
+              )}
             </div>
           </div>
           {turn.user.attachments && turn.user.attachments.length > 0 && (
@@ -441,8 +487,8 @@ function ConversationTurnView({ turn, index, onOpenArtifact, onApplyDiff }: {
                   className="inline-flex max-w-[220px] items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[9px] text-muted-foreground"
                   title={attachment.path || attachment.name}
                 >
-                  {attachment.kind === 'image' && attachment.dataUrl ? (
-                    <img src={attachment.dataUrl} alt={attachment.name} className="h-5 w-5 shrink-0 rounded object-cover" />
+                  {attachment.kind === 'image' && (attachment.thumbDataUrl || attachment.dataUrl) ? (
+                    <img src={attachment.thumbDataUrl || attachment.dataUrl} alt={attachment.name} className="h-5 w-5 shrink-0 rounded object-cover" />
                   ) : attachment.source === 'repo' ? <AtSign className="h-2.5 w-2.5 shrink-0 text-primary" /> : <Paperclip className="h-2.5 w-2.5 shrink-0" />}
                   <span className="truncate">{attachment.path || attachment.name}</span>
                   <span className="shrink-0 opacity-70">{formatFileSize(attachment.size)}</span>
@@ -1205,7 +1251,10 @@ export default function AiAssistantV2Page() {
   const [repoFileDialogOpen, setRepoFileDialogOpen] = useState(false);
   const [patchRequest, setPatchRequest] = useState<{ path: string; diff: string } | null>(null);
   const [storageError, setStorageError] = useState('');
+  const [sessionLoading, setSessionLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const loadedSessionsRef = useRef<Set<string>>(new Set());
+  const dirtySessionsRef = useRef<Set<string>>(new Set());
   const runCapabilitiesRef = useRef<string[]>([]);
   const runMetricsRef = useRef<{ runId: string; startedAt: number; firstTokenAt?: number } | null>(null);
   const pendingStreamRef = useRef<{ assistantId: string; content: string; reasoning: string } | null>(null);
@@ -1229,6 +1278,13 @@ export default function AiAssistantV2Page() {
   const messages = activeSession?.messages || [];
   const repoContext = activeSession?.repo || null;
   const hasConversation = messages.length > 0;
+  const turns = useMemo(() => buildTurns(messages), [messages]);
+  const virtualizer = useVirtualizer({
+    count: turns.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 240,
+    overscan: 4,
+  });
   const sessionType = (activeSession?.modelType as ModelType | undefined) || modelConfig.type;
   const providerDef = useMemo(() => getModelDef(sessionType), [sessionType]);
   const defaultProviderModel = providerDef.models?.[0]?.value || '';
@@ -1256,6 +1312,8 @@ export default function AiAssistantV2Page() {
 
   useEffect(() => {
     hydratedRef.current = false;
+    loadedSessionsRef.current = new Set();
+    dirtySessionsRef.current = new Set();
     let cancelled = false;
     if (!user?.login) {
       setSessions([]);
@@ -1263,68 +1321,87 @@ export default function AiAssistantV2Page() {
       hydratedRef.current = true;
       return;
     }
-
+    const login = user.login;
     void (async () => {
-      let loaded = await loadSessionStore(user.login);
+      let index = await loadSessionIndex(login);
       if (cancelled) return;
-
-      if (!loaded?.sessions?.length) {
+      if (!index?.sessions?.length) {
         try {
           const legacyRaw = legacyKey ? localStorage.getItem(legacyKey) : null;
           if (legacyRaw) {
             const legacy = JSON.parse(legacyRaw) as { messages?: UiChatMessage[]; repo?: RepoContext | null };
             const migrated = newSession();
-            migrated.messages = Array.isArray(legacy.messages) ? legacy.messages : [];
+            const legacyMessages = Array.isArray(legacy.messages) ? migrateLegacyRoundLimit(legacy.messages) : [];
+            migrated.messages = legacyMessages;
             migrated.repo = legacy.repo || null;
-            migrated.title = deriveSessionTitle(migrated.messages);
+            migrated.title = deriveSessionTitle(legacyMessages);
             migrated.titleSource = 'auto';
-            loaded = { sessions: [migrated], activeId: migrated.id };
+            await saveSessionMessages(login, migrated.id, compactMessages(legacyMessages));
+            loadedSessionsRef.current.add(migrated.id);
+            index = { sessions: [toSessionMeta(migrated)], activeId: migrated.id };
             if (legacyKey) localStorage.removeItem(legacyKey);
           }
         } catch {
           // ignore
         }
       }
-
-      const nextSessions = (loaded?.sessions?.length ? loaded.sessions : [newSession()])
-        .map(session => {
-          const migratedMessages = migrateLegacyRoundLimit(session.messages || []);
-          const looksLikePrompt = /^(请|帮我|请帮我|解释|阅读|分析|Actions|README|写一个)/.test(session.title);
-          const titleSource: 'auto' | 'manual' = session.titleSource === 'manual' && !looksLikePrompt ? 'manual' : 'auto';
-          return {
-            ...session,
-            messages: migratedMessages,
-            titleSource,
-            title: titleSource === 'auto' ? deriveSessionTitle(migratedMessages) : session.title,
-          };
+      const metas = (index?.sessions?.length ? index.sessions : [toSessionMeta(newSession())])
+        .map(meta => {
+          const looksLikePrompt = /^(请|帮我|请帮我|解释|阅读|分析|Actions|README|写一个)/.test(meta.title);
+          const titleSource: 'auto' | 'manual' = meta.titleSource === 'manual' && !looksLikePrompt ? 'manual' : 'auto';
+          return { ...meta, titleSource };
         });
-      const nextActive = loaded?.activeId && nextSessions.some(session => session.id === loaded?.activeId)
-        ? loaded.activeId
-        : nextSessions[0].id;
-      setSessions(nextSessions);
+      const nextActive = index?.activeId && metas.some(meta => meta.id === index?.activeId)
+        ? index.activeId
+        : metas[0].id;
+      // 只有当前会话的消息进入内存，其余会话等待切换时再加载
+      setSessions(metas.map(meta => ({ ...meta, messages: [] })));
       setActiveId(nextActive);
       hydratedRef.current = true;
-    })();
 
+      if (loadedSessionsRef.current.has(nextActive)) return;
+      const loadedMessages = migrateLegacyRoundLimit(await loadSessionMessages(login, nextActive));
+      if (cancelled) return;
+      loadedSessionsRef.current.add(nextActive);
+      setSessions(prev => prev.map(session => session.id === nextActive
+        ? {
+            ...session,
+            messages: loadedMessages,
+            title: session.titleSource === 'manual' ? session.title : deriveSessionTitle(loadedMessages),
+          }
+        : session));
+    })();
     return () => { cancelled = true; };
   }, [user?.login, legacyKey]);
-
   useEffect(() => {
     if (!hydratedRef.current || !user?.login) return;
+    const login = user.login;
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      const payload: SessionStore = {
-        sessions: sessions.slice(0, MAX_SESSIONS).map(session => ({
-          ...session,
-          messages: compactMessages(session.messages),
-        })),
+      const dirty = [...dirtySessionsRef.current];
+      dirtySessionsRef.current.clear();
+      const index: SessionIndex = {
+        sessions: sessions.slice(0, MAX_SESSIONS).map(session => toSessionMeta({ ...session, messages: [] })),
         activeId,
       };
-      void saveSessionStore(user.login, payload).then(result => {
+      void (async () => {
+        const indexResult = await saveSessionIndex(login, index);
+        let messagesOk = true;
+        let fallback = Boolean(indexResult.fallback);
+        for (const id of dirty) {
+          const session = sessions.find(item => item.id === id);
+          if (!session || !loadedSessionsRef.current.has(id)) continue;
+          const result = await saveSessionMessages(login, id, compactMessages(session.messages));
+          if (!result.ok) messagesOk = false;
+          if (result.fallback) fallback = true;
+        }
         if (cancelled) return;
-        if (result.ok) setStorageError('');
-        else setStorageError(result.error || i18n.t('会话保存失败，可能存储空间不足'));
-      });
+        if (messagesOk) {
+          setStorageError(fallback ? i18n.t('存储受限，已使用兼容模式保存') : '');
+        } else {
+          setStorageError(indexResult.error || i18n.t('会话保存失败，可能存储空间不足'));
+        }
+      })();
     }, 400);
     return () => {
       cancelled = true;
@@ -1358,6 +1435,14 @@ export default function AiAssistantV2Page() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, streaming, scrollToBottom]);
+
+  // 虚拟列表高度测量后补一次底部对齐，避免流式输出时被"截断"在中间
+  const virtualTotalSize = virtualizer.getTotalSize();
+  useEffect(() => {
+    if (!stickToBottomRef.current) return;
+    const frame = requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: 'end' }));
+    return () => cancelAnimationFrame(frame);
+  }, [virtualTotalSize]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -1457,6 +1542,7 @@ export default function AiAssistantV2Page() {
   const setMessages = useCallback((
     updater: UiChatMessage[] | ((previous: UiChatMessage[]) => UiChatMessage[]),
   ) => {
+    if (activeId) dirtySessionsRef.current.add(activeId);
     updateActiveSession(session => {
       const nextMessages = typeof updater === 'function' ? updater(session.messages) : updater;
       return {
@@ -1658,18 +1744,25 @@ export default function AiAssistantV2Page() {
           continue;
         }
         try {
-          const dataUrl = await readFileAsDataUrl(file);
+          const prepared = await prepareImageAttachment(file);
+          const imageId = makeAttachmentId('image');
+          const stored = await putImageBlob(imageId, prepared.blob);
           addAttachment({
-            id: makeAttachmentId('image'),
+            id: imageId,
             name: file.name,
             source: 'local',
             kind: 'image',
-            size: file.size,
+            size: prepared.size,
             content: '',
-            dataUrl,
+            thumbDataUrl: prepared.thumbDataUrl,
+            imageBlobId: stored ? imageId : undefined,
+            // 存储不可用时退回 dataUrl，保证图片仍然能发送
+            dataUrl: stored ? undefined : await readFileAsDataUrl(prepared.blob),
+            width: prepared.width,
+            height: prepared.height,
           });
         } catch {
-          toast.error(i18n.t('读取图片失败：{{name}}', { name: file.name }));
+          toast.error(i18n.t('图片处理失败：{{name}}', { name: file.name }));
         }
         continue;
       }
@@ -1735,7 +1828,9 @@ export default function AiAssistantV2Page() {
       return;
     }
     const userText = text || i18n.t('请查看附件');
-    const modelContent = buildModelUserParts(userText, attachments);
+    // 图片正文存放在 IndexedDB，发送前再回填成 dataUrl
+    const hydratedAttachments = await hydrateAttachmentImages(attachments);
+    const modelContent = buildModelUserParts(userText, hydratedAttachments);
     const displayText = text || `${i18n.t('请查看附件')}：${attachments.map(item => item.path || item.name).join('、')}`;
     if (!token) {
       toast.error(i18n.t('登录状态已失效，请重新登录'));
@@ -1768,7 +1863,8 @@ export default function AiAssistantV2Page() {
       createdAt: now,
     };
 
-    const previousHistory = toAgentHistory(messages.map(message => ({
+    const historyMessages = await hydrateMessageImages(messages);
+    const previousHistory = toAgentHistory(historyMessages.map(message => ({
       role: message.role,
       content: message.content,
       modelContent: message.modelContent,
@@ -1968,26 +2064,58 @@ export default function AiAssistantV2Page() {
 
   const handleNewSession = () => {
     if (streaming) return;
-    if (activeSession && activeSession.messages.length === 0) {
+    if (activeSession && loadedSessionsRef.current.has(activeSession.id) && activeSession.messages.length === 0) {
       setSessionDialogOpen(false);
+      requestAnimationFrame(() => scrollToBottom(true));
       return;
     }
     const session = newSession();
-    setSessions(prev => [session, ...prev].slice(0, MAX_SESSIONS));
+    loadedSessionsRef.current.add(session.id);
+    dirtySessionsRef.current.add(session.id);
+    const merged = [session, ...sessions];
+    const overflow = merged.slice(MAX_SESSIONS);
+    if (user?.login) {
+      for (const droppedSession of overflow) {
+        loadedSessionsRef.current.delete(droppedSession.id);
+        void deleteSessionMessages(user.login, droppedSession.id);
+      }
+    }
+    setSessions(merged.slice(0, MAX_SESSIONS));
     setActiveId(session.id);
     setInput('');
     setPendingAttachments([]);
     setSessionDialogOpen(false);
     requestAnimationFrame(() => scrollToBottom(true));
   };
-
   const handleSelectSession = (id: string) => {
     if (streaming) return;
-    setActiveId(id);
     setSessionDialogOpen(false);
     setPendingAttachments([]);
     stickToBottomRef.current = true;
-    requestAnimationFrame(() => scrollToBottom(true));
+    if (id === activeId) {
+      requestAnimationFrame(() => scrollToBottom(true));
+      return;
+    }
+    setActiveId(id);
+    if (!user?.login || loadedSessionsRef.current.has(id)) {
+      requestAnimationFrame(() => scrollToBottom(true));
+      return;
+    }
+    const login = user.login;
+    setSessionLoading(true);
+    void loadSessionMessages(login, id)
+      .then(loaded => {
+        loadedSessionsRef.current.add(id);
+        const nextMessages = migrateLegacyRoundLimit(loaded);
+        setSessions(prev => prev.map(session => session.id === id
+          ? {
+              ...session,
+              messages: nextMessages,
+              title: session.titleSource === 'manual' ? session.title : deriveSessionTitle(nextMessages),
+            }
+          : session));
+      })
+      .finally(() => setSessionLoading(false));
   };
 
   const handleSelectModel = (type: string, model: string) => {
@@ -2015,15 +2143,34 @@ export default function AiAssistantV2Page() {
     if (!target) return;
     if (!window.confirm(i18n.t('确定删除对话「{{title}}」？此操作不可恢复。', { title: target.title || i18n.t('新对话') }))) return;
     if (user?.login) void clearRunSnapshots(user.login, id);
+    if (user?.login) void deleteSessionMessages(user.login, id);
+    loadedSessionsRef.current.delete(id);
+    dirtySessionsRef.current.delete(id);
     const remaining = sessions.filter(session => session.id !== id);
     if (remaining.length === 0) {
       const session = newSession();
+      loadedSessionsRef.current.add(session.id);
       setSessions([session]);
       setActiveId(session.id);
       return;
     }
     setSessions(remaining);
-    if (id === activeId) setActiveId(remaining[0].id);
+    if (id === activeId) {
+      const nextId = remaining[0].id;
+      setActiveId(nextId);
+      if (user?.login && !loadedSessionsRef.current.has(nextId)) {
+        const login = user.login;
+        setSessionLoading(true);
+        void loadSessionMessages(login, nextId)
+          .then(loaded => {
+            loadedSessionsRef.current.add(nextId);
+            setSessions(prev => prev.map(session => session.id === nextId
+              ? { ...session, messages: migrateLegacyRoundLimit(loaded) }
+              : session));
+          })
+          .finally(() => setSessionLoading(false));
+      }
+    }
   };
 
   const handleClear = () => {
@@ -2184,8 +2331,13 @@ export default function AiAssistantV2Page() {
           onScroll={handleScroll}
           className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
-          <div className="mx-auto w-full max-w-3xl space-y-5 px-3 py-4 sm:px-5">
-            {!hasConversation ? (
+          <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-5">
+            {sessionLoading ? (
+              <div className="flex min-h-[28vh] items-center justify-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {i18n.t('正在加载对话…')}
+              </div>
+            ) : !hasConversation ? (
               <div className="flex min-h-[28vh] flex-col items-center justify-center text-center">
                 <h2 className="text-base font-semibold">{i18n.t('开始一段对话')}</h2>
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
@@ -2202,9 +2354,50 @@ export default function AiAssistantV2Page() {
                 </div>
               </div>
             ) : (
-              buildTurns(messages).map((turn, index) => (
-                <ConversationTurnView key={turn.id} turn={turn} index={index} onOpenArtifact={openArtifact} onApplyDiff={handleApplyDiff} />
-              ))
+              (() => {
+                const virtualItems = virtualizer.getVirtualItems();
+                // 极端情况下（容器高度为 0、ResizeObserver 不可用）退化为只渲染最近几轮
+                if (!virtualItems.length) {
+                  const recent = turns.slice(-12);
+                  return (
+                    <div className="space-y-5">
+                      {recent.map((turn, index) => (
+                        <ConversationTurnView
+                          key={turn.id}
+                          turn={turn}
+                          index={turns.length - recent.length + index}
+                          onOpenArtifact={openArtifact}
+                          onApplyDiff={handleApplyDiff}
+                        />
+                      ))}
+                    </div>
+                  );
+                }
+                return (
+                  <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+                    {virtualItems.map(item => {
+                      const turn = turns[item.index];
+                      if (!turn) return null;
+                      return (
+                        <div
+                          key={turn.id}
+                          data-index={item.index}
+                          ref={virtualizer.measureElement}
+                          className="absolute left-0 top-0 w-full pb-5"
+                          style={{ transform: `translateY(${item.start}px)` }}
+                        >
+                          <ConversationTurnView
+                            turn={turn}
+                            index={item.index}
+                            onOpenArtifact={openArtifact}
+                            onApplyDiff={handleApplyDiff}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()
             )}
             <div ref={bottomRef} />
           </div>
@@ -2262,8 +2455,8 @@ export default function AiAssistantV2Page() {
                       className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border bg-muted/40 px-2 py-1 text-[10px]"
                       title={attachment.path || attachment.name}
                     >
-                      {attachment.kind === 'image' && attachment.dataUrl ? (
-                        <img src={attachment.dataUrl} alt={attachment.name} className="h-5 w-5 shrink-0 rounded object-cover" />
+                      {attachment.kind === 'image' && (attachment.thumbDataUrl || attachment.dataUrl) ? (
+                        <img src={attachment.thumbDataUrl || attachment.dataUrl} alt={attachment.name} className="h-5 w-5 shrink-0 rounded object-cover" />
                       ) : attachment.source === 'repo' ? <AtSign className="h-3 w-3 shrink-0 text-primary" /> : <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />}
                       <span className="max-w-[160px] truncate">{attachment.path || attachment.name}</span>
                       <span className="shrink-0 text-muted-foreground">{formatFileSize(attachment.size)}</span>

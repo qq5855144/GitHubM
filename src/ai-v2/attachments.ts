@@ -1,11 +1,15 @@
 // AI V2 — 会话附件与 @ 仓库文件引用
+import type { V2ContentPart } from './types';
+
 export interface UiAttachment {
   id: string;
   name: string;
   path?: string;
   source: 'local' | 'repo';
+  kind?: 'text' | 'image';
   size: number;
   content: string;
+  dataUrl?: string;
 }
 
 export const MAX_ATTACHMENTS = 5;
@@ -28,6 +32,10 @@ export function buildModelUserContent(
   const blocks: string[] = [];
   for (let index = 0; index < attachments.length; index++) {
     const attachment = attachments[index];
+    if (attachment.kind === 'image') {
+      blocks.push(`\n\n[图片附件] ${attachment.name}（图片内容已作为视觉输入发送）`);
+      continue;
+    }
     const label = attachment.path || attachment.name;
     const header = `\n\n[附件 ${index + 1}] ${label}（${formatFileSize(attachment.size)}${attachment.source === 'repo' ? '，来自当前仓库' : ''}）`;
     if (remaining <= 0) {
@@ -39,6 +47,22 @@ export function buildModelUserContent(
     remaining -= content.length;
   }
   return `${text}${blocks.join('')}`;
+}
+
+export function buildModelUserParts(
+  text: string,
+  attachments: UiAttachment[],
+  maxChars = MAX_MODEL_ATTACHMENT_CHARS,
+): string | V2ContentPart[] {
+  const images = attachments.filter(item => item.kind === 'image' && item.dataUrl);
+  if (!images.length) return buildModelUserContent(text, attachments, maxChars);
+  return [
+    { type: 'text', text: buildModelUserContent(text, attachments.filter(item => item.kind !== 'image'), maxChars) },
+    ...images.map((image): V2ContentPart => ({
+      type: 'image_url',
+      image_url: { url: image.dataUrl! },
+    })),
+  ];
 }
 
 const TEXT_EXTENSIONS = new Set([

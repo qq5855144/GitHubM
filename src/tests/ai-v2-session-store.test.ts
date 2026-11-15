@@ -8,6 +8,8 @@ const store: SessionStore = {
     id: 's1',
     title: '测试会话',
     repo: null,
+    modelType: 'openrouter',
+    model: 'deepseek-v4-pro',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     messages: [{ id: 'm1', role: 'user', content: '你好', createdAt: '2026-01-01T00:00:00.000Z' }],
@@ -25,6 +27,8 @@ describe('AI session store', () => {
 
     const loaded = await loadSessionStore('alice');
     expect(loaded?.activeId).toBe('s1');
+    expect(loaded?.sessions[0].modelType).toBe('openrouter');
+    expect(loaded?.sessions[0].model).toBe('deepseek-v4-pro');
     expect(loaded?.sessions[0].messages[0].content).toBe('你好');
   });
 

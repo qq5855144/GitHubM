@@ -23,9 +23,13 @@ export interface V2ToolDefinition {
   };
 }
 
+export type V2ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 export interface V2ProviderMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string | null;
+  content: string | V2ContentPart[] | null;
   tool_calls?: Array<{
     id: string;
     type: 'function';
@@ -118,6 +122,9 @@ export interface RunAgentOptions {
   history: AgentHistoryMessage[];
   contextBudget?: number;
   memoryEnabled?: boolean;
+  /** 当前用户消息（可包含图片） */
+  currentUserContent?: V2ProviderMessage['content'];
+  currentUserText?: string;
   /** 当前角色卡的人格设定 */
   persona?: string;
   signal: AbortSignal;
@@ -157,11 +164,19 @@ export interface UiChatMessage {
   role: 'user' | 'assistant';
   content: string;
   /** 包含附件正文的模型上下文；UI 仍显示 content */
-  modelContent?: string;
+  modelContent?: string | V2ContentPart[];
   attachments?: UiAttachment[];
   reasoning?: string;
   tools?: UiToolRun[];
   streaming?: boolean;
   error?: boolean;
+  metrics?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+    durationMs?: number;
+    firstTokenMs?: number;
+    model?: string;
+  };
   createdAt: string;
 }

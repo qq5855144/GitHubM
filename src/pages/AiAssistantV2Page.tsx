@@ -12,6 +12,7 @@ import { buildUnifiedDiff } from '@/ai-v2/diff';
 import { applyUnifiedDiff, diffStats } from '@/ai-v2/patch';
 import {
   buildModelUserContent,
+  buildModelUserParts,
   filterRepoFiles,
   formatFileSize,
   isTextFilePath,
@@ -24,13 +25,18 @@ import { loadActiveCharacter } from '@/ai-v2/characters';
 import type { CharacterCard } from '@/ai-v2/characters';
 import { loadSessionStore, saveSessionStore } from '@/ai-v2/sessionStore';
 import type { SessionStore, V2Session } from '@/ai-v2/sessionStore';
+import { extractPdfText, MAX_PDF_BYTES } from '@/ai-v2/pdf';
 import RepoSelector from '@/components/ai/RepoSelector';
 import {
+  MODEL_DEFS,
   ModelAvatar,
   getModelDef,
   loadModelConfig,
+  loadProviderKey,
   renderMarkdown,
 } from '@/components/ai/aiUtils';
+import type { ModelType } from '@/components/ai/aiTypes';
+import { getModelCapabilities } from '@/ai-v2/modelCapabilities';
 import type { ModelConfig } from '@/components/ai/aiTypes';
 import type { GitHubRepo } from '@/types/types';
 import { Button } from '@/components/ui/button';
@@ -89,6 +95,16 @@ const LEGACY_PREFIX = 'githubm_ai_v2_session:';
 const MAX_SESSIONS = 20;
 const MAX_SAVED_MESSAGES = 40;
 const MAX_TOOL_RESULT = 4000;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('读取图片失败'));
+    reader.readAsDataURL(file);
+  });
+}
 
 const CLOUDFLARE_FALLBACK_CONFIG: ModelConfig = {
   type: 'cloudflare',
@@ -330,6 +346,15 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
         </div>
       ) : null}
 
+      {message.metrics && !message.streaming && (
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-[9px] text-muted-foreground/70">
+          {message.metrics.totalTokens ? <span>{message.metrics.totalTokens} tokens</span> : null}
+          {message.metrics.firstTokenMs ? <span>首字 {Math.round(message.metrics.firstTokenMs / 100) / 10}s</span> : null}
+          {message.metrics.durationMs ? <span>总耗时 {Math.round(message.metrics.durationMs / 100) / 10}s</span> : null}
+          {message.metrics.model ? <span className="max-w-[180px] truncate font-mono">{message.metrics.model}</span> : null}
+        </div>
+      )}
+
       {message.content && !message.streaming && (
         <div className="mt-1.5 flex items-center gap-1">
           <button
@@ -411,7 +436,9 @@ function ConversationTurnView({ turn, index, onOpenArtifact, onApplyDiff }: {
                   className="inline-flex max-w-[220px] items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[9px] text-muted-foreground"
                   title={attachment.path || attachment.name}
                 >
-                  {attachment.source === 'repo' ? <AtSign className="h-2.5 w-2.5 shrink-0 text-primary" /> : <Paperclip className="h-2.5 w-2.5 shrink-0" />}
+                  {attachment.kind === 'image' && attachment.dataUrl ? (
+                    <img src={attachment.dataUrl} alt={attachment.name} className="h-5 w-5 shrink-0 rounded object-cover" />
+                  ) : attachment.source === 'repo' ? <AtSign className="h-2.5 w-2.5 shrink-0 text-primary" /> : <Paperclip className="h-2.5 w-2.5 shrink-0" />}
                   <span className="truncate">{attachment.path || attachment.name}</span>
                   <span className="shrink-0 opacity-70">{formatFileSize(attachment.size)}</span>
                 </span>
@@ -574,6 +601,88 @@ function ApplyPatchDialog({
             </div>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ModelPickerDialog({
+  open,
+  onOpenChange,
+  providers,
+  currentType,
+  currentModel,
+  capabilities,
+  onSelect,
+  onOpenSettings,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  providers: typeof MODEL_DEFS;
+  currentType: string;
+  currentModel: string;
+  capabilities: ReturnType<typeof getModelCapabilities>;
+  onSelect: (type: string, model: string) => void;
+  onOpenSettings: () => void;
+}) {
+  const currentProvider = providers.find(item => item.type === currentType) || providers[0];
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <ModelAvatar modelDef={currentProvider} size="sm" />
+            {i18n.t('会话模型')}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-wrap gap-1.5 text-[10px] text-muted-foreground">
+          <Badge variant="secondary" className="text-[9px]">{currentProvider.label}</Badge>
+          <Badge variant="outline" className="text-[9px]">{i18n.t('上下文')} {Math.round(capabilities.contextWindow / 1000)}K</Badge>
+          <Badge variant="outline" className="text-[9px]">{capabilities.supportsTools ? i18n.t('支持工具') : i18n.t('仅聊天')}</Badge>
+          {capabilities.supportsVision && <Badge variant="outline" className="text-[9px]">{i18n.t('支持图片')}</Badge>}
+        </div>
+        <div className="max-h-[55vh] space-y-3 overflow-y-auto">
+          {providers.map(provider => (
+            <div key={provider.type}>
+              <div className="mb-1 flex items-center gap-1.5 px-1 text-[10px] text-muted-foreground">
+                <ModelAvatar modelDef={provider} size="sm" />
+                <span className="font-medium">{provider.label}</span>
+                {!loadProviderKey(provider.type) && provider.type !== currentType && <span>· {i18n.t('未配置 Key')}</span>}
+              </div>
+              <div className="space-y-1">
+                {(provider.models || []).map(model => {
+                  const selected = provider.type === currentType && model.value === currentModel;
+                  return (
+                    <button
+                      key={`${provider.type}:${model.value}`}
+                      type="button"
+                      onClick={() => {
+                        onSelect(provider.type, model.value);
+                        onOpenChange(false);
+                      }}
+                      className={cn(
+                        'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs',
+                        selected
+                          ? 'border-primary/35 bg-primary/10 text-primary'
+                          : 'border-border hover:bg-muted/50',
+                      )}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{model.label}</span>
+                        <span className="block truncate font-mono text-[9px] text-muted-foreground">{model.value}</span>
+                      </span>
+                      {selected && <Check className="h-3.5 w-3.5 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <Button type="button" variant="outline" size="sm" className="w-full gap-1.5" onClick={onOpenSettings}>
+          <Settings className="h-3.5 w-3.5" />
+          {i18n.t('打开模型设置')}
+        </Button>
       </DialogContent>
     </Dialog>
   );
@@ -1090,6 +1199,7 @@ export default function AiAssistantV2Page() {
   const [v2Settings] = useState(() => loadV2Settings());
   const [repoDialogOpen, setRepoDialogOpen] = useState(false);
   const [branchDialogOpen, setBranchDialogOpen] = useState(false);
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -1107,6 +1217,7 @@ export default function AiAssistantV2Page() {
   const [storageError, setStorageError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const runCapabilitiesRef = useRef<string[]>([]);
+  const runMetricsRef = useRef<{ runId: string; startedAt: number; firstTokenAt?: number } | null>(null);
   const approvalResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1115,12 +1226,10 @@ export default function AiAssistantV2Page() {
   const hydratedRef = useRef(false);
 
   const legacyKey = user?.login ? `${LEGACY_PREFIX}${user.login}` : '';
-  const modelDef = useMemo(() => getModelDef(modelConfig.type), [modelConfig.type]);
   const isAndroid = useMemo(
     () => typeof window !== 'undefined' && !!(window as unknown as { AndroidBridge?: unknown }).AndroidBridge,
     [],
   );
-  const hasModelKey = Boolean(modelConfig.api_key?.trim());
   const activeSession = useMemo(
     () => sessions.find(session => session.id === activeId) || sessions[0] || null,
     [sessions, activeId],
@@ -1128,6 +1237,26 @@ export default function AiAssistantV2Page() {
   const messages = activeSession?.messages || [];
   const repoContext = activeSession?.repo || null;
   const hasConversation = messages.length > 0;
+  const sessionType = (activeSession?.modelType as ModelType | undefined) || modelConfig.type;
+  const providerDef = useMemo(() => getModelDef(sessionType), [sessionType]);
+  const defaultProviderModel = providerDef.models?.[0]?.value || '';
+  const sessionModel = activeSession?.model
+    || (sessionType === modelConfig.type ? modelConfig.model || '' : defaultProviderModel);
+  const sessionApiKey = (sessionType === modelConfig.type ? modelConfig.api_key : loadProviderKey(sessionType)) || '';
+  const effectiveConfig = useMemo<ModelConfig>(
+    () => ({ ...modelConfig, type: sessionType, model: sessionModel, api_key: sessionApiKey }),
+    [modelConfig, sessionType, sessionModel, sessionApiKey],
+  );
+  const modelDef = providerDef;
+  const hasModelKey = Boolean(effectiveConfig.api_key?.trim());
+  const modelCapabilities = useMemo(
+    () => getModelCapabilities(effectiveConfig.type, sessionModel),
+    [effectiveConfig.type, sessionModel],
+  );
+  const modelLabel = useMemo(() => {
+    const option = modelDef.models?.find(item => item.value === sessionModel);
+    return option?.label || sessionModel || modelDef.label;
+  }, [modelDef, sessionModel]);
 
   useEffect(() => {
     setCharacter(loadActiveCharacter(user?.login));
@@ -1349,6 +1478,12 @@ export default function AiAssistantV2Page() {
     setMessages(prev => prev.map(message => message.id === id ? { ...message, ...patch } : message));
   }, [setMessages]);
 
+  const patchMetrics = useCallback((id: string, patch: NonNullable<UiChatMessage['metrics']>) => {
+    setMessages(prev => prev.map(message => message.id === id
+      ? { ...message, metrics: { ...message.metrics, ...patch } }
+      : message));
+  }, [setMessages]);
+
   const appendAssistant = useCallback((id: string, patch: { content?: string; reasoning?: string }) => {
     setMessages(prev => prev.map(message => {
       if (message.id !== id) return message;
@@ -1377,9 +1512,17 @@ export default function AiAssistantV2Page() {
         runCapabilitiesRef.current = event.capabilities || [];
         break;
       case 'text_delta':
+        if (runMetricsRef.current?.runId === runId && !runMetricsRef.current.firstTokenAt) {
+          runMetricsRef.current.firstTokenAt = Date.now();
+          patchMetrics(assistantId, { firstTokenMs: runMetricsRef.current.firstTokenAt - runMetricsRef.current.startedAt });
+        }
         appendAssistant(assistantId, { content: event.text });
         break;
       case 'reasoning_delta':
+        if (runMetricsRef.current?.runId === runId && !runMetricsRef.current.firstTokenAt) {
+          runMetricsRef.current.firstTokenAt = Date.now();
+          patchMetrics(assistantId, { firstTokenMs: runMetricsRef.current.firstTokenAt - runMetricsRef.current.startedAt });
+        }
         appendAssistant(assistantId, { reasoning: event.text });
         break;
       case 'tool_start':
@@ -1407,22 +1550,35 @@ export default function AiAssistantV2Page() {
           endedAt: Date.now(),
         });
         break;
+      case 'usage':
+        patchMetrics(assistantId, {
+          promptTokens: event.usage.prompt_tokens,
+          completionTokens: event.usage.completion_tokens,
+          totalTokens: event.usage.total_tokens,
+        });
+        break;
       case 'error':
         patchAssistant(assistantId, {
           content: event.message,
           streaming: false,
           error: true,
         });
+        if (runMetricsRef.current?.runId === runId) {
+          patchMetrics(assistantId, { durationMs: Date.now() - runMetricsRef.current.startedAt });
+        }
         break;
       case 'done':
         patchAssistant(assistantId, { streaming: false });
+        if (runMetricsRef.current?.runId === runId) {
+          patchMetrics(assistantId, { durationMs: Date.now() - runMetricsRef.current.startedAt });
+        }
         if (user?.login) void clearRunSnapshot(user.login, runId);
         setResumableSnapshot(null);
         break;
       default:
         break;
     }
-  }, [appendAssistant, patchAssistant, patchTool, setMessages, user?.login]);
+  }, [appendAssistant, patchAssistant, patchMetrics, patchTool, setMessages, user?.login]);
 
   const persistRunSnapshot = useCallback((
     runId: string,
@@ -1462,6 +1618,54 @@ export default function AiAssistantV2Page() {
     if (!files?.length) return;
     const candidates = Array.from(files).slice(0, MAX_ATTACHMENTS);
     for (const file of candidates) {
+      if (file.type.startsWith('image/')) {
+        if (!modelCapabilities.supportsVision) {
+          toast.error(i18n.t('当前模型不支持图片，请切换到 Gemini 或 GPT-4o 等视觉模型'));
+          continue;
+        }
+        if (file.size > MAX_IMAGE_BYTES) {
+          toast.error(i18n.t('{{name}} 超过 5 MB', { name: file.name }));
+          continue;
+        }
+        try {
+          const dataUrl = await readFileAsDataUrl(file);
+          addAttachment({
+            id: makeAttachmentId('image'),
+            name: file.name,
+            source: 'local',
+            kind: 'image',
+            size: file.size,
+            content: '',
+            dataUrl,
+          });
+        } catch {
+          toast.error(i18n.t('读取图片失败：{{name}}', { name: file.name }));
+        }
+        continue;
+      }
+      if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
+        if (file.size > MAX_PDF_BYTES) {
+          toast.error(i18n.t('{{name}} 超过 10 MB', { name: file.name }));
+          continue;
+        }
+        try {
+          const extracted = await extractPdfText(await file.arrayBuffer());
+          if (!extracted.trim()) {
+            toast.warning(i18n.t('{{name}} 没有可提取的文本（可能是扫描件）', { name: file.name }));
+            continue;
+          }
+          addAttachment({
+            id: makeAttachmentId('pdf'),
+            name: file.name,
+            source: 'local',
+            size: file.size,
+            content: `[PDF 文本提取]\n${extracted}`,
+          });
+        } catch {
+          toast.error(i18n.t('PDF 解析失败：{{name}}', { name: file.name }));
+        }
+        continue;
+      }
       if (file.size > MAX_ATTACHMENT_BYTES) {
         toast.error(i18n.t('{{name}} 超过 200 KB', { name: file.name }));
         continue;
@@ -1496,7 +1700,12 @@ export default function AiAssistantV2Page() {
     const text = input.trim();
     const attachments = pendingAttachments;
     if ((!text && !attachments.length) || streaming) return;
-    const modelText = buildModelUserContent(text || i18n.t('请查看附件'), attachments);
+    if (attachments.some(item => item.kind === 'image') && !modelCapabilities.supportsVision) {
+      toast.error(i18n.t('当前模型不支持图片，请切换到视觉模型'));
+      return;
+    }
+    const userText = text || i18n.t('请查看附件');
+    const modelContent = buildModelUserParts(userText, attachments);
     const displayText = text || `${i18n.t('请查看附件')}：${attachments.map(item => item.path || item.name).join('、')}`;
     if (!token) {
       toast.error(i18n.t('登录状态已失效，请重新登录'));
@@ -1513,7 +1722,7 @@ export default function AiAssistantV2Page() {
       id: `u-${Date.now()}`,
       role: 'user',
       content: displayText,
-      modelContent: modelText,
+      modelContent,
       attachments: attachments.length ? attachments : undefined,
       createdAt: now,
     };
@@ -1525,6 +1734,7 @@ export default function AiAssistantV2Page() {
       reasoning: '',
       tools: [],
       streaming: true,
+      metrics: { model: effectiveConfig.model },
       createdAt: now,
     };
 
@@ -1550,10 +1760,11 @@ export default function AiAssistantV2Page() {
 
     const controller = new AbortController();
     abortRef.current = controller;
+    runMetricsRef.current = { runId, startedAt: Date.now() };
 
     const onEvent = (event: AgentEvent) => handleAgentEvent(assistantId, runId, event);
 
-    const history = [...previousHistory, { role: 'user' as const, content: modelText }];
+    const history = previousHistory;
     let runStatus: 'done' | 'error' | 'stopped' = 'done';
     let runError: string | undefined;
 
@@ -1563,9 +1774,11 @@ export default function AiAssistantV2Page() {
         userLogin: user?.login,
         runId,
         repo: repoContext || undefined,
-        config: modelConfig,
+        config: effectiveConfig,
         history,
-        contextBudget: v2Settings.contextBudget,
+        currentUserContent: modelContent,
+        currentUserText: userText,
+        contextBudget: Math.min(v2Settings.contextBudget, modelCapabilities.contextWindow),
         memoryEnabled: v2Settings.memoryEnabled,
         persona: character.prompt,
         signal: controller.signal,
@@ -1597,7 +1810,9 @@ export default function AiAssistantV2Page() {
               runId,
               config: CLOUDFLARE_FALLBACK_CONFIG,
               history,
-              contextBudget: v2Settings.contextBudget,
+              currentUserContent: modelContent,
+              currentUserText: userText,
+              contextBudget: Math.min(v2Settings.contextBudget, modelCapabilities.contextWindow),
               memoryEnabled: v2Settings.memoryEnabled,
               persona: character.prompt,
               signal: controller.signal,
@@ -1655,8 +1870,9 @@ export default function AiAssistantV2Page() {
 
     setResumableSnapshot(null);
     setStreaming(true);
-    patchAssistant(assistantId, { streaming: true, error: false });
+    patchAssistant(assistantId, { streaming: true, error: false, metrics: { model: effectiveConfig.model } });
     runCapabilitiesRef.current = snapshot.capabilities;
+    runMetricsRef.current = { runId: snapshot.runId, startedAt: Date.now() };
     if (user?.login) resumeRun(user.login, snapshot.runId);
 
     const controller = new AbortController();
@@ -1671,11 +1887,11 @@ export default function AiAssistantV2Page() {
         userLogin: user?.login,
         runId: snapshot.runId,
         repo: repoContext || undefined,
-        config: modelConfig,
+        config: effectiveConfig,
         history: [],
         resumeMessages: snapshot.messages as V2ProviderMessage[],
         resumeSteps: snapshot.steps,
-        contextBudget: v2Settings.contextBudget,
+        contextBudget: Math.min(v2Settings.contextBudget, modelCapabilities.contextWindow),
         memoryEnabled: v2Settings.memoryEnabled,
         persona: character.prompt,
         signal: controller.signal,
@@ -1739,6 +1955,16 @@ export default function AiAssistantV2Page() {
     setPendingAttachments([]);
     stickToBottomRef.current = true;
     requestAnimationFrame(() => scrollToBottom(true));
+  };
+
+  const handleSelectModel = (type: string, model: string) => {
+    updateActiveSession(session => ({
+      ...session,
+      modelType: type,
+      model,
+      updatedAt: new Date().toISOString(),
+    }));
+    toast.success(i18n.t('已切换当前会话模型'));
   };
 
   const handleRenameSession = (id: string, title: string) => {
@@ -1909,7 +2135,7 @@ export default function AiAssistantV2Page() {
               {i18n.t('上次运行中断于第 {{step}} 步', { step: resumableSnapshot.steps })}：{resumableSnapshot.title}
             </span>
             <Button type="button" size="sm" className="h-7 gap-1 px-2 text-[10px]" onClick={() => void handleResume()}>
-              {i18n.t('继续')}
+              {i18n.t('继续/重试')}
             </Button>
             <Button
               type="button"
@@ -2014,7 +2240,7 @@ export default function AiAssistantV2Page() {
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept=".txt,.md,.markdown,.json,.jsonc,.yaml,.yml,.toml,.ini,.env,.js,.jsx,.ts,.tsx,.mjs,.cjs,.css,.scss,.html,.htm,.xml,.svg,.vue,.svelte,.py,.go,.rs,.java,.kt,.kts,.gradle,.c,.h,.cpp,.hpp,.cs,.php,.rb,.sh,.bash,.sql,.csv,.log,Dockerfile,Makefile"
+                accept=".txt,.md,.markdown,.json,.jsonc,.yaml,.yml,.toml,.ini,.env,.js,.jsx,.ts,.tsx,.mjs,.cjs,.css,.scss,.html,.htm,.xml,.svg,.vue,.svelte,.py,.go,.rs,.java,.kt,.kts,.gradle,.c,.h,.cpp,.hpp,.cs,.php,.rb,.sh,.bash,.sql,.csv,.log,.pdf,.png,.jpg,.jpeg,.webp,.gif,Dockerfile,Makefile"
                 className="hidden"
                 onChange={event => void handleLocalFiles(event.target.files)}
               />
@@ -2026,7 +2252,9 @@ export default function AiAssistantV2Page() {
                       className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border bg-muted/40 px-2 py-1 text-[10px]"
                       title={attachment.path || attachment.name}
                     >
-                      {attachment.source === 'repo' ? <AtSign className="h-3 w-3 shrink-0 text-primary" /> : <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />}
+                      {attachment.kind === 'image' && attachment.dataUrl ? (
+                        <img src={attachment.dataUrl} alt={attachment.name} className="h-5 w-5 shrink-0 rounded object-cover" />
+                      ) : attachment.source === 'repo' ? <AtSign className="h-3 w-3 shrink-0 text-primary" /> : <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />}
                       <span className="max-w-[160px] truncate">{attachment.path || attachment.name}</span>
                       <span className="shrink-0 text-muted-foreground">{formatFileSize(attachment.size)}</span>
                       <button
@@ -2090,11 +2318,11 @@ export default function AiAssistantV2Page() {
                 </Button>
                 <button
                   type="button"
-                  onClick={() => navigate('/ai-settings')}
+                  onClick={() => setModelDialogOpen(true)}
                   className="flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   <ModelAvatar modelDef={modelDef} size="sm" />
-                  <span className="max-w-[110px] truncate">{modelDef.label}</span>
+                  <span className="max-w-[110px] truncate">{modelLabel}</span>
                   <ChevronDown className="h-3 w-3 shrink-0" />
                 </button>
                 <span className="ml-auto text-[9px] text-muted-foreground">
@@ -2128,7 +2356,7 @@ export default function AiAssistantV2Page() {
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           <ContextContent
             repo={repoContext}
-            modelLabel={modelDef.label}
+            modelLabel={modelLabel}
             characterLabel={character.name}
             onAddRepo={() => setRepoDialogOpen(true)}
             onRemoveRepo={() => setRepoContext(null)}
@@ -2270,6 +2498,20 @@ const args = approvalRequest.arguments as Record<string, unknown>;
         </DialogContent>
       </Dialog>
 
+      <ModelPickerDialog
+        open={modelDialogOpen}
+        onOpenChange={setModelDialogOpen}
+        providers={MODEL_DEFS}
+        currentType={sessionType}
+        currentModel={sessionModel}
+        capabilities={modelCapabilities}
+        onSelect={handleSelectModel}
+        onOpenSettings={() => {
+          setModelDialogOpen(false);
+          navigate('/ai-settings/model');
+        }}
+      />
+
       <BranchPickerDialog
         open={branchDialogOpen}
         onOpenChange={setBranchDialogOpen}
@@ -2333,7 +2575,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
           </DialogHeader>
           <ContextContent
             repo={repoContext}
-            modelLabel={modelDef.label}
+            modelLabel={modelLabel}
             characterLabel={character.name}
             onAddRepo={() => {
               setContextDialogOpen(false);

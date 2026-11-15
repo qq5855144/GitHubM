@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildModelUserContent,
+  buildModelUserParts,
   filterRepoFiles,
   formatFileSize,
   isTextFilePath,
@@ -40,6 +41,20 @@ describe('AI attachments', () => {
     }]);
     expect(history[0].content).toContain('src/App.tsx');
     expect(history[0].content).toContain('export default');
+  });
+
+  it('builds multimodal parts for image attachments', () => {
+    const parts = buildModelUserParts('看这张图', [{
+      id: 'img1',
+      name: 'screen.png',
+      source: 'local',
+      kind: 'image',
+      size: 100,
+      content: '',
+      dataUrl: 'data:image/png;base64,AAAA',
+    }]);
+    expect(Array.isArray(parts)).toBe(true);
+    expect((parts as Array<{ type: string }>).map(part => part.type)).toEqual(['text', 'image_url']);
   });
 
   it('filters repo text files and formats sizes', () => {

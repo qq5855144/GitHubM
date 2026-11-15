@@ -1,5 +1,5 @@
 // AI V2 — Run Store：持久化运行摘要，用于历史、诊断和后续恢复
-import type { AgentEvent } from './types';
+import type { AgentEvent, V2ProviderMessage } from './types';
 import { idbDelete, idbGet, idbKeys, idbSet } from './idbKv';
 
 export type RunStatus = 'running' | 'done' | 'error' | 'stopped';
@@ -172,14 +172,7 @@ export interface RunSnapshot {
   sessionId?: string;
   assistantId?: string;
   title: string;
-  messages: Array<{
-    role: string;
-    content: string | null;
-    tool_calls?: unknown;
-    tool_call_id?: string;
-    name?: string;
-    reasoning_content?: string;
-  }>;
+  messages: V2ProviderMessage[];
   steps: number;
   capabilities: string[];
   savedAt: string;
@@ -242,7 +235,13 @@ async function writeRunSnapshot(login: string | undefined, snapshot: RunSnapshot
     ...snapshot,
     messages: snapshot.messages.slice(-60).map(message => ({
       ...message,
-      content: typeof message.content === 'string' ? message.content.slice(0, 30000) : message.content,
+      content: typeof message.content === 'string'
+        ? message.content.slice(0, 30000)
+        : Array.isArray(message.content)
+          ? message.content.map(part => part.type === 'image_url'
+            ? { type: 'text' as const, text: '[图片附件已省略]' }
+            : { ...part, text: part.text.slice(0, 30000) })
+          : null,
     })),
     savedAt: new Date().toISOString(),
   };

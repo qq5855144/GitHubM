@@ -79,6 +79,7 @@
     "miaoda-react-devkit": "0.1.1-beta.15",
     "motion": "^12.23.25",
     "next-themes": "^0.4.6",
+    "pdfjs-dist": "5.4.149",
     "qrcode": "^1.5.4",
     "react": "^18.0.0",
     "react-day-picker": "^9.13.0",

@@ -349,6 +349,33 @@ describe('AI Assistant V2 provider', () => {
     expect(request.body.model).toBe('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
   });
 
+  it('appends multimodal current user content', async () => {
+    let seen: V2ProviderMessage[] = [];
+    await runGeneralAgent({
+      token: 'github-token',
+      userLogin: 'image-user',
+      history: [{ role: 'user', content: 'old' }, { role: 'assistant', content: 'old answer' }],
+      currentUserContent: [
+        { type: 'text', text: '看这张图' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } },
+      ],
+      currentUserText: '看这张图',
+      config,
+      signal: new AbortController().signal,
+      tools: [fakeTool()],
+      onEvent: () => undefined,
+      callModel: async (_config, messages): Promise<ProviderStreamResult> => {
+        seen = [...messages];
+        return { content: '看到了', reasoning: '', toolCalls: [], model: 'test-model' };
+      },
+    });
+    expect(Array.isArray(seen[seen.length - 1].content)).toBe(true);
+    expect(seen[seen.length - 1].content).toEqual([
+      { type: 'text', text: '看这张图' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } },
+    ]);
+  });
+
   it('parses streaming text, reasoning and tool call fragments', async () => {
     const chunks = [
       'data: {"choices":[{"delta":{"reasoning":"思考"}}]}\n\n',

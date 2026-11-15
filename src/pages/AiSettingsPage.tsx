@@ -45,6 +45,7 @@ import {
   ChevronRight,
   Cpu,
   Database,
+  FileText,
   HardDrive,
   KeyRound,
   Loader2,
@@ -662,6 +663,12 @@ export default function AiSettingsPage() {
       { name: 'github_list_files', desc: '列出目录文件', icon: HardDrive, risk: 'read', group: 'GitHub 只读' },
       { name: 'github_read_file', desc: '读取文本文件', icon: Wrench, risk: 'read', group: 'GitHub 只读' },
       { name: 'github_search_code', desc: '搜索代码与文本', icon: Cpu, risk: 'read', group: 'GitHub 只读' },
+      { name: 'github_list_workflow_runs', desc: 'Actions 运行列表', icon: Activity, risk: 'read', group: 'GitHub 协作' },
+      { name: 'github_list_workflow_jobs', desc: '列出 Job 与失败步骤', icon: Activity, risk: 'read', group: 'GitHub 协作' },
+      { name: 'github_get_job_logs', desc: '读取完整 Job 日志', icon: FileText, risk: 'read', group: 'GitHub 协作' },
+      { name: 'github_list_issues', desc: '列出 Issues', icon: Database, risk: 'read', group: 'GitHub 协作' },
+      { name: 'github_list_pulls', desc: '列出 Pull Request', icon: Database, risk: 'read', group: 'GitHub 协作' },
+      { name: 'github_get_pull', desc: '读取 PR 详情', icon: Database, risk: 'read', group: 'GitHub 协作' },
       { name: 'github_write_file', desc: '创建或更新文件', icon: Wrench, risk: 'write', group: 'GitHub 写入' },
     ];
     return (

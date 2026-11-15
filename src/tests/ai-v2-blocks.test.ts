@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendBlockDelta, appendToolBlock, ensureBlocks } from '@/ai-v2/blocks';
+import { appendBlockDelta, appendToolBlock, buildRenderGroups, ensureBlocks } from '@/ai-v2/blocks';
 import type { UiChatMessage } from '@/ai-v2/types';
 
 describe('assistant blocks', () => {
@@ -44,5 +44,29 @@ describe('assistant blocks', () => {
     const blocks = appendBlockDelta(undefined, 'text', '原始');
     const message = { id: 'a2', role: 'assistant', content: '原始', blocks, createdAt: '' } as UiChatMessage;
     expect(ensureBlocks(message)).toBe(blocks);
+  });
+
+  it('groups consecutive tool calls into one execution group', () => {
+    let blocks: ReturnType<typeof appendBlockDelta> = [{ id: 't1', type: 'text', text: '先看下' }];
+    blocks = appendToolBlock(blocks, 'call_1');
+    blocks = appendToolBlock(blocks, 'call_2');
+    blocks = appendBlockDelta(blocks, 'text', '结论');
+    blocks = appendToolBlock(blocks, 'call_3');
+
+    const groups = buildRenderGroups(blocks);
+    expect(groups.map(group => group.kind)).toEqual(['text', 'execution', 'text', 'execution']);
+    const execution = groups[1];
+    expect(execution.kind === 'execution' && execution.toolIds).toEqual(['call_1', 'call_2']);
+  });
+
+  it('keeps reasoning separate from the answer', () => {
+    let blocks: ReturnType<typeof appendBlockDelta> = [{ id: 'r1', type: 'reasoning', text: '想一想' }];
+    blocks = appendBlockDelta(blocks, 'text', '回答');
+    expect(buildRenderGroups(blocks).map(group => group.kind)).toEqual(['reasoning', 'text']);
+  });
+
+  it('skips empty groups', () => {
+    expect(buildRenderGroups([])).toEqual([]);
+    expect(buildRenderGroups([{ id: 'x', type: 'text', text: '' }])).toEqual([]);
   });
 });

@@ -43,3 +43,31 @@ export function ensureBlocks(message: UiChatMessage): UiAssistantBlock[] {
   }
   return list;
 }
+
+export type AssistantRenderGroup =
+  | { kind: 'reasoning'; id: string; text: string }
+  | { kind: 'text'; id: string; text: string }
+  | { kind: 'execution'; id: string; toolIds: string[] };
+
+/**
+ * 把有序区块合并成展示分组：
+ * 连续的工具调用合并成一个执行组，其余按原顺序保留。
+ */
+export function buildRenderGroups(blocks: UiAssistantBlock[]): AssistantRenderGroup[] {
+  const groups: AssistantRenderGroup[] = [];
+  for (const block of blocks) {
+    if (block.type === 'tool') {
+      if (!block.toolId) continue;
+      const last = groups[groups.length - 1];
+      if (last && last.kind === 'execution') {
+        last.toolIds.push(block.toolId);
+      } else {
+        groups.push({ kind: 'execution', id: block.id, toolIds: [block.toolId] });
+      }
+      continue;
+    }
+    if (!block.text) continue;
+    groups.push({ kind: block.type === 'reasoning' ? 'reasoning' : 'text', id: block.id, text: block.text });
+  }
+  return groups;
+}

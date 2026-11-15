@@ -36,7 +36,8 @@ import {
   toSessionMeta,
 } from '@/ai-v2/sessionStore';
 import type { SessionIndex, V2Session } from '@/ai-v2/sessionStore';
-import { appendBlockDelta, appendToolBlock, ensureBlocks } from '@/ai-v2/blocks';
+import { appendBlockDelta, appendToolBlock, buildRenderGroups, ensureBlocks } from '@/ai-v2/blocks';
+import AiExecutionPanel from '@/components/ai/AiExecutionPanel';
 import { deriveSessionTitle } from '@/ai-v2/sessionTitle';
 import { extractPdfText, MAX_PDF_BYTES } from '@/ai-v2/pdf';
 import RepoSelector from '@/components/ai/RepoSelector';
@@ -377,7 +378,7 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
   const blocks = message.blocks || [];
   const tools = message.tools || [];
   const isStreaming = Boolean(message.streaming);
-  const lastIndex = blocks.length - 1;
+
   const hasBody = blocks.length > 0 || Boolean(message.content || message.reasoning) || tools.length > 0;
   const copy = async () => {
     try {
@@ -389,26 +390,31 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
   };
 
   // 新消息按区块顺序渲染：思考 → 工具 → 正文 → 工具 → 正文…
-  const renderedBlocks = blocks.map((block, index) => {
-    const isLast = index === lastIndex;
-    if (block.type === 'reasoning') {
-      if (!block.text) return null;
-      return <ReasoningPanel key={block.id} text={block.text} streaming={isStreaming && isLast} />;
+  // 区块合并成展示分组：连续工具调用收进执行面板，正文保持独立
+  const groups = buildRenderGroups(blocks);
+  const lastGroupIndex = groups.length - 1;
+  const renderedBlocks = groups.map((group, index) => {
+    const isLast = index === lastGroupIndex;
+    if (group.kind === 'reasoning') {
+      return <ReasoningPanel key={group.id} text={group.text} streaming={isStreaming && isLast} />;
     }
-    if (block.type === 'tool') {
-      const tool = tools.find(item => item.id === block.toolId);
-      if (!tool) return null;
+    if (group.kind === 'execution') {
+      const groupTools = group.toolIds
+        .map(id => tools.find(item => item.id === id))
+        .filter((tool): tool is UiToolRun => Boolean(tool));
+      if (!groupTools.length) return null;
       return (
-        <div key={block.id} className="my-1.5 border-l-2 border-primary/20 pl-2.5">
-          <ToolCard tool={tool} onOpenArtifact={onOpenArtifact} />
-        </div>
+        <AiExecutionPanel
+          key={group.id}
+          tools={groupTools}
+          onOpenArtifact={onOpenArtifact}
+        />
       );
     }
-    if (!block.text) return null;
     return (
       <AssistantTextBlock
-        key={block.id}
-        text={block.text}
+        key={group.id}
+        text={group.text}
         streaming={isStreaming && isLast}
         error={message.error && isLast}
         onApplyDiff={onApplyDiff}
@@ -418,7 +424,7 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
 
   return (
     <div className="min-w-0">
-      {blocks.length > 0 ? (
+      {groups.length > 0 ? (
         <div className="space-y-2">{renderedBlocks}</div>
       ) : (
         <>
@@ -1666,6 +1672,21 @@ export default function AiAssistantV2Page() {
     }
   }, [flushStreamDelta]);
 
+  /** 运行结束时把仍在执行中的工具标成已停止，避免一直转圈 */
+  const settleRunningTools = useCallback((assistantId: string) => {
+    setMessages(prev => prev.map(message => {
+      if (message.id !== assistantId) return message;
+      const tools = message.tools || [];
+      if (!tools.some(tool => tool.status === 'running')) return message;
+      return {
+        ...message,
+        tools: tools.map(tool => (tool.status === 'running'
+          ? { ...tool, status: 'error' as const, content: tool.content || i18n.t('已停止'), endedAt: tool.endedAt || Date.now() }
+          : tool)),
+      };
+    }));
+  }, [setMessages]);
+
   const patchTool = useCallback((assistantId: string, callId: string, patch: Partial<UiToolRun>) => {
     setMessages(prev => prev.map(message => {
       if (message.id !== assistantId) return message;
@@ -2038,6 +2059,7 @@ export default function AiAssistantV2Page() {
       }
     } finally {
       flushStreamDelta();
+      settleRunningTools(assistantId);
       finishRun(user?.login, runId, runStatus, runError);
       if (runStatus !== 'done' && user?.login) {
         void latestRunSnapshot(user.login, activeSession?.id).then(snapshot => setResumableSnapshot(snapshot));
@@ -2110,6 +2132,7 @@ export default function AiAssistantV2Page() {
       }
     } finally {
       flushStreamDelta();
+      settleRunningTools(assistantId);
       finishRun(user?.login, snapshot.runId, runStatus, runError);
       if (runStatus !== 'done' && user?.login) {
         void latestRunSnapshot(user.login, activeSession?.id).then(snapshot => setResumableSnapshot(snapshot));

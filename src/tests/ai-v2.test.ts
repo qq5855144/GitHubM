@@ -103,6 +103,48 @@ describe('AI Assistant V2 agent loop', () => {
     expect(events.some(event => event.type === 'done')).toBe(true);
   });
 
+  it('continues the run after a tool throws', async () => {
+    const events: AgentEvent[] = [];
+    let modelCall = 0;
+    const broken: AgentTool = {
+      ...fakeTool(),
+      name: 'broken',
+      async execute() {
+        throw new Error('boom');
+      },
+    };
+
+    await runGeneralAgent({
+      token: 'github-token',
+      history: [{ role: 'user', content: '调用一个会失败的工具' }],
+      config,
+      signal: new AbortController().signal,
+      onEvent: event => events.push(event),
+      tools: [broken],
+      callModel: async (): Promise<ProviderStreamResult> => {
+        modelCall++;
+        if (modelCall === 1) {
+          return {
+            content: '',
+            reasoning: '',
+            toolCalls: [{ id: 'call-broken', name: 'broken', arguments: '{}' }],
+            model: 'test-model',
+          };
+        }
+        return {
+          content: '工具失败后继续完成',
+          reasoning: '',
+          toolCalls: [],
+          model: 'test-model',
+        };
+      },
+    });
+
+    expect(modelCall).toBe(2);
+    expect(events.some(event => event.type === 'tool_end' && !event.ok)).toBe(true);
+    expect(events.some(event => event.type === 'done')).toBe(true);
+  });
+
   it('keeps running beyond twelve tool rounds until the model finishes', async () => {
     const events: AgentEvent[] = [];
     let modelCall = 0;

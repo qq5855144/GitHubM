@@ -40,6 +40,15 @@ function getRequestUrl(config: ModelConfig): { url: string; proxy: boolean } {
   return { url: `${DEFAULT_PROXY}/v1/chat/completions`, proxy: true };
 }
 
+/** 部分供应商（DeepSeek）禁止回传 reasoning_content，发送前统一剔除 */
+export function stripReasoningContent(messages: V2ProviderMessage[]): V2ProviderMessage[] {
+  return messages.map(message => {
+    if (!message.reasoning_content) return message;
+    const { reasoning_content: _reasoning, ...rest } = message;
+    return rest;
+  });
+}
+
 export function buildProviderRequest(
   config: ModelConfig,
   messages: V2ProviderMessage[],
@@ -64,7 +73,7 @@ export function buildProviderRequest(
 
   const body: Record<string, unknown> = {
     model: config.model || defaultModelFor(config.type),
-    messages,
+    messages: stripReasoningContent(messages),
     stream: true,
     max_tokens: getModelCapabilities(config.type, config.model).maxOutput,
   };

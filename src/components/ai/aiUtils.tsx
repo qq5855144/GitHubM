@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import type { ModelConfig, ModelType, SSEChunk } from './aiTypes';
 import DiffBlock from './DiffBlock';
+import CodeBlock from './CodeBlock';
 import { WenxinIcon, DeepSeekIcon, GeminiIcon, QwenIcon, OpenAIIcon, CustomIcon } from './ModelIcons';
 import {
   FolderOpen, BookOpen, Search, FileCode2, Pencil,
@@ -353,19 +354,7 @@ export function renderMarkdown(text: string, onApplyDiff?: (filePath: string, di
       }
 
       result.push(
-        <div key={key++} className="my-2 rounded-lg border border-border bg-muted overflow-hidden">
-          {lang && (
-            <div className="flex items-center justify-between px-3 py-1 bg-muted border-b border-border">
-              <span className="text-[10px] font-mono text-muted-foreground select-none">{lang}</span>
-            </div>
-          )}
-          {/* 代码块：overflow-x-auto 约束在气泡宽度内横向滚动，避免 Android WebView 撑爆父容器 */}
-          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-            <pre className="p-3 text-[11px] font-mono leading-relaxed whitespace-pre" style={{ display: 'inline-block', minWidth: '100%' }}>
-              <code>{codeText}</code>
-            </pre>
-          </div>
-        </div>
+        <CodeBlock key={key++} code={codeText} lang={lang} />
       );
       i++; continue;
     }

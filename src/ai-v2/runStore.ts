@@ -181,7 +181,77 @@ export interface RunSnapshot {
 const SNAPSHOT_PREFIX = 'githubm_ai_run_snapshot:';
 const SNAPSHOT_IDB_PREFIX = 'run_snapshot:';
 const MAX_SNAPSHOTS = 10;
+const MAX_SNAPSHOT_MESSAGES = 24;
+const MAX_SNAPSHOT_TOOL_ROUNDS = 10;
+const MAX_SNAPSHOT_TOOL_CHARS = 1500;
+const MAX_SNAPSHOT_TEXT_CHARS = 4000;
 const snapshotWriteQueues = new Map<string, Promise<void>>();
+
+function clampContent(
+  content: V2ProviderMessage['content'],
+  maxChars: number,
+): V2ProviderMessage['content'] {
+  if (typeof content === 'string') {
+    return content.length > maxChars ? content.slice(0, maxChars) : content;
+  }
+  if (Array.isArray(content)) {
+    return content.map(part => (part.type === 'image_url'
+      ? { type: 'text' as const, text: '[图片附件已省略]' }
+      : { ...part, text: part.text.slice(0, maxChars) }));
+  }
+  return content;
+}
+
+/**
+ * 快照只用于断点续跑：
+ * - 只保留最近 24 条消息
+ * - 只保留最近 10 轮工具调用，工具结果截断到 1500 字符
+ * - 图片一律省略
+ */
+export function compactSnapshotMessages(messages: V2ProviderMessage[]): V2ProviderMessage[] {
+  const windowed = messages.slice(-MAX_SNAPSHOT_MESSAGES);
+  let start = 0;
+  while (start < windowed.length && windowed[start].role === 'tool') start += 1;
+  const trimmed = windowed.slice(start);
+
+  const owners: number[] = [];
+  for (let index = trimmed.length - 1; index >= 0; index -= 1) {
+    if (trimmed[index].tool_calls?.length) {
+      owners.push(index);
+      if (owners.length >= MAX_SNAPSHOT_TOOL_ROUNDS) break;
+    }
+  }
+  const keepOwners = new Set(owners);
+  const keepCallIds = new Set<string>();
+  for (const index of owners) {
+    for (const call of trimmed[index].tool_calls || []) keepCallIds.add(call.id);
+  }
+
+  const result: V2ProviderMessage[] = [];
+  trimmed.forEach((message, index) => {
+    if (message.role === 'tool') {
+      if (message.tool_call_id && !keepCallIds.has(message.tool_call_id)) return;
+      result.push({ ...message, content: clampContent(message.content, MAX_SNAPSHOT_TOOL_CHARS) });
+      return;
+    }
+    if (message.tool_calls?.length) {
+      if (!keepOwners.has(index)) {
+        const { tool_calls: _dropped, ...rest } = message;
+        result.push({ ...rest, content: clampContent(message.content, MAX_SNAPSHOT_TEXT_CHARS) });
+        return;
+      }
+      result.push({
+        ...message,
+        content: clampContent(message.content, MAX_SNAPSHOT_TEXT_CHARS),
+        tool_calls: message.tool_calls.filter(call => keepCallIds.has(call.id)),
+      });
+      return;
+    }
+    result.push({ ...message, content: clampContent(message.content, MAX_SNAPSHOT_TEXT_CHARS) });
+  });
+
+  return result;
+}
 
 function idbSnapshotKey(login: string | undefined, runId: string): string {
   return `${SNAPSHOT_IDB_PREFIX}${safeLogin(login)}:${runId}`;
@@ -233,16 +303,7 @@ async function pruneSnapshots(login: string | undefined): Promise<void> {
 async function writeRunSnapshot(login: string | undefined, snapshot: RunSnapshot): Promise<void> {
   const compact: RunSnapshot = {
     ...snapshot,
-    messages: snapshot.messages.slice(-60).map(message => ({
-      ...message,
-      content: typeof message.content === 'string'
-        ? message.content.slice(0, 30000)
-        : Array.isArray(message.content)
-          ? message.content.map(part => part.type === 'image_url'
-            ? { type: 'text' as const, text: '[图片附件已省略]' }
-            : { ...part, text: part.text.slice(0, 30000) })
-          : null,
-    })),
+    messages: compactSnapshotMessages(snapshot.messages),
     savedAt: new Date().toISOString(),
   };
   const persisted = await idbSet(idbSnapshotKey(login, compact.runId), compact);

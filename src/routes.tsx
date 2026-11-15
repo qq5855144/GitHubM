@@ -1,47 +1,49 @@
+import { Suspense, lazy } from 'react';
 import type { ReactNode } from 'react';
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import ReposPage from './pages/ReposPage';
-import RepoDetailPage from './pages/RepoDetailPage';
-import IssuesPage from './pages/IssuesPage';
-import IssueDetailPage from './pages/IssueDetailPage';
-import PullsPage from './pages/PullsPage';
-import PullDetailPage from './pages/PullDetailPage';
-import CodeBrowserPage from './pages/CodeBrowserPage';
-import CommitsPage from './pages/CommitsPage';
-import CommitDetailPage from './pages/CommitDetailPage';
-import BranchesPage from './pages/BranchesPage';
-import CollaboratorsPage from './pages/CollaboratorsPage';
-import NotificationsPage from './pages/NotificationsPage';
-import SearchPage from './pages/SearchPage';
-import SettingsPage from './pages/SettingsPage';
-import ActivityPage from './pages/ActivityPage';
-import ActivityDetailPage from './pages/ActivityDetailPage';
-import ActionsPage from './pages/ActionsPage';
-import ActionsSecretsPage from './pages/ActionsSecretsPage';
-import GistsPage from './pages/GistsPage';
-import GistDetailPage from './pages/GistDetailPage';
-import PackagesPage from './pages/PackagesPage';
-import ProjectsPage from './pages/ProjectsPage';
-import DiscussionsPage from './pages/DiscussionsPage';
-import WikiPage from './pages/WikiPage';
-import AccountsPage from './pages/AccountsPage';
-import ExportPage from './pages/ExportPage';
-import UploadPage from './pages/UploadPage';
-import PagesDeployPage from './pages/PagesDeployPage';
-import ArtifactsPage from './pages/ArtifactsPage';
-import GraphQLPlaygroundPage from './pages/GraphQLPlaygroundPage';
-import FollowListPage from './pages/FollowListPage';
-import StarredPage from './pages/StarredPage';
-import UserProfilePage from './pages/UserProfilePage';
-import RepoForksPage from './pages/RepoForksPage';
-import StargazersPage from './pages/StargazersPage';
 import { Navigate } from 'react-router-dom';
-import PrDiffPage from './pages/PrDiffPage';
-import AiAssistantV2Page from './pages/AiAssistantV2Page';
-import AiSettingsPage from './pages/AiSettingsPage';
-import MorePage from './pages/MorePage';
-import i18n from "@/i18n";
+import i18n from '@/i18n';
+
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const ReposPage = lazy(() => import('./pages/ReposPage'));
+const RepoDetailPage = lazy(() => import('./pages/RepoDetailPage'));
+const IssuesPage = lazy(() => import('./pages/IssuesPage'));
+const IssueDetailPage = lazy(() => import('./pages/IssueDetailPage'));
+const PullsPage = lazy(() => import('./pages/PullsPage'));
+const PullDetailPage = lazy(() => import('./pages/PullDetailPage'));
+const CodeBrowserPage = lazy(() => import('./pages/CodeBrowserPage'));
+const CommitsPage = lazy(() => import('./pages/CommitsPage'));
+const CommitDetailPage = lazy(() => import('./pages/CommitDetailPage'));
+const BranchesPage = lazy(() => import('./pages/BranchesPage'));
+const CollaboratorsPage = lazy(() => import('./pages/CollaboratorsPage'));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
+const SearchPage = lazy(() => import('./pages/SearchPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const ActivityPage = lazy(() => import('./pages/ActivityPage'));
+const ActivityDetailPage = lazy(() => import('./pages/ActivityDetailPage'));
+const ActionsPage = lazy(() => import('./pages/ActionsPage'));
+const ActionsSecretsPage = lazy(() => import('./pages/ActionsSecretsPage'));
+const GistsPage = lazy(() => import('./pages/GistsPage'));
+const GistDetailPage = lazy(() => import('./pages/GistDetailPage'));
+const PackagesPage = lazy(() => import('./pages/PackagesPage'));
+const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
+const DiscussionsPage = lazy(() => import('./pages/DiscussionsPage'));
+const WikiPage = lazy(() => import('./pages/WikiPage'));
+const AccountsPage = lazy(() => import('./pages/AccountsPage'));
+const ExportPage = lazy(() => import('./pages/ExportPage'));
+const UploadPage = lazy(() => import('./pages/UploadPage'));
+const PagesDeployPage = lazy(() => import('./pages/PagesDeployPage'));
+const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'));
+const GraphQLPlaygroundPage = lazy(() => import('./pages/GraphQLPlaygroundPage'));
+const FollowListPage = lazy(() => import('./pages/FollowListPage'));
+const StarredPage = lazy(() => import('./pages/StarredPage'));
+const UserProfilePage = lazy(() => import('./pages/UserProfilePage'));
+const RepoForksPage = lazy(() => import('./pages/RepoForksPage'));
+const StargazersPage = lazy(() => import('./pages/StargazersPage'));
+const PrDiffPage = lazy(() => import('./pages/PrDiffPage'));
+const AiAssistantV2Page = lazy(() => import('./pages/AiAssistantV2Page'));
+const AiSettingsPage = lazy(() => import('./pages/AiSettingsPage'));
+const MorePage = lazy(() => import('./pages/MorePage'));
 
 export interface RouteConfig {
   name: string;
@@ -52,55 +54,67 @@ export interface RouteConfig {
   public?: boolean;
 }
 
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[40vh] w-full items-center justify-center">
+      <div className="h-7 w-7 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+    </div>
+  );
+}
+
+function page(node: ReactNode): ReactNode {
+  return <Suspense fallback={<RouteFallback />}>{node}</Suspense>;
+}
+
 export const routes: RouteConfig[] = [
   // 公开路由
-  { name: i18n.t('登录'), path: '/login', element: <LoginPage />, public: true },
+  { name: i18n.t('登录'), path: '/login', element: page(<LoginPage />), public: true },
   // 受保护路由
-  { name: i18n.t('首页'), path: '/', element: <DashboardPage /> },
-  { name: i18n.t('仓库列表'), path: '/repos', element: <ReposPage /> },
-  { name: i18n.t('仓库详情'), path: '/repos/:owner/:repo', element: <RepoDetailPage /> },
-  { name: 'Issues', path: '/repos/:owner/:repo/issues', element: <IssuesPage /> },
-  { name: i18n.t('Issue 详情'), path: '/repos/:owner/:repo/issues/:number', element: <IssueDetailPage /> },
-  { name: 'Pull Requests', path: '/repos/:owner/:repo/pulls', element: <PullsPage /> },
-  { name: i18n.t('PR 详情'), path: '/repos/:owner/:repo/pulls/:number', element: <PullDetailPage /> },
-  { name: 'PR Diff', path: '/repos/:owner/:repo/pulls/:number/diff', element: <PrDiffPage /> },
-  { name: i18n.t('代码浏览'), path: '/repos/:owner/:repo/code/*', element: <CodeBrowserPage /> },
-  { name: i18n.t('代码浏览根'), path: '/repos/:owner/:repo/code', element: <CodeBrowserPage /> },
-  { name: i18n.t('提交历史'), path: '/repos/:owner/:repo/commits', element: <CommitsPage /> },
-  { name: i18n.t('提交详情'), path: '/repos/:owner/:repo/commits/:sha', element: <CommitDetailPage /> },
-  { name: i18n.t('分支管理'), path: '/repos/:owner/:repo/branches', element: <BranchesPage /> },
-  { name: i18n.t('协作者'), path: '/repos/:owner/:repo/collaborators', element: <CollaboratorsPage /> },
+  { name: i18n.t('首页'), path: '/', element: page(<DashboardPage />) },
+  { name: i18n.t('仓库列表'), path: '/repos', element: page(<ReposPage />) },
+  { name: i18n.t('仓库详情'), path: '/repos/:owner/:repo', element: page(<RepoDetailPage />) },
+  { name: 'Issues', path: '/repos/:owner/:repo/issues', element: page(<IssuesPage />) },
+  { name: i18n.t('Issue 详情'), path: '/repos/:owner/:repo/issues/:number', element: page(<IssueDetailPage />) },
+  { name: 'Pull Requests', path: '/repos/:owner/:repo/pulls', element: page(<PullsPage />) },
+  { name: i18n.t('PR 详情'), path: '/repos/:owner/:repo/pulls/:number', element: page(<PullDetailPage />) },
+  { name: 'PR Diff', path: '/repos/:owner/:repo/pulls/:number/diff', element: page(<PrDiffPage />) },
+  { name: i18n.t('代码浏览'), path: '/repos/:owner/:repo/code/*', element: page(<CodeBrowserPage />) },
+  { name: i18n.t('代码浏览根'), path: '/repos/:owner/:repo/code', element: page(<CodeBrowserPage />) },
+  { name: i18n.t('提交历史'), path: '/repos/:owner/:repo/commits', element: page(<CommitsPage />) },
+  { name: i18n.t('提交详情'), path: '/repos/:owner/:repo/commits/:sha', element: page(<CommitDetailPage />) },
+  { name: i18n.t('分支管理'), path: '/repos/:owner/:repo/branches', element: page(<BranchesPage />) },
+  { name: i18n.t('协作者'), path: '/repos/:owner/:repo/collaborators', element: page(<CollaboratorsPage />) },
   // 新增仓库子功能
-  { name: 'Actions', path: '/repos/:owner/:repo/actions', element: <ActionsPage /> },
-  { name: 'Actions 运行详情', path: '/repos/:owner/:repo/actions/runs/:runId', element: <ActionsPage /> },
-  { name: i18n.t('Actions 密钥与变量'), path: '/repos/:owner/:repo/actions/secrets', element: <ActionsSecretsPage /> },
-  { name: 'Packages', path: '/repos/:owner/:repo/packages', element: <PackagesPage /> },
-  { name: 'Projects', path: '/repos/:owner/:repo/projects', element: <ProjectsPage /> },
-  { name: 'Discussions', path: '/repos/:owner/:repo/discussions', element: <DiscussionsPage /> },
-  { name: 'Wiki', path: '/repos/:owner/:repo/wiki', element: <WikiPage /> },
+  { name: 'Actions', path: '/repos/:owner/:repo/actions', element: page(<ActionsPage />) },
+  { name: 'Actions 运行详情', path: '/repos/:owner/:repo/actions/runs/:runId', element: page(<ActionsPage />) },
+  { name: i18n.t('Actions 密钥与变量'), path: '/repos/:owner/:repo/actions/secrets', element: page(<ActionsSecretsPage />) },
+  { name: 'Packages', path: '/repos/:owner/:repo/packages', element: page(<PackagesPage />) },
+  { name: 'Projects', path: '/repos/:owner/:repo/projects', element: page(<ProjectsPage />) },
+  { name: 'Discussions', path: '/repos/:owner/:repo/discussions', element: page(<DiscussionsPage />) },
+  { name: 'Wiki', path: '/repos/:owner/:repo/wiki', element: page(<WikiPage />) },
   // 全局功能
-  { name: i18n.t('通知'), path: '/notifications', element: <NotificationsPage /> },
-  { name: i18n.t('搜索'), path: '/search', element: <SearchPage /> },
-  { name: i18n.t('活动'), path: '/activity', element: <ActivityPage /> },
-  { name: i18n.t('活动详情'), path: '/activity/:eventId', element: <ActivityDetailPage /> },
-  { name: 'Gists', path: '/gists', element: <GistsPage /> },
-  { name: i18n.t('Gist 详情'), path: '/gists/:gistId', element: <GistDetailPage /> },
-  { name: i18n.t('关注列表'), path: '/follow-list/:type', element: <FollowListPage /> },
-  { name: i18n.t('用户主页'), path: '/users/:username', element: <UserProfilePage /> },
-  { name: i18n.t('我的收藏'), path: '/starred', element: <StarredPage /> },
-  { name: 'Packages', path: '/packages', element: <PackagesPage /> },
-  { name: i18n.t('账号管理'), path: '/accounts', element: <AccountsPage /> },
-  { name: i18n.t('数据导出'), path: '/export', element: <ExportPage /> },
-  { name: i18n.t('批量上传'), path: '/repos/:owner/:repo/upload', element: <UploadPage /> },
-  { name: i18n.t('Pages 部署'), path: '/repos/:owner/:repo/pages', element: <PagesDeployPage /> },
-  { name: i18n.t('仓库产物'), path: '/repos/:owner/:repo/artifacts', element: <ArtifactsPage /> },
-  { name: i18n.t('仓库 Forks'), path: '/repos/:owner/:repo/forks', element: <RepoForksPage /> },
-  { name: i18n.t('仓库收藏者'), path: '/repos/:owner/:repo/stargazers', element: <StargazersPage /> },
-  { name: i18n.t('设置'), path: '/settings', element: <SettingsPage /> },
-  { name: 'GraphQL Playground', path: '/graphql-playground', element: <GraphQLPlaygroundPage /> },
-  { name: i18n.t('AI 助手'), path: '/ai-assistant', element: <AiAssistantV2Page /> },
+  { name: i18n.t('通知'), path: '/notifications', element: page(<NotificationsPage />) },
+  { name: i18n.t('搜索'), path: '/search', element: page(<SearchPage />) },
+  { name: i18n.t('活动'), path: '/activity', element: page(<ActivityPage />) },
+  { name: i18n.t('活动详情'), path: '/activity/:eventId', element: page(<ActivityDetailPage />) },
+  { name: 'Gists', path: '/gists', element: page(<GistsPage />) },
+  { name: i18n.t('Gist 详情'), path: '/gists/:gistId', element: page(<GistDetailPage />) },
+  { name: i18n.t('关注列表'), path: '/follow-list/:type', element: page(<FollowListPage />) },
+  { name: i18n.t('用户主页'), path: '/users/:username', element: page(<UserProfilePage />) },
+  { name: i18n.t('我的收藏'), path: '/starred', element: page(<StarredPage />) },
+  { name: 'Packages', path: '/packages', element: page(<PackagesPage />) },
+  { name: i18n.t('账号管理'), path: '/accounts', element: page(<AccountsPage />) },
+  { name: i18n.t('数据导出'), path: '/export', element: page(<ExportPage />) },
+  { name: i18n.t('批量上传'), path: '/repos/:owner/:repo/upload', element: page(<UploadPage />) },
+  { name: i18n.t('Pages 部署'), path: '/repos/:owner/:repo/pages', element: page(<PagesDeployPage />) },
+  { name: i18n.t('仓库产物'), path: '/repos/:owner/:repo/artifacts', element: page(<ArtifactsPage />) },
+  { name: i18n.t('仓库 Forks'), path: '/repos/:owner/:repo/forks', element: page(<RepoForksPage />) },
+  { name: i18n.t('仓库收藏者'), path: '/repos/:owner/:repo/stargazers', element: page(<StargazersPage />) },
+  { name: i18n.t('设置'), path: '/settings', element: page(<SettingsPage />) },
+  { name: 'GraphQL Playground', path: '/graphql-playground', element: page(<GraphQLPlaygroundPage />) },
+  { name: i18n.t('AI 助手'), path: '/ai-assistant', element: page(<AiAssistantV2Page />) },
   { name: i18n.t('AI 助手'), path: '/ai-assistant-v1', element: <Navigate to="/ai-assistant" replace />, visible: false },
-  { name: i18n.t('AI 设置'), path: '/ai-settings', element: <AiSettingsPage /> },
-  { name: i18n.t('AI 设置'), path: '/ai-settings/:section', element: <AiSettingsPage /> },
-  { name: '全部功能', path: '/more', element: <MorePage /> },
+  { name: i18n.t('AI 设置'), path: '/ai-settings', element: page(<AiSettingsPage />) },
+  { name: i18n.t('AI 设置'), path: '/ai-settings/:section', element: page(<AiSettingsPage />) },
+  { name: '全部功能', path: '/more', element: page(<MorePage />) },
 ];

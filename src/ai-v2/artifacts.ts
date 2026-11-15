@@ -1,10 +1,21 @@
 // AI V2 — Artifact Store：大工具结果落盘到本机，模型按需分页读取
 import type { ArtifactMeta } from './types';
+import {
+  clearArtifactContents,
+  deleteArtifactContent,
+  getArtifactContent,
+  putArtifactContent,
+} from './artifactDb';
 
 const INDEX_PREFIX = 'githubm_ai_artifact_index:';
 const DATA_PREFIX = 'githubm_ai_artifact_data:';
 const MAX_ARTIFACTS = 20;
 const MAX_ARTIFACT_CHARS = 200_000;
+const contentCache = new Map<string, string>();
+
+function cacheKey(login: string | undefined, id: string): string {
+  return `${encodeURIComponent(login || 'anonymous')}:${id}`;
+}
 
 function safeLogin(login?: string): string {
   return encodeURIComponent(login || 'anonymous');
@@ -57,7 +68,17 @@ export function saveArtifact(params: {
   };
 
   try {
-    localStorage.setItem(dataKey(params.login, id), content);
+    const key = cacheKey(params.login, id);
+    contentCache.set(key, content);
+    void putArtifactContent(params.login, id, content).then(persisted => {
+      if (!persisted) {
+        try {
+          localStorage.setItem(dataKey(params.login, id), content);
+        } catch {
+          // ignore
+        }
+      }
+    });
     const previous = readIndex(params.login);
     const next = [meta, ...previous].slice(0, MAX_ARTIFACTS);
     writeIndex(params.login, next);
@@ -65,7 +86,11 @@ export function saveArtifact(params: {
     // 清理超出上限的旧 Artifact 正文
     const kept = new Set(next.map(item => item.id));
     for (const item of previous) {
-      if (!kept.has(item.id)) localStorage.removeItem(dataKey(params.login, item.id));
+      if (!kept.has(item.id)) {
+        contentCache.delete(cacheKey(params.login, item.id));
+        localStorage.removeItem(dataKey(params.login, item.id));
+        void deleteArtifactContent(params.login, item.id);
+      }
     }
     return meta;
   } catch {
@@ -73,21 +98,31 @@ export function saveArtifact(params: {
   }
 }
 
-export function readArtifact(
+export async function readArtifact(
   login: string | undefined,
   id: string,
   offset = 0,
   limit = 12000,
-): {
+): Promise<{
   meta: ArtifactMeta | null;
   content: string;
   total: number;
   nextOffset: number;
   hasMore: boolean;
-} {
+}> {
   const meta = readIndex(login).find(item => item.id === id) || null;
   if (!meta) return { meta: null, content: '', total: 0, nextOffset: 0, hasMore: false };
-  const full = localStorage.getItem(dataKey(login, id)) || '';
+  let full = contentCache.get(cacheKey(login, id));
+  if (full === undefined) {
+    full = await getArtifactContent(login, id) ?? undefined;
+  }
+  if (full === undefined) {
+    try {
+      full = localStorage.getItem(dataKey(login, id)) || '';
+    } catch {
+      full = '';
+    }
+  }
   const safeOffset = Math.max(0, Math.min(offset, full.length));
   const safeLimit = Math.max(1, Math.min(limit, 20000));
   const content = full.slice(safeOffset, safeOffset + safeLimit);
@@ -107,6 +142,10 @@ export function listArtifacts(login?: string, limit = 20): ArtifactMeta[] {
 
 export function clearArtifacts(login?: string): void {
   const items = readIndex(login);
+  const prefix = `${encodeURIComponent(login || 'anonymous')}:`;
+  for (const key of [...contentCache.keys()]) {
+    if (key.startsWith(prefix)) contentCache.delete(key);
+  }
   for (const item of items) {
     try {
       localStorage.removeItem(dataKey(login, item.id));
@@ -114,6 +153,7 @@ export function clearArtifacts(login?: string): void {
       // ignore
     }
   }
+  void clearArtifactContents(login);
   try {
     localStorage.removeItem(indexKey(login));
   } catch {

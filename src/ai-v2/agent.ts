@@ -13,6 +13,7 @@ import type {
 import { streamProvider } from './providers';
 import { resolveCapabilities } from './capabilities';
 import { saveArtifact } from './artifacts';
+import { buildAgentContext } from './context';
 
 const MAX_INLINE_TOOL_RESULT = 12000;
 const TOOL_PREVIEW_CHARS = 4000;
@@ -77,9 +78,14 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
     repo,
     config,
     history,
+    contextBudget,
+    memoryEnabled,
     signal,
     onEvent,
     requestApproval,
+    onSnapshot,
+    resumeMessages,
+    resumeSteps,
     callModel = streamProvider,
   } = options;
 
@@ -95,19 +101,32 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
   const tools = capabilityState.tools;
   const toolMap = new Map(tools.map(tool => [tool.name, tool]));
   const toolDefs = toToolDefinitions(tools);
-  const messages: V2ProviderMessage[] = [
-    { role: 'system', content: buildSystemPrompt(repo) },
-    ...history.map((item): V2ProviderMessage => ({
-      role: item.role,
-      content: item.content,
-    })),
-  ];
+  const lastUserQuery = [...history].reverse().find(item => item.role === 'user')?.content || '';
+  const builtContext = resumeMessages
+    ? null
+    : buildAgentContext({
+        systemPrompt: buildSystemPrompt(repo),
+        history,
+        query: lastUserQuery,
+        userLogin,
+        capabilities: capabilityState.capabilities,
+        contextBudget,
+        memoryEnabled,
+      });
+  const messages: V2ProviderMessage[] = resumeMessages || builtContext!.messages;
 
   const repeatedCalls = new Map<string, number>();
   let finalText = '';
-  let steps = 0;
+  let steps = resumeSteps || 0;
 
-  onEvent({ type: 'run_start', runId, capabilities: capabilityState.capabilities.map(item => item.id) });
+  onEvent({
+    type: 'run_start',
+    runId,
+    capabilities: capabilityState.capabilities.map(item => item.id),
+    skills: builtContext?.skillIds || [],
+    memories: builtContext?.memoryIds || [],
+  });
+  onSnapshot?.({ messages, steps });
 
   // 不设置固定工具轮数上限：由用户停止、网络错误或重复调用保护来结束。
   while (true) {
@@ -217,6 +236,7 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
       });
     }
     steps++;
+    onSnapshot?.({ messages, steps });
   }
 }
 

@@ -2,6 +2,7 @@
 import type { AgentTool, CapabilityInfo, RepoContext } from './types';
 import { GITHUB_READ_TOOLS, GITHUB_WRITE_TOOLS } from './tools/github';
 import { ARTIFACT_TOOLS } from './tools/artifacts';
+import { MEMORY_TOOLS } from './tools/memory';
 
 export interface CapabilityPack extends CapabilityInfo {
   tools: AgentTool[];
@@ -12,8 +13,8 @@ export const CAPABILITY_PACKS: CapabilityPack[] = [
   {
     id: 'core',
     label: '核心',
-    description: 'Artifact 读取与基础运行时能力',
-    tools: ARTIFACT_TOOLS,
+    description: 'Artifact 读取与长期记忆能力',
+    tools: [...ARTIFACT_TOOLS, ...MEMORY_TOOLS],
     active: () => true,
   },
   {

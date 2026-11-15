@@ -32,7 +32,7 @@ export const ARTIFACT_TOOLS: AgentTool[] = [{
 
     const offset = Number(args.offset || 0);
     const limit = Number(args.limit || 12000);
-    const result = readArtifact(ctx.userLogin, id, Number.isFinite(offset) ? offset : 0, Number.isFinite(limit) ? limit : 12000);
+    const result = await readArtifact(ctx.userLogin, id, Number.isFinite(offset) ? offset : 0, Number.isFinite(limit) ? limit : 12000);
     if (!result.meta) return { ok: false, content: `Artifact 不存在：${id}` };
     const start = result.nextOffset - result.content.length;
     return {

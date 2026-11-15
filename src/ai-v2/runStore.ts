@@ -126,6 +126,23 @@ export function appendRunEvent(login: string | undefined, runId: string, event: 
   }
 }
 
+export function resumeRun(login: string | undefined, runId: string): void {
+  try {
+    const runs = listRuns(login, MAX_RUNS);
+    const index = runs.findIndex(run => run.id === runId);
+    if (index < 0) return;
+    runs[index] = {
+      ...runs[index],
+      status: 'running',
+      finishedAt: undefined,
+      error: undefined,
+    };
+    writeRuns(login, runs);
+  } catch {
+    // ignore
+  }
+}
+
 export function finishRun(
   login: string | undefined,
   runId: string,
@@ -144,6 +161,96 @@ export function finishRun(
     }
     runs[index] = run;
     writeRuns(login, runs);
+  } catch {
+    // ignore
+  }
+}
+
+export interface RunSnapshot {
+  runId: string;
+  sessionId?: string;
+  assistantId?: string;
+  title: string;
+  messages: Array<{
+    role: string;
+    content: string | null;
+    tool_calls?: unknown;
+    tool_call_id?: string;
+    name?: string;
+    reasoning_content?: string;
+  }>;
+  steps: number;
+  capabilities: string[];
+  savedAt: string;
+}
+
+const SNAPSHOT_PREFIX = 'githubm_ai_run_snapshot:';
+const MAX_SNAPSHOTS = 10;
+
+function snapshotKey(login: string | undefined, runId: string): string {
+  return `${SNAPSHOT_PREFIX}${safeLogin(login)}:${runId}`;
+}
+
+export function saveRunSnapshot(login: string | undefined, snapshot: RunSnapshot): void {
+  try {
+    const compact: RunSnapshot = {
+      ...snapshot,
+      messages: snapshot.messages.slice(-60).map(message => ({
+        ...message,
+        content: typeof message.content === 'string' ? message.content.slice(0, 30000) : message.content,
+      })),
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(snapshotKey(login, snapshot.runId), JSON.stringify(compact));
+
+    const prefix = `${SNAPSHOT_PREFIX}${safeLogin(login)}:`;
+    const keys = Object.keys(localStorage).filter(key => key.startsWith(prefix));
+    if (keys.length > MAX_SNAPSHOTS) {
+      keys.sort((a, b) => {
+        const ta = Date.parse((JSON.parse(localStorage.getItem(a) || '{}') as RunSnapshot).savedAt || '') || 0;
+        const tb = Date.parse((JSON.parse(localStorage.getItem(b) || '{}') as RunSnapshot).savedAt || '') || 0;
+        return ta - tb;
+      });
+      for (const key of keys.slice(0, keys.length - MAX_SNAPSHOTS)) localStorage.removeItem(key);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function loadRunSnapshot(login: string | undefined, runId: string): RunSnapshot | null {
+  try {
+    const raw = localStorage.getItem(snapshotKey(login, runId));
+    return raw ? JSON.parse(raw) as RunSnapshot : null;
+  } catch {
+    return null;
+  }
+}
+
+export function latestRunSnapshot(login: string | undefined, sessionId?: string): RunSnapshot | null {
+  try {
+    const prefix = `${SNAPSHOT_PREFIX}${safeLogin(login)}:`;
+    const snapshots = Object.keys(localStorage)
+      .filter(key => key.startsWith(prefix))
+      .map(key => {
+        try {
+          return JSON.parse(localStorage.getItem(key) || 'null') as RunSnapshot | null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((item): item is RunSnapshot => Boolean(item))
+      .filter(item => !sessionId || item.sessionId === sessionId)
+      .sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt));
+    return snapshots[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearRunSnapshot(login: string | undefined, runId: string): void {
+  try {
+    localStorage.removeItem(snapshotKey(login, runId));
   } catch {
     // ignore
   }

@@ -94,7 +94,7 @@ export interface ToolRuntimeContext {
 }
 
 export type AgentEvent =
-  | { type: 'run_start'; runId: string; capabilities?: string[] }
+  | { type: 'run_start'; runId: string; capabilities?: string[]; skills?: string[]; memories?: string[] }
   | { type: 'text_delta'; text: string }
   | { type: 'reasoning_delta'; text: string }
   | { type: 'tool_start'; call: V2ToolCall }
@@ -115,10 +115,17 @@ export interface RunAgentOptions {
   repo?: RepoContext;
   config: ModelConfig;
   history: AgentHistoryMessage[];
+  contextBudget?: number;
+  memoryEnabled?: boolean;
   signal: AbortSignal;
   onEvent: (event: AgentEvent) => void;
   /** 写操作前的用户确认；未提供时写工具默认拒绝 */
   requestApproval?: (request: ApprovalRequest) => Promise<boolean>;
+  /** 每个工具阶段后的状态快照，用于中断恢复 */
+  onSnapshot?: (snapshot: { messages: V2ProviderMessage[]; steps: number }) => void;
+  /** 恢复被中断的运行 */
+  resumeMessages?: V2ProviderMessage[];
+  resumeSteps?: number;
   /** 测试注入：默认使用真实 provider */
   callModel?: (
     config: ModelConfig,

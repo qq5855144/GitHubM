@@ -55,7 +55,7 @@ describe('AI Assistant V2 agent loop', () => {
       },
     });
 
-    expect(seenTools.map(tool => tool.function.name)).toEqual(['artifact_read']);
+    expect(seenTools.map(tool => tool.function.name)).toEqual(['artifact_read', 'memory_save', 'memory_search']);
     expect(events.some(event => event.type === 'done')).toBe(true);
   });
 
@@ -200,7 +200,7 @@ describe('AI Assistant V2 agent loop', () => {
     expect(toolEnd && toolEnd.type === 'tool_end' ? toolEnd.artifact?.size : 0).toBe(13000);
     const artifactId = toolEnd && toolEnd.type === 'tool_end' ? toolEnd.artifact?.id : '';
     expect(artifactId).toBeTruthy();
-    const slice = readArtifact('artifact-user', artifactId!, 0, 100);
+    const slice = await readArtifact('artifact-user', artifactId!, 0, 100);
     expect(slice.total).toBe(13000);
     expect(slice.content).toHaveLength(100);
     expect(slice.hasMore).toBe(true);
@@ -269,7 +269,7 @@ describe('AI Assistant V2 agent loop', () => {
     expect(withRepo).toContain('artifact_read');
     const noRepoTools = resolveCapabilities().tools.map(tool => tool.name);
     const repoTools = resolveCapabilities({ fullName: 'owner/repo', defaultBranch: 'main' }).tools.map(tool => tool.name);
-    expect(noRepoTools).toEqual(['artifact_read']);
+    expect(noRepoTools).toEqual(['artifact_read', 'memory_save', 'memory_search']);
     expect(repoTools).toContain('github_write_file');
   });
 });

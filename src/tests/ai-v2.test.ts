@@ -206,6 +206,34 @@ describe('AI Assistant V2 agent loop', () => {
     expect(slice.hasMore).toBe(true);
   });
 
+  it('resumes from a saved provider message snapshot', async () => {
+    const resumeMessages = [
+      { role: 'system' as const, content: 'saved system' },
+      { role: 'user' as const, content: 'resume task' },
+      { role: 'assistant' as const, content: 'partial' },
+    ];
+    let seen: V2ProviderMessage[] = [];
+    const events: AgentEvent[] = [];
+    await runGeneralAgent({
+      token: 'github-token',
+      userLogin: 'resume-user',
+      runId: 'run-resume',
+      history: [],
+      resumeMessages,
+      resumeSteps: 4,
+      config,
+      signal: new AbortController().signal,
+      onEvent: event => events.push(event),
+      callModel: async (_config, messages): Promise<ProviderStreamResult> => {
+        seen = messages;
+        return { content: '继续完成', reasoning: '', toolCalls: [], model: 'test-model' };
+      },
+    });
+
+    expect(seen).toEqual(resumeMessages);
+    expect(events.some(event => event.type === 'done' && event.steps === 5)).toBe(true);
+  });
+
   it('executes an approved write tool', async () => {
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);

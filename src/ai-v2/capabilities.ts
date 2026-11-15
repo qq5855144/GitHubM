@@ -1,6 +1,7 @@
 // AI V2 — Capability Registry：按上下文激活能力包，避免一次性注入全部工具
 import type { AgentTool, CapabilityInfo, RepoContext } from './types';
 import { GITHUB_READ_TOOLS, GITHUB_WRITE_TOOLS } from './tools/github';
+import { GITHUB_OPS_TOOLS } from './tools/githubOps';
 import { ARTIFACT_TOOLS } from './tools/artifacts';
 import { MEMORY_TOOLS } from './tools/memory';
 
@@ -22,6 +23,13 @@ export const CAPABILITY_PACKS: CapabilityPack[] = [
     label: 'GitHub 只读',
     description: '仓库信息、目录、文件和代码搜索',
     tools: GITHUB_READ_TOOLS,
+    active: ctx => Boolean(ctx.repo),
+  },
+  {
+    id: 'github-ops',
+    label: 'GitHub Actions / 协作',
+    description: 'Actions 运行、Job 日志、Issues 和 Pull Request',
+    tools: GITHUB_OPS_TOOLS,
     active: ctx => Boolean(ctx.repo),
   },
   {

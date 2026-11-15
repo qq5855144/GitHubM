@@ -1275,10 +1275,7 @@ export default function AiAssistantV2Page() {
       const nextSessions = (loaded?.sessions?.length ? loaded.sessions : [newSession()])
         .map(session => {
           const migratedMessages = migrateLegacyRoundLimit(session.messages || []);
-          const firstUser = migratedMessages.find(message => message.role === 'user')?.content.trim();
-          const legacyAutoTitle = firstUser?.replace(/\s+/g, ' ').slice(0, 32);
-          const titleSource = session.titleSource
-            || (session.title === i18n.t('新对话') || (legacyAutoTitle && session.title === legacyAutoTitle) ? 'auto' : 'manual');
+          const titleSource = session.titleSource || 'auto';
           return {
             ...session,
             messages: migratedMessages,

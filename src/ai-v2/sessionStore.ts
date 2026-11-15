@@ -10,6 +10,8 @@ export interface V2Session {
   /** 会话级模型覆盖；不设置时使用全局模型 */
   modelType?: string;
   model?: string;
+  /** 标题是否由系统自动生成；手动重命名后为 manual */
+  titleSource?: 'auto' | 'manual';
   createdAt: string;
   updatedAt: string;
 }

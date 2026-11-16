@@ -68,10 +68,12 @@
             android:launchMode="singleTask"
             android:alwaysRetainTaskState="true"
             android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|uiMode|smallestScreenSize|density|fontScale|layoutDirection|locale"
-            android:windowSoftInputMode="adjustPan">
+            android:windowSoftInputMode="adjustResize">
             <!--
-              adjustPan：Android 15 强制边到边后，adjustResize 不再可靠，
-              改用 adjustPan 保持键盘弹出时 WebView 平移而非重排布局。
+              输入法避让：边到边（setDecorFitsSystemWindows(false)）之后系统不会自动缩小 WebView，
+              单靠 adjustPan 只会平移窗口，底部固定输入框（AI 助手等）仍会被键盘盖住。
+              因此改回 adjustResize，并在 MainActivity 将 IME inset 补给 WebView 的底部 padding，
+              等效于「缩小页面可视区」，让输入框始终浮在键盘上方。
             -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

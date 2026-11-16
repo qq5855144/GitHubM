@@ -457,13 +457,7 @@ export default function RepoDetailPage() {
             >
               <Star className={`w-3.5 h-3.5 mr-1.5 ${starred ? 'fill-warning' : ''}`} />
               {starred ? i18n.t('已收藏') : i18n.t('收藏')}
-              <button
-                type="button"
-                className="ml-1.5 text-xs text-muted-foreground hover:text-accent hover:underline"
-                onClick={(e) => { e.stopPropagation(); navigate(`/repos/${repo.full_name}/stargazers`); }}
-              >
-                {formatNumber(repo.stargazers_count)}
-              </button>
+              <span className="ml-1.5 text-xs text-muted-foreground">{formatNumber(repo.stargazers_count)}</span>
             </Button>
             <Button
               variant="outline"

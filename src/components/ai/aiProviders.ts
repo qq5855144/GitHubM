@@ -5,6 +5,7 @@
 // 所有请求均由浏览器直接发出，API Key 仅保存在本机 localStorage。
 import type { ModelType } from './aiTypes';
 import i18n from "@/i18n";
+import { normalizeBaseEndpoint } from '@/lib/ai-endpoint';
 
 // ── 各平台 OpenAI 兼容 Chat Completions 端点 ──────────────────────────────
 export function getProviderChatUrl(type: ModelType, endpoint?: string): string {
@@ -17,23 +18,12 @@ export function getProviderChatUrl(type: ModelType, endpoint?: string): string {
     case 'cloudflare': return 'https://llm.callact.xyz/v1/chat/completions';
     case 'custom': {
       // 既支持只填基础地址（如 http://127.0.0.1:17890/v1），也支持完整的 /chat/completions
-      const base = normalizeCustomEndpoint(endpoint);
+      const base = normalizeBaseEndpoint(endpoint);
       return base ? `${base}/chat/completions` : '';
     }
     case 'wenxin':   // 平台内置免费通道已随后端移除，不再支持
       return '';
   }
-}
-
-/**
- * 规整自定义接口地址：
- * - 去掉末尾多余的 “/”
- * - 去掉用户可能粘贴的 “/chat/completions”，统一按基础地址（如 http://127.0.0.1:17890/v1）处理
- */
-function normalizeCustomEndpoint(endpoint?: string): string {
-  const raw = (endpoint || '').trim().replace(/\/+$/, '');
-  if (!raw) return '';
-  return raw.replace(/\/chat\/completions$/i, '');
 }
 
 /** 从 chat/completions 端点推导 models 列表端点（OpenAI 兼容） */
@@ -46,7 +36,7 @@ export function getProviderModelsUrl(type: ModelType, endpoint?: string): string
     case 'openrouter': return 'https://openrouter.ai/api/v1/models';
     case 'cloudflare': return '';
     case 'custom': {
-      const base = normalizeCustomEndpoint(endpoint);
+      const base = normalizeBaseEndpoint(endpoint);
       return base ? `${base}/models` : '';
     }
     case 'wenxin':   return '';

@@ -415,10 +415,10 @@ export default function AiSettingsPage() {
           </SettingRow>
 
           {def.needEndpoint && (
-            <SettingRow label={i18n.t('接口地址')} desc={i18n.t('兼容 OpenAI Chat Completions 格式。')}>
+            <SettingRow label={i18n.t('接口地址')} desc={i18n.t('兼容 OpenAI Chat Completions 格式；填到 /v1 即可，保存时会自动补全。')}>
               <Input
                 className="px-3"
-                placeholder="https://api.example.com/v1/chat/completions"
+                placeholder="http://127.0.0.1:17890/v1 或 https://api.example.com/v1/chat/completions"
                 value={config.endpoint || ''}
                 onChange={event => setConfig(prev => ({ ...prev, endpoint: event.target.value }))}
               />

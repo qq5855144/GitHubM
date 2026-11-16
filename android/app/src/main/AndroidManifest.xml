@@ -55,7 +55,8 @@
         android:theme="@style/Theme.GitHubManager"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config">
         <!--
           requestLegacyExternalStorage 在 API 30+ 无效，已移除。
           下载文件使用 DownloadManager 写入 Downloads 目录，API 29+ 无需此标志。

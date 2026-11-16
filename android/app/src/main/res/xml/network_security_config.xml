@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  明文（HTTP）流量策略
+  ─────────────────────────────────────────────────────────────
+  背景：应用默认 android:usesCleartextTraffic="false"，所有 http:// 请求都会被系统直接拦掉，
+        WebView 里表现为 fetch 报 “Failed to fetch”。
+        但自建/本地反代（例如 http://127.0.0.1:17890/v1）只有 http，必须放行。
+
+  策略：
+  - base-config：默认仍强制 HTTPS，防止误连不安全公网端点
+  - domain-config：只放行本机 / 模拟器回环地址
+  - 需要再放行局域网自建服务时，在下面 domain-config 里追加即可，例如：
+        <domain includeSubdomains="false">192.168.1.100</domain>
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">::1</domain>
+        <!-- Android 模拟器访问宿主机 -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

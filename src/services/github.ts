@@ -266,8 +266,13 @@ async function request<T>(
       if (!response.ok) {
         let errorMessage = `HTTP ${response.status}`;
         try {
-          const errorBody = await response.json() as { message?: string };
-          errorMessage = errorBody.message || errorMessage;
+          const errorBody = await response.json() as { message?: string; errors?: Array<{ message?: string }> };
+          const detail = Array.isArray(errorBody.errors)
+            ? errorBody.errors.map(item => item?.message).filter(Boolean)[0]
+            : undefined;
+          errorMessage = detail
+            ? `${errorBody.message || errorMessage}: ${detail}`
+            : (errorBody.message || errorMessage);
         } catch { /* 忽略 JSON 解析错误 */ }
         const error = new Error(errorMessage) as Error & { status: number };
         error.status = response.status;
@@ -288,8 +293,13 @@ async function request<T>(
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}`;
     try {
-      const errorBody = await response.json() as { message?: string };
-      errorMessage = errorBody.message || errorMessage;
+      const errorBody = await response.json() as { message?: string; errors?: Array<{ message?: string }> };
+      const detail = Array.isArray(errorBody.errors)
+        ? errorBody.errors.map(item => item?.message).filter(Boolean)[0]
+        : undefined;
+      errorMessage = detail
+        ? `${errorBody.message || errorMessage}: ${detail}`
+        : (errorBody.message || errorMessage);
     } catch { /* 忽略 JSON 解析错误 */ }
     const error = new Error(errorMessage) as Error & { status: number };
     error.status = response.status;
@@ -342,8 +352,13 @@ async function requestWithPagination<T>(
       if (!response.ok) {
         let errorMessage = `HTTP ${response.status}`;
         try {
-          const errorBody = await response.json() as { message?: string };
-          errorMessage = errorBody.message || errorMessage;
+          const errorBody = await response.json() as { message?: string; errors?: Array<{ message?: string }> };
+          const detail = Array.isArray(errorBody.errors)
+            ? errorBody.errors.map(item => item?.message).filter(Boolean)[0]
+            : undefined;
+          errorMessage = detail
+            ? `${errorBody.message || errorMessage}: ${detail}`
+            : (errorBody.message || errorMessage);
         } catch { /* 忽略 */ }
         const error = new Error(errorMessage) as Error & { status: number };
         error.status = response.status;
@@ -366,8 +381,13 @@ async function requestWithPagination<T>(
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}`;
     try {
-      const errorBody = await response.json() as { message?: string };
-      errorMessage = errorBody.message || errorMessage;
+      const errorBody = await response.json() as { message?: string; errors?: Array<{ message?: string }> };
+      const detail = Array.isArray(errorBody.errors)
+        ? errorBody.errors.map(item => item?.message).filter(Boolean)[0]
+        : undefined;
+      errorMessage = detail
+        ? `${errorBody.message || errorMessage}: ${detail}`
+        : (errorBody.message || errorMessage);
     } catch { /* 忽略 */ }
     const error = new Error(errorMessage) as Error & { status: number };
     error.status = response.status;

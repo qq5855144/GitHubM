@@ -11,6 +11,13 @@ import type {
 
 const DEFAULT_PROXY = 'https://llm.callact.xyz';
 
+/** 自定义接口：/v1 这类基础地址自动补 /chat/completions；已带该路径则原样使用 */
+function normalizeCustomChatEndpoint(endpoint?: string): string {
+  const raw = (endpoint || '').trim().replace(/\/+$/, '');
+  if (!raw) return '';
+  return /\/chat\/completions$/i.test(raw) ? raw : `${raw}/chat/completions`;
+}
+
 export function getProviderEndpoint(config: ModelConfig): string {
   switch (config.type) {
     case 'deepseek':
@@ -24,7 +31,7 @@ export function getProviderEndpoint(config: ModelConfig): string {
     case 'openrouter':
       return 'https://openrouter.ai/api/v1/chat/completions';
     case 'custom':
-      return config.endpoint?.trim() || '';
+      return normalizeCustomChatEndpoint(config.endpoint);
     default:
       return '';
   }

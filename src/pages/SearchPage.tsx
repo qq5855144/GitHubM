@@ -523,30 +523,23 @@ export default function SearchPage() {
     return pages;
   };
 
-  /** 排序下拉：leading = 搜索框左侧常驻（对齐官网，直接显示当前排序名）；toolbar = 结果栏右侧入口 */
-  const renderSortMenu = (variant: 'leading' | 'toolbar') => {
+  /** 排序入口：固定在搜索框内部左侧，只显示当前排序图标 */
+  const renderSortMenu = () => {
     const { icon: SortIcon } = SORT_ICONS[sortOption];
-    const leading = variant === 'leading';
+    const currentLabel = findSortOption(sortOption)?.label ?? '';
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            title={i18n.t('点击选择排序方式')}
-            aria-label={`${i18n.t('排序方式')}：${findSortOption(sortOption)?.label ?? ''}`}
-            className={cn(
-              'shrink-0 flex items-center gap-1.5 rounded-lg border border-border transition-colors',
-              leading
-                ? 'h-10 px-2.5 text-xs font-medium text-foreground max-w-[7.5rem] hover:bg-secondary'
-                : 'h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary'
-            )}
+            title={`${i18n.t('排序方式')}：${currentLabel}`}
+            aria-label={`${i18n.t('排序方式')}：${currentLabel}`}
+            className="absolute left-1 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
-            <SortIcon className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">{findSortOption(sortOption)?.label}</span>
-            <ChevronDown className="w-3 h-3 shrink-0 opacity-60" />
+            <SortIcon className="h-4 w-4" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align={leading ? 'start' : 'end'} className="bg-popover border-border w-48">
+        <DropdownMenuContent align="start" className="w-48 bg-popover border-border">
           {sortOptions.map(opt => {
             const { icon: OptIcon } = SORT_ICONS[opt.value];
             return (
@@ -574,10 +567,10 @@ export default function SearchPage() {
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
       {/* 搜索框（原顶部「全局搜索」标题行已移除，腾出一整行） */}
       <div className="flex items-center gap-2">
-        {/* 排序：与 GitHub 官网一致，搜索框左侧常驻显示当前排序名 */}
-        {sortOptions.length > 1 && renderSortMenu('leading')}
         <div className="relative flex-1 min-w-0">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          {sortOptions.length > 1
+            ? renderSortMenu()
+            : <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />}
           <Input
             ref={inputRef}
             value={query}
@@ -587,7 +580,7 @@ export default function SearchPage() {
             placeholder={searchType === 'code'
               ? i18n.t('搜索代码，可用 repo:owner/name 限定仓库')
               : i18n.t('搜索 GitHub…')}
-            className="search-input pl-9 pr-11 h-10 rounded-lg text-foreground placeholder:text-muted-foreground text-base"
+            className="search-input pl-10 pr-11 h-10 rounded-lg text-foreground placeholder:text-muted-foreground text-base"
           />
           {/* 回车搜索：置于输入框内部，不再使用外置搜索按钮 */}
           <button
@@ -679,8 +672,6 @@ export default function SearchPage() {
                 {i18n.t('· 第')}<span className="text-foreground font-medium">{currentPage}</span> / {totalPages} {i18n.t('页')}</span>
             )}
           </p>
-          {/* 结果栏右侧再给一个排序入口（与官网结果头部位置一致） */}
-          {sortOptions.length > 1 && renderSortMenu('toolbar')}
         </div>
       )}
 

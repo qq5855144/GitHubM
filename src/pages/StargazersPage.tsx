@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getRepoStargazers, formatNumber } from '@/services/github';
+import { getRepo, getRepoStargazers, formatNumber } from '@/services/github';
 import type { GitHubUser } from '@/types/types';
 import { UserLink } from '@/components/common/UserLink';
 import { toast } from 'sonner';
@@ -19,6 +19,8 @@ export default function StargazersPage() {
 
   const [stargazers, setStargazers] = useState<GitHubUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [restricted, setRestricted] = useState(false);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
@@ -35,8 +37,21 @@ export default function StargazersPage() {
       else setStargazers(data);
       setHasMore(data.length === PER_PAGE);
       setPage(p);
-    } catch {
-      toast.error(i18n.t('加载收藏者列表失败'));
+    } catch (error) {
+      const status = (error as { status?: number })?.status;
+      // GitHub 对部分仓库不返回收藏者名单（404/403），改用仓库总收藏数展示
+      if (status === 404 || status === 403) {
+        setRestricted(true);
+        setHasMore(false);
+        try {
+          const detail = await getRepo(owner, repoName);
+          setTotalCount(detail.stargazers_count);
+        } catch {
+          // 忽略详情失败
+        }
+      } else {
+        toast.error(i18n.t('加载收藏者列表失败'));
+      }
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -69,7 +84,7 @@ export default function StargazersPage() {
           <Star className="w-5 h-5 text-warning" />
           {i18n.t('收藏者列表')}{!loading && (
             <Badge variant="outline" className="text-xs border-border text-muted-foreground font-normal">
-              {formatNumber(stargazers.length)}{hasMore ? '+' : ''} {i18n.t('人')}</Badge>
+              {formatNumber(totalCount ?? stargazers.length)}{hasMore ? '+' : ''} {i18n.t('人')}</Badge>
           )}
         </h1>
         <Button
@@ -100,8 +115,29 @@ export default function StargazersPage() {
         ) : stargazers.length === 0 ? (
           <div className="py-16 text-center">
             <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-foreground font-medium">{i18n.t('暂无收藏者')}</p>
-            <p className="text-sm text-muted-foreground mt-1">{i18n.t('还没有人收藏这个仓库')}</p>
+            {restricted ? (
+              <>
+                <p className="text-foreground font-medium">{i18n.t('GitHub 未返回收藏者名单')}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {totalCount !== null
+                    ? i18n.t('该仓库共有 {{count}} 人收藏，名单仅仓库管理员可见', { count: formatNumber(totalCount) })
+                    : i18n.t('该仓库的收藏者名单当前不可见')}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-3 border border-border text-muted-foreground hover:bg-secondary h-8"
+                  onClick={() => { setRestricted(false); loadStargazers(1); }}
+                >
+                  <RefreshCw className="w-3 h-3 mr-1" />{i18n.t('重试')}
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-foreground font-medium">{i18n.t('暂无收藏者')}</p>
+                <p className="text-sm text-muted-foreground mt-1">{i18n.t('还没有人收藏这个仓库')}</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-border">

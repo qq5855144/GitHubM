@@ -267,14 +267,15 @@ export default function AiSettingsPage() {
   };
 
   const handleFetchModels = async () => {
-    if (!config.api_key?.trim()) {
+    // 自定义接口常自带鉴权或本地免鉴权（如 ollama），不强制填 API Key
+    if (!config.api_key?.trim() && config.type !== 'custom') {
       toast.error(i18n.t('请先填写 API Key'));
       return;
     }
     setModelsState('loading');
     setModelsError('');
     try {
-      const models = await fetchModelsFromAPI(config.type, config.api_key, config.endpoint);
+      const models = await fetchModelsFromAPI(config.type, config.api_key ?? '', config.endpoint);
       setFetchedModels(models);
       setModelsState('success');
     } catch (error) {
@@ -384,7 +385,15 @@ export default function AiSettingsPage() {
 
   if (activeSection.id === 'model') {
     const def = modelDef;
-    const modelOptions = def.models?.map(model => ({ value: model.value, label: model.label })) || [];
+    // 内置模型清单 + 从上游拉取到的模型（按 id 去重，拉取到的优先展示）
+    const modelOptions = (() => {
+      const merged = new Map<string, { value: string; label: string }>();
+      fetchedModels.forEach(model => merged.set(model.id, { value: model.id, label: model.name || model.id }));
+      (def.models || []).forEach(model => {
+        if (!merged.has(model.value)) merged.set(model.value, { value: model.value, label: model.label });
+      });
+      return Array.from(merged.values());
+    })();
     return (
       <div className="mx-auto min-h-full w-full max-w-2xl px-3 py-4 sm:px-4">
         <SectionHeader
@@ -406,10 +415,10 @@ export default function AiSettingsPage() {
           </SettingRow>
 
           {def.needEndpoint && (
-            <SettingRow label={i18n.t('接口地址')} desc={i18n.t('兼容 OpenAI Chat Completions 格式。')}>
+            <SettingRow label={i18n.t('接口地址')} desc={i18n.t('兼容 OpenAI Chat Completions 格式；填到 /v1 即可，保存时会自动补全。')}>
               <Input
                 className="px-3"
-                placeholder="https://api.example.com/v1/chat/completions"
+                placeholder="http://127.0.0.1:17890/v1 或 https://api.example.com/v1/chat/completions"
                 value={config.endpoint || ''}
                 onChange={event => setConfig(prev => ({ ...prev, endpoint: event.target.value }))}
               />
@@ -438,20 +447,60 @@ export default function AiSettingsPage() {
             </SettingRow>
           )}
 
-          <SettingRow label={i18n.t('默认模型')} desc={i18n.t('模型列表会随 Provider 更新，也可以使用诊断页拉取可用模型。')}>
-            <Select
-              value={config.model || modelOptions[0]?.value || ''}
-              onValueChange={value => setConfig(prev => ({ ...prev, model: value }))}
-            >
-              <SelectTrigger className="px-3"><SelectValue placeholder={i18n.t('请选择模型')} /></SelectTrigger>
-              <SelectContent>
-                {modelOptions.map(model => (
-                  <SelectItem key={model.value} value={model.value}>
-                    <span className="font-mono text-xs">{model.value}</span>
-                  </SelectItem>
+          <SettingRow label={i18n.t('默认模型')} desc={i18n.t('点击右侧「拉取」可直接从当前 Provider 获取可用模型，选择后保存生效。')}>
+            <div className="flex items-center gap-2">
+              <Select
+                value={config.model || modelOptions[0]?.value || ''}
+                onValueChange={value => setConfig(prev => ({ ...prev, model: value }))}
+              >
+                <SelectTrigger className="px-3"><SelectValue placeholder={i18n.t('请选择模型')} /></SelectTrigger>
+                <SelectContent>
+                  {modelOptions.map(model => (
+                    <SelectItem key={model.value} value={model.value}>
+                      <span className="font-mono text-xs">{model.value}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* 拉取上游模型：自定义接口没有内置模型清单，靠它把上游 /models 拿回来 */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 shrink-0 gap-1.5 px-2.5 text-xs"
+                onClick={handleFetchModels}
+                disabled={modelsState === 'loading'}
+              >
+                {modelsState === 'loading'
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <RefreshCw className="h-3.5 w-3.5" />}
+                {modelsState === 'loading' ? i18n.t('拉取中…') : i18n.t('拉取模型')}
+              </Button>
+            </div>
+            {modelsState === 'error' && (
+              <p className="break-words text-[11px] text-destructive">{modelsError}</p>
+            )}
+            {modelsState === 'success' && fetchedModels.length > 0 && (
+              <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg bg-muted/25 p-2">
+                {fetchedModels.map(model => (
+                  <button
+                    key={model.id}
+                    type="button"
+                    onClick={() => {
+                      setConfig(prev => ({ ...prev, model: model.id }));
+                      toast.success(i18n.t('已选择模型，保存后生效'));
+                    }}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-[10px] hover:bg-background/60',
+                      config.model === model.id ? 'text-primary' : 'text-foreground',
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate font-mono">{model.id}</span>
+                    <span className="shrink-0 text-primary">{i18n.t('选择')}</span>
+                  </button>
                 ))}
-              </SelectContent>
-            </Select>
+              </div>
+            )}
             {(config.type === 'custom' || modelOptions.length === 0) && (
               <Input
                 className="mt-2 px-3 font-mono text-xs"

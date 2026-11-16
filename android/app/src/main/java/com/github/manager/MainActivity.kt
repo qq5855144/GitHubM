@@ -1045,6 +1045,11 @@ class MainActivity : AppCompatActivity() {
             // 解决 Vite 打包后相对路径资源在 WebView 中被跨域拦截导致的白屏问题
             @Suppress("SetJavaScriptEnabled")
             allowFileAccessFromFileURLs = true
+            // file:// 页面（index.html）向本机 http 服务（如 127.0.0.1:17890）发请求时，
+            // 本地反代往往不返回 CORS 响应头；API 29 及以下需放开 file:// 的跨域访问，
+            // 否则 fetch 只会得到笼统的 “Failed to fetch”。（API 30+ 该开关会被系统忽略）
+            @Suppress("SetJavaScriptEnabled")
+            allowUniversalAccessFromFileURLs = true
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             cacheMode = WebSettings.LOAD_DEFAULT
             useWideViewPort = true

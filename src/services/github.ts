@@ -1266,7 +1266,12 @@ export async function getFileContent(
 
 export async function searchRepositories(
   query: string,
-  params: { sort?: 'stars' | 'forks' | 'updated'; order?: SortDirection; per_page?: number; page?: number } = {}
+  params: {
+    sort?: 'stars' | 'forks' | 'updated' | 'help-wanted-issues';
+    order?: SortDirection;
+    per_page?: number;
+    page?: number;
+  } = {}
 ): Promise<GitHubSearchResult<GitHubRepo>> {
   const { sort, order = 'desc', per_page = 20, page = 1 } = params;
   const q = encodeURIComponent(query);
@@ -1278,29 +1283,46 @@ export async function searchRepositories(
 
 export async function searchIssues(
   query: string,
-  params: { sort?: 'created' | 'updated' | 'comments'; order?: SortDirection; per_page?: number; page?: number } = {}
+  params: {
+    sort?: 'created' | 'updated' | 'comments' | 'reactions' | 'interactions';
+    order?: SortDirection;
+    per_page?: number;
+    page?: number;
+  } = {}
 ): Promise<GitHubSearchResult<GitHubIssue>> {
-  const { sort = 'created', order = 'desc', per_page = 20, page = 1 } = params;
+  const { sort, order = 'desc', per_page = 20, page = 1 } = params;
   const q = encodeURIComponent(query);
+  const sortQS = sort ? `&sort=${sort}&order=${order}` : '';
   return request<GitHubSearchResult<GitHubIssue>>(
-    `/search/issues?q=${q}&sort=${sort}&order=${order}&per_page=${per_page}&page=${page}`
+    `/search/issues?q=${q}${sortQS}&per_page=${per_page}&page=${page}`
   );
 }
 
 export async function searchUsers(
   query: string,
-  params: { sort?: 'followers' | 'repositories' | 'joined'; order?: SortDirection; per_page?: number; page?: number } = {}
+  params: {
+    sort?: 'followers' | 'repositories' | 'joined';
+    order?: SortDirection;
+    per_page?: number;
+    page?: number;
+  } = {}
 ): Promise<GitHubSearchResult<GitHubUser>> {
-  const { sort = 'followers', order = 'desc', per_page = 20, page = 1 } = params;
+  const { sort, order = 'desc', per_page = 20, page = 1 } = params;
   const q = encodeURIComponent(query);
+  const sortQS = sort ? `&sort=${sort}&order=${order}` : '';
   return request<GitHubSearchResult<GitHubUser>>(
-    `/search/users?q=${q}&sort=${sort}&order=${order}&per_page=${per_page}&page=${page}`
+    `/search/users?q=${q}${sortQS}&per_page=${per_page}&page=${page}`
   );
 }
 
 export async function searchCode(
   query: string,
-  params: { per_page?: number; page?: number } = {}
+  params: {
+    sort?: 'indexed';
+    order?: SortDirection;
+    per_page?: number;
+    page?: number;
+  } = {}
 ): Promise<GitHubSearchResult<{
   name: string;
   path: string;
@@ -1309,8 +1331,9 @@ export async function searchCode(
   repository: GitHubRepo;
   score: number;
 }>> {
-  const { per_page = 20, page = 1 } = params;
+  const { sort, order = 'desc', per_page = 20, page = 1 } = params;
   const q = encodeURIComponent(query);
+  const sortQS = sort ? `&sort=${sort}&order=${order}` : '';
   return request<GitHubSearchResult<{
     name: string;
     path: string;
@@ -1318,7 +1341,7 @@ export async function searchCode(
     html_url: string;
     repository: GitHubRepo;
     score: number;
-  }>>(`/search/code?q=${q}&per_page=${per_page}&page=${page}`);
+  }>>(`/search/code?q=${q}${sortQS}&per_page=${per_page}&page=${page}`);
 }
 
 // ===== 文件写入 =====

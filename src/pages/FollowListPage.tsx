@@ -126,7 +126,8 @@ export default function FollowListPage() {
     searchTimer.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const result = await searchUsers(value.trim(), { per_page: 8 });
+        // 用户选择关注对象时的下拉建议：保持『关注者最多』的旧有排序
+        const result = await searchUsers(value.trim(), { sort: 'followers', order: 'desc', per_page: 8 });
         setSearchResults(result.items);
       } catch {
         setSearchResults([]);

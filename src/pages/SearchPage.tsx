@@ -12,12 +12,16 @@ import {
   GitFork,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ExternalLink,
   Copy,
   Code2,
   Clock,
   X,
   CornerDownLeft,
+  MessageSquare,
+  Smile,
+  CalendarDays,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,11 +65,32 @@ import i18n from "@/i18n";
 const PER_PAGE = 20;
 const MAX_RESULTS = 1000;
 const HISTORY_STORAGE_KEY = 'github_search_history';
-const SORT_STORAGE_KEY    = 'github_search_sort';
+const SORT_STORAGE_KEY        = 'github_search_sort_by_type';
+const LEGACY_SORT_STORAGE_KEY = 'github_search_sort';
 const MAX_HISTORY = 12;
 
 type SearchType = 'repositories' | 'issues' | 'users' | 'code';
-type SortOption  = 'best-match' | 'stars' | 'forks' | 'updated';
+
+/**
+ * 排序项取值（与 GitHub 官网 / REST API 对齐）
+ * - repositories: stars / forks / updated / help-wanted-issues
+ * - issues(含 PR): comments(评论最多) / created(最新创建) / updated / reactions
+ * - users: followers / repositories / joined
+ * - code: indexed
+ */
+type SortOption =
+  | 'best-match'
+  | 'stars'
+  | 'forks'
+  | 'updated'
+  | 'help-wanted'
+  | 'comments'
+  | 'newest'
+  | 'reactions'
+  | 'followers'
+  | 'repositories'
+  | 'joined'
+  | 'indexed';
 
 type CodeSearchItem = {
   name: string;
@@ -76,22 +101,121 @@ type CodeSearchItem = {
   score: number;
 };
 
-interface SortConfig { value: SortOption; label: string; apiSort?: string; apiOrder?: string }
+interface SortConfig {
+  value: SortOption;
+  label: string;
+  apiSort?: string;
+  apiOrder?: 'asc' | 'desc';
+  /** 该排序项所属的搜索类型 */
+  types: SearchType[];
+}
 
-const SORT_OPTIONS: SortConfig[] = [
-  { value: 'best-match', label: i18n.t('最佳匹配') },
-  { value: 'stars',      label: i18n.t('Stars 最多'),  apiSort: 'stars',   apiOrder: 'desc' },
-  { value: 'forks',      label: i18n.t('Forks 最多'),  apiSort: 'forks',   apiOrder: 'desc' },
-  { value: 'updated',    label: i18n.t('最近更新'),     apiSort: 'updated', apiOrder: 'desc' },
-];
+const BEST_MATCH_TYPES: SearchType[] = ['repositories', 'issues', 'users', 'code'];
+
+/** 最佳匹配是所有搜索类型共有的首选项 */
+const BEST_MATCH_OPTION: SortConfig = {
+  value: 'best-match',
+  label: i18n.t('最佳匹配'),
+  types: BEST_MATCH_TYPES,
+};
+
+/** 按搜索类型划分的排序项，顺序与 GitHub 官网各 Tab 的下拉一致 */
+const SORT_OPTIONS_BY_TYPE: Record<SearchType, SortConfig[]> = {
+  repositories: [
+    BEST_MATCH_OPTION,
+    { value: 'stars',       label: i18n.t('Stars 最多'),       apiSort: 'stars',              apiOrder: 'desc', types: ['repositories'] },
+    { value: 'forks',       label: i18n.t('Forks 最多'),       apiSort: 'forks',              apiOrder: 'desc', types: ['repositories'] },
+    { value: 'updated',     label: i18n.t('最近更新'),         apiSort: 'updated',            apiOrder: 'desc', types: ['repositories'] },
+    { value: 'help-wanted', label: i18n.t('Help Wanted 最多'), apiSort: 'help-wanted-issues', apiOrder: 'desc', types: ['repositories'] },
+  ],
+  issues: [
+    BEST_MATCH_OPTION,
+    { value: 'comments',  label: i18n.t('评论最多'), apiSort: 'comments',  apiOrder: 'desc', types: ['issues'] },
+    { value: 'newest',    label: i18n.t('最新创建'), apiSort: 'created',   apiOrder: 'desc', types: ['issues'] },
+    { value: 'updated',   label: i18n.t('最近更新'), apiSort: 'updated',   apiOrder: 'desc', types: ['issues'] },
+    { value: 'reactions', label: i18n.t('反应最多'), apiSort: 'reactions', apiOrder: 'desc', types: ['issues'] },
+  ],
+  users: [
+    BEST_MATCH_OPTION,
+    { value: 'followers',    label: i18n.t('关注者最多'), apiSort: 'followers',    apiOrder: 'desc', types: ['users'] },
+    { value: 'repositories', label: i18n.t('仓库最多'),   apiSort: 'repositories', apiOrder: 'desc', types: ['users'] },
+    { value: 'joined',       label: i18n.t('最近加入'),   apiSort: 'joined',       apiOrder: 'desc', types: ['users'] },
+  ],
+  code: [
+    BEST_MATCH_OPTION,
+    { value: 'indexed', label: i18n.t('最近索引'), apiSort: 'indexed', apiOrder: 'desc', types: ['code'] },
+  ],
+};
+
+/** 全量排序项（按 value 去重），用于按值查找配置 */
+const ALL_SORT_OPTIONS: SortConfig[] = (() => {
+  const map = new Map<SortOption, SortConfig>();
+  (Object.keys(SORT_OPTIONS_BY_TYPE) as SearchType[]).forEach(type => {
+    SORT_OPTIONS_BY_TYPE[type].forEach(opt => {
+      if (!map.has(opt.value)) map.set(opt.value, opt);
+    });
+  });
+  return Array.from(map.values());
+})();
+
+const findSortOption = (value: SortOption | null | undefined): SortConfig | undefined =>
+  value ? ALL_SORT_OPTIONS.find(o => o.value === value) : undefined;
+
+/** 取某搜索类型下可用的排序项 */
+const sortOptionsFor = (type: SearchType): SortConfig[] => SORT_OPTIONS_BY_TYPE[type];
+
+/** 取某类型合法的排序值，非法或缺失时回落到『最佳匹配』 */
+const normalizeSort = (type: SearchType, value: SortOption | null | undefined): SortOption =>
+  sortOptionsFor(type).some(o => o.value === value) ? (value as SortOption) : 'best-match';
 
 // 每种排序方式对应的图标
 const SORT_ICONS: Record<SortOption, { icon: React.ElementType }> = {
-  'best-match': { icon: Search  },
-  'stars':      { icon: Star    },
-  'forks':      { icon: GitFork },
-  'updated':    { icon: Clock   },
+  'best-match':   { icon: Search        },
+  'stars':        { icon: Star          },
+  'forks':        { icon: GitFork       },
+  'updated':      { icon: Clock         },
+  'help-wanted':  { icon: AlertCircle   },
+  'comments':     { icon: MessageSquare },
+  'newest':       { icon: Clock         },
+  'reactions':    { icon: Smile         },
+  'followers':    { icon: Users         },
+  'repositories': { icon: BookOpen      },
+  'joined':       { icon: CalendarDays  },
+  'indexed':      { icon: Clock         },
 };
+
+// ── 排序偏好持久化（按搜索类型分别记忆） ──────────────────────────────────
+const DEFAULT_SORT_MAP: Record<SearchType, SortOption> = {
+  repositories: 'best-match',
+  issues:       'best-match',
+  users:        'best-match',
+  code:         'best-match',
+};
+
+function loadSortMap(): Record<SearchType, SortOption> {
+  const result = { ...DEFAULT_SORT_MAP };
+  try {
+    const raw = localStorage.getItem(SORT_STORAGE_KEY);
+    const parsed = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>;
+    // 兼容旧版单值存储：旧值只能代表仓库类型的排序
+    const legacy = localStorage.getItem(LEGACY_SORT_STORAGE_KEY);
+    if (legacy) parsed.repositories = legacy;
+    (Object.keys(result) as SearchType[]).forEach(type => {
+      result[type] = normalizeSort(type, parsed[type] as SortOption | undefined);
+    });
+  } catch {
+    return { ...DEFAULT_SORT_MAP };
+  }
+  return result;
+}
+
+function saveSortMap(map: Record<SearchType, SortOption>): void {
+  try {
+    localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    /* 隐私模式等写入失败时忽略，不影响本次会话内的排序 */
+  }
+}
 
 // ── 搜索历史工具函数 ──────────────────────────────────────────────────────
 function loadHistory(): string[] {
@@ -199,10 +323,15 @@ export default function SearchPage() {
   const inputRef                       = useRef<HTMLInputElement>(null);
   const historyRef                     = useRef<HTMLDivElement>(null);
 
-  // 排序
-  const [sortOption, setSortOption] = useState<SortOption>(() => {
-    return (localStorage.getItem(SORT_STORAGE_KEY) as SortOption | null) || 'best-match';
+  // 排序：按搜索类型分别记忆；URL 中的 sort 优先（用于返回/分享还原）
+  const [sortByType, setSortByType] = useState<Record<SearchType, SortOption>>(() => {
+    const map = loadSortMap();
+    const urlSort = searchParams.get('sort') as SortOption | null;
+    if (urlSort) map[initType] = normalizeSort(initType, urlSort);
+    return map;
   });
+  const sortOption  = sortByType[searchType];
+  const sortOptions = sortOptionsFor(searchType);
 
   const totalPages = Math.min(Math.ceil(totalCount / PER_PAGE), MAX_RESULTS / PER_PAGE);
 
@@ -220,15 +349,19 @@ export default function SearchPage() {
     saveHistory(searchQuery.trim());
     setHistory(loadHistory());
     try {
-      const sortCfg = SORT_OPTIONS.find(s => s.value === sort);
-      const sortParam = sortCfg?.apiSort as 'stars' | 'forks' | 'updated' | undefined;
-      const orderParam = sortCfg?.apiOrder as 'asc' | 'desc' | undefined;
+      // 按当前搜索类型取排序配置，注入到对应类型的 GitHub Search API
+      const effectiveSort = normalizeSort(type, sort);
+      const sortCfg    = findSortOption(effectiveSort);
+      const sortParam  = sortCfg?.apiSort;
+      const orderParam = sortCfg?.apiOrder;
 
       if (type === 'repositories') {
         const result = await searchRepositories(searchQuery, {
           per_page: PER_PAGE,
           page,
-          ...(sortParam ? { sort: sortParam, order: orderParam } : {}),
+          ...(sortParam
+            ? { sort: sortParam as 'stars' | 'forks' | 'updated' | 'help-wanted-issues', order: orderParam }
+            : {}),
         });
         setRepos(result.items);
         setTotalCount(result.total_count);
@@ -236,21 +369,37 @@ export default function SearchPage() {
         setUsers([]);
         setCodeResults([]);
       } else if (type === 'issues') {
-        const result = await searchIssues(searchQuery, { per_page: PER_PAGE, page });
+        const result = await searchIssues(searchQuery, {
+          per_page: PER_PAGE,
+          page,
+          ...(sortParam
+            ? { sort: sortParam as 'created' | 'updated' | 'comments' | 'reactions' | 'interactions', order: orderParam }
+            : {}),
+        });
         setIssues(result.items);
         setTotalCount(result.total_count);
         setRepos([]);
         setUsers([]);
         setCodeResults([]);
       } else if (type === 'code') {
-        const result = await searchCode(searchQuery, { per_page: PER_PAGE, page });
+        const result = await searchCode(searchQuery, {
+          per_page: PER_PAGE,
+          page,
+          ...(sortParam ? { sort: sortParam as 'indexed', order: orderParam } : {}),
+        });
         setCodeResults(result.items);
         setTotalCount(result.total_count);
         setRepos([]);
         setIssues([]);
         setUsers([]);
       } else {
-        const result = await searchUsers(searchQuery, { per_page: PER_PAGE, page });
+        const result = await searchUsers(searchQuery, {
+          per_page: PER_PAGE,
+          page,
+          ...(sortParam
+            ? { sort: sortParam as 'followers' | 'repositories' | 'joined', order: orderParam }
+            : {}),
+        });
         setUsers(result.items);
         setTotalCount(result.total_count);
         setRepos([]);
@@ -259,7 +408,7 @@ export default function SearchPage() {
       }
       setCurrentPage(page);
       // 同步 URL 参数，方便返回时恢复
-      setSearchParams({ q: searchQuery, type, page: String(page) }, { replace: true });
+      setSearchParams({ q: searchQuery, type, page: String(page), sort: effectiveSort }, { replace: true });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       const message = err instanceof Error ? err.message : '';
@@ -337,8 +486,9 @@ export default function SearchPage() {
   };
 
   const handleSortChange = (newSort: SortOption) => {
-    localStorage.setItem(SORT_STORAGE_KEY, newSort);
-    setSortOption(newSort);
+    const next = { ...sortByType, [searchType]: newSort };
+    saveSortMap(next);
+    setSortByType(next);
     if (searched && query.trim()) {
       handleSearch(query, searchType, 1, newSort);
     }
@@ -373,62 +523,61 @@ export default function SearchPage() {
     return pages;
   };
 
+  /** 排序下拉：leading = 搜索框左侧常驻（对齐官网，直接显示当前排序名）；toolbar = 结果栏右侧入口 */
+  const renderSortMenu = (variant: 'leading' | 'toolbar') => {
+    const { icon: SortIcon } = SORT_ICONS[sortOption];
+    const leading = variant === 'leading';
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            title={i18n.t('点击选择排序方式')}
+            aria-label={`${i18n.t('排序方式')}：${findSortOption(sortOption)?.label ?? ''}`}
+            className={cn(
+              'shrink-0 flex items-center gap-1.5 rounded-lg border border-border transition-colors',
+              leading
+                ? 'h-10 px-2.5 text-xs font-medium text-foreground max-w-[7.5rem] hover:bg-secondary'
+                : 'h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary'
+            )}
+          >
+            <SortIcon className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{findSortOption(sortOption)?.label}</span>
+            <ChevronDown className="w-3 h-3 shrink-0 opacity-60" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align={leading ? 'start' : 'end'} className="bg-popover border-border w-48">
+          {sortOptions.map(opt => {
+            const { icon: OptIcon } = SORT_ICONS[opt.value];
+            return (
+              <DropdownMenuItem
+                key={opt.value}
+                className={cn(
+                  'cursor-pointer text-sm gap-2',
+                  sortOption === opt.value ? 'text-primary font-medium' : 'text-foreground'
+                )}
+                onClick={() => handleSortChange(opt.value)}
+              >
+                <OptIcon className="w-3.5 h-3.5 shrink-0" />
+                {opt.label}
+                {sortOption === opt.value && (
+                  <span className="ml-auto text-primary text-xs">✓</span>
+                )}
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-xl font-bold text-foreground">{i18n.t('全局搜索')}</h1>
-        {/* 快捷键提示 */}
-        <span className="text-xs text-muted-foreground hidden md:flex items-center gap-1.5">
-          {i18n.t('按')}<kbd className="px-1.5 py-0.5 rounded border border-border bg-secondary text-xs font-mono">/</kbd>
-          {i18n.t('或')}<kbd className="px-1.5 py-0.5 rounded border border-border bg-secondary text-xs font-mono">Ctrl K</kbd>
-          {i18n.t('唤起搜索')}</span>
-      </div>
-
-      {/* 搜索框 */}
-      <div className="flex gap-3">
-        <div className="relative flex-1">
-          {/* 左侧图标：仓库搜索时为可点击的排序图标（下拉选择），其他类型为静态搜索图标 */}
-          {searchType === 'repositories' ? (() => {
-            const { icon: SortIcon } = SORT_ICONS[sortOption];
-            return (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    title={i18n.t('点击选择排序方式')}
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded text-primary hover:bg-primary/10 transition-colors"
-                  >
-                    <SortIcon className="w-4 h-4" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="bg-popover border-border w-36">
-                  {SORT_OPTIONS.map(opt => {
-                    const { icon: OptIcon } = SORT_ICONS[opt.value];
-                    return (
-                      <DropdownMenuItem
-                        key={opt.value}
-                        className={cn(
-                          'cursor-pointer text-sm gap-2',
-                          sortOption === opt.value
-                            ? 'text-primary font-medium'
-                            : 'text-foreground'
-                        )}
-                        onClick={() => handleSortChange(opt.value)}
-                      >
-                        <OptIcon className="w-3.5 h-3.5 shrink-0" />
-                        {opt.label}
-                        {sortOption === opt.value && (
-                          <span className="ml-auto text-primary text-xs">✓</span>
-                        )}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            );
-          })() : (
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          )}
+      {/* 搜索框（原顶部「全局搜索」标题行已移除，腾出一整行） */}
+      <div className="flex items-center gap-2">
+        {/* 排序：与 GitHub 官网一致，搜索框左侧常驻显示当前排序名 */}
+        {sortOptions.length > 1 && renderSortMenu('leading')}
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           <Input
             ref={inputRef}
             value={query}
@@ -512,7 +661,7 @@ export default function SearchPage() {
             onClick={() => {
               setSearchType(type);
               setCurrentPage(1);
-              if (query.trim()) handleSearch(query, type, 1);
+              if (query.trim()) handleSearch(query, type, 1, sortByType[type]);
             }}
           >
             <Icon className="w-4 h-4 shrink-0" />
@@ -530,6 +679,8 @@ export default function SearchPage() {
                 {i18n.t('· 第')}<span className="text-foreground font-medium">{currentPage}</span> / {totalPages} {i18n.t('页')}</span>
             )}
           </p>
+          {/* 结果栏右侧再给一个排序入口（与官网结果头部位置一致） */}
+          {sortOptions.length > 1 && renderSortMenu('toolbar')}
         </div>
       )}
 

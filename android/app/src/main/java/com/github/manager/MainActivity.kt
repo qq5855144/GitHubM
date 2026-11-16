@@ -16,6 +16,7 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.util.Base64
 import android.view.View
+import android.view.ViewTreeObserver
 import android.webkit.JavascriptInterface
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
@@ -60,6 +61,7 @@ private const val WARM_START_WINDOW_MS = 10 * 60 * 1000L
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
+    private var imeLayoutListener: ViewTreeObserver.OnGlobalLayoutListener? = null
     private lateinit var splashOverlay: View
     private lateinit var bottomNav: BottomNavigationView
     private lateinit var bottomNavContainer: android.widget.LinearLayout
@@ -882,7 +884,7 @@ class MainActivity : AppCompatActivity() {
         //   前端另有 useKeyboardInset() 兜底：margin 生效后 innerHeight 会同步缩小，
         //   前端算出的差值自动归零，不会双倍补偿。
         val imeContentRoot = findViewById<View>(android.R.id.content)
-        imeContentRoot.viewTreeObserver.addOnGlobalLayoutListener {
+        val imeListener = ViewTreeObserver.OnGlobalLayoutListener {
             val visible = android.graphics.Rect()
             imeContentRoot.getWindowVisibleDisplayFrame(visible)
             val keyboardHeight = (imeContentRoot.rootView.height - visible.bottom).coerceAtLeast(0)
@@ -894,6 +896,8 @@ class MainActivity : AppCompatActivity() {
                 webView.layoutParams = lp
             }
         }
+        imeLayoutListener = imeListener
+        imeContentRoot.viewTreeObserver.addOnGlobalLayoutListener(imeListener)
 
         // 读取上次持久化的主题色，并同步应用到启动画面各元素
         applySavedAccentToSplash()
@@ -1004,6 +1008,10 @@ class MainActivity : AppCompatActivity() {
                 .apply()
         }
         splashHandler.removeCallbacksAndMessages(null)
+        imeLayoutListener?.let { listener ->
+            findViewById<View>(android.R.id.content)?.viewTreeObserver?.removeOnGlobalLayoutListener(listener)
+        }
+        imeLayoutListener = null
         // webView 为 lateinit，若 onCreate 未完成初始化需防止 NPE
         if (::webView.isInitialized) {
             webView.stopLoading()

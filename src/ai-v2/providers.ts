@@ -1,4 +1,5 @@
 // AI Assistant V2 — OpenAI 兼容 Provider 层
+import { normalizeChatEndpoint } from '@/lib/ai-endpoint';
 import type { ModelConfig } from '@/components/ai/aiTypes';
 import { getModelCapabilities } from './modelCapabilities';
 import type {
@@ -10,13 +11,6 @@ import type {
 } from './types';
 
 const DEFAULT_PROXY = 'https://llm.callact.xyz';
-
-/** 自定义接口：/v1 这类基础地址自动补 /chat/completions；已带该路径则原样使用 */
-function normalizeCustomChatEndpoint(endpoint?: string): string {
-  const raw = (endpoint || '').trim().replace(/\/+$/, '');
-  if (!raw) return '';
-  return /\/chat\/completions$/i.test(raw) ? raw : `${raw}/chat/completions`;
-}
 
 export function getProviderEndpoint(config: ModelConfig): string {
   switch (config.type) {
@@ -31,7 +25,7 @@ export function getProviderEndpoint(config: ModelConfig): string {
     case 'openrouter':
       return 'https://openrouter.ai/api/v1/chat/completions';
     case 'custom':
-      return normalizeCustomChatEndpoint(config.endpoint);
+      return normalizeChatEndpoint(config.endpoint);
     default:
       return '';
   }

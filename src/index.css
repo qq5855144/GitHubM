@@ -467,3 +467,141 @@ html.theme-transitioning *::after {
     line-height: 24px !important;
   }
 }
+
+/* ── 登录页：柔和浮雕质感（软阴影替代硬边框，主色仍是应用蓝） ─────────── */
+.login-bg {
+  background:
+    radial-gradient(120% 80% at 50% -12%, hsl(var(--primary) / 0.12) 0%, transparent 62%),
+    radial-gradient(90% 60% at 104% 108%, hsl(190 90% 50% / 0.10) 0%, transparent 66%),
+    hsl(var(--background));
+}
+
+.dark .login-bg {
+  background:
+    radial-gradient(120% 80% at 50% -12%, hsl(var(--primary) / 0.20) 0%, transparent 60%),
+    radial-gradient(90% 60% at 104% 108%, hsl(190 90% 50% / 0.10) 0%, transparent 66%),
+    hsl(var(--background));
+}
+
+.login-card {
+  background: hsl(var(--card));
+  border-radius: 26px;
+  box-shadow:
+    0 26px 60px -30px rgba(15, 23, 42, 0.30),
+    0 2px 10px -4px rgba(15, 23, 42, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.dark .login-card {
+  box-shadow:
+    0 26px 60px -28px rgba(0, 0, 0, 0.80),
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.login-tip-card {
+  background: hsl(var(--card) / 0.72);
+  border-radius: 22px;
+  backdrop-filter: blur(8px);
+  box-shadow:
+    0 16px 40px -26px rgba(15, 23, 42, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.dark .login-tip-card {
+  box-shadow:
+    0 16px 40px -24px rgba(0, 0, 0, 0.8),
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.login-logo-tile {
+  background: linear-gradient(160deg, #ffffff 0%, hsl(220 20% 96%) 100%);
+  border-radius: 24px;
+  box-shadow:
+    0 16px 32px -16px rgba(15, 23, 42, 0.35),
+    inset 0 1px 0 #ffffff;
+}
+
+.dark .login-logo-tile {
+  background: linear-gradient(160deg, hsl(220 10% 20%) 0%, hsl(220 10% 13%) 100%);
+  box-shadow:
+    0 16px 32px -14px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* 输入框：内凹，聚焦时微微抬起（需 !important 覆盖全局输入框取消阴影的规则） */
+.login-card .login-field {
+  background: hsl(var(--secondary)) !important;
+  border: 1px solid transparent !important;
+  box-shadow: inset 0 2px 6px rgba(15, 23, 42, 0.09) !important;
+  transition: background 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.login-card .login-field:focus,
+.login-card .login-field:focus-visible {
+  background: hsl(var(--card)) !important;
+  border-color: hsl(var(--primary) / 0.55) !important;
+  box-shadow:
+    0 0 0 4px hsl(var(--primary) / 0.12),
+    inset 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+  outline: none !important;
+}
+
+.dark .login-card .login-field {
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.55) !important;
+}
+
+.dark .login-card .login-field:focus {
+  box-shadow:
+    0 0 0 4px hsl(var(--primary) / 0.18),
+    inset 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* 主按钮：渐变 + 投影，按下有回落感 */
+.login-cta {
+  background-image: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(211 100% 46%) 100%);
+  color: hsl(var(--primary-foreground));
+  box-shadow:
+    0 14px 28px -14px hsl(var(--primary) / 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.login-cta:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.login-cta:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    0 8px 18px -14px hsl(var(--primary) / 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.login-cta:disabled {
+  box-shadow: none;
+  filter: saturate(0.6);
+}
+
+/* 登录卡片入场：轻微上浮，尊重「减少动态效果」设置 */
+@keyframes login-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.login-card,
+.login-tip-card {
+  animation: login-rise 0.45s cubic-bezier(0.22, 0.82, 0.24, 1) both;
+}
+
+.login-tip-card {
+  animation-delay: 0.06s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-card,
+  .login-tip-card {
+    animation: none;
+  }
+}

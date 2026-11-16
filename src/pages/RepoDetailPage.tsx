@@ -291,7 +291,14 @@ export default function RepoDetailPage() {
       toast.success(i18n.t('仓库信息已更新'));
       setEditDialogOpen(false);
       if (editRepoName.trim() && editRepoName.trim() !== repoName) navigate(`/repos/${owner}/${editRepoName.trim()}`);
-    } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('更新失败')); }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      if (message.includes('Public forks')) {
+        toast.error(i18n.t('公开的 Fork 仓库不能设为私有，请新建独立仓库再迁移代码'));
+      } else {
+        toast.error(message || i18n.t('更新失败'));
+      }
+    }
     finally { setUpdating(false); }
   };
 
@@ -790,9 +797,20 @@ export default function RepoDetailPage() {
               <div className="flex items-center gap-3">
                 <button type="button" className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors ${!editPrivate ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:bg-secondary"}`} onClick={() => setEditPrivate(false)}>
                   <Globe className="w-3.5 h-3.5" />{i18n.t('公开')}</button>
-                <button type="button" className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors ${editPrivate ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:bg-secondary"}`} onClick={() => setEditPrivate(true)}>
+                <button
+                  type="button"
+                  disabled={repo.fork && !repo.private}
+                  title={repo.fork && !repo.private ? i18n.t('公开的 Fork 仓库不能直接设为私有') : undefined}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors ${repo.fork && !repo.private ? 'cursor-not-allowed border-border text-muted-foreground/50' : editPrivate ? 'border-primary text-primary bg-primary/10' : 'border-border text-muted-foreground hover:bg-secondary'}`}
+                  onClick={() => setEditPrivate(true)}
+                >
                   <Lock className="w-3.5 h-3.5" />{i18n.t('私有')}</button>
               </div>
+              {repo.fork && !repo.private && (
+                <p className="text-xs text-muted-foreground">
+                  {i18n.t('公开的 Fork 仓库不能直接设为私有，需要新建独立仓库再迁移代码')}
+                </p>
+              )}
             </div>
             <DialogFooter className="gap-2">
               <Button variant="ghost" className="border border-border text-muted-foreground hover:bg-secondary" onClick={() => setEditDialogOpen(false)}>{i18n.t('取消')}</Button>

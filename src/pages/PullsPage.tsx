@@ -118,15 +118,15 @@ export default function PullsPage() {
       </div>
 
       {/* 筛选栏 */}
-      <div className="flex gap-3 bg-card border border-border rounded-lg p-3">
-        <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2.5">
+        <div className="flex shrink-0 items-center gap-1">
           {(['open', 'closed', 'all'] as PrState[]).map((state) => {
             const labels: Record<PrState, string> = { open: i18n.t('开放'), closed: i18n.t('已关闭'), all: i18n.t('全部') };
             return (
               <button
                 key={state}
                 type="button"
-                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${stateFilter === state ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                className={`shrink-0 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs transition-colors sm:text-sm ${stateFilter === state ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                 onClick={() => setStateFilter(state)}
               >
                 {labels[state]}
@@ -134,9 +134,9 @@ export default function PullsPage() {
             );
           })}
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto shrink-0">
           <Select value={sortField} onValueChange={(v) => setSortField(v as typeof sortField)}>
-            <SelectTrigger className="bg-secondary border-border text-foreground w-28 h-9">
+            <SelectTrigger className="h-8 w-[108px] whitespace-nowrap bg-secondary border-border text-xs text-foreground">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border">

@@ -54,6 +54,7 @@ import { getModelCapabilities } from '@/ai-v2/modelCapabilities';
 import type { ModelConfig } from '@/components/ai/aiTypes';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { GitHubRepo } from '@/types/types';
+import { useKeyboardInset } from '@/hooks/use-keyboard-inset';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -1276,6 +1277,9 @@ export default function AiAssistantV2Page() {
   const [sessions, setSessions] = useState<V2Session[]>([]);
   const [activeId, setActiveId] = useState('');
   const [input, setInput] = useState('');
+  // 软键盘高度：Android 边到边下 innerHeight 不会随输入法收缩，
+  // 这里用 visualViewport 差值把底部输入条顶到键盘上方。
+  const keyboardInset = useKeyboardInset();
   const [streaming, setStreaming] = useState(false);
   const [modelConfig] = useState<ModelConfig>(() => loadModelConfig());
   const [character, setCharacter] = useState<CharacterCard>(() => loadActiveCharacter(user?.login));
@@ -2490,7 +2494,11 @@ export default function AiAssistantV2Page() {
           )}
         </div>
 
-        <div className="shrink-0 border-t border-border bg-background/95 px-2 pb-2 pt-2 sm:px-3">
+        <div
+          className="shrink-0 border-t border-border bg-background/95 px-2 pt-2 sm:px-3"
+          // 键盘弹出时整条输入区上移，避免被输入法遮住（pb 由 style 动态给出）
+          style={{ paddingBottom: keyboardInset > 0 ? keyboardInset + 8 : 8 }}
+        >
           <div className="mx-auto w-full max-w-3xl">
             <div className="rounded-2xl border border-border bg-card p-2 shadow-sm transition-colors focus-within:border-primary/40">
               <div className="mb-1 flex flex-wrap items-center gap-1.5 px-1">

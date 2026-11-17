@@ -112,10 +112,8 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_USER_MESSAGE_CHARS = 4000;
 const USER_MESSAGE_PREVIEW_CHARS = 2000;
 const STREAMING_PLAIN_LIMIT = 400_000;
-/** 单帧最多补进的字符数：上游一次性回整段时也能逐字落屏 */
-const STREAM_REVEAL_CHARS = 40;
-/** 补字间隔（毫秒） */
-const STREAM_REVEAL_MS = 24;
+/** 流式增量合并窗口（毫秒）：只做渲染合批，不做速度限制 */
+const STREAM_FLUSH_MS = 24;
 
 function readFileAsDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -1364,7 +1362,6 @@ export default function AiAssistantV2Page() {
   const runMetricsRef = useRef<{ runId: string; startedAt: number; firstTokenAt?: number } | null>(null);
   const pendingStreamRef = useRef<{ assistantId: string; content: string; reasoning: string } | null>(null);
   const streamFlushTimerRef = useRef<number | null>(null);
-  const pendingDoneRef = useRef<{ assistantId: string; runId: string } | null>(null);
   const approvalResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1679,70 +1676,31 @@ export default function AiAssistantV2Page() {
       : message));
   }, [setMessages]);
 
-  /** 缓冲区排空且已收到 done 时，才真正结束流式状态 */
-  const finalizeStreamIfDone = useCallback(() => {
-    const done = pendingDoneRef.current;
-    if (!done || pendingStreamRef.current) return;
-    pendingDoneRef.current = null;
-    patchAssistant(done.assistantId, { streaming: false });
-    if (runMetricsRef.current?.runId === done.runId) {
-      patchMetrics(done.assistantId, { durationMs: Date.now() - runMetricsRef.current.startedAt });
-    }
-    if (user?.login) void clearRunSnapshot(user.login, done.runId);
-    setResumableSnapshot(null);
-  }, [patchAssistant, patchMetrics, user?.login]);
-
-  /**
-   * 把缓冲区内容分帧写入消息。
-   * force=true 用于工具切换/报错/停止，必须立刻对齐顺序；
-   * 普通流式与收尾则按 STREAM_REVEAL_CHARS 逐帧补字，
-   * 避免上游一次吐整段时“说完才全部出现”。
-   */
-  const flushStreamDelta = useCallback((force = false) => {
+  const flushStreamDelta = useCallback(() => {
     if (streamFlushTimerRef.current !== null) {
       window.clearTimeout(streamFlushTimerRef.current);
       streamFlushTimerRef.current = null;
     }
     const pending = pendingStreamRef.current;
-    if (!pending) {
-      finalizeStreamIfDone();
-      return;
-    }
-    const takeContent = force ? pending.content : pending.content.slice(0, STREAM_REVEAL_CHARS);
-    const takeReasoning = force ? pending.reasoning : pending.reasoning.slice(0, STREAM_REVEAL_CHARS);
-    pending.content = pending.content.slice(takeContent.length);
-    pending.reasoning = pending.reasoning.slice(takeReasoning.length);
-    const rest = pending.content.length + pending.reasoning.length;
-    if (!rest) pendingStreamRef.current = null;
-
-    if (takeContent || takeReasoning) {
-      setMessages(prev => prev.map(message => {
-        if (message.id !== pending.assistantId) return message;
-        let blocks = message.blocks;
-        if (takeContent) blocks = appendBlockDelta(blocks, 'text', takeContent);
-        if (takeReasoning) blocks = appendBlockDelta(blocks, 'reasoning', takeReasoning);
-        return {
-          ...message,
-          content: takeContent ? message.content + takeContent : message.content,
-          reasoning: takeReasoning ? (message.reasoning || '') + takeReasoning : message.reasoning,
-          blocks,
-        };
-      }));
-    }
-
-    if (rest) {
-      streamFlushTimerRef.current = window.setTimeout(() => {
-        streamFlushTimerRef.current = null;
-        flushStreamDelta();
-      }, force ? 16 : STREAM_REVEAL_MS);
-    } else {
-      finalizeStreamIfDone();
-    }
-  }, [finalizeStreamIfDone, setMessages]);
+    pendingStreamRef.current = null;
+    if (!pending) return;
+    setMessages(prev => prev.map(message => {
+      if (message.id !== pending.assistantId) return message;
+      let blocks = message.blocks;
+      if (pending.content) blocks = appendBlockDelta(blocks, 'text', pending.content);
+      if (pending.reasoning) blocks = appendBlockDelta(blocks, 'reasoning', pending.reasoning);
+      return {
+        ...message,
+        content: pending.content ? message.content + pending.content : message.content,
+        reasoning: pending.reasoning ? (message.reasoning || '') + pending.reasoning : message.reasoning,
+        blocks,
+      };
+    }));
+  }, [setMessages]);
 
   const queueStreamDelta = useCallback((id: string, patch: { content?: string; reasoning?: string }) => {
     if (pendingStreamRef.current && pendingStreamRef.current.assistantId !== id) {
-      flushStreamDelta(true);
+      flushStreamDelta();
     }
     const pending = pendingStreamRef.current || { assistantId: id, content: '', reasoning: '' };
     pending.content += patch.content || '';
@@ -1752,7 +1710,7 @@ export default function AiAssistantV2Page() {
       streamFlushTimerRef.current = window.setTimeout(() => {
         streamFlushTimerRef.current = null;
         flushStreamDelta();
-      }, STREAM_REVEAL_MS);
+      }, STREAM_FLUSH_MS);
     }
   }, [flushStreamDelta]);
 
@@ -1802,7 +1760,7 @@ export default function AiAssistantV2Page() {
         queueStreamDelta(assistantId, { reasoning: event.text });
         break;
       case 'tool_start':
-        flushStreamDelta(true);
+        flushStreamDelta();
         setMessages(prev => prev.map(message => message.id === assistantId
           ? {
               ...message,
@@ -1821,7 +1779,7 @@ export default function AiAssistantV2Page() {
           : message));
         break;
       case 'tool_end':
-        flushStreamDelta(true);
+        flushStreamDelta();
         patchTool(assistantId, event.call.id, {
           status: event.ok ? 'done' : 'error',
           content: event.content,
@@ -1837,7 +1795,7 @@ export default function AiAssistantV2Page() {
         });
         break;
       case 'error':
-        flushStreamDelta(true);
+        flushStreamDelta();
         patchAssistant(assistantId, {
           content: event.message,
           blocks: [{ id: makeId('blk'), type: 'text', text: event.message }],
@@ -1849,8 +1807,13 @@ export default function AiAssistantV2Page() {
         }
         break;
       case 'done':
-        pendingDoneRef.current = { assistantId, runId };
         flushStreamDelta();
+        patchAssistant(assistantId, { streaming: false });
+        if (runMetricsRef.current?.runId === runId) {
+          patchMetrics(assistantId, { durationMs: Date.now() - runMetricsRef.current.startedAt });
+        }
+        if (user?.login) void clearRunSnapshot(user.login, runId);
+        setResumableSnapshot(null);
         break;
       default:
         break;
@@ -2138,10 +2101,6 @@ export default function AiAssistantV2Page() {
       }
     } finally {
       flushStreamDelta();
-      // 兜底：异常/中断时没有 done 事件，也要在缓冲区排空后收尾
-      if (!pendingDoneRef.current && pendingStreamRef.current) {
-        pendingDoneRef.current = { assistantId, runId };
-      }
       settleRunningTools(assistantId);
       finishRun(user?.login, runId, runStatus, runError);
       if (runStatus !== 'done' && user?.login) {
@@ -2227,7 +2186,7 @@ export default function AiAssistantV2Page() {
   };
 
   const handleStop = () => {
-    flushStreamDelta(true);
+    flushStreamDelta();
     pendingDoneRef.current = null;
     pendingStreamRef.current = null;
     if (streamFlushTimerRef.current !== null) {

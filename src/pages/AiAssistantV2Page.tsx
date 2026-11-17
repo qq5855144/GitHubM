@@ -720,7 +720,7 @@ function ApplyPatchDialog({
 
   return (
     <Dialog open={Boolean(request)} onOpenChange={open => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-xl">
+      <DialogContent className="max-h-[85dvh] max-w-[calc(100%-2rem)] overflow-y-auto p-4 md:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <GitBranch className="h-4 w-4 text-primary" />
@@ -783,7 +783,7 @@ function ModelPickerDialog({
   const currentProvider = providers.find(item => item.type === currentType) || providers[0];
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-md">
+      <DialogContent className="max-h-[85dvh] max-w-[calc(100%-2rem)] overflow-y-auto p-4 md:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <ModelAvatar modelDef={currentProvider} size="sm" />
@@ -891,7 +891,7 @@ function BranchPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-md">
+      <DialogContent className="max-h-[85dvh] max-w-[calc(100%-2rem)] overflow-y-auto p-4 md:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <GitBranch className="h-4 w-4 text-primary" />
@@ -1050,7 +1050,7 @@ function RepoFilePicker({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-xl">
+      <DialogContent className="max-h-[85dvh] max-w-[calc(100%-2rem)] overflow-y-auto p-4 md:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <AtSign className="h-4 w-4 text-primary" />
@@ -1064,10 +1064,10 @@ function RepoFilePicker({
             onChange={event => setQuery(event.target.value)}
             placeholder={i18n.t('搜索文件路径')}
             autoFocus
-            className="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-3 text-sm outline-none focus:border-primary/50"
+            className="h-9 w-full min-w-0 rounded-lg border border-border bg-background pl-8 pr-3 text-sm outline-none focus:border-primary/50"
           />
         </div>
-        <div className="min-h-[180px] max-h-[50vh] overflow-y-auto rounded-lg border border-border">
+        <div className="min-h-[140px] max-h-[38dvh] overflow-y-auto rounded-lg border border-border md:max-h-[320px]">
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -1368,6 +1368,19 @@ export default function AiAssistantV2Page() {
   const streamFlushTimerRef = useRef<number | null>(null);
   const approvalResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(() => (
+    typeof window === 'undefined' ? 800 : window.innerHeight
+  ));
+  useEffect(() => {
+    const sync = () => setViewportHeight(window.innerHeight);
+    sync();
+    window.addEventListener('resize', sync);
+    window.visualViewport?.addEventListener('resize', sync);
+    return () => {
+      window.removeEventListener('resize', sync);
+      window.visualViewport?.removeEventListener('resize', sync);
+    };
+  }, []);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
@@ -1542,6 +1555,11 @@ export default function AiAssistantV2Page() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, streaming, scrollToBottom]);
+
+  // 键盘开合改变可视高度时，若原本贴底就继续保持贴底
+  useEffect(() => {
+    scrollToBottom();
+  }, [viewportHeight, scrollToBottom]);
 
   // 虚拟列表高度测量后补一次底部对齐，避免流式输出时被"截断"在中间
   const virtualTotalSize = virtualizer.getTotalSize();
@@ -2348,8 +2366,8 @@ export default function AiAssistantV2Page() {
 
   return (
     <div
-      className="flex min-h-0 w-full overflow-hidden bg-background"
-      style={{ height: `calc(100dvh - ${isAndroid ? 56 : 120}px)` }}
+      className="flex min-h-0 w-full min-w-0 overflow-hidden bg-background"
+      style={{ height: `${Math.max(240, viewportHeight - (isAndroid ? 56 : 120))}px` }}
     >
       {/* 桌面端会话侧栏 */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-muted/10 2xl:flex">
@@ -2470,7 +2488,7 @@ export default function AiAssistantV2Page() {
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
         >
           <div className="mx-auto w-full max-w-3xl px-3.5 py-4 sm:px-6">
             {sessionLoading ? (
@@ -2556,11 +2574,11 @@ export default function AiAssistantV2Page() {
         </div>
 
         <div
-          className="shrink-0 border-t border-border bg-background/95 px-2 pt-2 sm:px-3"
+          className="w-full min-w-0 shrink-0 border-t border-border bg-background/95 px-2 pt-2 sm:px-3"
           // 键盘弹出时整条输入区上移，避免被输入法遮住（pb 由 style 动态给出）
           style={{ paddingBottom: keyboardInset > 0 ? keyboardInset + 8 : 8 }}
         >
-          <div className="mx-auto w-full max-w-3xl">
+          <div className="mx-auto w-full min-w-0 max-w-3xl">
             <div className="rounded-[22px] border border-border/80 bg-card p-2 shadow-sm transition-colors focus-within:border-primary/40">
               <div className="mb-1 flex flex-wrap items-center gap-1.5 px-1">
                 {repoContext ? (
@@ -2667,7 +2685,7 @@ export default function AiAssistantV2Page() {
                 <button
                   type="button"
                   onClick={() => setModelDialogOpen(true)}
-                  className="flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1.5 py-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   <ModelAvatar modelDef={modelDef} size="sm" />
                   <span className="max-w-[110px] truncate">{modelLabel}</span>
@@ -2712,7 +2730,7 @@ export default function AiAssistantV2Page() {
           if (!open) resolveApproval(false);
         }}
       >
-        <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-lg">
+        <DialogContent className="max-h-[85dvh] max-w-[calc(100%-2rem)] overflow-y-auto p-4 md:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <ShieldAlert className="h-4 w-4 text-amber-500" />
@@ -2795,7 +2813,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
       </Dialog>
 
       <Dialog open={artifactDialogOpen} onOpenChange={setArtifactDialogOpen}>
-        <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-2xl">
+        <DialogContent className="max-h-[85dvh] max-w-[calc(100%-2rem)] overflow-y-auto p-4 md:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <FileText className="h-4 w-4 text-primary" />
@@ -2828,7 +2846,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
       </Dialog>
 
       <Dialog open={repoDialogOpen} onOpenChange={setRepoDialogOpen}>
-        <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-xl">
+        <DialogContent className="max-h-[85dvh] max-w-[calc(100%-2rem)] overflow-y-auto p-4 md:max-w-xl">
           <DialogHeader>
             <DialogTitle className="text-base">{i18n.t('选择仓库')}</DialogTitle>
           </DialogHeader>
@@ -2910,7 +2928,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
       </Sheet>
 
       <Dialog open={contextDialogOpen} onOpenChange={setContextDialogOpen}>
-        <DialogContent className="max-w-[calc(100%-2rem)] p-4 md:max-w-sm">
+        <DialogContent className="max-h-[85dvh] max-w-[calc(100%-2rem)] overflow-y-auto p-4 md:max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-base">{i18n.t('会话上下文')}</DialogTitle>
           </DialogHeader>

@@ -71,7 +71,7 @@ const RepoSelector = memo(function RepoSelector({ onSelect }: RepoSelectorProps)
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
-          className="pl-9 px-9"
+          className="pl-9 pr-3"
           placeholder={i18n.t('搜索仓库名称或描述…')}
           value={query}
           onChange={e => { setQuery(e.target.value); }}
@@ -81,7 +81,7 @@ const RepoSelector = memo(function RepoSelector({ onSelect }: RepoSelectorProps)
       {/* 虚拟列表容器 */}
       <div
         ref={scrollContainerRef}
-        className="h-[360px] rounded-lg border border-border overflow-y-auto"
+        className="h-[min(360px,42dvh)] rounded-lg border border-border overflow-y-auto"
       >
         {/* 骨架屏（首次加载） */}
         {loading && repos.length === 0 ? (

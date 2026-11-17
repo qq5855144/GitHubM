@@ -336,6 +336,21 @@ function ToolActivity({ tools, onOpenArtifact }: { tools: UiToolRun[]; onOpenArt
   );
 }
 
+/** 等待首个 token 的三点动画（参考 DeepSeek chat 的等待态） */
+function WaitingDots() {
+  return (
+    <div className="flex items-center gap-1 py-2" aria-label={i18n.t('思考中…')}>
+      {[0, 1, 2].map(index => (
+        <span
+          key={index}
+          className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
+          style={{ animation: `fading 0.9s linear ${index * 0.12}s infinite` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function AssistantTextBlock({ text, streaming, error, onApplyDiff }: {
   text: string;
   streaming?: boolean;
@@ -449,12 +464,7 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
         </>
       )}
 
-      {isStreaming && !hasBody && (
-        <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          {i18n.t('思考中…')}
-        </div>
-      )}
+      {isStreaming && !hasBody && <WaitingDots />}
 
       {!message.streaming && (message.content || message.metrics) && (
         <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -557,8 +567,7 @@ function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff }: {
         </div>
       )}
 
-      <div className="min-w-0 border-t border-border/60 pt-3">
-
+      <div className="min-w-0">
         {turn.assistants.length > 0 ? (
           <div className="min-w-0 space-y-4">
             {turn.assistants.map(message => (
@@ -568,10 +577,7 @@ function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff }: {
             ))}
           </div>
         ) : (
-          <div className="flex items-center gap-2 py-1 text-[13px] text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            {i18n.t('思考中…')}
-          </div>
+          <WaitingDots />
         )}
       </div>
     </section>
@@ -2440,7 +2446,7 @@ export default function AiAssistantV2Page() {
                 if (!virtualItems.length) {
                   const recent = turns.slice(-12);
                   return (
-                    <div className="space-y-5">
+                    <div className="space-y-6">
                       {recent.map((turn, index) => (
                         <ConversationTurnView
                           key={turn.id}
@@ -2463,7 +2469,7 @@ export default function AiAssistantV2Page() {
                           key={turn.id}
                           data-index={item.index}
                           ref={virtualizer.measureElement}
-                          className="absolute left-0 top-0 w-full pb-5"
+                          className="absolute left-0 top-0 w-full pb-6"
                           style={{ transform: `translateY(${item.start}px)` }}
                         >
                           <ConversationTurnView
@@ -2500,7 +2506,7 @@ export default function AiAssistantV2Page() {
           style={{ paddingBottom: keyboardInset > 0 ? keyboardInset + 8 : 8 }}
         >
           <div className="mx-auto w-full max-w-3xl">
-            <div className="rounded-2xl border border-border bg-card p-2 shadow-sm transition-colors focus-within:border-primary/40">
+            <div className="rounded-[22px] border border-border/80 bg-card p-2 shadow-sm transition-colors focus-within:border-primary/40">
               <div className="mb-1 flex flex-wrap items-center gap-1.5 px-1">
                 {repoContext ? (
                   <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] text-primary">
@@ -2571,7 +2577,7 @@ export default function AiAssistantV2Page() {
                 placeholder={i18n.t('输入消息… Enter 发送，Shift+Enter 换行')}
                 rows={1}
                 disabled={streaming}
-                className="max-h-44 min-h-[40px] resize-none border-0 bg-transparent px-2 py-1.5 text-sm shadow-none focus-visible:ring-0"
+                className="max-h-44 min-h-[42px] resize-none border-0 bg-transparent px-2.5 py-2 text-sm shadow-none focus-visible:ring-0"
               />
 
               <div className="flex items-center gap-1 px-1 pt-1">
@@ -2615,7 +2621,7 @@ export default function AiAssistantV2Page() {
                 <Button
                   type="button"
                   size="icon"
-                  className="h-8 w-8 shrink-0 rounded-lg ml-auto"
+                  className="ml-auto h-9 w-9 shrink-0 rounded-full"
                   onClick={streaming ? handleStop : handleSend}
                   disabled={!streaming && ((!input.trim() && pendingAttachments.length === 0) || !token)}
                   title={streaming ? i18n.t('停止生成') : i18n.t('发送')}

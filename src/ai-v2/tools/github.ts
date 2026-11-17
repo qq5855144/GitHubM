@@ -55,9 +55,10 @@ function decodeBase64Utf8(base64: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-function truncate(text: string, limit = 30000): string {
-  if (text.length <= limit) return text;
-  return `${text.slice(0, limit)}\n\n…（已截断，原长度 ${text.length} 字符）`;
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(n, min), max);
 }
 
 const listFiles: AgentTool = {
@@ -90,11 +91,13 @@ const listFiles: AgentTool = {
 
 const readFile: AgentTool = {
   name: 'github_read_file',
-  description: '读取当前仓库中一个文本文件的内容。需要提供完整文件路径。',
+  description: '读取当前仓库中一个文本文件。大文件支持 offset/limit 分页；返回里会给出总长度与下一段 offset，内容未结束时应继续读取，不要基于截断内容下结论。',
   parameters: {
     type: 'object',
     properties: {
       path: { type: 'string', description: '文件路径，例如 src/App.tsx' },
+      offset: { type: 'number', description: '起始字符位置，默认 0' },
+      limit: { type: 'number', description: '本次读取字符数，1000-11500，默认 11000' },
     },
     required: ['path'],
   },
@@ -122,6 +125,12 @@ const readFile: AgentTool = {
       };
     }
     const text = decodeBase64Utf8(data.content);
+    const total = text.length;
+    const offset = clampNumber(args.offset, 0, total, 0);
+    const limit = clampNumber(args.limit, 1000, 11500, 11000);
+    const segment = text.slice(offset, offset + limit);
+    const nextOffset = offset + segment.length;
+    const lineCount = text.split('\n').length;
     return {
       ok: true,
       content: [
@@ -129,8 +138,13 @@ const readFile: AgentTool = {
         `分支：${branch}`,
         `SHA：${data.sha || ''}`,
         `大小：${data.size || 0} bytes`,
+        `全文：${total} 字符 / ${lineCount} 行`,
+        `本次范围：${offset}-${nextOffset}`,
         '',
-        truncate(text),
+        segment,
+        ...(nextOffset < total
+          ? ['', `[内容未结束] 继续读取：{"tool":"github_read_file","path":"${path}","offset":${nextOffset},"limit":${limit}}`]
+          : ['', '[内容结束]']),
       ].join('\n'),
     };
   },

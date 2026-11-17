@@ -468,26 +468,16 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
 
       {isStreaming && !hasBody && <WaitingDots />}
 
-      {!message.streaming && (message.content || message.metrics) && (
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          {message.content && (
-            <button
-              type="button"
-              onClick={copy}
-              title={i18n.t('复制')}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <Copy className="h-4 w-4" />
-            </button>
-          )}
-          {message.metrics && (
-            <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground/70">
-              {message.metrics.totalTokens ? <span>{message.metrics.totalTokens} tokens</span> : null}
-              {message.metrics.firstTokenMs ? <span>首字 {Math.round(message.metrics.firstTokenMs / 100) / 10}s</span> : null}
-              {message.metrics.durationMs ? <span>总耗时 {Math.round(message.metrics.durationMs / 100) / 10}s</span> : null}
-              {message.metrics.model ? <span className="max-w-[180px] truncate font-mono">{message.metrics.model}</span> : null}
-            </div>
-          )}
+      {!message.streaming && message.content && (
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={copy}
+            title={i18n.t('复制')}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Copy className="h-4 w-4" />
+          </button>
         </div>
       )}
     </div>

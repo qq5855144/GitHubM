@@ -368,6 +368,35 @@ describe('AI Assistant V2 provider', () => {
     )).rejects.toThrow('请求超时');
   });
 
+  it('resets the timeout whenever a stream chunk arrives', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const encoder = new TextEncoder();
+      let sent = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const timer = setInterval(() => {
+            if (sent < 4) {
+              controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"x"}}]}\n\n'));
+              sent += 1;
+              return;
+            }
+            clearInterval(timer);
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          }, 100);
+        },
+      });
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    }));
+    const result = await streamProvider(
+      { ...config, timeoutMs: 300 },
+      [{ role: 'user', content: 'hi' }],
+      [],
+      new AbortController().signal,
+      () => undefined,
+    );
+    expect(result.content).toBe('xxxx');
+  });
   it('uses the official OpenRouter endpoint and passes tools', () => {
     const request = buildProviderRequest(config, [{ role: 'user', content: 'hi' }], [{
       type: 'function',

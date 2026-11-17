@@ -72,26 +72,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (newToken: string) => {
+    const previousToken = token;
     setToken(newToken);
-    const userData = await getCurrentUser();
-    localStorage.setItem(TOKEN_KEY, newToken);
-    setTokenState(newToken);
-    setUser(userData);
-    setIsAuthenticated(true);
-    persistAccount(newToken, userData);
-    refreshRateLimit();
-  }, [refreshRateLimit, persistAccount]);
+    try {
+      const userData = await getCurrentUser();
+      localStorage.setItem(TOKEN_KEY, newToken);
+      setTokenState(newToken);
+      setUser(userData);
+      setIsAuthenticated(true);
+      persistAccount(newToken, userData);
+      refreshRateLimit();
+    } catch (error) {
+      // 校验失败时回滚模块级 token，避免「界面还是旧用户、请求全 401」的半登出状态。
+      setToken(previousToken);
+      throw error;
+    }
+  }, [token, refreshRateLimit, persistAccount]);
 
   const switchAccount = useCallback(async (switchToken: string) => {
+    const previousToken = token;
     setToken(switchToken);
-    const userData = await getCurrentUser();
-    localStorage.setItem(TOKEN_KEY, switchToken);
-    setTokenState(switchToken);
-    setUser(userData);
-    setIsAuthenticated(true);
-    persistAccount(switchToken, userData);
-    refreshRateLimit();
-  }, [refreshRateLimit, persistAccount]);
+    try {
+      const userData = await getCurrentUser();
+      localStorage.setItem(TOKEN_KEY, switchToken);
+      setTokenState(switchToken);
+      setUser(userData);
+      setIsAuthenticated(true);
+      persistAccount(switchToken, userData);
+      refreshRateLimit();
+    } catch (error) {
+      setToken(previousToken);
+      throw error;
+    }
+  }, [token, refreshRateLimit, persistAccount]);
 
   const removeAccount = useCallback((removeToken: string) => {
     setSavedAccounts((prev) => {

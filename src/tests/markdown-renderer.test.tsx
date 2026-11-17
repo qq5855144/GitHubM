@@ -59,4 +59,31 @@ describe('MarkdownRenderer README 语言切换', () => {
     expect(link?.getAttribute('href')).toBe('https://vuejs.org/');
     expect(link?.getAttribute('target')).toBe('_blank');
   });
+
+  it('保留仓库相对图片地址', () => {
+    const { container } = renderMarkdown('![logo](images/logo.png)');
+    const img = container.querySelector('img');
+    expect(img?.getAttribute('src')).toBe(
+      'https://raw.githubusercontent.com/octocat/Hello-World/main/images/logo.png'
+    );
+  });
+  it('移除 iframe / srcdoc 等可执行内联 HTML', () => {
+    const { container } = renderMarkdown('<iframe srcdoc="<script>alert(1)</script>"></iframe><p>safe</p>');
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(container.querySelector('script')).toBeNull();
+    expect(screen.getByText('safe')).toBeTruthy();
+  });
+
+  it('移除 javascript: 链接', () => {
+    const { container } = renderMarkdown('[bad](javascript:alert(1))');
+    expect(container.querySelector('a[href^="javascript:"]')).toBeNull();
+  });
+
+  it('保留 GFM 任务列表复选框', () => {
+    const { container } = renderMarkdown('- [x] done\n- [ ] todo');
+    const boxes = container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+    expect(boxes.length).toBe(2);
+    expect(boxes[0].checked).toBe(true);
+    expect(boxes[1].checked).toBe(false);
+  });
 });

@@ -1,6 +1,5 @@
 // 全局确认弹窗：替代原生 window.confirm，支持异步 await
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Trash2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -60,33 +59,22 @@ export function ConfirmDialogHost() {
   return (
     <Dialog open={Boolean(pending)} onOpenChange={open => { if (!open) close(false); }}>
       <DialogContent className="max-w-[calc(100%-2rem)] gap-0 overflow-hidden rounded-2xl p-0 md:max-w-sm [&>button]:hidden">
-        <div className="flex items-start gap-3 p-5">
-          <span
-            className={
-              destructive
-                ? 'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive'
-                : 'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary'
-            }
-          >
-            {destructive ? <Trash2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-          </span>
-          <div className="min-w-0 flex-1">
-            <DialogTitle className="text-[15px] font-semibold leading-6 break-words">
-              {pending?.title}
-            </DialogTitle>
-            {pending?.description && (
-              <DialogDescription className="mt-1 text-xs leading-relaxed text-muted-foreground break-words">
-                {pending.description}
-              </DialogDescription>
-            )}
-          </div>
+        <div className="px-5 pb-5 pt-6 text-center">
+          <DialogTitle className="text-[15px] font-semibold leading-6 break-words">
+            {pending?.title}
+          </DialogTitle>
+          {pending?.description && (
+            <DialogDescription className="mt-1.5 text-xs leading-relaxed text-muted-foreground break-words">
+              {pending.description}
+            </DialogDescription>
+          )}
         </div>
-        <DialogFooter className="flex-row justify-end gap-2 border-t border-border/60 bg-muted/20 px-5 py-3">
+        <DialogFooter className="flex-row gap-2 border-t border-border/60 bg-muted/20 px-4 py-3">
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 min-w-[72px] rounded-lg text-xs"
+            className="h-9 flex-1 rounded-lg text-xs"
             onClick={() => close(false)}
           >
             {pending?.cancelText || i18n.t('取消')}
@@ -95,7 +83,7 @@ export function ConfirmDialogHost() {
             type="button"
             size="sm"
             variant={destructive ? 'destructive' : 'default'}
-            className="h-8 min-w-[72px] rounded-lg text-xs"
+            className="h-9 flex-1 rounded-lg text-xs"
             onClick={() => close(true)}
           >
             {pending?.confirmText || i18n.t('删除')}

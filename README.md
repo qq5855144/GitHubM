@@ -159,9 +159,9 @@ Agent：get_workflow_runs → get_run_jobs → get_job_logs
 - **后台保活**：Android 端通过 `AndroidBridge.startAgentTask` 启动前台服务，切换后台任务继续跑
 - **auto_review 规则**：硬编码密钥 / Token、TODO-FIXME 遗留、`await` 缺少 try-catch、`console.log` 残留、超长行（>120）、过长函数（>80 行）
 
-### 移动端网络适配：LLM Proxy（可选）
+### 移动端网络适配：LLM Proxy（可选、自建）
 
-Android WebView 下部分模型 API 受 CORS / DNS 影响，项目内置一个**无状态** Cloudflare Worker 代理（`cloudflare/llm-proxy`）：只转发请求与 SSE 流，不保存会话、不记录 API Key、不跑 Agent 循环，并对上游地址做白名单校验。
+默认直连各模型官方接口，**API Key 不经过任何第三方服务器**。只有部分网络环境下遇到 CORS / DNS 问题时，才需要自行部署一个**无状态** Cloudflare Worker 代理（`cloudflare/llm-proxy`），然后在设置里显式填写代理地址：代理只转发请求与 SSE 流，不保存会话、不记录 API Key、不跑 Agent 循环，并对上游地址做白名单校验。
 
 ```http
 POST /v1/chat/completions
@@ -438,7 +438,7 @@ tag v* ────► tauri-build（三平台桌面安装包）
 <details>
 <summary><b>AI 助手在手机上请求失败（CORS / 网络错误）</b></summary>
 
-部分模型域名在 WebView 下受 CORS 或 DNS 限制，部署 `cloudflare/llm-proxy` 后在「设置 → AI 配置」填写代理地址即可，代理不保存任何凭据。
+应用默认直连模型官方接口。如果所在网络确实无法直连，可自行部署 `cloudflare/llm-proxy`，再在「设置 → AI 配置 → 模型代理」填写地址；不填写时不会走任何代理。
 </details>
 
 <details>
@@ -464,7 +464,7 @@ tag v* ────► tauri-build（三平台桌面安装包）
 ## 隐私与安全
 
 - **GitHub Token** 仅存于本机 localStorage，所有请求直连 `api.github.com`，不经过任何第三方服务器
-- **模型 API Key** 同样仅本地保存；使用 LLM Proxy 时代理不记录请求体与 Authorization
+- **模型 API Key** 同样仅本地保存；默认只发送到模型官方域名，不经过第三方。只有在设置中手动填写代理地址时，请求才会经该代理转发（代理不记录请求体与 Authorization）
 - **访问统计** 完全本地计算 PV / UV，无上报
 - **代码安全**：`check_security` 工具与 `auto_review` 规则会扫描硬编码密钥、`eval`、SQL 注入、XSS 等常见风险
 - **依赖忽略**：`.gitignore` 已排除 `node_modules`、`dist`、`*.keystore`（示例证书除外）、`local.properties` 等

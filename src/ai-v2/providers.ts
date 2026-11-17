@@ -10,8 +10,6 @@ import type {
   V2ToolDefinition,
 } from './types';
 
-const DEFAULT_PROXY = 'https://llm.callact.xyz';
-
 export function getProviderEndpoint(config: ModelConfig): string {
   switch (config.type) {
     case 'deepseek':
@@ -34,11 +32,16 @@ export function getProviderEndpoint(config: ModelConfig): string {
 function getRequestUrl(config: ModelConfig): { url: string; proxy: boolean } {
   const explicitProxy = config.proxy_url?.trim().replace(/\/+$/, '');
   if (explicitProxy) return { url: `${explicitProxy}/v1/chat/completions`, proxy: true };
-  // OpenRouter / 自定义接口支持浏览器 CORS，默认直连；其余走项目内置无状态代理。
-  if (config.type === 'openrouter' || config.type === 'custom') {
-    return { url: getProviderEndpoint(config), proxy: false };
+  // 默认直连模型官方接口：API Key 不经过任何第三方。
+  // 只有用户在设置里显式填写代理地址时才走代理。
+  const endpoint = getProviderEndpoint(config);
+  if (!endpoint) {
+    if (config.type === 'cloudflare') {
+      throw new Error('Cloudflare 免费通道需要先填写代理地址');
+    }
+    throw new Error('请先在模型设置中填写接口地址');
   }
-  return { url: `${DEFAULT_PROXY}/v1/chat/completions`, proxy: true };
+  return { url: endpoint, proxy: false };
 }
 
 /** 部分供应商（DeepSeek）禁止回传 reasoning_content，发送前统一剔除 */

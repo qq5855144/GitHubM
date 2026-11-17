@@ -130,7 +130,6 @@ const CLOUDFLARE_FALLBACK_CONFIG: ModelConfig = {
   type: 'cloudflare',
   api_key: 'cloudflare-free',
   model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-  proxy_url: 'https://llm.callact.xyz',
 };
 
 function isOpenRouterDailyLimit(message: string): boolean {
@@ -2073,7 +2072,8 @@ export default function AiAssistantV2Page() {
         let message = (error as Error)?.message || String(error);
 
         // OpenRouter 免费额度用尽：无仓库上下文时自动切到 Cloudflare Workers AI 免费额度。
-        if (isOpenRouterDailyLimit(message) && modelConfig.type === 'openrouter' && !repoContext) {
+        const fallbackProxy = modelConfig.proxy_url?.trim().replace(/\/+$/, '') || '';
+        if (isOpenRouterDailyLimit(message) && modelConfig.type === 'openrouter' && !repoContext && fallbackProxy) {
           toast.info(i18n.t('OpenRouter 免费额度已用尽，正在切换 Cloudflare AI 重试'));
           patchAssistant(assistantId, {
             content: `> ${i18n.t('OpenRouter 免费额度已用尽，已切换到 Cloudflare AI 重试。')}\n\n`,
@@ -2088,7 +2088,7 @@ export default function AiAssistantV2Page() {
               token,
               userLogin: user?.login,
               runId,
-              config: CLOUDFLARE_FALLBACK_CONFIG,
+              config: { ...CLOUDFLARE_FALLBACK_CONFIG, proxy_url: fallbackProxy },
               history,
               currentUserContent: modelContent,
               currentUserText: userText,

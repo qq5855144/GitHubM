@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
+import { ConfirmDialogHost } from '@/components/ui/confirm-dialog';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layouts/MainLayout';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -105,6 +106,7 @@ function AppContent() {
       </Routes>
       <NetworkStatusBanner />
       <Toaster richColors position="top-right" />
+      <ConfirmDialogHost />
     </>
   );
 }

@@ -198,6 +198,11 @@ export function getModelDef(type: ModelType): ModelDef {
   return MODEL_DEFS.find(m => m.type === type) ?? MODEL_DEFS[0];
 }
 
+/** 模型展示名：去掉「（速度快 · 推荐）」这类括注 */
+export function modelDisplayName(label?: string): string {
+  return (label || '').replace(/[（(][^）)]*[）)]/g, '').trim();
+}
+
 export function loadModelConfig(): ModelConfig {
   try {
     const raw = localStorage.getItem(MODEL_CONFIG_KEY);

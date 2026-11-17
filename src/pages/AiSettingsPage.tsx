@@ -31,6 +31,7 @@ import {
 } from '@/ai-v2/characters';
 import type { CharacterCard } from '@/ai-v2/characters';
 import { Button } from '@/components/ui/button';
+import { confirmAction } from '@/components/ui/confirm-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -284,8 +285,13 @@ export default function AiSettingsPage() {
     }
   };
 
-  const clearSessions = () => {
-    if (!window.confirm(i18n.t('确定清除本机所有 AI 会话？此操作不可撤销。'))) return;
+  const clearSessions = async () => {
+    const confirmed = await confirmAction({
+      title: i18n.t('清除所有会话？'),
+      description: i18n.t('本机保存的全部 AI 会话都会被删除，无法撤销。'),
+      confirmText: i18n.t('清除'),
+    });
+    if (!confirmed) return;
     try {
       const keys = Object.keys(localStorage).filter(key =>
         key.startsWith('githubm_ai_v2_store:') || key.startsWith('githubm_ai_v2_session:'),
@@ -629,8 +635,13 @@ export default function AiSettingsPage() {
 
   if (activeSection.id === 'context') {
     const totalSessions = sessions.reduce((sum, item) => sum + item.count, 0);
-    const clearUserArtifacts = () => {
-      if (!window.confirm(i18n.t('确定清除当前账号的 Artifact 缓存？'))) return;
+    const clearUserArtifacts = async () => {
+      const confirmed = await confirmAction({
+        title: i18n.t('清除 Artifact 缓存？'),
+        description: i18n.t('当前账号的 Artifact 缓存会被清空，无法恢复。'),
+        confirmText: i18n.t('清除'),
+      });
+      if (!confirmed) return;
       clearArtifacts(user?.login);
       setStorageVersion(version => version + 1);
       toast.success(i18n.t('已清除 Artifact'));
@@ -711,8 +722,13 @@ export default function AiSettingsPage() {
                 variant="outline"
                 size="sm"
                 className="mt-3 h-8 gap-1.5 text-xs"
-                onClick={() => {
-                  if (!window.confirm(i18n.t('确定清除当前账号的长期记忆？'))) return;
+                onClick={async () => {
+                  const confirmed = await confirmAction({
+                    title: i18n.t('清除长期记忆？'),
+                    description: i18n.t('当前账号保存的长期记忆会被清空，无法恢复。'),
+                    confirmText: i18n.t('清除'),
+                  });
+                  if (!confirmed) return;
                   clearMemories(user?.login);
                   setStorageVersion(version => version + 1);
                   toast.success(i18n.t('已清除长期记忆'));
@@ -958,8 +974,13 @@ export default function AiSettingsPage() {
                           variant="ghost"
                           size="sm"
                           className="h-7 text-xs text-destructive"
-                          onClick={() => {
-                            if (!window.confirm(i18n.t('确定删除角色卡「{{name}}」？', { name: card.name }))) return;
+                          onClick={async () => {
+                            const confirmed = await confirmAction({
+                              title: i18n.t('删除角色卡「{{name}}」？', { name: card.name }),
+                              description: i18n.t('删除后无法恢复。'),
+                              confirmText: i18n.t('删除'),
+                            });
+                            if (!confirmed) return;
                             deleteCustomCharacter(user?.login, card.id);
                             refresh();
                             toast.success(i18n.t('角色卡已删除'));
@@ -1077,8 +1098,13 @@ export default function AiSettingsPage() {
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-[10px] text-muted-foreground"
-                onClick={() => {
-                  if (!window.confirm(i18n.t('确定清除运行记录？'))) return;
+                onClick={async () => {
+                  const confirmed = await confirmAction({
+                    title: i18n.t('清除运行记录？'),
+                    description: i18n.t('已保存的运行记录会被删除，无法恢复。'),
+                    confirmText: i18n.t('清除'),
+                  });
+                  if (!confirmed) return;
                   void clearRuns(user?.login);
                   setStorageVersion(version => version + 1);
                   toast.success(i18n.t('已清除运行记录'));

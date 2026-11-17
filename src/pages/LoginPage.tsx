@@ -98,7 +98,7 @@ export default function LoginPage() {
             <img
               src={`${import.meta.env.BASE_URL}assets/logo.svg`}
               alt={t('login.title')}
-              className="h-16 w-16"
+              className="h-[88px] w-[88px]"
             />
             <h1 className="mt-6 text-[22px] font-semibold tracking-tight text-foreground">{t('login.title')}</h1>
             <p className="mt-1.5 text-sm text-muted-foreground">{t('login.subtitle')}</p>

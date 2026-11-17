@@ -1,4 +1,4 @@
-// 登录页 - GitHub 令牌认证（极简下划线风格）
+// 登录页 - GitHub 令牌认证（柔和卡片风格）
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -66,8 +66,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[400px] flex-col px-6">
+    <div className="login-page min-h-screen">
+      <div className="mx-auto flex min-h-screen w-full max-w-[400px] flex-col px-5">
         {/* 语言切换 */}
         <div className="flex justify-end pt-3">
           <DropdownMenu>
@@ -92,82 +92,84 @@ export default function LoginPage() {
           </DropdownMenu>
         </div>
 
-        <div className="flex flex-1 flex-col justify-center pb-24">
-          {/* Logo 与标题 */}
-          <div className="flex flex-col items-center text-center">
+        <div className="flex flex-1 items-center justify-center pb-10 pt-4">
+          <div className="login-card w-full">
+            {/* Logo 与标题 */}
             <img
               src={`${import.meta.env.BASE_URL}assets/logo.svg`}
               alt={t('login.title')}
-              className="h-[88px] w-[88px]"
+              className="mx-auto h-20 w-20"
             />
-            <h1 className="mt-6 text-[22px] font-semibold tracking-tight text-foreground">{t('login.title')}</h1>
-            <p className="mt-1.5 text-sm text-muted-foreground">{t('login.subtitle')}</p>
-          </div>
+            <h1 className="mt-4 text-center text-[21px] font-semibold tracking-tight text-foreground">
+              {t('login.title')}
+            </h1>
+            <p className="mt-1.5 text-center text-sm text-muted-foreground">{t('login.subtitle')}</p>
 
-          {/* 登录表单 */}
-          <form onSubmit={handleSubmit} className="mt-10 space-y-6">
-            <div>
-              <Label htmlFor="token" className="text-xs font-normal text-foreground">
-                {t('login.tokenLabel')}
-              </Label>
-              <div className="relative">
-                <Input
-                  id="token"
-                  type="text"
-                  inputMode="text"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder={t('login.placeholder')}
-                  className="login-underline h-11 text-[15px] font-mono text-foreground placeholder:text-muted-foreground/70"
-                  style={showToken ? undefined : ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowToken(!showToken)}
-                  className="absolute bottom-0 right-0 flex h-11 w-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+            {/* 登录表单 */}
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              <div>
+                <Label htmlFor="token" className="text-xs font-normal text-foreground">
+                  {t('login.tokenLabel')}
+                </Label>
+                <div className="relative mt-1.5">
+                  <Input
+                    id="token"
+                    type="text"
+                    inputMode="text"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder={t('login.placeholder')}
+                    className="login-inset h-12 text-[15px] font-mono text-foreground placeholder:text-muted-foreground/70"
+                    style={showToken ? undefined : ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowToken(!showToken)}
+                    className="absolute bottom-0 right-1 flex h-12 w-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {error && (
-              <p className="flex items-start gap-1.5 text-[13px] leading-relaxed text-destructive">
-                <AlertCircle className="mt-[2px] h-3.5 w-3.5 shrink-0" />
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || !token.trim()}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#1677FF] text-[15px] font-medium text-white transition-[filter] hover:brightness-105 active:translate-y-px disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                  {t('login.loading')}
-                </span>
-              ) : (
-                t('login.button')
+              {error && (
+                <p className="flex items-start gap-1.5 text-[13px] leading-relaxed text-destructive">
+                  <AlertCircle className="mt-[2px] h-3.5 w-3.5 shrink-0" />
+                  {error}
+                </p>
               )}
-            </button>
-          </form>
 
-          {/* 获取令牌 */}
-          <div className="mt-7 text-center">
-            <a
-              href={TOKEN_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-primary underline decoration-primary/40 underline-offset-4 transition-colors hover:decoration-primary"
-            >
-              {t('login.getToken')}
-            </a>
+              <button
+                type="submit"
+                disabled={loading || !token.trim()}
+                className="login-cta flex h-12 w-full items-center justify-center gap-2 text-[15px] font-medium disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    {t('login.loading')}
+                  </span>
+                ) : (
+                  t('login.button')
+                )}
+              </button>
+            </form>
+
+            {/* 获取令牌 */}
+            <div className="mt-5 text-center">
+              <a
+                href={TOKEN_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-primary underline decoration-primary/40 underline-offset-4 transition-colors hover:decoration-primary"
+              >
+                {t('login.getToken')}
+              </a>
+            </div>
           </div>
         </div>
       </div>

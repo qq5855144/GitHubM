@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ChevronDown, Eye, EyeOff, Globe } from 'lucide-react';
+import { AlertCircle, ChevronDown, Globe } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -121,8 +121,7 @@ export default function LoginPage() {
                     inputMode="text"
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
-                    placeholder={t('login.placeholder')}
-                    className="login-underline h-11 text-[15px] font-mono text-foreground placeholder:text-muted-foreground/70"
+                    className="login-underline h-11 text-[15px] font-mono text-foreground"
                     style={showToken ? undefined : ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)}
                     autoComplete="off"
                     autoCorrect="off"
@@ -132,10 +131,9 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowToken(!showToken)}
-                    className="absolute bottom-0 right-0 flex h-11 w-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                    aria-label={showToken ? 'Hide token' : 'Show token'}
+                    className="absolute bottom-0 right-0 h-11 w-8"
+                  />
                 </div>
               </div>
 

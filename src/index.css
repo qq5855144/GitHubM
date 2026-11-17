@@ -58,7 +58,7 @@
     --code-bg: 220 14% 96%;
     --code-border: 0 0% 91%;
     /* 登录页：卡片阴影（浅色，做了淡化） */
-    --login-card-shadow: 6px 6px 14px rgba(163, 177, 198, 0.38), -6px -6px 14px rgba(255, 255, 255, 0.85);
+    --login-card-shadow: 6px 6px 14px rgba(163, 177, 198, 0.30), -6px -6px 14px rgba(255, 255, 255, 0.90);
     --login-cta-shadow: 0 10px 20px -14px rgba(22, 119, 255, 0.60);
   }
 
@@ -110,7 +110,7 @@
     --code-bg: 0 0% 9%;
     --code-border: 0 0% 20%;
     /* 登录页：卡片阴影（深色，做了淡化） */
-    --login-card-shadow: 4px 4px 12px rgba(0, 0, 0, 0.45), -4px -4px 12px rgba(255, 255, 255, 0.03);
+    --login-card-shadow: 4px 4px 12px rgba(0, 0, 0, 0.40), -4px -4px 12px rgba(255, 255, 255, 0.025);
     --login-cta-shadow: 0 10px 20px -14px rgba(22, 119, 255, 0.45);
   }
 }
@@ -480,8 +480,9 @@ html.theme-transitioning *::after {
 
 .login-card {
   background: hsl(var(--background));
-  border-radius: 24px;
-  padding: 24px 22px 22px;
+  border: 0;
+  border-radius: 22px;
+  padding: 22px 20px 20px;
   box-shadow: var(--login-card-shadow);
 }
 
@@ -491,8 +492,10 @@ html.theme-transitioning *::after {
   border-radius: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
-  padding-left: 0 !important;
+  padding-left: 32px !important;
   padding-right: 32px !important;
+  text-align: center !important;
+  caret-color: #1677FF !important;
 }
 
 .login-card .login-underline:focus,

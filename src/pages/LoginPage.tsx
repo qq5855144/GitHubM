@@ -93,22 +93,25 @@ export default function LoginPage() {
         </div>
 
         <div className="flex flex-1 items-center justify-center pb-10 pt-4">
-          <div className="login-card w-full">
-            {/* Logo 与标题 */}
-            <img
-              src={`${import.meta.env.BASE_URL}assets/logo.svg`}
-              alt={t('login.title')}
-              className="mx-auto h-20 w-20"
-            />
-            <h1 className="mt-4 text-center text-[21px] font-semibold tracking-tight text-foreground">
-              {t('login.title')}
-            </h1>
-            <p className="mt-1.5 text-center text-sm text-muted-foreground">{t('login.subtitle')}</p>
+          <div className="w-full">
+            {/* Logo 与标题：卡片之外 */}
+            <div className="mb-6 flex flex-col items-center text-center">
+              <img
+                src={`${import.meta.env.BASE_URL}assets/logo.svg`}
+                alt={t('login.title')}
+                className="h-20 w-20"
+              />
+              <h1 className="mt-4 text-[21px] font-semibold tracking-tight text-foreground">
+                {t('login.title')}
+              </h1>
+              <p className="mt-1.5 text-sm text-muted-foreground">{t('login.subtitle')}</p>
+            </div>
 
-            {/* 登录表单 */}
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <div className="login-card w-full">
+              {/* 登录表单 */}
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <Label htmlFor="token" className="text-xs font-normal text-foreground">
+                <Label htmlFor="token" className="block text-center text-xs font-normal text-foreground">
                   {t('login.tokenLabel')}
                 </Label>
                 <div className="relative mt-1.5">
@@ -119,7 +122,7 @@ export default function LoginPage() {
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
                     placeholder={t('login.placeholder')}
-                    className="login-inset h-12 text-[15px] font-mono text-foreground placeholder:text-muted-foreground/70"
+                    className="login-underline h-11 text-[15px] font-mono text-foreground placeholder:text-muted-foreground/70"
                     style={showToken ? undefined : ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)}
                     autoComplete="off"
                     autoCorrect="off"
@@ -129,7 +132,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowToken(!showToken)}
-                    className="absolute bottom-0 right-1 flex h-12 w-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                    className="absolute bottom-0 right-0 flex h-11 w-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
                   >
                     {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -158,9 +161,10 @@ export default function LoginPage() {
                 )}
               </button>
             </form>
+            </div>
 
-            {/* 获取令牌 */}
-            <div className="mt-5 text-center">
+            {/* 获取令牌：卡片之外 */}
+            <div className="mt-6 text-center">
               <a
                 href={TOKEN_URL}
                 target="_blank"

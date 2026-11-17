@@ -28,6 +28,7 @@ login: {
         howTo4: "Select required scopes: repo, notifications, user",
         howTo5: "Generate and copy the token",
         link: "Go to GitHub to create token",
+        getToken: "Get a Personal Access Token",
         security: "Token is only stored locally in the browser and will never be uploaded to any server."
       },
       settings: {
@@ -1326,6 +1327,7 @@ login: {
         howTo4: "选择所需权限：repo、notifications、user",
         howTo5: "生成并复制令牌",
         link: "前往 GitHub 创建令牌",
+        getToken: "获取 Personal Access Token",
         security: "令牌仅保存在本地浏览器中，不会上传至任何服务器"
       },
       settings: {

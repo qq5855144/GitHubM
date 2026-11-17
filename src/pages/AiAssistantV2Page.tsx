@@ -572,7 +572,9 @@ function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff }: {
   return (
     <section className="flex min-w-0 flex-col gap-3">
       {turn.user && (
-        <div className="flex min-w-0 items-start justify-end gap-2.5">
+        <div className="flex min-w-0 items-start gap-2.5">
+          {/* 左侧固定占位：与助手头像列同宽，用户内容不进入该区域 */}
+          <div className="w-7 shrink-0" aria-hidden />
           <div className="flex min-w-0 flex-1 flex-col items-end gap-1.5">
             <div className="max-w-full min-w-0 rounded-2xl rounded-br-md bg-muted px-3.5 py-2.5 text-[15px] leading-7 text-foreground">
               <span className="whitespace-pre-wrap break-words">{shownUserContent}</span>
@@ -625,6 +627,8 @@ function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff }: {
             <WaitingDots />
           )}
         </div>
+        {/* 右侧固定占位：与用户头像列同宽，助手内容不进入该区域 */}
+        <div className="w-7 shrink-0" aria-hidden />
       </div>
     </section>
   );
@@ -2187,7 +2191,6 @@ export default function AiAssistantV2Page() {
 
   const handleStop = () => {
     flushStreamDelta();
-    pendingDoneRef.current = null;
     pendingStreamRef.current = null;
     if (streamFlushTimerRef.current !== null) {
       window.clearTimeout(streamFlushTimerRef.current);

@@ -1333,9 +1333,12 @@ export default function AiAssistantV2Page() {
   const [sessions, setSessions] = useState<V2Session[]>([]);
   const [activeId, setActiveId] = useState('');
   const [input, setInput] = useState('');
-  // 软键盘高度：Android 边到边下 innerHeight 不会随输入法收缩，
-  // 这里用 visualViewport 差值把底部输入条顶到键盘上方。
-  const keyboardInset = useKeyboardInset();
+  const isAndroid = useMemo(
+    () => typeof window !== 'undefined' && !!(window as unknown as { AndroidBridge?: unknown }).AndroidBridge,
+    [],
+  );
+  // Android 由原生把 WebView 缩短来避让键盘，这里只给 Web 端兜底，避免双倍补偿
+  const keyboardInset = useKeyboardInset(!isAndroid);
   const [streaming, setStreaming] = useState(false);
   const [modelConfig] = useState<ModelConfig>(() => loadModelConfig());
   const [character, setCharacter] = useState<CharacterCard>(() => loadActiveCharacter(user?.login));
@@ -1387,10 +1390,6 @@ export default function AiAssistantV2Page() {
   const hydratedRef = useRef(false);
 
   const legacyKey = user?.login ? `${LEGACY_PREFIX}${user.login}` : '';
-  const isAndroid = useMemo(
-    () => typeof window !== 'undefined' && !!(window as unknown as { AndroidBridge?: unknown }).AndroidBridge,
-    [],
-  );
   const activeSession = useMemo(
     () => sessions.find(session => session.id === activeId) || sessions[0] || null,
     [sessions, activeId],

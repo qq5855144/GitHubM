@@ -575,8 +575,8 @@ function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff }: {
     <section className="flex min-w-0 flex-col gap-3">
       {turn.user && (
         <div className="flex min-w-0 items-start justify-end gap-2.5">
-          <div className="flex min-w-0 flex-col items-end gap-1.5">
-            <div className="max-w-[88%] min-w-0 rounded-2xl rounded-br-md bg-muted px-3.5 py-2.5 text-[15px] leading-7 text-foreground">
+          <div className="flex min-w-0 flex-1 flex-col items-end gap-1.5">
+            <div className="max-w-full min-w-0 rounded-2xl rounded-br-md bg-muted px-3.5 py-2.5 text-[15px] leading-7 text-foreground">
               <span className="whitespace-pre-wrap break-words">{shownUserContent}</span>
               {userIsLong && (
                 <button
@@ -591,7 +591,7 @@ function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff }: {
               )}
             </div>
             {turn.user.attachments && turn.user.attachments.length > 0 && (
-              <div className="flex max-w-[94%] flex-wrap justify-end gap-1">
+              <div className="flex max-w-full flex-wrap justify-end gap-1">
                 {turn.user.attachments.map(attachment => (
                   <span
                     key={attachment.id}

@@ -145,11 +145,11 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !token.trim()}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-black text-[15px] font-medium text-white transition-opacity dark:bg-white dark:text-black hover:opacity-90 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-30"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#1677FF] text-[15px] font-medium text-white transition-[filter] hover:brightness-105 active:translate-y-px disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-background/30 border-t-background" />
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                   {t('login.loading')}
                 </span>
               ) : (

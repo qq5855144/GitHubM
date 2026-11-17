@@ -93,19 +93,22 @@ export default function LoginPage() {
         </div>
 
         <div className="flex flex-1 items-center justify-center pb-10 pt-4">
-          <div className="login-card w-full">
-            {/* Logo 与标题 */}
-            <img
-              src={`${import.meta.env.BASE_URL}assets/logo.svg`}
-              alt={t('login.title')}
-              className="mx-auto h-20 w-20"
-            />
-            <h1 className="mt-4 text-center text-[21px] font-semibold tracking-tight text-foreground">
-              {t('login.title')}
-            </h1>
-            <p className="mt-1.5 text-center text-sm text-muted-foreground">{t('login.subtitle')}</p>
+          <div className="w-full">
+            {/* Logo 与标题：卡片之外 */}
+            <div className="mb-6 flex flex-col items-center text-center">
+              <img
+                src={`${import.meta.env.BASE_URL}assets/logo.svg`}
+                alt={t('login.title')}
+                className="h-20 w-20"
+              />
+              <h1 className="mt-4 text-[21px] font-semibold tracking-tight text-foreground">
+                {t('login.title')}
+              </h1>
+              <p className="mt-1.5 text-sm text-muted-foreground">{t('login.subtitle')}</p>
+            </div>
 
-            {/* 登录表单 */}
+            <div className="login-card w-full">
+              {/* 登录表单 */}
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <div>
                 <Label htmlFor="token" className="text-xs font-normal text-foreground">
@@ -169,6 +172,7 @@ export default function LoginPage() {
               >
                 {t('login.getToken')}
               </a>
+            </div>
             </div>
           </div>
         </div>

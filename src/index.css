@@ -521,3 +521,9 @@ html.theme-transitioning *::after {
 .login-cta:active:not(:disabled) {
   transform: translateY(1px);
 }
+
+/* AI 对话：等待与流式指示点 */
+@keyframes fading {
+  0%, 100% { opacity: 0.3; }
+  33%, 66% { opacity: 1; }
+}

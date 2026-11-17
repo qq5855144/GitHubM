@@ -471,7 +471,7 @@ html.theme-transitioning *::after {
 /* 登录页：极简下划线输入框（覆盖全局输入框的描边规则） */
 .login-underline {
   border: 0 !important;
-  border-bottom: 1px solid hsl(var(--border)) !important;
+  border-bottom: 2px solid hsl(var(--foreground)) !important;
   border-radius: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
@@ -481,7 +481,7 @@ html.theme-transitioning *::after {
 
 .login-underline:focus,
 .login-underline:focus-visible {
-  border-bottom-color: hsl(var(--foreground) / 0.85) !important;
+  border-bottom: 2px solid hsl(var(--foreground)) !important;
   box-shadow: none !important;
   outline: none !important;
 }

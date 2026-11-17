@@ -107,7 +107,7 @@ export default function LoginPage() {
           {/* 登录表单 */}
           <form onSubmit={handleSubmit} className="mt-10 space-y-6">
             <div>
-              <Label htmlFor="token" className="text-xs font-normal text-muted-foreground">
+              <Label htmlFor="token" className="text-xs font-normal text-foreground">
                 {t('login.tokenLabel')}
               </Label>
               <div className="relative">
@@ -145,7 +145,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !token.trim()}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-foreground text-[15px] font-medium text-background transition-opacity hover:opacity-90 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-30"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-black text-[15px] font-medium text-white transition-opacity dark:bg-white dark:text-black hover:opacity-90 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-30"
             >
               {loading ? (
                 <span className="flex items-center gap-2">
@@ -164,7 +164,7 @@ export default function LoginPage() {
               href={TOKEN_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground"
+              className="text-sm font-medium text-primary underline decoration-primary/40 underline-offset-4 transition-colors hover:decoration-primary"
             >
               {t('login.getToken')}
             </a>

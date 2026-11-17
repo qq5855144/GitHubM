@@ -1367,11 +1367,21 @@ export default function AiAssistantV2Page() {
     typeof window === 'undefined' ? 800 : window.innerHeight
   ));
   useEffect(() => {
-    const sync = () => setViewportHeight(window.innerHeight);
-    sync();
+    let timer = 0;
+    const apply = () => {
+      const next = window.innerHeight;
+      setViewportHeight(prev => (Math.abs(prev - next) > 1 ? next : prev));
+    };
+    // 键盘弹出/收起是一段连续 resize，逐帧改高度会让整页反复重排（抖动）
+    const sync = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(apply, 120);
+    };
+    apply();
     window.addEventListener('resize', sync);
     window.visualViewport?.addEventListener('resize', sync);
     return () => {
+      window.clearTimeout(timer);
       window.removeEventListener('resize', sync);
       window.visualViewport?.removeEventListener('resize', sync);
     };
@@ -1539,7 +1549,12 @@ export default function AiAssistantV2Page() {
 
   const scrollToBottom = useCallback((force = false) => {
     if (!force && !stickToBottomRef.current) return;
-    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: 'end' }));
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      // 用容器自身滚动，避免 scrollIntoView 顺手滚动外层 body
+      el.scrollTop = el.scrollHeight;
+    });
     setShowScrollButton(false);
   }, []);
 
@@ -2491,7 +2506,7 @@ export default function AiAssistantV2Page() {
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
+          className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [overflow-anchor:none]"
         >
           <div className="mx-auto w-full max-w-3xl px-3.5 py-4 sm:px-6">
             {sessionLoading ? (

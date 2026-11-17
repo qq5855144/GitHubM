@@ -183,6 +183,8 @@ export const QUICK_PROMPTS = [
 // ── 纯工具函数 ──────────────────────────────────────────────────────────────────
 
 const MODEL_CONFIG_KEY = 'ai_assistant_model_config';
+/** 旧版本内置代理默认值：仅在用户从未主动选择时自动迁移为直连 */
+const LEGACY_DEFAULT_PROXY = 'https://llm.callact.xyz';
 
 /**
  * 将 API Key 部分掩码显示（隐藏状态）：保留前 4 位 + 后 4 位，中间用 * 替代。
@@ -208,6 +210,13 @@ export function loadModelConfig(): ModelConfig {
     const raw = localStorage.getItem(MODEL_CONFIG_KEY);
     if (raw) {
       const cfg = JSON.parse(raw) as ModelConfig;
+      // 旧版本曾把内置代理写进配置。该代理域名可能停止维护，
+      // 这里一次性迁移为直连；用户手动填写的其他代理地址不受影响。
+      if (cfg?.proxy_url && cfg.proxy_url.trim().replace(/\/+$/, '') === LEGACY_DEFAULT_PROXY) {
+        const { proxy_url: _legacyProxy, ...rest } = cfg;
+        try { localStorage.setItem(MODEL_CONFIG_KEY, JSON.stringify(rest)); } catch { /* ignore */ }
+        return rest;
+      }
       // 旧版本「文心」平台内置免费通道已随后端移除：
       // 自动迁移到 DeepSeek（需用户自填 API Key），兼容老用户配置
       if (cfg && cfg.type === 'wenxin') {

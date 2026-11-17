@@ -15,7 +15,7 @@ export function getProviderChatUrl(type: ModelType, endpoint?: string): string {
     case 'qwen':     return 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
     case 'openai':   return 'https://api.openai.com/v1/chat/completions';
     case 'openrouter': return 'https://openrouter.ai/api/v1/chat/completions';
-    case 'cloudflare': return 'https://llm.callact.xyz/v1/chat/completions';
+    case 'cloudflare': return ''; // 需要显式配置代理（Workers AI 绑定在代理侧）
     case 'custom': {
       // 既支持只填基础地址（如 http://127.0.0.1:17890/v1），也支持完整的 /chat/completions
       const base = normalizeBaseEndpoint(endpoint);
@@ -137,8 +137,8 @@ export async function testProviderConnection(
   proxyUrl?: string,
 ): Promise<TestConnectionResult> {
   if (type === 'wenxin') return { success: false, error: i18n.t('该平台已不再支持') };
-  const proxyBase = proxyUrl?.trim().replace(/\/+$/, '') ||
-    (type !== 'custom' && type !== 'openrouter' ? 'https://llm.callact.xyz' : '');
+  // 默认直连；只有显式传入代理地址时才走代理。
+  const proxyBase = proxyUrl?.trim().replace(/\/+$/, '') || '';
   const url = proxyBase
     ? `${proxyBase}/v1/chat/completions`
     : getProviderChatUrl(type, endpoint);

@@ -131,10 +131,18 @@ export async function streamProvider(
   const onAbort = () => requestController.abort();
   if (signal.aborted) requestController.abort();
   else signal.addEventListener('abort', onAbort, { once: true });
-  const timer = setTimeout(() => {
-    timedOut = true;
-    requestController.abort();
-  }, timeoutMs);
+  // 空闲超时：每收到一块数据就重新计时。
+  // 这样长时间 reasoning 的模型不会因为「总时长」被硬切，
+  // 上游真正挂住不发包时仍能在 timeoutMs 内失败。
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const armTimeout = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timedOut = true;
+      requestController.abort();
+    }, timeoutMs);
+  };
+  armTimeout();
 
   try {
   const prepared = buildProviderRequest(config, messages, tools);
@@ -227,6 +235,7 @@ export async function streamProvider(
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      armTimeout();
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split(/\r?\n/);
       buffer = lines.pop() || '';
@@ -267,7 +276,7 @@ export async function streamProvider(
     }
     throw error;
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
     signal.removeEventListener('abort', onAbort);
   }
 }

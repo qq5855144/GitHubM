@@ -43,7 +43,7 @@ export default defineConfig({
     include: ["src/tests/**/*.test.ts", "src/tests/**/*.test.tsx"],
     coverage: {
       provider: "v8",
-      include: ["src/services/**", "src/pages/**", "src/utils/**"],
+      include: ["src/services/**", "src/ai-v2/**", "src/lib/**", "src/components/**"],
       reporter: ["text", "html"],
     },
   },

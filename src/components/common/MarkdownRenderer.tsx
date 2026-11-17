@@ -10,6 +10,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+import type { Options as SanitizeSchema } from 'rehype-sanitize';
 import { useNavigate } from 'react-router-dom';
 
 export interface RepoLinkContext {
@@ -28,6 +30,31 @@ interface MarkdownRendererProps {
   repoContext?: RepoLinkContext;
 }
 
+/**
+ * Markdown 来自 Issue / PR / 仓库文件 / AI 工具返回，全部按不可信输入处理。
+ * rehype-raw 会保留内联 HTML，必须在它之后做 sanitize，否则 iframe[srcdoc]、
+ * 事件属性和 javascript: 链接可以直接接触页面上下文。
+ */
+const MARKDOWN_SANITIZE_SCHEMA: SanitizeSchema = {
+  ...defaultSchema,
+  tagNames: [
+    ...(defaultSchema.tagNames ?? []),
+    'details', 'summary', 'kbd', 'del', 'ins', 'sup', 'sub', 'picture', 'source',
+  ],
+  attributes: {
+    ...defaultSchema.attributes,
+    '*': [...(defaultSchema.attributes?.['*'] ?? []), 'className', 'id'],
+    code: [['className', /^language-./]],
+    img: [...(defaultSchema.attributes?.img ?? []), 'loading', 'width', 'height'],
+    // GFM 任务列表
+    input: ['type', 'checked', 'disabled'],
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    href: ['http', 'https', 'mailto'],
+    src: ['http', 'https'],
+  },
+};
 const ABSOLUTE_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
 /** 归一化仓库内相对路径：处理 ./ ../ 与多余的斜杠 */
@@ -183,7 +210,7 @@ export default function MarkdownRenderer({ content, className, repoContext }: Ma
     <div className={`markdown-body ${className || ''}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight, rehypeRaw]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA], rehypeHighlight]}
         components={{
           // 安全处理图片（含仓库相对路径）
           img: ({ src, alt, node: _node, ...props }) => (

@@ -98,7 +98,7 @@ export default function LoginPage() {
             <img
               src={`${import.meta.env.BASE_URL}assets/logo.svg`}
               alt={t('login.title')}
-              className="h-16 w-16"
+              className="h-[88px] w-[88px]"
             />
             <h1 className="mt-6 text-[22px] font-semibold tracking-tight text-foreground">{t('login.title')}</h1>
             <p className="mt-1.5 text-sm text-muted-foreground">{t('login.subtitle')}</p>
@@ -107,7 +107,7 @@ export default function LoginPage() {
           {/* 登录表单 */}
           <form onSubmit={handleSubmit} className="mt-10 space-y-6">
             <div>
-              <Label htmlFor="token" className="text-xs font-normal text-muted-foreground">
+              <Label htmlFor="token" className="text-xs font-normal text-foreground">
                 {t('login.tokenLabel')}
               </Label>
               <div className="relative">
@@ -145,11 +145,11 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !token.trim()}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-foreground text-[15px] font-medium text-background transition-opacity hover:opacity-90 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-30"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#1677FF] text-[15px] font-medium text-white transition-[filter] hover:brightness-105 active:translate-y-px disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-background/30 border-t-background" />
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                   {t('login.loading')}
                 </span>
               ) : (
@@ -164,7 +164,7 @@ export default function LoginPage() {
               href={TOKEN_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground"
+              className="text-sm font-medium text-primary underline decoration-primary/40 underline-offset-4 transition-colors hover:decoration-primary"
             >
               {t('login.getToken')}
             </a>

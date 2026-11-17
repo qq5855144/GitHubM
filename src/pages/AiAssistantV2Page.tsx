@@ -47,6 +47,7 @@ import {
   getModelDef,
   loadModelConfig,
   loadProviderKey,
+  modelDisplayName,
   renderMarkdown,
 } from '@/components/ai/aiUtils';
 import type { ModelType } from '@/components/ai/aiTypes';
@@ -56,6 +57,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { GitHubRepo } from '@/types/types';
 import { useKeyboardInset } from '@/hooks/use-keyboard-inset';
 import { Button } from '@/components/ui/button';
+import { confirmAction } from '@/components/ui/confirm-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -791,7 +793,7 @@ function ModelPickerDialog({
             <div key={provider.type}>
               <div className="mb-1 flex items-center gap-1.5 px-1 text-[10px] text-muted-foreground">
                 <ModelAvatar modelDef={provider} size="sm" />
-                <span className="font-medium">{provider.label}</span>
+                <span className="font-medium">{modelDisplayName(provider.label)}</span>
                 {!loadProviderKey(provider.type) && provider.type !== currentType && <span>· {i18n.t('未配置 Key')}</span>}
               </div>
               <div className="space-y-1">
@@ -813,7 +815,7 @@ function ModelPickerDialog({
                       )}
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">{model.label}</span>
+                        <span className="block truncate font-medium">{modelDisplayName(model.label)}</span>
                         <span className="block truncate font-mono text-[9px] text-muted-foreground">{model.value}</span>
                       </span>
                       {selected && <Check className="h-3.5 w-3.5 shrink-0" />}
@@ -1412,7 +1414,7 @@ export default function AiAssistantV2Page() {
   );
   const modelLabel = useMemo(() => {
     const option = modelDef.models?.find(item => item.value === sessionModel);
-    return option?.label || sessionModel || modelDef.label;
+    return modelDisplayName(option?.label || sessionModel || modelDef.label);
   }, [modelDef, sessionModel]);
 
   useEffect(() => {
@@ -2285,11 +2287,16 @@ export default function AiAssistantV2Page() {
     toast.success(i18n.t('对话已重命名'));
   };
 
-  const handleDeleteSession = (id: string) => {
+  const handleDeleteSession = async (id: string) => {
     if (streaming) return;
     const target = sessions.find(session => session.id === id);
     if (!target) return;
-    if (!window.confirm(i18n.t('确定删除对话「{{title}}」？此操作不可恢复。', { title: target.title || i18n.t('新对话') }))) return;
+    const confirmed = await confirmAction({
+      title: i18n.t('删除这段对话？'),
+      description: i18n.t('「{{title}}」及其消息将被永久删除，无法恢复。', { title: target.title || i18n.t('新对话') }),
+      confirmText: i18n.t('删除'),
+    });
+    if (!confirmed) return;
     if (user?.login) void clearRunSnapshots(user.login, id);
     if (user?.login) void deleteSessionMessages(user.login, id);
     loadedSessionsRef.current.delete(id);
@@ -2321,9 +2328,16 @@ export default function AiAssistantV2Page() {
     }
   };
 
-  const handleClear = () => {
+  const handleClear = async () => {
     if (streaming) return;
-    if (hasConversation && !window.confirm(i18n.t('确定清空当前对话？'))) return;
+    if (hasConversation) {
+      const confirmed = await confirmAction({
+        title: i18n.t('清空当前对话？'),
+        description: i18n.t('当前对话的所有消息都会被删除，无法恢复。'),
+        confirmText: i18n.t('清空'),
+      });
+      if (!confirmed) return;
+    }
     setMessages([]);
     setInput('');
     setPendingAttachments([]);
@@ -2896,7 +2910,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
 
       <Sheet open={sessionDialogOpen} onOpenChange={setSessionDialogOpen}>
         <SheetContent side="left" className="flex w-[86vw] max-w-sm flex-col gap-0 p-0">
-          <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3 pr-9">
+          <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border px-3 pr-14">
             <SheetTitle className="text-sm font-semibold">{i18n.t('对话历史')}</SheetTitle>
             <Button type="button" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={handleNewSession} disabled={streaming}>
               <Plus className="h-3.5 w-3.5" />

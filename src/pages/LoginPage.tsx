@@ -109,9 +109,9 @@ export default function LoginPage() {
 
             <div className="login-card w-full">
               {/* 登录表单 */}
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <Label htmlFor="token" className="text-xs font-normal text-foreground">
+                <Label htmlFor="token" className="block text-center text-xs font-normal text-foreground">
                   {t('login.tokenLabel')}
                 </Label>
                 <div className="relative mt-1.5">
@@ -122,7 +122,7 @@ export default function LoginPage() {
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
                     placeholder={t('login.placeholder')}
-                    className="login-inset h-12 text-[15px] font-mono text-foreground placeholder:text-muted-foreground/70"
+                    className="login-underline h-11 text-[15px] font-mono text-foreground placeholder:text-muted-foreground/70"
                     style={showToken ? undefined : ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)}
                     autoComplete="off"
                     autoCorrect="off"
@@ -132,7 +132,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowToken(!showToken)}
-                    className="absolute bottom-0 right-1 flex h-12 w-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                    className="absolute bottom-0 right-0 flex h-11 w-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
                   >
                     {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -161,9 +161,10 @@ export default function LoginPage() {
                 )}
               </button>
             </form>
+            </div>
 
-            {/* 获取令牌 */}
-            <div className="mt-5 text-center">
+            {/* 获取令牌：卡片之外 */}
+            <div className="mt-6 text-center">
               <a
                 href={TOKEN_URL}
                 target="_blank"
@@ -172,7 +173,6 @@ export default function LoginPage() {
               >
                 {t('login.getToken')}
               </a>
-            </div>
             </div>
           </div>
         </div>

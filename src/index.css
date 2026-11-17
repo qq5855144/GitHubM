@@ -57,13 +57,9 @@
     --info-foreground: 0 0% 100%;
     --code-bg: 220 14% 96%;
     --code-border: 0 0% 91%;
-    /* 登录页：柔和卡片阴影（浅色） */
-    --login-page-glow: radial-gradient(120% 90% at 18% 0%, rgba(255, 255, 255, 0.85) 0%, transparent 58%);
-    --login-card-shadow: 10px 10px 24px rgba(163, 177, 198, 0.55), -10px -10px 24px rgba(255, 255, 255, 0.95);
-    --login-inset-shadow: inset 4px 4px 8px rgba(163, 177, 198, 0.50), inset -4px -4px 8px rgba(255, 255, 255, 0.90);
-    --login-inset-focus-shadow: inset 4px 4px 8px rgba(163, 177, 198, 0.50), inset -4px -4px 8px rgba(255, 255, 255, 0.90), 0 0 0 3px rgba(22, 119, 255, 0.16);
-    --login-cta-shadow: 0 12px 22px -12px rgba(22, 119, 255, 0.75), 4px 4px 10px rgba(163, 177, 198, 0.35), -4px -4px 10px rgba(255, 255, 255, 0.85);
-    --login-cta-active-shadow: 0 6px 14px -12px rgba(22, 119, 255, 0.70), inset 2px 2px 6px rgba(0, 0, 0, 0.12);
+    /* 登录页：卡片阴影（浅色，做了淡化） */
+    --login-card-shadow: 6px 6px 14px rgba(163, 177, 198, 0.38), -6px -6px 14px rgba(255, 255, 255, 0.85);
+    --login-cta-shadow: 0 10px 20px -14px rgba(22, 119, 255, 0.60);
   }
 
   /* 深色模式 */
@@ -113,13 +109,9 @@
     --info-foreground: 0 0% 100%;
     --code-bg: 0 0% 9%;
     --code-border: 0 0% 20%;
-    /* 登录页：柔和卡片阴影（深色） */
-    --login-page-glow: radial-gradient(120% 90% at 18% 0%, rgba(255, 255, 255, 0.05) 0%, transparent 58%);
-    --login-card-shadow: 10px 10px 24px rgba(0, 0, 0, 0.55), -10px -10px 24px rgba(255, 255, 255, 0.035);
-    --login-inset-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.50), inset -4px -4px 8px rgba(255, 255, 255, 0.05);
-    --login-inset-focus-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.50), inset -4px -4px 8px rgba(255, 255, 255, 0.05), 0 0 0 3px rgba(22, 119, 255, 0.28);
-    --login-cta-shadow: 0 12px 22px -12px rgba(22, 119, 255, 0.55), 4px 4px 10px rgba(0, 0, 0, 0.45), -4px -4px 10px rgba(255, 255, 255, 0.04);
-    --login-cta-active-shadow: 0 6px 14px -12px rgba(22, 119, 255, 0.5), inset 2px 2px 6px rgba(0, 0, 0, 0.35);
+    /* 登录页：卡片阴影（深色，做了淡化） */
+    --login-card-shadow: 4px 4px 12px rgba(0, 0, 0, 0.45), -4px -4px 12px rgba(255, 255, 255, 0.03);
+    --login-cta-shadow: 0 10px 20px -14px rgba(22, 119, 255, 0.45);
   }
 }
 
@@ -481,32 +473,32 @@ html.theme-transitioning *::after {
     line-height: 24px !important;
   }
 }
-/* ── 登录页：柔和卡片（阴影走 CSS 变量，深浅色各自取值） ───────────── */
+/* ── 登录页：轻拟态卡片 + 下划线输入 ─────────────────────────────── */
 .login-page {
   background: hsl(var(--background));
-  background-image: var(--login-page-glow);
-  transition: background-color 0.2s ease;
 }
 
 .login-card {
   background: hsl(var(--background));
-  border-radius: 28px;
-  padding: 28px 22px 24px;
+  border-radius: 24px;
+  padding: 24px 22px 22px;
   box-shadow: var(--login-card-shadow);
 }
 
-.login-card .login-inset {
-  background: hsl(var(--background)) !important;
+.login-card .login-underline {
   border: 0 !important;
-  border-radius: 14px !important;
-  box-shadow: var(--login-inset-shadow) !important;
-  padding-left: 14px !important;
-  padding-right: 44px !important;
+  border-bottom: 2px solid hsl(var(--foreground)) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding-left: 0 !important;
+  padding-right: 32px !important;
 }
 
-.login-card .login-inset:focus,
-.login-card .login-inset:focus-visible {
-  box-shadow: var(--login-inset-focus-shadow) !important;
+.login-card .login-underline:focus,
+.login-card .login-underline:focus-visible {
+  border-bottom: 2px solid hsl(var(--foreground)) !important;
+  box-shadow: none !important;
   outline: none !important;
 }
 
@@ -514,9 +506,9 @@ html.theme-transitioning *::after {
   background: #1677FF;
   color: #fff;
   border: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   box-shadow: var(--login-cta-shadow);
-  transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease;
+  transition: transform 0.12s ease, filter 0.18s ease;
 }
 
 .login-cta:hover:not(:disabled) {
@@ -525,5 +517,4 @@ html.theme-transitioning *::after {
 
 .login-cta:active:not(:disabled) {
   transform: translateY(1px);
-  box-shadow: var(--login-cta-active-shadow);
 }

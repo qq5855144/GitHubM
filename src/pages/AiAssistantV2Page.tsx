@@ -1335,7 +1335,8 @@ export default function AiAssistantV2Page() {
   const [input, setInput] = useState('');
   // 软键盘高度：Android 边到边下 innerHeight 不会随输入法收缩，
   // 这里用 visualViewport 差值把底部输入条顶到键盘上方。
-  const keyboardInset = useKeyboardInset();
+  // Android 由原生把 WebView 缩短来避让键盘，这里只给 Web 端兜底，避免双倍补偿
+  const keyboardInset = useKeyboardInset(!isAndroid);
   const [streaming, setStreaming] = useState(false);
   const [modelConfig] = useState<ModelConfig>(() => loadModelConfig());
   const [character, setCharacter] = useState<CharacterCard>(() => loadActiveCharacter(user?.login));

@@ -520,69 +520,113 @@ function buildTurns(messages: UiChatMessage[]): ConversationTurn[] {
   return turns;
 }
 
+/** 助手头像：应用 logo，浅色圆底 */
+function AssistantAvatar() {
+  return (
+    <img
+      src={`${import.meta.env.BASE_URL}assets/logo.svg`}
+      alt=""
+      aria-hidden
+      className="mt-0.5 h-7 w-7 shrink-0 rounded-full bg-primary/10 p-1"
+    />
+  );
+}
+
+/** 用户头像：有 GitHub 头像用头像，否则用首字母 */
+function UserAvatar({ avatarUrl, login }: { avatarUrl?: string; login?: string }) {
+  const initial = (login || 'U').slice(0, 1).toUpperCase();
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt=""
+        aria-hidden
+        className="mt-0.5 h-7 w-7 shrink-0 rounded-full object-cover ring-1 ring-border/60"
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-muted-foreground ring-1 ring-border/60"
+    >
+      {initial}
+    </span>
+  );
+}
+
 function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff }: {
   turn: ConversationTurn;
   index: number;
   onOpenArtifact: (meta: ArtifactMeta) => void;
   onApplyDiff: (path: string, diff: string) => void;
 }) {
+  const { user: authUser } = useAuth();
   const [userExpanded, setUserExpanded] = useState(false);
   const userContent = turn.user?.content || '';
   const userIsLong = userContent.length > MAX_USER_MESSAGE_CHARS;
   const shownUserContent = userIsLong && !userExpanded
-    ? `${userContent.slice(0, USER_MESSAGE_PREVIEW_CHARS)}\n\n…`
+    ? `${userContent.slice(0, USER_MESSAGE_PREVIEW_CHARS)}
+
+…`
     : userContent;
 
   return (
     <section className="flex min-w-0 flex-col gap-3">
       {turn.user && (
-        <div className="flex min-w-0 flex-col items-end gap-1.5">
-          <div className="max-w-[86%] min-w-0 rounded-2xl rounded-br-md bg-muted px-3.5 py-2.5 text-[15px] leading-7 text-foreground">
-            <span className="whitespace-pre-wrap break-words">{shownUserContent}</span>
-            {userIsLong && (
-              <button
-                type="button"
-                onClick={() => setUserExpanded(value => !value)}
-                className="mt-1 block text-[10px] text-primary underline-offset-2 hover:underline"
-              >
-                {userExpanded
-                  ? i18n.t('收起内容')
-                  : i18n.t('展开全部（共 {{count}} 字）', { count: userContent.length })}
-              </button>
+        <div className="flex min-w-0 items-start justify-end gap-2.5">
+          <div className="flex min-w-0 flex-col items-end gap-1.5">
+            <div className="max-w-[88%] min-w-0 rounded-2xl rounded-br-md bg-muted px-3.5 py-2.5 text-[15px] leading-7 text-foreground">
+              <span className="whitespace-pre-wrap break-words">{shownUserContent}</span>
+              {userIsLong && (
+                <button
+                  type="button"
+                  onClick={() => setUserExpanded(value => !value)}
+                  className="mt-1 block text-[10px] text-primary underline-offset-2 hover:underline"
+                >
+                  {userExpanded
+                    ? i18n.t('收起内容')
+                    : i18n.t('展开全部（共 {{count}} 字）', { count: userContent.length })}
+                </button>
+              )}
+            </div>
+            {turn.user.attachments && turn.user.attachments.length > 0 && (
+              <div className="flex max-w-[94%] flex-wrap justify-end gap-1">
+                {turn.user.attachments.map(attachment => (
+                  <span
+                    key={attachment.id}
+                    className="inline-flex max-w-[220px] items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[9px] text-muted-foreground"
+                    title={attachment.path || attachment.name}
+                  >
+                    {attachment.kind === 'image' && (attachment.thumbDataUrl || attachment.dataUrl) ? (
+                      <img src={attachment.thumbDataUrl || attachment.dataUrl} alt={attachment.name} className="h-5 w-5 shrink-0 rounded object-cover" />
+                    ) : attachment.source === 'repo' ? <AtSign className="h-2.5 w-2.5 shrink-0 text-primary" /> : <Paperclip className="h-2.5 w-2.5 shrink-0" />}
+                    <span className="truncate">{attachment.path || attachment.name}</span>
+                    <span className="shrink-0 opacity-70">{formatFileSize(attachment.size)}</span>
+                  </span>
+                ))}
+              </div>
             )}
           </div>
-          {turn.user.attachments && turn.user.attachments.length > 0 && (
-            <div className="flex max-w-[94%] flex-wrap justify-end gap-1">
-              {turn.user.attachments.map(attachment => (
-                <span
-                  key={attachment.id}
-                  className="inline-flex max-w-[220px] items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[9px] text-muted-foreground"
-                  title={attachment.path || attachment.name}
-                >
-                  {attachment.kind === 'image' && (attachment.thumbDataUrl || attachment.dataUrl) ? (
-                    <img src={attachment.thumbDataUrl || attachment.dataUrl} alt={attachment.name} className="h-5 w-5 shrink-0 rounded object-cover" />
-                  ) : attachment.source === 'repo' ? <AtSign className="h-2.5 w-2.5 shrink-0 text-primary" /> : <Paperclip className="h-2.5 w-2.5 shrink-0" />}
-                  <span className="truncate">{attachment.path || attachment.name}</span>
-                  <span className="shrink-0 opacity-70">{formatFileSize(attachment.size)}</span>
-                </span>
-              ))}
-            </div>
-          )}
+          <UserAvatar avatarUrl={authUser?.avatar_url} login={authUser?.login} />
         </div>
       )}
 
-      <div className="min-w-0">
-        {turn.assistants.length > 0 ? (
-          <div className="min-w-0 space-y-4">
-            {turn.assistants.map(message => (
-              <div key={message.id} className="min-w-0">
-                <AssistantTurn message={message} onOpenArtifact={onOpenArtifact} onApplyDiff={onApplyDiff} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <WaitingDots />
-        )}
+      <div className="flex min-w-0 items-start gap-2.5">
+        <AssistantAvatar />
+        <div className="min-w-0 flex-1">
+          {turn.assistants.length > 0 ? (
+            <div className="min-w-0 space-y-4">
+              {turn.assistants.map(message => (
+                <div key={message.id} className="min-w-0">
+                  <AssistantTurn message={message} onOpenArtifact={onOpenArtifact} onApplyDiff={onApplyDiff} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <WaitingDots />
+          )}
+        </div>
       </div>
     </section>
   );
@@ -2466,7 +2510,7 @@ export default function AiAssistantV2Page() {
           onScroll={handleScroll}
           className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
-          <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-5">
+          <div className="mx-auto w-full max-w-3xl px-3.5 py-4 sm:px-6">
             {sessionLoading ? (
               <div className="flex min-h-[28vh] items-center justify-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />

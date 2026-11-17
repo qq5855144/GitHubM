@@ -2579,7 +2579,7 @@ export default function AiAssistantV2Page() {
           style={{ paddingBottom: keyboardInset > 0 ? keyboardInset + 8 : 8 }}
         >
           <div className="mx-auto w-full min-w-0 max-w-3xl">
-            <div className="rounded-[22px] border border-border/80 bg-card p-2 shadow-sm transition-colors focus-within:border-primary/40">
+            <div className="rounded-[22px] border border-border/80 bg-card p-2 shadow-sm transition-colors">
               <div className="mb-1 flex flex-wrap items-center gap-1.5 px-1">
                 {repoContext ? (
                   <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] text-primary">
@@ -2650,7 +2650,7 @@ export default function AiAssistantV2Page() {
                 placeholder={i18n.t('输入消息… Enter 发送，Shift+Enter 换行')}
                 rows={1}
                 disabled={streaming}
-                className="max-h-44 min-h-[42px] resize-none border-0 bg-transparent px-2.5 py-2 text-sm shadow-none focus-visible:ring-0"
+                className="max-h-44 min-h-[42px] resize-none border-0 bg-transparent px-2.5 py-2 text-sm shadow-none outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
               />
 
               <div className="flex items-center gap-1 px-1 pt-1">

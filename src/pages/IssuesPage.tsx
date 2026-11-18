@@ -12,6 +12,9 @@ import {
   Tag,
   Search,
   X,
+  SlidersHorizontal,
+  Flag,
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,7 +39,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { UserLink } from '@/components/common/UserLink';
 import {
-  getIssues,
   createIssue,
   formatRelativeTime,
   getRepoLabels,
@@ -66,6 +68,7 @@ export default function IssuesPage() {
   const [labelFilter, setLabelFilter] = useState('');
   const [milestoneFilter, setMilestoneFilter] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newBody, setNewBody] = useState('');
@@ -92,38 +95,23 @@ export default function IssuesPage() {
     try {
       let issuesOnly: GitHubIssue[];
       let nextPage: boolean;
-      if (query) {
-        const q = [
-          `repo:${owner}/${repo}`,
-          'is:issue',
-          stateFilter === 'all' ? '' : `state:${stateFilter}`,
-          labelFilter ? `label:"${labelFilter}"` : '',
-          milestoneFilter ? `milestone:"${milestoneFilter}"` : '',
-          assigneeFilter.trim() ? `assignee:${assigneeFilter.trim()}` : '',
-          query,
-        ].filter(Boolean).join(' ');
-        const result = await searchIssues(q, {
-          sort: sortField,
-          order: sortDirection,
-          per_page: 30,
-          page: pageNum,
-        });
-        issuesOnly = result.items.filter((issue) => !issue.pull_request);
-        nextPage = pageNum * 30 < result.total_count;
-      } else {
-        const result = await getIssues(owner, repo, {
-          state: stateFilter,
-          sort: sortField,
-          direction: sortDirection,
-          per_page: 30,
-          page: pageNum,
-          labels: labelFilter || undefined,
-          milestone: milestoneFilter || undefined,
-          assignee: assigneeFilter.trim() || undefined,
-        });
-        issuesOnly = result.data.filter((issue) => !issue.pull_request);
-        nextPage = result.hasNextPage;
-      }
+      const q = [
+        `repo:${owner}/${repo}`,
+        'is:issue',
+        stateFilter === 'all' ? '' : `state:${stateFilter}`,
+        labelFilter ? `label:"${labelFilter}"` : '',
+        milestoneFilter ? `milestone:"${milestoneFilter}"` : '',
+        assigneeFilter.trim() ? `assignee:${assigneeFilter.trim()}` : '',
+        query,
+      ].filter(Boolean).join(' ');
+      const result = await searchIssues(q, {
+        sort: sortField,
+        order: sortDirection,
+        per_page: 30,
+        page: pageNum,
+      });
+      issuesOnly = result.items;
+      nextPage = pageNum * 30 < result.total_count;
       if (append) {
         setIssues((prev) => [...prev, ...issuesOnly]);
       } else {
@@ -286,83 +274,43 @@ export default function IssuesPage() {
       )}
 
       {/* 筛选栏 */}
-      <div className="space-y-3 bg-card border border-border rounded-lg p-3">
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="flex gap-1 shrink-0">
-            {([['open', i18n.t('开放')], ['closed', i18n.t('已关闭')], ['all', i18n.t('全部')]] as const).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${stateFilter === value ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => setStateFilter(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+      <div className="rounded-xl border border-border bg-card p-3 space-y-3">
+        <div className="grid grid-cols-3 gap-1 rounded-lg bg-secondary/40 p-1">
+          {([['open', i18n.t('开放')], ['closed', i18n.t('已关闭')], ['all', i18n.t('全部')]] as const).map(([value, label]) => (
+            <button key={value} type="button" className={`h-8 rounded-md text-sm font-medium transition-colors ${stateFilter === value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setStateFilter(value)}>{label}</button>
+          ))}
+        </div>
+        <div className="flex gap-2">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={i18n.t('搜索标题或正文…')}
-              className="bg-secondary border-border text-foreground pl-9"
-            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-t text-muted-foreground" />
+            <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={i18n.t('搜索标题或正文…')} className="bg-secondary border-border text-foreground pl-9 h-10" />
           </div>
+          <Button variant="outline" className="h-10 shrink-0 border-border hover:bg-secondary" onClick={() => setFilterOpen(true)}>
+            <SlidersHorizontal className="w-4 h-4 mr-1.5" />{i18n.t('筛选')}
+            {(labelFilter || milestoneFilter || assigneeFilter) && <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{[labelFilter, milestoneFilter, assigneeFilter].filter(Boolean).length}</span>}
+          </Button>
         </div>
-        <div className="flex flex-wrap gap-2 items-center">
-          <Select value={labelFilter || '__all'} onValueChange={(v) => setLabelFilter(v === '__all' ? '' : v)}>
-            <SelectTrigger className="bg-secondary border-border text-foreground w-[132px] h-9">
-              <Tag className="w-3 h-3 mr-1" />
-              <SelectValue placeholder={i18n.t('标签')} />
-            </SelectTrigger>
-            <SelectContent className="bg-popover border-border max-h-60">
-              <SelectItem value="__all" className="text-foreground">{i18n.t('全部标签')}</SelectItem>
-              {labels.map((label) => (
-                <SelectItem key={label.id} value={label.name} className="text-foreground">{label.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={milestoneFilter || '__all'} onValueChange={(v) => setMilestoneFilter(v === '__all' ? '' : v)}>
-            <SelectTrigger className="bg-secondary border-border text-foreground w-[150px] h-9">
-              <SelectValue placeholder={i18n.t('里程碑')} />
-            </SelectTrigger>
-            <SelectContent className="bg-popover border-border max-h-60">
-              <SelectItem value="__all" className="text-foreground">{i18n.t('全部里程碑')}</SelectItem>
-              {milestones.map((milestone) => (
-                <SelectItem key={milestone.id} value={milestone.title} className="text-foreground">{milestone.title}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            value={assigneeFilter}
-            onChange={(e) => setAssigneeFilter(e.target.value)}
-            placeholder={i18n.t('负责人 login')}
-            className="bg-secondary border-border text-foreground w-[140px] h-9"
-          />
-          <Select value={sortField} onValueChange={(v) => setSortField(v as IssueSortField)}>
-            <SelectTrigger className="bg-secondary border-border text-foreground w-[128px] h-9 ml-auto">
-              <Filter className="w-3 h-3 mr-1" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-popover border-border">
-              <SelectItem value="created" className="text-foreground">{i18n.t('创建时间')}</SelectItem>
-              <SelectItem value="updated" className="text-foreground">{i18n.t('更新时间')}</SelectItem>
-              <SelectItem value="comments" className="text-foreground">{i18n.t('评论数')}</SelectItem>
-            </SelectContent>
-          </Select>
-          {(labelFilter || milestoneFilter || assigneeFilter || searchQuery) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-9 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => { setLabelFilter(''); setMilestoneFilter(''); setAssigneeFilter(''); setSearchQuery(''); }}
-            >
-              <X className="w-3.5 h-3.5 mr-1" />{i18n.t('清除筛选')}
-            </Button>
-          )}
-        </div>
+        {(labelFilter || milestoneFilter || assigneeFilter) && (
+          <div className="flex flex-wrap gap-1.5">
+            {labelFilter && <Badge variant="outline" className="text-xs h-6 border-primary/30 text-primary"><Tag className="w-3 h-3 mr-1" />{labelFilter}<button type="button" className="ml-1" onClick={() => setLabelFilter('')}><X className="w-3 h-3" /></button></Badge>}
+            {milestoneFilter && <Badge variant="outline" className="text-xs h-6 border-primary/30 text-primary"><Flag className="w-3 h-3 mr-1" />{milestoneFilter}<button type="button" className="ml-1" onClick={() => setMilestoneFilter('')}><X className="w-3 h-3" /></button></Badge>}
+            {assigneeFilter && <Badge variant="outline" className="text-xs h-6 border-primary/30 text-primary"><Users className="w-3 h-3 mr-1" />{assigneeFilter}<button type="button" className="ml-1" onClick={() => setAssigneeFilter('')}><X className="w-3 h-3" /></button></Badge>}
+          </div>
+        )}
       </div>
+      <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
+        <DialogContent aria-describedby={undefined} className="max-w-[calc(100%-2rem)] md:max-w-md bg-card border-border">
+          <DialogHeader><DialogTitle className="text-foreground">{i18n.t('筛选 Issues')}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">{i18n.t('标签')}</Label><Select value={labelFilter || '__all'} onValueChange={(v) => setLabelFilter(v === '__all' ? '' : v)}><SelectTrigger className="bg-secondary border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-popover border-border max-h-60"><SelectItem value="__all" className="text-foreground">{i18n.t('全部标签')}</SelectItem>{labels.map((label) => <SelectItem key={label.id} value={label.name} className="text-foreground">{label.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">{i18n.t('里程碑')}</Label><Select value={milestoneFilter || '__all'} onValueChange={(v) => setMilestoneFilter(v === '__all' ? '' : v)}><SelectTrigger className="bg-secondary border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-popover border-border max-h-60"><SelectItem value="__all" className="text-foreground">{i18n.t('全部里程碑')}</SelectItem>{milestones.map((milestone) => <SelectItem key={milestone.id} value={milestone.title} className="text-foreground">{milestone.title}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">{i18n.t('负责人')}</Label><Input value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} placeholder={i18n.t('负责人用户名')} className="bg-secondary border-border text-foreground" /></div>
+            <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">{i18n.t('排序')}</Label><Select value={sortField} onValueChange={(v) => setSortField(v as IssueSortField)}><SelectTrigger className="bg-secondary border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-popover border-border"><SelectItem value="created" className="text-foreground">{i18n.t('创建时间')}</SelectItem><SelectItem value="updated" className="text-foreground">{i18n.t('更新时间')}</SelectItem><SelectItem value="comments" className="text-foreground">{i18n.t('评论数')}</SelectItem></SelectContent></Select></div>
+            <div className="flex gap-2 pt-1"><Button variant="outline" className="flex-1 border-border" onClick={() => { setLabelFilter(''); setMilestoneFilter(''); setAssigneeFilter(''); }}>{i18n.t('清空筛选')}</Button><Button className="flex-1 bg-primary text-primary-foreground" onClick={() => setFilterOpen(false)}>{i18n.t('完成')}</Button></div>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* Issue 列表 */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         {loading ? (

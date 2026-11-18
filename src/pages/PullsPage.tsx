@@ -112,6 +112,8 @@ export default function PullsPage() {
         ]);
         if (cancelled) return;
         const names = branchResult.data.map(b => b.name);
+        // 分支接口按名称分页，默认分支可能不在第一页；必须补进来，否则目标分支下拉框为空。
+        if (!names.includes(repoInfo.default_branch)) names.unshift(repoInfo.default_branch);
         setBranches(names);
         setBase(prev => prev || repoInfo.default_branch);
         setHead(prev => prev || names.find(name => name !== repoInfo.default_branch) || '');

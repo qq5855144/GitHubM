@@ -1,12 +1,12 @@
 // GitHub Issue 接口。
-import type { GitHubComment, GitHubIssue, GitHubLabel, GitHubMilestone, IssueSortField, IssueState, SortDirection } from '@/types/types';
+import type { GitHubComment, GitHubIssue, GitHubLabel, GitHubMilestone, GitHubUser, IssueSortField, IssueState, SortDirection } from '@/types/types';
 import { request, requestWithPagination } from './core';
 
 export async function getIssues(
   owner: string,
   repo: string,
   params: {
-    state?: IssueState;
+    state?: IssueState | 'all';
     sort?: IssueSortField;
     direction?: SortDirection;
     per_page?: number;
@@ -99,6 +99,39 @@ export async function getIssueComments(
   );
 }
 
+export async function getIssueCommentsPage(
+  owner: string,
+  repo: string,
+  issueNumber: number,
+  page = 1,
+  perPage = 50
+): Promise<{ data: GitHubComment[]; hasNextPage: boolean }> {
+  return requestWithPagination<GitHubComment>(
+    `/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=${perPage}&page=${page}`
+  );
+}
+export async function updateIssueComment(
+  owner: string,
+  repo: string,
+  commentId: number,
+  body: string
+): Promise<GitHubComment> {
+  return request<GitHubComment>(`/repos/${owner}/${repo}/issues/comments/${commentId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ body }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+export async function deleteIssueComment(
+  owner: string,
+  repo: string,
+  commentId: number
+): Promise<void> {
+  await request<void>(`/repos/${owner}/${repo}/issues/comments/${commentId}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function createIssueComment(
   owner: string,
   repo: string,
@@ -122,6 +155,12 @@ export async function getRepoLabels(
   return request<GitHubLabel[]>(`/repos/${owner}/${repo}/labels?per_page=100`);
 }
 
+export async function getRepoAssignees(
+  owner: string,
+  repo: string
+): Promise<GitHubUser[]> {
+  return request<GitHubUser[]>(`/repos/${owner}/${repo}/assignees?per_page=100`);
+}
 export async function getRepoMilestones(
   owner: string,
   repo: string

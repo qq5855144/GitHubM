@@ -1,6 +1,6 @@
 // AI 对话轮次展示组件：思考、工具、正文、头像与用户气泡。
 import { useEffect, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Copy, Eye, Loader2, Wrench, XCircle, Zap, AtSign, Paperclip } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Copy, Eye, Loader2, Pencil, RefreshCw, Wrench, XCircle, Zap, AtSign, Paperclip } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toolCallLabel } from '@/ai-v2/agent';
 import type { ArtifactMeta, UiChatMessage, UiToolRun } from '@/ai-v2/types';
@@ -168,10 +168,11 @@ ${text.slice(-STREAMING_PLAIN_LIMIT)}`
   );
 }
 
-function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
+function AssistantTurn({ message, onOpenArtifact, onApplyDiff, onRegenerate }: {
   message: UiChatMessage;
   onOpenArtifact: (meta: ArtifactMeta) => void;
   onApplyDiff: (path: string, diff: string) => void;
+  onRegenerate?: () => void;
 }) {
   const blocks = message.blocks || [];
   const tools = message.tools || [];
@@ -251,6 +252,16 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff }: {
           >
             <Copy className="h-4 w-4" />
           </button>
+          {onRegenerate && (
+            <button
+              type="button"
+              onClick={onRegenerate}
+              title={i18n.t('重新生成')}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -316,11 +327,14 @@ function UserAvatar({ avatarUrl, login }: { avatarUrl?: string; login?: string }
   );
 }
 
-export function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff }: {
+export function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff, onEditUser, onRegenerate, regenerateId }: {
   turn: ConversationTurn;
   index: number;
   onOpenArtifact: (meta: ArtifactMeta) => void;
   onApplyDiff: (path: string, diff: string) => void;
+  onEditUser: (message: UiChatMessage) => void;
+  onRegenerate: (message: UiChatMessage) => void;
+  regenerateId?: string;
 }) {
   const { user: authUser } = useAuth();
   const [userExpanded, setUserExpanded] = useState(false);
@@ -353,6 +367,14 @@ export function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff }: {
                 </button>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => onEditUser(turn.user!)}
+              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              <Pencil className="h-3 w-3" />
+              {i18n.t('编辑重发')}
+            </button>
             {turn.user.attachments && turn.user.attachments.length > 0 && (
               <div className="flex max-w-full flex-wrap justify-end gap-1">
                 {turn.user.attachments.map(attachment => (
@@ -382,7 +404,12 @@ export function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff }: {
             <div className="min-w-0 space-y-4">
               {turn.assistants.map(message => (
                 <div key={message.id} className="min-w-0">
-                  <AssistantTurn message={message} onOpenArtifact={onOpenArtifact} onApplyDiff={onApplyDiff} />
+                  <AssistantTurn
+                    message={message}
+                    onOpenArtifact={onOpenArtifact}
+                    onApplyDiff={onApplyDiff}
+                    onRegenerate={regenerateId === message.id && turn.user ? () => onRegenerate(turn.user!) : undefined}
+                  />
                 </div>
               ))}
             </div>

@@ -1,5 +1,6 @@
 // AI V2 — GitHub Actions / Issues / Pull Requests 只读工具
 import type { AgentTool, RepoContext, ToolRunResult, ToolRuntimeContext } from '../types';
+import { fetchWithResilience } from '@/services/github/http';
 
 const API = 'https://api.github.com';
 
@@ -20,40 +21,27 @@ async function request(
   path: string,
   accept = 'application/vnd.github+json',
 ): Promise<unknown> {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetchWithResilience(`${API}${path}`, {
     headers: {
       Authorization: `Bearer ${ctx.token}`,
       Accept: accept,
       'X-GitHub-Api-Version': '2022-11-28',
     },
     signal: ctx.signal,
-  });
+  }, 'GET');
   const text = await res.text();
-  if (!res.ok) {
-    let detail = text;
-    try {
-      detail = (JSON.parse(text) as { message?: string }).message || text;
-    } catch {
-      // ignore
-    }
-    throw new Error(`GitHub HTTP ${res.status}: ${detail.slice(0, 300)}`);
-  }
   return text ? JSON.parse(text) : null;
 }
 
 async function requestText(ctx: ToolRuntimeContext, path: string): Promise<string> {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetchWithResilience(`${API}${path}`, {
     headers: {
       Authorization: `Bearer ${ctx.token}`,
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
     },
     signal: ctx.signal,
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`GitHub HTTP ${res.status}: ${text.slice(0, 300)}`);
-  }
+  }, 'GET');
   return res.text();
 }
 

@@ -31,8 +31,8 @@ const MAX_CACHE_ENTRIES = 300;
 const cdnBustPrefixes = new Set<string>();
 
 /** 生成缓存 key（URL + 当前 token，token 变化后旧缓存自动失效） */
-export function buildCacheKey(url: string): string {
-  return `${authToken ?? ''}|${url}`;
+export function buildCacheKey(url: string, accept = 'application/vnd.github+json'): string {
+  return `${authToken ?? ''}|${accept}|${url}`;
 }
 
 /** 读取缓存；过期但带 ETag 的条目保留，用于条件请求 */
@@ -265,7 +265,9 @@ export async function request<T>(
   const method = (options.method ?? 'GET').toUpperCase();
 
   if (method === 'GET') {
-    const cacheKey = buildCacheKey(url);
+    const accept = String((options.headers as Record<string, string> | undefined)?.Accept
+      ?? 'application/vnd.github+json');
+    const cacheKey = buildCacheKey(url, accept);
     // 1. TTL 缓存命中：直接返回，不发网络请求
     const entry = getCacheEntry<T>(cacheKey);
     const cached = getCached<T>(cacheKey);
@@ -275,7 +277,7 @@ export async function request<T>(
     //    fetchUrl 可能附加 _t 时间戳以绕过 GitHub CDN 强制缓存（60s），
     //    但 cacheKey 始终用干净 URL，确保时间戳不污染内存缓存键。
     const fetchUrl = consumeCacheBust(url);
-    return getOrCreateInFlight<T>(cacheKey, async () => {
+    const execute = async (): Promise<T> => {
       const headers: Record<string, string> = {
         ...(buildHeaders() as Record<string, string>),
         ...(options.headers as Record<string, string> | undefined),
@@ -308,7 +310,9 @@ export async function request<T>(
       const data = await response.json() as T;
       setCached(cacheKey, data, response.headers.get('etag') ?? undefined, cacheTtlForUrl(url));
       return data;
-    });
+    };
+    // 带 signal 的调用独立执行，避免一方取消时连带其他共享 Promise 的调用方。
+    return options.signal ? execute() : getOrCreateInFlight<T>(cacheKey, execute);
   }
 
   // 非 GET 请求：直接发出，完成后失效相关缓存前缀

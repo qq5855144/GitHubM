@@ -54,13 +54,13 @@ describe('GitHub API 缓存层', () => {
     it('无 token 时 key 包含空字符串前缀', () => {
       setToken(null);
       const key = buildCacheKey('https://api.github.com/user');
-      expect(key).toBe('|https://api.github.com/user');
+      expect(key).toBe('|application/vnd.github+json|https://api.github.com/user');
     });
 
     it('有 token 时 key 包含 token 前缀', () => {
       setToken('ghp_testtoken123');
       const key = buildCacheKey('https://api.github.com/user');
-      expect(key).toBe('ghp_testtoken123|https://api.github.com/user');
+      expect(key).toBe('ghp_testtoken123|application/vnd.github+json|https://api.github.com/user');
     });
 
     it('相同 URL + 相同 token 生成相同 key', () => {
@@ -70,6 +70,12 @@ describe('GitHub API 缓存层', () => {
       expect(key1).toBe(key2);
     });
 
+    it('相同 URL + 不同 Accept 生成不同 key', () => {
+      setToken('token-a');
+      const jsonKey = buildCacheKey('https://api.github.com/repos/x/y/projects');
+      const previewKey = buildCacheKey('https://api.github.com/repos/x/y/projects', 'application/vnd.github.inertia-preview+json');
+      expect(jsonKey).not.toBe(previewKey);
+    });
     it('相同 URL + 不同 token 生成不同 key（防跨用户缓存污染）', () => {
       setToken('token-user1');
       const key1 = buildCacheKey('https://api.github.com/user');

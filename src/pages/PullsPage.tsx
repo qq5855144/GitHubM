@@ -9,6 +9,8 @@ import {
   MessageSquare,
   ChevronRight,
   GitBranch,
+  Plus,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,8 +23,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { UserLink } from '@/components/common/UserLink';
-import { getPullRequests, formatRelativeTime } from '@/services/github';
+import { getPullRequests, createPullRequest, getRepo, getBranches, formatRelativeTime } from '@/services/github';
 import type { GitHubPullRequest, PrState } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
@@ -37,6 +49,14 @@ export default function PullsPage() {
   const [page, setPage] = useState(1);
   const [stateFilter, setStateFilter] = useState<PrState>('open');
   const [sortField, setSortField] = useState<'created' | 'updated' | 'popularity' | 'long-running'>('created');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [head, setHead] = useState('');
+  const [base, setBase] = useState('');
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [draft, setDraft] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const loadPulls = useCallback(async (pageNum = 1, append = false, force = false) => {
     if (!owner || !repo) return;
@@ -81,6 +101,53 @@ export default function PullsPage() {
     loadPulls(1);
   }, [loadPulls]);
 
+  useEffect(() => {
+    if (!createOpen || !owner || !repo) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [repoInfo, branchResult] = await Promise.all([
+          getRepo(owner, repo),
+          getBranches(owner, repo, 1, 100),
+        ]);
+        if (cancelled) return;
+        const names = branchResult.data.map(b => b.name);
+        setBranches(names);
+        setBase(prev => prev || repoInfo.default_branch);
+        setHead(prev => prev || names.find(name => name !== repoInfo.default_branch) || '');
+      } catch (err) {
+        if (!cancelled) toast.error(err instanceof Error ? err.message : i18n.t('加载分支失败'));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [createOpen, owner, repo]);
+
+  const handleCreate = async () => {
+    if (!owner || !repo) return;
+    if (!title.trim()) { toast.error(i18n.t('请输入 PR 标题')); return; }
+    if (!head || !base) { toast.error(i18n.t('请选择源分支和目标分支')); return; }
+    if (head === base) { toast.error(i18n.t('源分支和目标分支不能相同')); return; }
+    setCreating(true);
+    try {
+      const pr = await createPullRequest(owner, repo, {
+        title: title.trim(),
+        head,
+        base,
+        body: body.trim(),
+        draft,
+      });
+      pageCache.invalidate(`pulls:${owner}/${repo}`);
+      setCreateOpen(false);
+      setTitle(''); setBody(''); setDraft(false);
+      toast.success(i18n.t('PR 已创建'));
+      navigate(`/repos/${owner}/${repo}/pulls/${pr.number}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : i18n.t('创建 PR 失败'));
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const getPrIcon = (pr: GitHubPullRequest) => {
     if (pr.merged_at || pr.merged) return <GitMerge className="w-4 h-4 text-chart-4 shrink-0" />;
     if (pr.state === 'closed') return <XCircle className="w-4 h-4 text-destructive shrink-0" />;
@@ -113,9 +180,60 @@ export default function PullsPage() {
       </div>
 
       {/* 页头 */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-foreground">Pull Requests</h1>
+        <Button className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0" onClick={() => setCreateOpen(true)}>
+          <Plus className="w-4 h-4 mr-1.5" />{i18n.t('新建 PR')}
+        </Button>
       </div>
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">{i18n.t('创建 Pull Request')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">{i18n.t('源分支')}</Label>
+                <Select value={head} onValueChange={setHead}>
+                  <SelectTrigger className="bg-secondary border-border text-foreground"><SelectValue placeholder={i18n.t('选择分支')} /></SelectTrigger>
+                  <SelectContent className="bg-popover border-border max-h-60">
+                    {branches.map(name => <SelectItem key={name} value={name} className="text-foreground">{name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">{i18n.t('目标分支')}</Label>
+                <Select value={base} onValueChange={setBase}>
+                  <SelectTrigger className="bg-secondary border-border text-foreground"><SelectValue placeholder={i18n.t('选择分支')} /></SelectTrigger>
+                  <SelectContent className="bg-popover border-border max-h-60">
+                    {branches.map(name => <SelectItem key={name} value={name} className="text-foreground">{name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">{i18n.t('标题')}</Label>
+              <Input value={title} onChange={e => setTitle(e.target.value)} placeholder={i18n.t('PR 标题')} className="bg-secondary border-border text-foreground" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">{i18n.t('描述（可选）')}</Label>
+              <Textarea value={body} onChange={e => setBody(e.target.value)} rows={4} placeholder={i18n.t('描述这次改动…')} className="bg-secondary border-border text-foreground resize-none" />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-normal text-foreground">{i18n.t('创建为草稿')}</Label>
+                <p className="text-xs text-muted-foreground">{i18n.t('草稿 PR 不会自动请求评审')}</p>
+              </div>
+              <Switch checked={draft} onCheckedChange={setDraft} />
+            </div>
+            <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleCreate} disabled={creating || !branches.length}>
+              {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <GitPullRequest className="w-4 h-4 mr-2" />}
+              {creating ? i18n.t('创建中…') : i18n.t('创建 PR')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 筛选栏 */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2.5">

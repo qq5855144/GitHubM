@@ -1,3 +1,4 @@
+import { beginRateLimitWait, endRateLimitWait } from '@/lib/githubRateLimitStatus';
 // GitHub 请求网络层：重试、限流等待与错误解析。
 // 不依赖缓存/token 模块，便于后续把 github.ts 按资源拆分。
 
@@ -99,7 +100,12 @@ export async function fetchWithResilience(
         MAX_RATE_LIMIT_WAIT_MS,
         Math.max(1_000, (error.retryAt ?? Date.now() + 60_000) - Date.now()),
       );
-      await sleepWithSignal(waitMs, init.signal);
+      beginRateLimitWait(error.retryAt ?? Date.now() + waitMs, attempt + 1);
+      try {
+        await sleepWithSignal(waitMs, init.signal);
+      } finally {
+        endRateLimitWait();
+      }
       attempt += 1;
       continue;
     }

@@ -209,7 +209,7 @@ export default function PullsPage() {
                 value={branchQuery}
                 onChange={e => setBranchQuery(e.target.value)}
                 placeholder={i18n.t('筛选分支，例如 main')}
-                className="bg-secondary border-border text-foreground"
+                className="bg-secondary border-border text-foreground pl-9"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">

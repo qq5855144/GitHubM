@@ -1,78 +1,40 @@
 #!/usr/bin/env bash
-# ============================================================
-# GitHub Manager — Release Keystore 生成脚本
-# 首次设置时执行一次，将输出内容配置到 GitHub Repository Secrets
+# 生成新的 Release Keystore（仅一次）。生成后请立即离线备份，并把
+# base64 与口令写入 GitHub Actions Secrets；不要提交到仓库。
 #
 # 用法：
-#   chmod +x generate-keystore.sh
-#   ./generate-keystore.sh
-# ============================================================
-
+#   RELEASE_STORE_PASSWORD='强随机口令' ./generate-keystore.sh /path/to/release.keystore
+#   不传口令时会自动生成随机口令并打印一次。
 set -euo pipefail
 
-KEYSTORE_FILE="release.keystore"
-KEY_ALIAS="github-manager"
-STORE_PASS="GithubManager@2024"
-KEY_PASS="GithubManager@2024"
-VALIDITY_DAYS=10000   # ~27 年
+OUT="${1:-$HOME/githubm-release.keystore}"
+ALIAS="${KEY_ALIAS:-github-manager}"
+STORE_PASS="${RELEASE_STORE_PASSWORD:-$(openssl rand -base64 33 | tr -dc 'A-Za-z0-9' | head -c 32)}"
+KEY_PASS="${RELEASE_KEY_PASSWORD:-$STORE_PASS}"
 
-echo ""
-echo "🔑  正在生成 Release Keystore..."
-echo "    文件：${KEYSTORE_FILE}"
-echo "    别名：${KEY_ALIAS}"
-echo ""
-
-# 如果文件已存在则跳过生成（避免覆盖旧签名导致覆盖安装失败）
-if [ -f "${KEYSTORE_FILE}" ]; then
-    echo "⚠️  ${KEYSTORE_FILE} 已存在，跳过生成（避免签名证书变更）。"
-    echo "   如需重新生成，请先手动删除该文件。"
-else
-    keytool -genkeypair -v \
-        -keystore "${KEYSTORE_FILE}" \
-        -alias "${KEY_ALIAS}" \
-        -keyalg RSA \
-        -keysize 2048 \
-        -validity ${VALIDITY_DAYS} \
-        -storepass "${STORE_PASS}" \
-        -keypass "${KEY_PASS}" \
-        -dname "CN=GitHub Manager, OU=Android, O=Developer, L=CN, S=CN, C=CN"
-
-    echo ""
-    echo "✅  Keystore 生成成功！"
+if [ -e "$OUT" ] && [ "${FORCE:-0}" != "1" ]; then
+  echo "❌ 文件已存在：$OUT"
+  echo "   覆盖会改变签名，导致旧版本无法升级。确需覆盖请设置 FORCE=1。"
+  exit 1
 fi
 
-echo ""
-echo "══════════════════════════════════════════════════"
-echo "  📋  请将以下内容配置到 GitHub Repository Secrets"
-echo "  路径：Settings → Secrets and variables → Actions"
-echo "══════════════════════════════════════════════════"
-echo ""
+keytool -genkeypair -v \
+  -keystore "$OUT" \
+  -alias "$ALIAS" \
+  -keyalg RSA -keysize 4096 -validity 10000 \
+  -storepass "$STORE_PASS" -keypass "$KEY_PASS" \
+  -dname "CN=GitHub Manager, OU=Android, O=GitHubM, L=CN, S=CN, C=CN" \
+  -noprompt
 
-echo "Secret 名称: RELEASE_KEYSTORE_BASE64"
-echo "Secret 值（请完整复制下方 base64 内容）:"
-echo "---BEGIN BASE64---"
-base64 -w 0 "${KEYSTORE_FILE}"
-echo ""
-echo "---END BASE64---"
-
-echo ""
-echo "Secret 名称: RELEASE_KEY_ALIAS"
-echo "Secret 值:   ${KEY_ALIAS}"
-echo ""
-echo "Secret 名称: RELEASE_STORE_PASSWORD"
-echo "Secret 值:   ${STORE_PASS}"
-echo ""
-echo "Secret 名称: RELEASE_KEY_PASSWORD"
-echo "Secret 值:   ${KEY_PASS}"
-echo ""
-echo "══════════════════════════════════════════════════"
-echo "  ⚠️   重要提示"
-echo "══════════════════════════════════════════════════"
-echo "  1. 请妥善备份 ${KEYSTORE_FILE}，一旦丢失无法覆盖"
-echo "     安装已分发给用户的旧版本 APK。"
-echo "  2. release.keystore 已加入 .gitignore，"
-echo "     切勿将 keystore 文件提交到 Git 仓库。"
-echo "  3. 配置好 Secrets 后，下次 push main 分支即会"
-echo "     自动构建签名 APK 并发布 GitHub Release。"
-echo "══════════════════════════════════════════════════"
-echo ""
+chmod 600 "$OUT"
+echo
+ echo "✅ 已生成：$OUT"
+echo "别名：$ALIAS"
+echo "Store 密码：$STORE_PASS"
+echo "Key 密码：$KEY_PASS"
+echo
+echo "请离线备份 keystore 与口令，然后配置 4 个 Actions Secrets："
+echo "  RELEASE_KEYSTORE_BASE64=$(base64 -w 0 "$OUT")"
+echo "  RELEASE_KEY_ALIAS=$ALIAS"
+echo "  RELEASE_STORE_PASSWORD=$STORE_PASS"
+echo "  RELEASE_KEY_PASSWORD=$KEY_PASS"

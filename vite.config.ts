@@ -45,6 +45,7 @@ export default defineConfig({
       provider: "v8",
       include: ["src/services/**", "src/ai-v2/**", "src/lib/**", "src/components/**"],
       reporter: ["text", "html"],
+      thresholds: { lines: 28, functions: 24 },
     },
   },
   build: {

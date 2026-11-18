@@ -240,6 +240,21 @@
     box-shadow: var(--shadow-soft-md);
   }
 
+  /*
+   * 顶栏图标按钮：浅色主题下点击/悬停保持深色图标，深色主题才使用白色。
+   * 避免 ghost 变体的 hover:text-accent-foreground 在浅色主题把图标刷成白色。
+   */
+  .topbar-icon:hover,
+  .topbar-icon:active {
+    background-color: hsl(var(--secondary)) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .dark .topbar-icon:hover,
+  .dark .topbar-icon:active {
+    color: #fff !important;
+  }
+
   [class~='bg-card'][class~='border-border'] {
     border-color: hsl(var(--border));
   }

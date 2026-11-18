@@ -439,7 +439,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           {/* 移动端菜单按钮 */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden text-foreground hover:bg-secondary">
+              <Button variant="ghost" size="icon" className="topbar-icon lg:hidden text-foreground hover:bg-secondary">
                 <Menu className="w-5 h-5" />
               </Button>
             </SheetTrigger>
@@ -452,7 +452,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <Button
             variant="ghost"
             size="icon"
-            className="hidden lg:flex text-muted-foreground hover:bg-secondary"
+            className="topbar-icon hidden lg:flex text-muted-foreground hover:bg-secondary"
             onClick={() => setCollapsed(!collapsed)}
           >
             {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
@@ -488,7 +488,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-muted-foreground hover:bg-secondary"
+                  className="topbar-icon text-muted-foreground hover:bg-secondary"
                   onClick={cycleTheme}
                 >
                   <ThemeIcon className="w-4 h-4" />
@@ -507,7 +507,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                     <Button
                       variant="ghost"
                       size="icon"
-                      className={cn("text-muted-foreground hover:bg-secondary", targetLang !== 'off' && "text-primary")}
+                      className={cn("topbar-icon text-muted-foreground hover:bg-secondary", targetLang !== 'off' && "text-primary")}
                     >
                       <Languages className="w-4 h-4" />
                     </Button>
@@ -532,7 +532,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             <Button
               variant="ghost"
               size="icon"
-              className="relative text-muted-foreground hover:bg-secondary"
+              className="topbar-icon relative text-muted-foreground hover:bg-secondary"
               onClick={() => navigate('/notifications')}
               aria-label={hasUnreadNotifications ? i18n.t('通知（有未读）') : i18n.t('通知')}
             >
@@ -547,7 +547,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             <Button
               variant="ghost"
               size="icon"
-              className="text-muted-foreground hover:bg-secondary"
+              className="topbar-icon text-muted-foreground hover:bg-secondary"
               onClick={() => navigate('/more')}
               aria-label="全部功能"
             >
@@ -558,7 +558,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center gap-2 px-2 h-9 text-foreground hover:bg-secondary">
+                  <Button variant="ghost" className="topbar-icon flex items-center gap-2 px-2 h-9 text-foreground hover:bg-secondary">
                     <Avatar className="w-6 h-6">
                       <AvatarImage src={user.avatar_url} alt={user.login} />
                       <AvatarFallback className="bg-primary/20 text-primary text-xs font-semibold">

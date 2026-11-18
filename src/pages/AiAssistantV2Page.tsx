@@ -942,6 +942,7 @@ export default function AiAssistantV2Page() {
   const [sessions, setSessions] = useState<V2Session[]>([]);
   const [activeId, setActiveId] = useState('');
   const [input, setInput] = useState('');
+  const [editTargetId, setEditTargetId] = useState<string | null>(null);
   const isAndroid = useMemo(
     () => typeof window !== 'undefined' && !!(window as unknown as { AndroidBridge?: unknown }).AndroidBridge,
     [],
@@ -1588,9 +1589,9 @@ export default function AiAssistantV2Page() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleSend = async () => {
-    const text = input.trim();
-    const attachments = pendingAttachments;
+  const handleSend = async (options?: { text?: string; attachments?: UiAttachment[]; editTargetId?: string }) => {
+    const text = (options?.text ?? input).trim();
+    const attachments = options ? (options.attachments ?? []) : pendingAttachments;
     if ((!text && !attachments.length) || streaming) return;
     if (attachments.some(item => item.kind === 'image') && !modelCapabilities.supportsVision) {
       toast.error(i18n.t('当前模型不支持图片，请切换到视觉模型'));
@@ -1633,7 +1634,10 @@ export default function AiAssistantV2Page() {
       createdAt: now,
     };
 
-    const historyMessages = await hydrateMessageImages(messages);
+    const targetId = options?.editTargetId ?? editTargetId ?? undefined;
+    const targetIndex = targetId ? messages.findIndex(message => message.id === targetId) : -1;
+    const baseMessages = targetIndex >= 0 ? messages.slice(0, targetIndex) : messages;
+    const historyMessages = await hydrateMessageImages(baseMessages);
     const previousHistory = toAgentHistory(historyMessages.map(message => ({
       role: message.role,
       content: message.content,
@@ -1648,9 +1652,10 @@ export default function AiAssistantV2Page() {
       sessionId: activeSession?.id,
       title: text || `${i18n.t('附件')} ${attachments[0]?.name || ''}`,
     });
-    setMessages(prev => [...prev, userMessage, assistantMessage]);
+    setMessages([...baseMessages, userMessage, assistantMessage]);
     setInput('');
     setPendingAttachments([]);
+    setEditTargetId(null);
     setStreaming(true);
     stickToBottomRef.current = true;
 
@@ -1758,6 +1763,20 @@ export default function AiAssistantV2Page() {
     }
   };
 
+  const handleEditUser = (message: UiChatMessage) => {
+    if (streaming) return;
+    setInput(message.content);
+    setPendingAttachments(message.attachments || []);
+    setEditTargetId(message.id);
+  };
+  const handleRegenerate = (userMessage: UiChatMessage) => {
+    if (streaming) return;
+    void handleSend({
+      text: userMessage.content,
+      attachments: userMessage.attachments,
+      editTargetId: userMessage.id,
+    });
+  };
   const handleResume = async () => {
     const snapshot = resumableSnapshot;
     if (!snapshot || streaming || !token) return;
@@ -2163,6 +2182,9 @@ export default function AiAssistantV2Page() {
                           index={turns.length - recent.length + index}
                           onOpenArtifact={openArtifact}
                           onApplyDiff={handleApplyDiff}
+                          onEditUser={handleEditUser}
+                          onRegenerate={handleRegenerate}
+                          regenerateId={messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1]?.id : undefined}
                         />
                       ))}
                     </div>
@@ -2186,6 +2208,9 @@ export default function AiAssistantV2Page() {
                             index={item.index}
                             onOpenArtifact={openArtifact}
                             onApplyDiff={handleApplyDiff}
+                            onEditUser={handleEditUser}
+                            onRegenerate={handleRegenerate}
+                            regenerateId={messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1]?.id : undefined}
                           />
                         </div>
                       );
@@ -2331,7 +2356,7 @@ export default function AiAssistantV2Page() {
                   type="button"
                   size="icon"
                   className="ml-auto h-9 w-9 shrink-0 rounded-full"
-                  onClick={streaming ? handleStop : handleSend}
+                  onClick={streaming ? handleStop : () => { void handleSend(); }}
                   disabled={!streaming && ((!input.trim() && pendingAttachments.length === 0) || !token)}
                   title={streaming ? i18n.t('停止生成') : i18n.t('发送')}
                 >

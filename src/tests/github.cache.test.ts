@@ -208,4 +208,11 @@ describe('GitHub API 缓存层', () => {
       expect(getToken()).toBeNull();
     });
   });
+
+  it('caps the cache at 300 entries and evicts the oldest', () => {
+    for (let i = 0; i <= 300; i += 1) setCached(`cap-${i}`, i);
+    expect(getCached('cap-0')).toBeNull();
+    expect(getCached('cap-300')).toBe(300);
+  });
 });
+

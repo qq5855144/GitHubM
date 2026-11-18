@@ -1,6 +1,6 @@
 {
-  "name": "miaoda-react-admin",
-  "version": "0.0.2",
+  "name": "githubm",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

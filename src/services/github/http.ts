@@ -90,6 +90,8 @@ export async function fetchWithResilience(
       }
       throw error;
     }
+    // 条件请求命中：没有响应体，但缓存仍有效。
+    if (response.status === 304) return response;
     if (response.ok) return response;
     const error = await createHttpError(response);
     if (error.rateLimited && attempt < MAX_RATE_LIMIT_RETRIES) {

@@ -55,6 +55,8 @@ import type { GitHubBranch } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
 import i18n from "@/i18n";
+import { useAuth } from '@/contexts/AuthContext';
+import { isRepoOwner } from '@/lib/repoPermissions';
 
 interface BranchWithCompare extends GitHubBranch {
   ahead_by?: number;
@@ -67,6 +69,7 @@ const CARD_ACTION_BUTTON_CLASS = 'h-8 px-2 text-xs gap-1.5 text-muted-foreground
 export default function BranchesPage() {
   const { owner, repo } = useParams<{ owner: string; repo: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [branches, setBranches] = useState<BranchWithCompare[]>([]);
   const [defaultBranch, setDefaultBranch] = useState('main');
   const [loading, setLoading] = useState(true);
@@ -266,7 +269,7 @@ export default function BranchesPage() {
             </span>
           )}
         </h1>
-        {canPush && (
+        {canPush && isRepoOwner(owner, user?.login) && (
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
@@ -411,7 +414,7 @@ export default function BranchesPage() {
                     <Star className="w-3.5 h-3.5" />{i18n.t('默认')}
                   </Button>
                 )}
-                {canPush && branch.name !== defaultBranch && !branch.protected && (
+                {canPush && isRepoOwner(owner, user?.login) && branch.name !== defaultBranch && !branch.protected && (
                   <Button
                     variant="ghost" size="sm"
                     className={`${CARD_ACTION_BUTTON_CLASS} hover:text-destructive hover:bg-destructive/10`}

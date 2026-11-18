@@ -99,6 +99,8 @@ export interface FileTreeProps {
   onMove?: (item: GitHubContent) => void;
   /** 下载文件回调 */
   onDownload?: (item: GitHubContent) => void;
+  /** 是否为仓库所有者，控制写入菜单 */
+  canEdit?: boolean;
   /** 外部触发刷新用 key（递增则重新加载根节点） */
   refreshKey?: number;
   className?: string;
@@ -137,6 +139,7 @@ function TreeNodeRow({
   repo,
   branch,
   filterText,
+  canEdit,
 }: {
   node: TreeNode;
   depth: number;
@@ -158,6 +161,7 @@ function TreeNodeRow({
   repo: string;
   branch: string;
   filterText: string;
+  canEdit: boolean;
 }) {
   const navigate = useNavigate();
   const { item, status } = node;
@@ -200,23 +204,28 @@ function TreeNodeRow({
       <ContextMenuItem onClick={() => navigate(`/repos/${owner}/${repo}/code/${item.path}`)}>
         <Eye className="w-3.5 h-3.5 mr-2" />{i18n.t('在主区域打开')}</ContextMenuItem>
       <ContextMenuSeparator />
-      <ContextMenuItem onClick={() => onNewFile?.(item.path)}>
-        <FilePlus className="w-3.5 h-3.5 mr-2" />{i18n.t('新建文件')}</ContextMenuItem>
-      <ContextMenuItem onClick={() => onNewFolder?.(item.path)}>
-        <FolderPlus className="w-3.5 h-3.5 mr-2" />{i18n.t('新建子文件夹')}</ContextMenuItem>
-      <ContextMenuItem onClick={() => onUpload?.(item.path)}>
-        <Upload className="w-3.5 h-3.5 mr-2" />{i18n.t('上传文件到此')}</ContextMenuItem>
-      <ContextMenuSeparator />
+      {canEdit && (
+        <>
+          <ContextMenuItem onClick={() => onNewFile?.(item.path)}>
+            <FilePlus className="w-3.5 h-3.5 mr-2" />{i18n.t('新建文件')}</ContextMenuItem>
+          <ContextMenuItem onClick={() => onNewFolder?.(item.path)}>
+            <FolderPlus className="w-3.5 h-3.5 mr-2" />{i18n.t('新建子文件夹')}</ContextMenuItem>
+          <ContextMenuItem onClick={() => onUpload?.(item.path)}>
+            <Upload className="w-3.5 h-3.5 mr-2" />{i18n.t('上传文件到此')}</ContextMenuItem>
+          <ContextMenuSeparator />
+        </>
+      )}
       <ContextMenuItem onClick={() => onCopyPath?.(item.path)}>
         <ClipboardCopy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制路径')}</ContextMenuItem>
-      <ContextMenuItem onClick={() => onRename?.(item)}>
-        <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</ContextMenuItem>
-      <ContextMenuSeparator />
-      <ContextMenuItem
-        onClick={() => onDelete?.(item)}
-        className="text-destructive focus:text-destructive"
-      >
-        <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除文件夹')}</ContextMenuItem>
+      {canEdit && (
+        <>
+          <ContextMenuItem onClick={() => onRename?.(item)}>
+            <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onClick={() => onDelete?.(item)} className="text-destructive focus:text-destructive">
+            <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除文件夹')}</ContextMenuItem>
+        </>
+      )}
     </ContextMenuContent>
   );
 
@@ -235,18 +244,23 @@ function TreeNodeRow({
       <ContextMenuItem onClick={() => onCopyRaw?.(item.path)}>
         <Link className="w-3.5 h-3.5 mr-2" />{i18n.t('复制 Raw 链接')}</ContextMenuItem>
       <ContextMenuSeparator />
-      <ContextMenuItem onClick={() => onRename?.(item)}>
-        <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</ContextMenuItem>
-      <ContextMenuItem onClick={() => onMove?.(item)}>
-        <MoveIcon className="w-3.5 h-3.5 mr-2" />{i18n.t('移动到...')}</ContextMenuItem>
+      {canEdit && (
+        <>
+          <ContextMenuItem onClick={() => onRename?.(item)}>
+            <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</ContextMenuItem>
+          <ContextMenuItem onClick={() => onMove?.(item)}>
+            <MoveIcon className="w-3.5 h-3.5 mr-2" />{i18n.t('移动到...')}</ContextMenuItem>
+        </>
+      )}
       <ContextMenuItem onClick={() => onViewHistory?.(item)}>
         <History className="w-3.5 h-3.5 mr-2" />{i18n.t('查看历史')}</ContextMenuItem>
-      <ContextMenuSeparator />
-      <ContextMenuItem
-        onClick={() => onDelete?.(item)}
-        className="text-destructive focus:text-destructive"
-      >
-        <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除文件')}</ContextMenuItem>
+      {canEdit && (
+        <>
+          <ContextMenuSeparator />
+          <ContextMenuItem onClick={() => onDelete?.(item)} className="text-destructive focus:text-destructive">
+            <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除文件')}</ContextMenuItem>
+        </>
+      )}
     </ContextMenuContent>
   );
 
@@ -292,14 +306,16 @@ function TreeNodeRow({
           <span className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
             {isDir ? (
               <>
-                <button
-                  type="button"
-                  className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted/70"
-                  title={i18n.t('新建文件')}
-                  onClick={e => { e.stopPropagation(); onNewFile?.(item.path); }}
-                >
-                  <FilePlus className="w-3 h-3 text-muted-foreground" />
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted/70"
+                    title={i18n.t('新建文件')}
+                    onClick={e => { e.stopPropagation(); onNewFile?.(item.path); }}
+                  >
+                    <FilePlus className="w-3 h-3 text-muted-foreground" />
+                  </button>
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
@@ -311,21 +327,26 @@ function TreeNodeRow({
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">
-                    <DropdownMenuItem onClick={() => onNewFolder?.(item.path)}>
-                      <FolderPlus className="w-3.5 h-3.5 mr-2" />{i18n.t('新建子文件夹')}</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onUpload?.(item.path)}>
-                      <Upload className="w-3.5 h-3.5 mr-2" />{i18n.t('上传文件到此')}</DropdownMenuItem>
-                    <DropdownMenuSeparator />
+                    {canEdit && (
+                      <>
+                        <DropdownMenuItem onClick={() => onNewFolder?.(item.path)}>
+                          <FolderPlus className="w-3.5 h-3.5 mr-2" />{i18n.t('新建子文件夹')}</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onUpload?.(item.path)}>
+                          <Upload className="w-3.5 h-3.5 mr-2" />{i18n.t('上传文件到此')}</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
                     <DropdownMenuItem onClick={() => onCopyPath?.(item.path)}>
                       <ClipboardCopy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制路径')}</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onRename?.(item)}>
-                      <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => onDelete?.(item)}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除')}</DropdownMenuItem>
+                    {canEdit && (
+                      <>
+                        <DropdownMenuItem onClick={() => onRename?.(item)}>
+                          <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => onDelete?.(item)} className="text-destructive focus:text-destructive">
+                          <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除')}</DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </>
@@ -349,17 +370,18 @@ function TreeNodeRow({
                     <ClipboardCopy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制路径')}</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onCopyRaw?.(item.path)}>
                     <Link className="w-3.5 h-3.5 mr-2" />{i18n.t('复制 Raw 链接')}</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onRename?.(item)}>
-                    <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onMove?.(item)}>
-                    <MoveIcon className="w-3.5 h-3.5 mr-2" />{i18n.t('移动到...')}</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => onDelete?.(item)}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除')}</DropdownMenuItem>
+                  {canEdit && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => onRename?.(item)}>
+                        <Pencil className="w-3.5 h-3.5 mr-2" />{i18n.t('重命名')}</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onMove?.(item)}>
+                        <MoveIcon className="w-3.5 h-3.5 mr-2" />{i18n.t('移动到...')}</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => onDelete?.(item)} className="text-destructive focus:text-destructive">
+                        <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除')}</DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -404,6 +426,7 @@ function TreeNodeList({
   repo,
   branch,
   filterText,
+  canEdit,
 }: {
   nodes: TreeNode[];
   depth: number;
@@ -425,6 +448,7 @@ function TreeNodeList({
   repo: string;
   branch: string;
   filterText: string;
+  canEdit: boolean;
 }) {
   return (
     <>
@@ -454,6 +478,7 @@ function TreeNodeList({
               repo={repo}
               branch={branch}
               filterText={filterText}
+              canEdit={canEdit}
             />
             {/* 子节点 */}
             {node.item.type === 'dir' && isExpanded && node.children && node.children.length > 0 && (
@@ -478,6 +503,7 @@ function TreeNodeList({
                 repo={repo}
                 branch={branch}
                 filterText={filterText}
+                canEdit={canEdit}
               />
             )}
             {/* 空文件夹提示 */}
@@ -514,6 +540,7 @@ export default function FileTree({
   onDownload,
   refreshKey,
   className,
+  canEdit = false,
 }: FileTreeProps) {
   const navigate = useNavigate();
 
@@ -764,6 +791,7 @@ export default function FileTree({
               repo={repo}
               branch={branch}
               filterText={searchText}
+              canEdit={canEdit}
             />
           )}
           {rootStatus === 'loaded' && filteredRoots.length === 0 && searchText && (

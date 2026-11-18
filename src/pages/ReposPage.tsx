@@ -90,13 +90,16 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { pageCache } from '@/lib/page-cache';
 import { copyToClipboard } from '@/lib/utils';
 import i18n from "@/i18n";
+import { useAuth } from '@/contexts/AuthContext';
+import { isRepoOwner } from '@/lib/repoPermissions';
 
 // 仓库右键上下文菜单
 // ContextMenu 菜单内容（不含任何弹窗，只触发回调）
-function RepoContextMenu({ repo, onDeleteRequest, onDeleteSuccess }: {
+function RepoContextMenu({ repo, onDeleteRequest, onDeleteSuccess, canDelete }: {
   repo: GitHubRepo;
   onDeleteRequest: () => void;
   onDeleteSuccess: (name: string) => void;
+  canDelete: boolean;
 }) {
   const navigate = useNavigate();
 
@@ -161,12 +164,13 @@ function RepoContextMenu({ repo, onDeleteRequest, onDeleteSuccess }: {
         <a href={repo.html_url} target="_blank" rel="noopener noreferrer">
           <ExternalLink className="w-3.5 h-3.5 mr-2" />{i18n.t('在 GitHub 中打开')}</a>
       </ContextMenuItem>
-      <ContextMenuSeparator className="bg-border" />
-      <ContextMenuItem
-        className="text-destructive cursor-pointer text-sm focus:text-destructive"
-        onClick={onDeleteRequest}
-      >
-        <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除仓库')}</ContextMenuItem>
+      {canDelete && (
+        <>
+          <ContextMenuSeparator className="bg-border" />
+          <ContextMenuItem className="text-destructive cursor-pointer text-sm focus:text-destructive" onClick={onDeleteRequest}>
+            <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除仓库')}</ContextMenuItem>
+        </>
+      )}
     </ContextMenuContent>
   );
 }
@@ -241,7 +245,7 @@ function RepoDeleteDialog({ repo, open, onOpenChange, onDeleteSuccess }: {
 }
 
 // 移动端仓库卡片下拉菜单（补全移动端的右键菜单功能）
-function RepoCardDropdown({ repo, onDeleteRequest, onDeleteSuccess }: { repo: GitHubRepo; onDeleteRequest: () => void; onDeleteSuccess: (name: string) => void }) {
+function RepoCardDropdown({ repo, onDeleteRequest, onDeleteSuccess, canDelete }: { repo: GitHubRepo; onDeleteRequest: () => void; onDeleteSuccess: (name: string) => void; canDelete: boolean }) {
   const navigate = useNavigate();
 
   const handleToggleStar = async () => {
@@ -308,12 +312,13 @@ function RepoCardDropdown({ repo, onDeleteRequest, onDeleteSuccess }: { repo: Gi
              onClick={(e) => e.stopPropagation()}>
             <ExternalLink className="w-3.5 h-3.5 mr-2" />{i18n.t('在 GitHub 中打开')}</a>
         </DropdownMenuItem>
-        <DropdownMenuSeparator className="bg-border" />
-        <DropdownMenuItem
-          className="text-destructive cursor-pointer text-sm focus:text-destructive"
-          onClick={(e) => { e.stopPropagation(); onDeleteRequest(); }}
-        >
-          <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除仓库')}</DropdownMenuItem>
+        {canDelete && (
+          <>
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem className="text-destructive cursor-pointer text-sm focus:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteRequest(); }}>
+              <Trash2 className="w-3.5 h-3.5 mr-2" />{i18n.t('删除仓库')}</DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -321,6 +326,7 @@ function RepoCardDropdown({ repo, onDeleteRequest, onDeleteSuccess }: { repo: Gi
 
 export default function ReposPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -703,6 +709,7 @@ export default function ReposPage() {
                       <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
                         <RepoCardDropdown
                           repo={repo}
+                          canDelete={isRepoOwner(repo.owner.login, user?.login)}
                           onDeleteRequest={() => {
                             // 移动端删除弹窗也统一在 ContextMenu 树之外渲染，避免 React Portal 事件冒泡
                             setDeleteTarget(repo);
@@ -723,6 +730,7 @@ export default function ReposPage() {
                 </ContextMenuTrigger>
                 <RepoContextMenu
                   repo={repo}
+                          canDelete={isRepoOwner(repo.owner.login, user?.login)}
                   onDeleteRequest={() => {
                     // 只设置目标，弹窗在 ContextMenu 树之外渲染
                     setDeleteTarget(repo);

@@ -34,7 +34,8 @@ import {
   disablePages,
   triggerPagesBuild,
   listPagesBuilds,
-  getRepoBranches,
+  getAllBranches,
+  getRepo,
   type GitHubPages,
   type GitHubPagesBuild,
   formatRelativeTime,
@@ -81,19 +82,29 @@ export default function PagesDeployPage() {
     if (!owner || !repo) return;
     Promise.all([
       getPages(owner, repo).catch(() => null),
-      getRepoBranches(owner, repo).catch(() => []),
-    ]).then(([pagesData, branchData]) => {
+      getAllBranches(owner, repo).catch(() => []),
+      getRepo(owner, repo).catch(() => null),
+    ]).then(([pagesData, branchData, repoData]) => {
+      const names = branchData.map((b) => b.name);
+      const preferredBranch = names.includes('main')
+        ? 'main'
+        : repoData?.default_branch || names[0] || 'main';
+      if (!names.includes(preferredBranch)) names.unshift(preferredBranch);
+      if (pagesData?.source && !names.includes(pagesData.source.branch)) names.unshift(pagesData.source.branch);
+      setBranches(names);
       if (pagesData) {
         setPages(pagesData);
         if (pagesData.source) {
           setSelectedBranch(pagesData.source.branch);
           setSelectedDir(pagesData.source.directory === '/docs' ? '/docs' : '/');
+        } else {
+          setSelectedBranch(preferredBranch);
         }
         setCname(pagesData.cname || '');
       } else {
         setNotEnabled(true);
+        setSelectedBranch(preferredBranch);
       }
-      setBranches(branchData.map((b) => b.name));
     }).finally(() => setLoading(false));
   }, [owner, repo]);
 

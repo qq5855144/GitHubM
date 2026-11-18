@@ -31,15 +31,12 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { UserLink } from '@/components/common/UserLink';
 import {
-  createIssue,
   formatRelativeTime,
   getRepoLabels,
   getRepoMilestones,
@@ -69,13 +66,6 @@ export default function IssuesPage() {
   const [milestoneFilter, setMilestoneFilter] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newBody, setNewBody] = useState('');
-  const [newLabels, setNewLabels] = useState('');
-  const [newAssignees, setNewAssignees] = useState('');
-  const [newMilestone, setNewMilestone] = useState('__none');
-  const [creating, setCreating] = useState(false);
 
   const loadIssues = useCallback(async (pageNum = 1, append = false, force = false) => {
     if (!owner || !repo) return;
@@ -134,36 +124,6 @@ export default function IssuesPage() {
       getRepoMilestones(owner, repo).then(setMilestones).catch(console.error);
     }
   }, [loadIssues, owner, repo]);
-  const handleCreateIssue = async () => {
-    if (!owner || !repo) return;
-    if (!newTitle.trim()) {
-      toast.error(i18n.t('请输入 Issue 标题'));
-      return;
-    }
-    setCreating(true);
-    try {
-      await createIssue(owner, repo, {
-        title: newTitle.trim(),
-        body: newBody.trim() || undefined,
-        labels: newLabels.split(',').map(value => value.trim()).filter(Boolean),
-        assignees: newAssignees.split(',').map(value => value.trim()).filter(Boolean),
-        milestone: newMilestone === '__none' ? undefined : Number(newMilestone),
-      });
-      toast.success(i18n.t('Issue 创建成功！'));
-      setCreateDialogOpen(false);
-      setNewTitle('');
-      setNewBody('');
-      setNewLabels('');
-      setNewAssignees('');
-      setNewMilestone('__none');
-      pageCache.invalidate(`issues:${owner}/${repo}:`);
-      loadIssues(1, false, true);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : i18n.t('创建失败'));
-    } finally {
-      setCreating(false);
-    }
-  };
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
@@ -179,76 +139,10 @@ export default function IssuesPage() {
       {/* 页头 */}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-foreground">Issues</h1>
-        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-              <Plus className="w-4 h-4 mr-2" />
-              {i18n.t('新建 Issue')}</Button>
-          </DialogTrigger>
-          <DialogContent aria-describedby={undefined} className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
-            <DialogHeader>
-              <DialogTitle className="text-foreground">{i18n.t('创建 Issue')}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">{i18n.t('标题 *')}</Label>
-                <Input
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder={i18n.t('Issue 标题')}
-                  className="bg-secondary border-border text-foreground placeholder:text-muted-foreground"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">{i18n.t('描述（支持 Markdown）')}</Label>
-                <Textarea
-                  value={newBody}
-                  onChange={(e) => setNewBody(e.target.value)}
-                  placeholder={i18n.t('详细描述问题...')}
-                  className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm"
-                  rows={6}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-sm font-normal text-foreground">{i18n.t('标签（逗号分隔）')}</Label>
-                  <Input value={newLabels} onChange={(e) => setNewLabels(e.target.value)} placeholder={i18n.t('bug, enhancement')} className="bg-secondary border-border text-foreground" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-sm font-normal text-foreground">{i18n.t('负责人（逗号分隔）')}</Label>
-                  <Input value={newAssignees} onChange={(e) => setNewAssignees(e.target.value)} placeholder={i18n.t('负责人用户名')} className="bg-secondary border-border text-foreground" />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-sm font-normal text-foreground">{i18n.t('里程碑')}</Label>
-                <Select value={newMilestone} onValueChange={setNewMilestone}>
-                  <SelectTrigger className="bg-secondary border-border text-foreground"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-popover border-border">
-                    <SelectItem value="__none" className="text-foreground">{i18n.t('无里程碑')}</SelectItem>
-                    {milestones.map((milestone) => (
-                      <SelectItem key={milestone.id} value={String(milestone.number)} className="text-foreground">{milestone.title}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  className="flex-1 border-border hover:bg-secondary"
-                  onClick={() => setCreateDialogOpen(false)}
-                >
-                  {i18n.t('取消')}</Button>
-                <Button
-                  className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={handleCreateIssue}
-                  disabled={creating || !newTitle.trim()}
-                >
-                  {creating ? i18n.t('提交中...') : i18n.t('提交 Issue')}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => navigate(`/repos/${owner}/${repo}/issues/new`)}>
+          <Plus className="w-4 h-4 mr-2" />
+          {i18n.t('新建 Issue')}
+        </Button>
       </div>
 
       {/* 标签列表 */}

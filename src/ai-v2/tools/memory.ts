@@ -14,7 +14,7 @@ export const MEMORY_TOOLS: AgentTool[] = [
       },
       required: ['content'],
     },
-    risk: 'read',
+    risk: 'write',
     async execute(args, ctx) {
       const record = saveMemory(
         ctx.userLogin,

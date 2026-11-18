@@ -8,8 +8,13 @@ import {
   saveSessionMessages,
 } from '@/ai-v2/sessionStore';
 import type { V2ProviderMessage } from '@/ai-v2/types';
+import { MEMORY_TOOLS } from '@/ai-v2/tools/memory';
 
 describe('AI memory budget', () => {
+  it('requires approval for memory writes', () => {
+    const saveTool = MEMORY_TOOLS.find(tool => tool.name === 'memory_save');
+    expect(saveTool?.risk).toBe('write');
+  });
   describe('snapshot compaction', () => {
     const buildMessages = (rounds: number): V2ProviderMessage[] => {
       const messages: V2ProviderMessage[] = [{ role: 'system', content: 'sys' }];

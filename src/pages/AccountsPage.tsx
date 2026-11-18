@@ -453,7 +453,7 @@ export default function AccountsPage() {
               <DialogHeader>
                 <DialogTitle className="text-foreground">{i18n.t('添加 GitHub 账号')}</DialogTitle>
                 <DialogDescription className="text-muted-foreground text-xs">
-                  {i18n.t('Token 仅保存在本机浏览器存储中，不会上传到任何第三方服务器。')}
+                  {i18n.t('Token 仅保存在本机：Android 使用系统 Keystore 加密，Web 使用浏览器存储；不会上传到任何第三方服务器。')}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-2">

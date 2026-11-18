@@ -272,6 +272,33 @@ class MainActivity : AppCompatActivity() {
     inner class WebAppBridge {
 
         /** React 首屏就绪后调用，与 3s 最小时间共同触发启动遮罩淡出 */
+        /**
+         * Token 安全存储：Android Keystore 加密后写入私有 SharedPreferences。
+         * 前端通过 src/lib/secureStorage.ts 读写，Web 端仍回退 localStorage。
+         */
+        @JavascriptInterface
+        fun secureGet(key: String): String? = try {
+            SecureStore.get(this@MainActivity, key)
+        } catch (_: Exception) {
+            null
+        }
+
+        @JavascriptInterface
+        fun secureSet(key: String, value: String): Boolean = try {
+            SecureStore.put(this@MainActivity, key, value)
+        } catch (_: Exception) {
+            false
+        }
+
+        @JavascriptInterface
+        fun secureRemove(key: String) {
+            try {
+                SecureStore.remove(this@MainActivity, key)
+            } catch (_: Exception) {
+                // ignore
+            }
+        }
+
         @JavascriptInterface
         fun notifyReady() {
             webViewReadyReceived = true

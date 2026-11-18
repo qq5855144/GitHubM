@@ -214,7 +214,7 @@ npx wrangler deploy
 ┌───────▼──────────┐   ┌────────▼────────────────┐
 │  api.github.com  │   │  LLM Provider / MCP     │
 └──────────────────┘   └─────────────────────────┘
-        ▲ 无中转服务器，Token 仅存本机 localStorage
+        ▲ 无中转服务器；Android Token 由 Keystore 加密保存
 ```
 
 ---
@@ -463,7 +463,7 @@ tag v* ────► tauri-build（三平台桌面安装包）
 
 ## 隐私与安全
 
-- **GitHub Token** 仅存于本机 localStorage，所有请求直连 `api.github.com`，不经过任何第三方服务器
+- **GitHub Token** 仅存本机：Android 使用 Android Keystore 加密后写入私有 SharedPreferences，Web 端回退 localStorage；所有请求直连 `api.github.com`，不经过任何第三方服务器
 - **模型 API Key** 同样仅本地保存；默认只发送到模型官方域名，不经过第三方。只有在设置中手动填写代理地址时，请求才会经该代理转发（代理不记录请求体与 Authorization）
 - **访问统计** 完全本地计算 PV / UV，无上报
 - **代码安全**：`check_security` 工具与 `auto_review` 规则会扫描硬编码密钥、`eval`、SQL 注入、XSS 等常见风险

@@ -26,6 +26,7 @@ import type {
   SortDirection,
 } from '@/types/types';
 import i18n from "@/i18n";
+import { createHttpError, fetchWithResilience } from '@/services/github/http';
 
 const BASE_URL = 'https://api.github.com';
 
@@ -259,10 +260,10 @@ async function request<T>(
     //    但 cacheKey 始终用干净 URL，确保时间戳不污染内存缓存键。
     const fetchUrl = consumeCacheBust(url);
     return getOrCreateInFlight<T>(cacheKey, async () => {
-      const response = await fetch(fetchUrl, {
+      const response = await fetchWithResilience(fetchUrl, {
         ...options,
         headers: { ...buildHeaders(), ...options.headers },
-      });
+      }, method);
       if (!response.ok) {
         let errorMessage = `HTTP ${response.status}`;
         try {
@@ -286,10 +287,10 @@ async function request<T>(
   }
 
   // 非 GET 请求：直接发出，完成后失效相关缓存前缀
-  const response = await fetch(url, {
+  const response = await fetchWithResilience(url, {
     ...options,
     headers: { ...buildHeaders(), ...options.headers },
-  });
+  }, method);
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}`;
     try {
@@ -345,10 +346,10 @@ async function requestWithPagination<T>(
     // 2. In-flight 合并（fetchUrl 可能附加 _t 绕过 GitHub CDN 强制缓存）
     const fetchUrl = consumeCacheBust(url);
     return getOrCreateInFlight<{ data: T[]; hasNextPage: boolean }>(cacheKey, async () => {
-      const response = await fetch(fetchUrl, {
+      const response = await fetchWithResilience(fetchUrl, {
         ...options,
         headers: { ...buildHeaders(), ...options.headers },
-      });
+      }, method);
       if (!response.ok) {
         let errorMessage = `HTTP ${response.status}`;
         try {
@@ -374,10 +375,10 @@ async function requestWithPagination<T>(
   }
 
   // 非 GET 分页请求（极少见，直接发出）
-  const response = await fetch(url, {
+  const response = await fetchWithResilience(url, {
     ...options,
     headers: { ...buildHeaders(), ...options.headers },
-  });
+  }, method);
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}`;
     try {

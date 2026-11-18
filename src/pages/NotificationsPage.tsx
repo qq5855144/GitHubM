@@ -28,6 +28,7 @@ import {
 import type { GitHubNotification } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
+import { publishNotificationUnread } from '@/lib/notificationBadge';
 import i18n from "@/i18n";
 
 export default function NotificationsPage() {
@@ -37,6 +38,10 @@ export default function NotificationsPage() {
   const [showAll, setShowAll] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!loading) publishNotificationUnread(notifications.some((item) => item.unread));
+  }, [notifications, loading]);
 
   const loadNotifications = useCallback(async (force = false) => {
     const cacheKey = `notifications:${showAll}`;

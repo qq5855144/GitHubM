@@ -110,7 +110,9 @@ export function compactProviderMessages(
   }
 
   if (!compacted) {
-    compacted = [...systemPrefix, ...body.slice(-8)];
+    let start = Math.max(0, body.length - 8);
+    while (start < body.length && body[start].role === 'tool') start += 1;
+    compacted = [...systemPrefix, ...body.slice(start)];
   }
 
   const overBudget = (items: V2ProviderMessage[]) =>
@@ -128,6 +130,13 @@ export function compactProviderMessages(
     compacted.splice(start, end - start);
   }
 
+  // 兜底清理：任何压缩路径都不能让请求以孤儿 tool 消息开头。
+  const firstBodyIndex = compacted.findIndex(item => item.role !== 'system');
+  if (firstBodyIndex >= 0) {
+    let start = firstBodyIndex;
+    while (start < compacted.length && compacted[start].role === 'tool') start += 1;
+    if (start > firstBodyIndex) compacted.splice(firstBodyIndex, start - firstBodyIndex);
+  }
   // 最后一个用户消息本身仍然过大时，截断非系统消息正文。
   return compacted.map(item => {
     if (item.role === 'tool' && typeof item.content === 'string' && estimateTokens(item.content) > 1500) {

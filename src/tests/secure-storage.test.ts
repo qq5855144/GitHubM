@@ -53,6 +53,26 @@ describe('secureStorage', () => {
     expect(getSecureItem('token')).toBe('legacy-token');
   });
 
+  it('refuses plaintext fallback when the native bridge write fails', () => {
+    setBridge({
+      secureGet: () => null,
+      secureSet: () => false,
+      secureRemove: () => undefined,
+    });
+    expect(() => setSecureItem('token', 'secret-token')).toThrow('安全存储不可用');
+    expect(localStorage.getItem('token')).toBeNull();
+  });
+  it('does not read a legacy plaintext value when the native bridge read fails', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    setBridge({
+      secureGet: () => { throw new Error('keystore broken'); },
+      secureSet: () => false,
+      secureRemove: () => undefined,
+    });
+    localStorage.setItem('token', 'legacy-plaintext');
+    expect(getSecureItem('token')).toBeNull();
+    errorSpy.mockRestore();
+  });
   it('writes through the bridge and keeps localStorage empty', () => {
     const store = new Map<string, string>();
     setBridge({

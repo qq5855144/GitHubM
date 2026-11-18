@@ -20,7 +20,7 @@ if [ -z "$useauth_output" ]; then
     exit 0
 fi
 
-authprovider_output=$(ast-grep scan -r .rules/authProvider.yml 2>/dev/null)
+authprovider_output=$(ast-grep scan -r .rules/authProvider.yml src/App.tsx 2>/dev/null)
 
 if [ -n "$authprovider_output" ]; then
     exit 0

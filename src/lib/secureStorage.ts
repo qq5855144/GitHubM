@@ -34,8 +34,10 @@ export function getSecureItem(key: string): string | null {
         return legacy;
       }
       return null;
-    } catch {
-      // 原生存储异常时回退 Web 行为
+    } catch (error) {
+      // Android 端读取失败时不能回退明文，否则会破坏安全存储承诺。
+      console.error('[secureStorage] 原生安全存储读取失败', error);
+      return null;
     }
   }
   try {
@@ -48,14 +50,17 @@ export function getSecureItem(key: string): string | null {
 export function setSecureItem(key: string, value: string): void {
   const bridge = getBridge();
   if (bridge?.secureSet) {
+    let saved = false;
     try {
-      if (bridge.secureSet(key, value)) {
-        localStorage.removeItem(key);
-        return;
-      }
-    } catch {
-      // fall through to localStorage
+      saved = bridge.secureSet(key, value);
+    } catch (error) {
+      console.error('[secureStorage] 原生安全存储写入失败', error);
     }
+    if (!saved) {
+      throw new Error('安全存储不可用，已拒绝将敏感信息写入明文存储');
+    }
+    localStorage.removeItem(key);
+    return;
   }
   try {
     localStorage.setItem(key, value);

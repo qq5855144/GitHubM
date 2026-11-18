@@ -82,6 +82,11 @@ jobs:
       - name: 安装依赖
         run: pnpm install
 
+      - name: 代码质量检查
+        run: |
+          npx biome lint
+          npx tsgo -p tsconfig.check.json
+          pnpm test
       - name: 构建 Web 应用（注入版本号）
         run: |
           # 注入版本号

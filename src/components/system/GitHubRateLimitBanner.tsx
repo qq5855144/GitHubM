@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Loader2 } from 'lucide-react';
 import i18n from '@/i18n';
 import {
+  cancelRateLimitWait,
   getRateLimitStatus,
   subscribeRateLimitStatus,
 } from '@/lib/githubRateLimitStatus';
@@ -44,6 +45,13 @@ export function GitHubRateLimitBanner() {
           {i18n.t('第 {{count}} 次等待', { count: status.attempt })}
         </span>
       )}
+      <button
+        type="button"
+        onClick={cancelRateLimitWait}
+        className="rounded-full border border-amber-600/30 px-2 py-0.5 text-[10px] font-semibold text-amber-900 hover:bg-amber-500/15 dark:text-amber-100"
+      >
+        {i18n.t('取消等待')}
+      </button>
     </div>
   );
 }

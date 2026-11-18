@@ -202,7 +202,11 @@ function invalidateCacheForMutation(url: string, method: string): void {
     invalidateAndBust(cleanPath);               // checkStarred 精确 key
   }
 
-  // 11. /repos/:owner/:repo/actions — 工作流触发/取消
+  // 11. /notifications — 已读/删除后失效通知列表与未读徽标
+  if (cleanPath.startsWith('/notifications')) {
+    invalidateAndBust('/notifications');
+  }
+  // 12. /repos/:owner/:repo/actions — 工作流触发/取消
   const actionsMatch = cleanPath.match(/^(\/repos\/[^/]+\/[^/]+\/actions)/);
   if (actionsMatch) {
     invalidateAndBust(actionsMatch[1]);

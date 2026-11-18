@@ -11,6 +11,7 @@ export interface GitHubRateLimitWaitState {
 let activeWaits = 0;
 let until = 0;
 let attempt = 0;
+let waitController = new AbortController();
 let snapshot: GitHubRateLimitWaitState = { active: false, until: 0, attempt: 0 };
 const listeners = new Set<() => void>();
 
@@ -19,11 +20,12 @@ function emit() {
   for (const listener of listeners) listener();
 }
 
-export function beginRateLimitWait(target: number, attemptNumber: number): void {
+export function beginRateLimitWait(target: number, attemptNumber: number): AbortSignal {
   activeWaits += 1;
   until = Math.max(until, target);
   attempt = Math.max(attempt, attemptNumber);
   emit();
+  return waitController.signal;
 }
 
 export function endRateLimitWait(): void {
@@ -33,6 +35,17 @@ export function endRateLimitWait(): void {
     attempt = 0;
   }
   emit();
+}
+
+/** 用户主动取消所有正在等待配额的请求。 */
+export function cancelRateLimitWait(): void {
+  const current = waitController;
+  activeWaits = 0;
+  until = 0;
+  attempt = 0;
+  waitController = new AbortController();
+  emit();
+  current.abort();
 }
 
 export function subscribeRateLimitStatus(listener: () => void): () => void {
@@ -45,8 +58,11 @@ export function getRateLimitStatus(): GitHubRateLimitWaitState {
 }
 
 export function resetRateLimitStatus(): void {
+  const current = waitController;
   activeWaits = 0;
   until = 0;
   attempt = 0;
+  waitController = new AbortController();
   emit();
+  current.abort();
 }

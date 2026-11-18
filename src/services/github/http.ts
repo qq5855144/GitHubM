@@ -14,6 +14,7 @@ type GitHubRequestError = Error & {
 };
 const MAX_RATE_LIMIT_WAIT_MS = 65 * 60 * 1000;
 const MAX_RATE_LIMIT_RETRIES = 8;
+const REQUEST_TIMEOUT_MS = 30_000;
 
 function sleepWithSignal(ms: number, signal?: AbortSignal | null): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -31,6 +32,57 @@ function sleepWithSignal(ms: number, signal?: AbortSignal | null): Promise<void>
     };
     signal?.addEventListener('abort', onAbort, { once: true });
   });
+}
+
+function combineSignals(signals: Array<AbortSignal | null | undefined>): {
+  signal: AbortSignal;
+  cleanup: () => void;
+} {
+  const controller = new AbortController();
+  const cleanups: Array<() => void> = [];
+  for (const source of signals) {
+    if (!source) continue;
+    if (source.aborted) {
+      controller.abort();
+      break;
+    }
+    const onAbort = () => controller.abort();
+    source.addEventListener('abort', onAbort, { once: true });
+    cleanups.push(() => source.removeEventListener('abort', onAbort));
+  }
+  return { signal: controller.signal, cleanup: () => cleanups.forEach(done => done()) };
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const external = init.signal;
+  const onExternalAbort = () => controller.abort();
+  if (external) {
+    if (external.aborted) controller.abort();
+    else external.addEventListener('abort', onExternalAbort, { once: true });
+  }
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (timedOut) {
+      const timeoutError = new Error(`请求超时（${Math.round(timeoutMs / 1000)} 秒）`);
+      timeoutError.name = 'TimeoutError';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    external?.removeEventListener('abort', onExternalAbort);
+  }
 }
 
 function parseRetryAfter(value: string | null): number | undefined {
@@ -81,10 +133,11 @@ export async function fetchWithResilience(
   while (true) {
     let response: Response;
     try {
-      response = await fetch(url, init);
+      response = await fetchWithTimeout(url, init);
     } catch (error) {
-      // 弱网下的短暂失败只对幂等 GET 重试；AbortError 不重试。
-      if (method === 'GET' && !init.signal?.aborted && attempt < 2) {
+      // 弱网下的短暂失败只对幂等 GET 重试；超时与主动取消不重试。
+      if (method === 'GET' && !init.signal?.aborted && error instanceof Error
+        && error.name !== 'TimeoutError' && attempt < 2) {
         await sleepWithSignal(300 * 3 ** attempt, init.signal);
         attempt += 1;
         continue;
@@ -100,10 +153,17 @@ export async function fetchWithResilience(
         MAX_RATE_LIMIT_WAIT_MS,
         Math.max(1_000, (error.retryAt ?? Date.now() + 60_000) - Date.now()),
       );
-      beginRateLimitWait(error.retryAt ?? Date.now() + waitMs, attempt + 1);
+      const waitSignal = beginRateLimitWait(error.retryAt ?? Date.now() + waitMs, attempt + 1);
+      const combined = combineSignals([init.signal, waitSignal]);
       try {
-        await sleepWithSignal(waitMs, init.signal);
+        await sleepWithSignal(waitMs, combined.signal);
+      } catch (error) {
+        if (waitSignal.aborted && !init.signal?.aborted) {
+          throw new Error('已取消 GitHub 配额等待');
+        }
+        throw error;
       } finally {
+        combined.cleanup();
         endRateLimitWait();
       }
       attempt += 1;

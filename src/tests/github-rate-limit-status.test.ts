@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   beginRateLimitWait,
+  cancelRateLimitWait,
   endRateLimitWait,
   getRateLimitStatus,
   resetRateLimitStatus,
@@ -20,6 +21,16 @@ describe('GitHub rate-limit status', () => {
     expect(getRateLimitStatus()).toMatchObject({ active: false, until: 0, attempt: 0 });
   });
 
+  it('cancels all waiters and resets state', () => {
+    const first = beginRateLimitWait(2_000, 1);
+    const second = beginRateLimitWait(3_000, 2);
+    expect(first.aborted).toBe(false);
+    expect(second.aborted).toBe(false);
+    cancelRateLimitWait();
+    expect(first.aborted).toBe(true);
+    expect(second.aborted).toBe(true);
+    expect(getRateLimitStatus()).toMatchObject({ active: false, until: 0, attempt: 0 });
+  });
   it('notifies subscribers', () => {
     const listener = vi.fn();
     const unsubscribe = subscribeRateLimitStatus(listener);

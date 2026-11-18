@@ -113,15 +113,19 @@ export default function NotificationsPage() {
   /** 点击通知：自动标为已读并跳转到对应页面 */
   const handleNotificationClick = async (notification: GitHubNotification) => {
     if (notification.unread) {
-      // 乐观更新 UI，再执行 API 调用
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notification.id ? { ...n, unread: false } : n))
-      );
+      const cacheKey = `notifications:${showAll}`;
+      // 乐观更新 UI，同时写回列表缓存，避免返回时又显示未读。
+      setNotifications((prev) => {
+        const updated = prev.map((n) => (n.id === notification.id ? { ...n, unread: false } : n));
+        pageCache.set(cacheKey, updated, 2 * 60 * 1000);
+        return updated;
+      });
       markNotificationRead(notification.id).catch(() => {
-        // 回滚
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === notification.id ? { ...n, unread: true } : n))
-        );
+        setNotifications((prev) => {
+          const rollback = prev.map((n) => (n.id === notification.id ? { ...n, unread: true } : n));
+          pageCache.set(cacheKey, rollback, 2 * 60 * 1000);
+          return rollback;
+        });
       });
     }
     const route = resolveNotificationRoute(notification);

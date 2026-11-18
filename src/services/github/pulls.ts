@@ -37,6 +37,24 @@ export async function getPullRequests(
   );
 }
 
+/** 创建 Pull Request（同仓库分支）。 */
+export async function createPullRequest(
+  owner: string,
+  repo: string,
+  params: { title: string; head: string; base: string; body?: string; draft?: boolean }
+): Promise<GitHubPullRequest> {
+  return request<GitHubPullRequest>(`/repos/${owner}/${repo}/pulls`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: params.title,
+      head: params.head,
+      base: params.base,
+      body: params.body ?? '',
+      draft: params.draft ?? false,
+    }),
+  });
+}
+
 export async function getPullRequest(
   owner: string,
   repo: string,

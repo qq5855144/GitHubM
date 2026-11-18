@@ -323,7 +323,7 @@ pnpm dev            # 启动开发服务器 http://localhost:5173
 | `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | 若使用 Supabase 相关能力时配置 |
 | `VITE_APP_VERSION` | 由 CI 注入，格式 `1.0.<run_number>`；本地开发为 `undefined` |
 
-AI 模型的 API Key 不放在 `.env`，而是登录后在**设置 → AI 配置**中填写，仅保存到本机 localStorage。
+AI 模型的 API Key 不放在 `.env`，而是登录后在**设置 → AI 配置**中填写：Android 端由系统 Keystore 加密保存，Web 端回退 localStorage。
 
 ---
 

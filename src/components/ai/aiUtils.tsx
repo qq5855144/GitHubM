@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import i18n from "@/i18n";
+import { getSecureItem, setSecureItem, removeSecureItem } from '@/lib/secureStorage';
 
 // ── 模型类型（从 aiTypes 导入，在此仅重导出供外部使用）──────────────────────────────
 export type { ModelType };
@@ -207,14 +208,14 @@ export function modelDisplayName(label?: string): string {
 
 export function loadModelConfig(): ModelConfig {
   try {
-    const raw = localStorage.getItem(MODEL_CONFIG_KEY);
+    const raw = getSecureItem(MODEL_CONFIG_KEY);
     if (raw) {
       const cfg = JSON.parse(raw) as ModelConfig;
       // 旧版本曾把内置代理写进配置。该代理域名可能停止维护，
       // 这里一次性迁移为直连；用户手动填写的其他代理地址不受影响。
       if (cfg?.proxy_url && cfg.proxy_url.trim().replace(/\/+$/, '') === LEGACY_DEFAULT_PROXY) {
         const { proxy_url: _legacyProxy, ...rest } = cfg;
-        try { localStorage.setItem(MODEL_CONFIG_KEY, JSON.stringify(rest)); } catch { /* ignore */ }
+        try { setSecureItem(MODEL_CONFIG_KEY, JSON.stringify(rest)); } catch { /* ignore */ }
         return rest;
       }
       // 旧版本「文心」平台内置免费通道已随后端移除：
@@ -229,26 +230,26 @@ export function loadModelConfig(): ModelConfig {
 }
 
 export function saveModelConfig(cfg: ModelConfig): void {
-  localStorage.setItem(MODEL_CONFIG_KEY, JSON.stringify(cfg));
+  setSecureItem(MODEL_CONFIG_KEY, JSON.stringify(cfg));
   // 同步更新独立 key 存储，保持两者一致
   if (cfg.api_key && cfg.type !== 'wenxin') {
-    localStorage.setItem(`ai_api_key_${cfg.type}`, cfg.api_key);
+    setSecureItem(`ai_api_key_${cfg.type}`, cfg.api_key);
   }
 }
 
 /** 加载指定平台独立存储的 API Key */
 export function loadProviderKey(type: ModelType): string {
   try {
-    return localStorage.getItem(`ai_api_key_${type}`) ?? '';
+    return getSecureItem(`ai_api_key_${type}`) ?? '';
   } catch { return ''; }
 }
 
 /** 保存指定平台独立存储的 API Key，并在该平台为当前活跃模型时同步更新 modelConfig */
 export function saveProviderKey(type: ModelType, key: string): void {
   if (key.trim()) {
-    localStorage.setItem(`ai_api_key_${type}`, key.trim());
+    setSecureItem(`ai_api_key_${type}`, key.trim());
   } else {
-    localStorage.removeItem(`ai_api_key_${type}`);
+    removeSecureItem(`ai_api_key_${type}`);
   }
   // 若该平台正是当前活跃模型，同步更新 modelConfig 中的 api_key
   const current = loadModelConfig();

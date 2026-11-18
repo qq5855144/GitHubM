@@ -28,6 +28,7 @@ import {
 import type { GitHubNotification } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
+import { publishNotificationUnread } from '@/lib/notificationBadge';
 import i18n from "@/i18n";
 
 export default function NotificationsPage() {
@@ -37,6 +38,10 @@ export default function NotificationsPage() {
   const [showAll, setShowAll] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!loading) publishNotificationUnread(notifications.some((item) => item.unread));
+  }, [notifications, loading]);
 
   const loadNotifications = useCallback(async (force = false) => {
     const cacheKey = `notifications:${showAll}`;
@@ -261,18 +266,18 @@ export default function NotificationsPage() {
       </div>
 
       {/* 通知列表 */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="space-y-2">
         {loading ? (
-          <div className="divide-y divide-border">
+          <div className="space-y-2">
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="p-4">
+              <div key={i} className="bg-card border border-border rounded-xl p-4">
                 <Skeleton className="h-5 w-3/4 bg-muted mb-2" />
                 <Skeleton className="h-4 w-1/3 bg-muted" />
               </div>
             ))}
           </div>
         ) : notifications.length === 0 ? (
-          <div className="py-16 text-center">
+          <div className="bg-card border border-border rounded-xl py-16 text-center">
             <BellOff className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
             <p className="text-foreground font-medium">{i18n.t('暂无通知')}</p>
             <p className="text-muted-foreground text-sm mt-1">
@@ -280,11 +285,11 @@ export default function NotificationsPage() {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="space-y-2">
             {notifications.map((notification) => (
               <div
                 key={notification.id}
-                className={`p-4 transition-colors cursor-pointer ${notification.unread ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-secondary/50'}`}
+                className={`rounded-xl border p-4 transition-colors cursor-pointer ${notification.unread ? 'border-primary/30 bg-primary/5 hover:bg-primary/10' : 'border-border bg-card hover:bg-secondary/40'}`}
                 onClick={() => handleNotificationClick(notification)}
               >
                 <div className="flex items-start gap-3">

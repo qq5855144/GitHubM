@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { downloadGithubFile, isDownloadProxyEnabled } from '@/lib/githubDownload';
+import { getSecureItem } from '@/lib/secureStorage';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import i18n from '@/i18n';
@@ -150,7 +151,7 @@ export default function LaunchUpdateChecker() {
     if (!updateInfo?.downloadUrl) return;
     setDownloading(true);
     const filename = updateInfo.downloadUrl.split('/').pop() || `github-manager-v${updateInfo.version}.apk`;
-    const authToken = token || localStorage.getItem('github_manager_token') || '';
+    const authToken = token || getSecureItem('github_manager_token') || '';
     const bridge = (window as unknown as { AndroidBridge?: AndroidUpdateBridge }).AndroidBridge;
 
     try {

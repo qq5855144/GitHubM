@@ -51,6 +51,7 @@ import { getProviderStats, getTotalRequestCount, clearAllUsage, type ProviderSta
 import AgentDiagnosticsPanel from '@/components/ai/AgentDiagnosticsPanel';
 import { formatCostUsd, getModelPrice, SOURCES } from '@/components/ai/modelPricing';
 import { fetchVisitStats, type DailyStats, type VisitSummary, type VisitStatsSource } from '@/lib/visitStats';
+import { getSecureItem } from '@/lib/secureStorage';
 import {
   DEFAULT_DOWNLOAD_PROXY_URL,
   downloadGithubFile,
@@ -1358,7 +1359,7 @@ export default function SettingsPage() {
                     onClick={async (e) => {
                       e.preventDefault();
                       const filename = updateInfo.downloadUrl.split('/').pop() || 'update.apk';
-                      const token = localStorage.getItem('github_manager_token') || '';
+                      const token = getSecureItem('github_manager_token') || '';
                       const bridge = (window as unknown as { AndroidBridge?: { downloadFile?: (u: string, f: string, t: string) => void } }).AndroidBridge;
 
                       // 开启全局代理时，应用更新也复用自动测速/最快代理

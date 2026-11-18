@@ -60,3 +60,4 @@ package.json.[0-9]*
 worker/.wrangler/
 worker/.dev.vars
 worker/node_modules/
+coverage/

@@ -37,13 +37,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -68,16 +61,11 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import {
   getUserRepos,
-  createRepo,
   formatRelativeTime,
   formatNumber,
   getLanguageColor,
-  getGitignoreTemplates,
-  getLicenses,
   starRepo,
   unstarRepo,
   checkStarred,
@@ -337,22 +325,10 @@ export default function ReposPage() {
   const [sortField, setSortField] = useState<RepoSortField>('pushed');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [typeFilter, setTypeFilter] = useState<'all' | 'owner' | 'member' | 'public' | 'private'>('all');
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   // 删除弹窗状态：在 ContextMenu 树之外统一管理，避免 React Portal 事件冒泡触发 ContextMenu
   const [deleteTarget, setDeleteTarget] = useState<GitHubRepo | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-  // 创建仓库表单
-  const [newRepoName, setNewRepoName] = useState('');
-  const [newRepoDesc, setNewRepoDesc] = useState('');
-  const [newRepoPrivate, setNewRepoPrivate] = useState(false);
-  const [newRepoAutoInit, setNewRepoAutoInit] = useState(true);
-  const [newRepoGitignore, setNewRepoGitignore] = useState('');
-  const [newRepoLicense, setNewRepoLicense] = useState('');
-  const [gitignoreTemplates, setGitignoreTemplates] = useState<string[]>([]);
-  const [licenses, setLicenses] = useState<Array<{ key: string; name: string }>>([]);
-  const [creating, setCreating] = useState(false);
 
   const loadRepos = useCallback(async (pageNum = 1, append = false, force = false) => {
     if (pageNum === 1) setLoading(true);
@@ -401,55 +377,12 @@ export default function ReposPage() {
     loadRepos(1, false);
   }, [loadRepos]);
 
-  // 加载创建仓库所需数据
-  useEffect(() => {
-    if (!createDialogOpen) return;
-    Promise.all([getGitignoreTemplates(), getLicenses()])
-      .then(([templates, licenseList]) => {
-        setGitignoreTemplates(templates);
-        setLicenses(licenseList);
-      })
-      .catch(console.error);
-  }, [createDialogOpen]);
-
   const filteredRepos = repos.filter((repo) =>
     debouncedSearch
       ? repo.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
         (repo.description || '').toLowerCase().includes(debouncedSearch.toLowerCase())
       : true
   );
-
-  const handleCreateRepo = async () => {
-    if (!newRepoName.trim()) {
-      toast.error(i18n.t('请输入仓库名称'));
-      return;
-    }
-    setCreating(true);
-    try {
-      const newRepo = await createRepo({
-        name: newRepoName.trim(),
-        description: newRepoDesc.trim() || undefined,
-        private: newRepoPrivate,
-        auto_init: newRepoAutoInit,
-        gitignore_template: newRepoGitignore || undefined,
-        license_template: newRepoLicense || undefined,
-      });
-      toast.success(`仓库 ${newRepo.name} 创建成功！`);
-      setCreateDialogOpen(false);
-      setNewRepoName('');
-      setNewRepoDesc('');
-      setNewRepoPrivate(false);
-      setNewRepoAutoInit(true);
-      setNewRepoGitignore('');
-      setNewRepoLicense('');
-      pageCache.invalidate('repos:'); // 创建后使仓库列表缓存失效
-      loadRepos(1, false, true);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : i18n.t('创建仓库失败'));
-    } finally {
-      setCreating(false);
-    }
-  };
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
@@ -468,102 +401,11 @@ export default function ReposPage() {
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-                <Plus className="w-4 h-4 mr-2" />
-                <span className="hidden md:inline">{i18n.t('新建仓库')}</span>
-                <span className="md:hidden">{i18n.t('新建')}</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
-              <DialogHeader>
-                <DialogTitle className="text-foreground">{i18n.t('创建新仓库')}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-2">
-                <div className="space-y-1">
-                  <Label className="text-sm font-normal text-foreground">{i18n.t('仓库名称 *')}</Label>
-                  <Input
-                    value={newRepoName}
-                    onChange={(e) => setNewRepoName(e.target.value)}
-                    placeholder="my-awesome-project"
-                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-sm font-normal text-foreground">{i18n.t('描述（可选）')}</Label>
-                  <Textarea
-                    value={newRepoDesc}
-                    onChange={(e) => setNewRepoDesc(e.target.value)}
-                    placeholder={i18n.t('项目简介...')}
-                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none"
-                    rows={2}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-normal text-foreground">{i18n.t('私有仓库')}</Label>
-                    <p className="text-xs text-muted-foreground">{i18n.t('只有您有权访问此仓库')}</p>
-                  </div>
-                  <Switch checked={newRepoPrivate} onCheckedChange={setNewRepoPrivate} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-normal text-foreground">{i18n.t('初始化 README')}</Label>
-                    <p className="text-xs text-muted-foreground">{i18n.t('自动创建 README 文件')}</p>
-                  </div>
-                  <Switch checked={newRepoAutoInit} onCheckedChange={setNewRepoAutoInit} />
-                </div>
-                {newRepoAutoInit && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-normal text-foreground">{i18n.t('.gitignore 模板')}</Label>
-                      <Select value={newRepoGitignore} onValueChange={setNewRepoGitignore}>
-                        <SelectTrigger className="bg-secondary border-border text-foreground h-9">
-                          <SelectValue placeholder={i18n.t('选择模板')} />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover border-border max-h-48">
-                          <SelectItem value="none" className="text-foreground">{i18n.t('无')}</SelectItem>
-                          {gitignoreTemplates.map((t) => (
-                            <SelectItem key={t} value={t} className="text-foreground">{t}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-sm font-normal text-foreground">{i18n.t('许可证')}</Label>
-                      <Select value={newRepoLicense} onValueChange={setNewRepoLicense}>
-                        <SelectTrigger className="bg-secondary border-border text-foreground h-9">
-                          <SelectValue placeholder={i18n.t('选择许可证')} />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover border-border max-h-48">
-                          <SelectItem value="none" className="text-foreground">{i18n.t('无')}</SelectItem>
-                          {licenses.map((l) => (
-                            <SelectItem key={l.key} value={l.key} className="text-foreground">{l.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                )}
-                <div className="flex gap-3 pt-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1 border-border hover:bg-secondary"
-                    onClick={() => setCreateDialogOpen(false)}
-                  >
-                    {i18n.t('取消')}</Button>
-                  <Button
-                    className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
-                    onClick={handleCreateRepo}
-                    disabled={creating || !newRepoName.trim()}
-                  >
-                    {creating ? i18n.t('创建中...') : i18n.t('创建仓库')}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => navigate('/repos/new')}>
+              <Plus className="w-4 h-4 mr-2" />
+              <span className="hidden md:inline">{i18n.t('新建仓库')}</span>
+              <span className="md:hidden">{i18n.t('新建')}</span>
+            </Button>
         </div>
       </div>
 

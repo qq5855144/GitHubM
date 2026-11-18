@@ -7,10 +7,13 @@ import i18n from '@/i18n';
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const ReposPage = lazy(() => import('./pages/ReposPage'));
+const NewRepoPage = lazy(() => import('./pages/NewRepoPage'));
 const RepoDetailPage = lazy(() => import('./pages/RepoDetailPage'));
 const IssuesPage = lazy(() => import('./pages/IssuesPage'));
+const NewIssuePage = lazy(() => import('./pages/NewIssuePage'));
 const IssueDetailPage = lazy(() => import('./pages/IssueDetailPage'));
 const PullsPage = lazy(() => import('./pages/PullsPage'));
+const NewPullPage = lazy(() => import('./pages/NewPullPage'));
 const PullDetailPage = lazy(() => import('./pages/PullDetailPage'));
 const CodeBrowserPage = lazy(() => import('./pages/CodeBrowserPage'));
 const CommitsPage = lazy(() => import('./pages/CommitsPage'));
@@ -78,10 +81,13 @@ export const routes: RouteConfig[] = [
   // 受保护路由
   { nameKey: '首页', path: '/', element: page(<DashboardPage />) },
   { nameKey: '仓库列表', path: '/repos', element: page(<ReposPage />) },
+  { nameKey: '新建仓库', path: '/repos/new', element: page(<NewRepoPage />), visible: false },
   { nameKey: '仓库详情', path: '/repos/:owner/:repo', element: page(<RepoDetailPage />) },
   { nameKey: 'Issues', path: '/repos/:owner/:repo/issues', element: page(<IssuesPage />) },
+  { nameKey: '新建 Issue', path: '/repos/:owner/:repo/issues/new', element: page(<NewIssuePage />), visible: false },
   { nameKey: 'Issue 详情', path: '/repos/:owner/:repo/issues/:number', element: page(<IssueDetailPage />) },
   { nameKey: 'Pull Requests', path: '/repos/:owner/:repo/pulls', element: page(<PullsPage />) },
+  { nameKey: '新建 PR', path: '/repos/:owner/:repo/pulls/new', element: page(<NewPullPage />), visible: false },
   { nameKey: 'PR 详情', path: '/repos/:owner/:repo/pulls/:number', element: page(<PullDetailPage />) },
   { nameKey: 'PR Diff', path: '/repos/:owner/:repo/pulls/:number/diff', element: page(<PrDiffPage />) },
   { nameKey: '代码浏览', path: '/repos/:owner/:repo/code/*', element: page(<CodeBrowserPage />) },

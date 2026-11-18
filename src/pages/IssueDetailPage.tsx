@@ -296,49 +296,35 @@ export default function IssueDetailPage() {
       {/* Issue 标题 */}
       <div className="space-y-2">
         <div className="flex items-start gap-3">
-          <div className={`mt-1 shrink-0 ${issue.state === 'open' ? 'text-primary' : 'text-muted-foreground'}`}>
+          <div className={`mt-0.5 shrink-0 ${issue.state === 'open' ? 'text-primary' : 'text-muted-foreground'}`}>
             {issue.state === 'open' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
           </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold text-foreground text-balance">
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <h1 className="text-lg md:text-2xl font-bold text-foreground leading-snug break-words">
               {issue.title}
-              <span className="text-muted-foreground font-normal ml-2">#{issue.number}</span>
+              <span className="text-muted-foreground font-normal ml-1.5 text-base">#{issue.number}</span>
             </h1>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <Badge
-                variant="outline"
-                className={`text-xs ${issue.state === 'open' ? 'border-primary text-primary' : 'border-muted-foreground text-muted-foreground'}`}
-              >
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className={`text-xs ${issue.state === 'open' ? 'border-primary text-primary' : 'border-muted-foreground text-muted-foreground'}`}>
                 {issue.state === 'open' ? i18n.t('开放') : i18n.t('已关闭')}
               </Badge>
-              <span className="text-sm text-muted-foreground">
-                {issue.user.login} {i18n.t('于')}{formatRelativeTime(issue.created_at)} {i18n.t('创建 ·')}{issue.comments} {i18n.t('条评论')}</span>
+              <span className="text-xs sm:text-sm text-muted-foreground">
+                {issue.user.login} {i18n.t('于')}{formatRelativeTime(issue.created_at)} {i18n.t('创建 ·')}{issue.comments} {i18n.t('条评论')}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={openEditIssue}>
+                <Edit2 className="w-3 h-3 mr-1" />{i18n.t('编辑')}
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={openManageIssue}>
+                <Tag className="w-3 h-3 mr-1" />{i18n.t('管理')}
+              </Button>
+              <Button variant="outline" size="sm" className={`h-7 text-xs border-border ${issue.state === 'open' ? 'text-foreground hover:bg-secondary' : 'text-primary hover:bg-secondary'}`} onClick={handleToggleState} disabled={toggling}>
+                {issue.state === 'open' ? (<><X className="w-3 h-3 mr-1" />{i18n.t('关闭')}</>) : (<><Check className="w-3 h-3 mr-1" />{i18n.t('重新打开')}</>)}
+              </Button>
             </div>
           </div>
-          {/* 操作按钮 */}
-          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-            <Button variant="ghost" size="sm" className="h-8 text-muted-foreground" onClick={openEditIssue} title={i18n.t('编辑标题和正文')}>
-              <Edit2 className="w-3.5 h-3.5 mr-1" />{i18n.t('编辑')}
-            </Button>
-            <Button variant="ghost" size="sm" className="h-8 text-muted-foreground" onClick={openManageIssue} title={i18n.t('标签、负责人、里程碑')}>
-              <Tag className="w-3.5 h-3.5 mr-1" />{i18n.t('管理')}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className={`border-border h-8 ${issue.state === 'open' ? 'text-foreground hover:bg-secondary' : 'text-primary hover:bg-secondary'}`}
-              onClick={handleToggleState}
-              disabled={toggling}
-            >
-              {issue.state === 'open' ? (
-                <><X className="w-3.5 h-3.5 mr-1" />{i18n.t('关闭')}</>
-              ) : (
-                <><Check className="w-3.5 h-3.5 mr-1" />{i18n.t('重新打开')}</>
-              )}
-            </Button>
-          </div>
         </div>
-
         {/* 标签 */}
         {issue.labels.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap ml-8">

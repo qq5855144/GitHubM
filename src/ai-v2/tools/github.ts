@@ -1,6 +1,7 @@
 // AI Assistant V2 — GitHub 只读工具包（按需加载）
 import type { AgentTool, RepoContext, ToolRunResult, ToolRuntimeContext } from '../types';
 import { isTextFilePath } from '../attachments';
+import { fetchWithResilience } from '@/services/github/http';
 
 const API = 'https://api.github.com';
 
@@ -24,7 +25,7 @@ async function githubFetch(
   accept = 'application/vnd.github+json',
   init: Pick<RequestInit, 'method' | 'body'> = {},
 ): Promise<unknown> {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetchWithResilience(`${API}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${ctx.token}`,
@@ -33,18 +34,8 @@ async function githubFetch(
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
     },
     signal: ctx.signal,
-  });
+  }, init.method ?? 'GET');
   const text = await res.text();
-  if (!res.ok) {
-    let detail = text;
-    try {
-      const json = JSON.parse(text) as { message?: string };
-      detail = json.message || text;
-    } catch {
-      // ignore
-    }
-    throw new Error(`GitHub HTTP ${res.status}: ${detail.slice(0, 300)}`);
-  }
   return text ? JSON.parse(text) : null;
 }
 

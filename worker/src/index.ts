@@ -37,7 +37,7 @@ interface ProfileAchievement {
 }
 
 const RATE_WINDOW_MS = 30 * 60 * 1000;
-const MAX_SUMMARY_DAYS = 90;
+const MAX_SUMMARY_DAYS = 3650;
 const MAX_EXPORT_DAYS = 3650;
 const AUTH_CACHE_SECONDS = 600;
 const ACHIEVEMENT_CACHE_MS = 6 * 60 * 60 * 1000;
@@ -135,7 +135,7 @@ async function authenticate(request: Request): Promise<GitHubUser | null> {
         new Response(JSON.stringify(user), {
           headers: {
             'Content-Type': 'application/json',
-            'Cache-Control': `max-age=${AUTH_CACHE_SECONDS}`,
+            'Cache-Control': `private, max-age=${AUTH_CACHE_SECONDS}`,
           },
         }),
       );

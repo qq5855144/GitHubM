@@ -49,6 +49,7 @@ import type {
 import MarkdownRenderer from '@/components/common/MarkdownRenderer';
 import { UserLink } from '@/components/common/UserLink';
 import { useAuth } from '@/contexts/AuthContext';
+import { isRepoOwner } from '@/lib/repoPermissions';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -123,6 +124,7 @@ export default function PullDetailPage() {
   const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const canManage = isRepoOwner(owner, user?.login);
   const [pr, setPr] = useState<GitHubPullRequest | null>(null);
   const [comments, setComments] = useState<GitHubComment[]>([]);
   const [files, setFiles] = useState<GitHubFile[]>([]);
@@ -318,7 +320,7 @@ export default function PullDetailPage() {
       {!reviewsLoading && <ReviewDecisionBanner decision={reviewDecision} />}
 
       {/* 操作按钮 */}
-      {pr.state === 'open' && (
+      {canManage && pr.state === 'open' && (
         <div className="flex flex-wrap gap-3 bg-card border border-border rounded-lg p-4">
           {!pr.merged && pr.state === 'open' && (
             <>
@@ -343,7 +345,7 @@ export default function PullDetailPage() {
         </div>
       )}
 
-      {pr.state === 'closed' && !pr.merged && (
+      {canManage && pr.state === 'closed' && !pr.merged && (
         <div className="flex gap-3 bg-card border border-border rounded-lg p-4">
           <Button
             variant="outline"

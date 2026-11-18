@@ -116,6 +116,8 @@ import { parse as parseYaml } from 'yaml';
 import { buildActionsFailurePrompt } from '@/lib/actionsAiPrompt';
 import { setAiTaskHandoff } from '@/lib/aiTaskHandoff';
 import i18n from "@/i18n";
+import { useAuth } from "@/contexts/AuthContext";
+import { isRepoOwner } from "@/lib/repoPermissions";
 
 function RunStatusBadge({ status, conclusion }: { status: string | null; conclusion: string | null }) {
   if (status === 'in_progress' || status === 'queued' || status === 'waiting') {
@@ -589,6 +591,7 @@ function JobItem({
   repo,
   branch,
   onRerun,
+  canRerun,
   isRerunning,
 }: {
   job: GitHubWorkflowJob;
@@ -596,6 +599,7 @@ function JobItem({
   repo: string;
   branch?: string;
   onRerun: (job: GitHubWorkflowJob) => void;
+  canRerun: boolean;
   isRerunning: boolean;
 }) {
   const [open, setOpen] = useState(job.conclusion === 'failure' || job.conclusion === 'timed_out');
@@ -643,7 +647,7 @@ function JobItem({
               {showLogs ? i18n.t('收起日志') : i18n.t('查看日志')}
               {isRunning && <span className="text-warning text-[10px]">{i18n.t('● 实时')}</span>}
             </Button>
-            {job.status === 'completed' && (
+            {canRerun && job.status === 'completed' && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -691,6 +695,8 @@ function RunDetail({
   onRunUpdate: (run: GitHubWorkflowRun) => void;
   onRefreshList: () => void;
 }) {
+  const { user } = useAuth();
+  const canManage = isRepoOwner(owner, user?.login);
   const [liveRun, setLiveRun] = useState<GitHubWorkflowRun>(run);
   const [jobs, setJobs] = useState<GitHubWorkflowJob[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
@@ -857,7 +863,7 @@ function RunDetail({
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
-            {isRunning && (
+            {canManage && isRunning && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -868,7 +874,7 @@ function RunDetail({
                 {i18n.t('取消运行')}
               </Button>
             )}
-            {isFailed && (
+            {canManage && isFailed && (
               <Button
                 size="sm"
                 className="bg-primary text-primary-foreground hover:bg-primary/90 h-8"
@@ -879,7 +885,7 @@ function RunDetail({
                 {rerunning === 'failed' ? i18n.t('触发中...') : i18n.t('重跑失败项')}
               </Button>
             )}
-            {liveRun.status === 'completed' && (
+            {canManage && liveRun.status === 'completed' && (
               <Button
                 size="sm"
                 variant="outline"
@@ -968,6 +974,7 @@ function RunDetail({
               repo={repo}
               branch={liveRun.head_branch || ''}
               onRerun={handleRerunJob}
+              canRerun={canManage}
               isRerunning={rerunningJobId === job.id}
             />
           ))}
@@ -1043,6 +1050,8 @@ function RunDetail({
 
 export default function ActionsPage() {
   const { owner, repo, runId } = useParams<{ owner: string; repo: string; runId?: string }>();
+  const { user } = useAuth();
+  const canManage = isRepoOwner(owner, user?.login);
   const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<GitHubWorkflow[]>([]);
   const [runs, setRuns] = useState<GitHubWorkflowRun[]>([]);
@@ -1388,7 +1397,7 @@ export default function ActionsPage() {
             {selectedRun ? i18n.t('Actions 运行详情') : i18n.t('Actions 工作流')}
           </h1>
         </div>
-        {!selectedRun && (
+        {canManage && !selectedRun && (
           <div className="flex items-center gap-2 shrink-0">
             <Button
               variant="outline"

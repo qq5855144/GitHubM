@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 import type { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
+import RepoOwnerGate from './components/repo/RepoOwnerGate';
 import i18n from '@/i18n';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -88,11 +89,11 @@ export const routes: RouteConfig[] = [
   { nameKey: '提交历史', path: '/repos/:owner/:repo/commits', element: page(<CommitsPage />) },
   { nameKey: '提交详情', path: '/repos/:owner/:repo/commits/:sha', element: page(<CommitDetailPage />) },
   { nameKey: '分支管理', path: '/repos/:owner/:repo/branches', element: page(<BranchesPage />) },
-  { nameKey: '协作者', path: '/repos/:owner/:repo/collaborators', element: page(<CollaboratorsPage />) },
+  { nameKey: '协作者', path: '/repos/:owner/:repo/collaborators', element: page(<RepoOwnerGate><CollaboratorsPage /></RepoOwnerGate>) },
   // 新增仓库子功能
   { nameKey: 'Actions', path: '/repos/:owner/:repo/actions', element: page(<ActionsPage />) },
   { nameKey: 'Actions 运行详情', path: '/repos/:owner/:repo/actions/runs/:runId', element: page(<ActionsPage />) },
-  { nameKey: 'Actions 密钥与变量', path: '/repos/:owner/:repo/actions/secrets', element: page(<ActionsSecretsPage />) },
+  { nameKey: 'Actions 密钥与变量', path: '/repos/:owner/:repo/actions/secrets', element: page(<RepoOwnerGate><ActionsSecretsPage /></RepoOwnerGate>) },
   { nameKey: 'Packages', path: '/repos/:owner/:repo/packages', element: page(<PackagesPage />) },
   { nameKey: 'Projects', path: '/repos/:owner/:repo/projects', element: page(<ProjectsPage />) },
   { nameKey: 'Discussions', path: '/repos/:owner/:repo/discussions', element: page(<DiscussionsPage />) },
@@ -110,8 +111,8 @@ export const routes: RouteConfig[] = [
   { nameKey: 'Packages', path: '/packages', element: page(<PackagesPage />) },
   { nameKey: '账号管理', path: '/accounts', element: page(<AccountsPage />) },
   { nameKey: '数据导出', path: '/export', element: page(<ExportPage />) },
-  { nameKey: '批量上传', path: '/repos/:owner/:repo/upload', element: page(<UploadPage />) },
-  { nameKey: 'Pages 部署', path: '/repos/:owner/:repo/pages', element: page(<PagesDeployPage />) },
+  { nameKey: '批量上传', path: '/repos/:owner/:repo/upload', element: page(<RepoOwnerGate><UploadPage /></RepoOwnerGate>) },
+  { nameKey: 'Pages 部署', path: '/repos/:owner/:repo/pages', element: page(<RepoOwnerGate><PagesDeployPage /></RepoOwnerGate>) },
   { nameKey: '仓库产物', path: '/repos/:owner/:repo/artifacts', element: page(<ArtifactsPage />) },
   { nameKey: '仓库 Forks', path: '/repos/:owner/:repo/forks', element: page(<RepoForksPage />) },
   { nameKey: '仓库收藏者', path: '/repos/:owner/:repo/stargazers', element: page(<StargazersPage />) },

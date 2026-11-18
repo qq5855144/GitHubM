@@ -73,6 +73,8 @@ import { toast } from 'sonner';
 import { downloadGithubFile, isDownloadProxyEnabled } from '@/lib/githubDownload';
 import { copyToClipboard } from '@/lib/utils';
 import i18n from "@/i18n";
+import { useAuth } from "@/contexts/AuthContext";
+import { isRepoOwner } from "@/lib/repoPermissions";
 
 interface ReleasePublishResultDetail {
   success: boolean;
@@ -189,9 +191,11 @@ function AssetItem({ asset }: { asset: GitHubReleaseAsset }) {
 function ReleaseItem({
   release,
   onDelete,
+  canManage,
 }: {
   release: GitHubRelease;
   onDelete: (id: number) => void;
+  canManage: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -246,7 +250,7 @@ function ReleaseItem({
         <Button
           variant="ghost"
           size="sm"
-          className={`${CARD_ACTION_BUTTON_CLASS} hover:text-destructive hover:bg-destructive/10`}
+          className={`${CARD_ACTION_BUTTON_CLASS} hover:text-destructive hover:bg-destructive/10 ${canManage ? '' : 'hidden'}`}
           onClick={() => onDelete(release.id)}
           title={i18n.t('删除 Release')}
         >
@@ -418,6 +422,8 @@ function ArtifactDownloadButton({ art, owner, repo }: { art: GitHubArtifact; own
 
 export default function ArtifactsPage() {
   const { owner, repo } = useParams<{ owner: string; repo: string }>();
+  const { user } = useAuth();
+  const canManage = isRepoOwner(owner, user?.login);
   const navigate = useNavigate();
   const [releases, setReleases] = useState<GitHubRelease[]>([]);
   const [artifacts, setArtifacts] = useState<GitHubArtifact[]>([]);
@@ -671,7 +677,7 @@ export default function ArtifactsPage() {
             <div className="space-y-2">
               {releases.map((rel) => (
                 <div key={rel.id} className="bg-card border border-border rounded-xl overflow-hidden">
-                  <ReleaseItem release={rel} onDelete={setDeleteRelTarget} />
+                  <ReleaseItem release={rel} onDelete={setDeleteRelTarget} canManage={canManage} />
                 </div>
               ))}
             </div>
@@ -728,7 +734,7 @@ export default function ArtifactsPage() {
                     {!art.expired && (
                       <ArtifactDownloadButton art={art} owner={owner ?? ''} repo={repo ?? ''} />
                     )}
-                    {!art.expired && (
+                    {canManage && !art.expired && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -743,7 +749,7 @@ export default function ArtifactsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className={`${CARD_ACTION_BUTTON_CLASS} hover:text-destructive hover:bg-destructive/10`}
+                      className={`${CARD_ACTION_BUTTON_CLASS} hover:text-destructive hover:bg-destructive/10 ${canManage ? '' : 'hidden'}`}
                       onClick={() => setDeleteArtTarget(art.id)}
                       title={i18n.t('删除')}
                     >

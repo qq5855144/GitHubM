@@ -55,6 +55,7 @@ import type { GitHubIssue, GitHubComment, GitHubLabel, GitHubMilestone, GitHubUs
 import MarkdownRenderer from '@/components/common/MarkdownRenderer';
 import { UserLink } from '@/components/common/UserLink';
 import { useAuth } from '@/contexts/AuthContext';
+import { isRepoOwner } from '@/lib/repoPermissions';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
 import i18n from "@/i18n";
@@ -63,6 +64,7 @@ export default function IssueDetailPage() {
   const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const canManage = isRepoOwner(owner, user?.login);
   const [issue, setIssue] = useState<GitHubIssue | null>(null);
   const [comments, setComments] = useState<GitHubComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -312,6 +314,7 @@ export default function IssueDetailPage() {
                 {issue.user.login} {i18n.t('于')}{formatRelativeTime(issue.created_at)} {i18n.t('创建 ·')}{issue.comments} {i18n.t('条评论')}
               </span>
             </div>
+            {canManage && (
             <div className="flex flex-wrap items-center gap-1.5">
               <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={openEditIssue}>
                 <Edit2 className="w-3 h-3 mr-1" />{i18n.t('编辑')}
@@ -323,6 +326,7 @@ export default function IssueDetailPage() {
                 {issue.state === 'open' ? (<><X className="w-3 h-3 mr-1" />{i18n.t('关闭')}</>) : (<><Check className="w-3 h-3 mr-1" />{i18n.t('重新打开')}</>)}
               </Button>
             </div>
+            )}
           </div>
         </div>
         {/* 标签 */}

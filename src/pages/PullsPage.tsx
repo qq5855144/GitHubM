@@ -198,7 +198,7 @@ export default function PullsPage() {
         </Button>
       </div>
       <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setBranchQuery(''); }}>
-        <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border max-h-[85vh] overflow-y-auto" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="text-foreground">{i18n.t('创建 Pull Request')}</DialogTitle>
           </DialogHeader>

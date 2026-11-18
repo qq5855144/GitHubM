@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearApiCache, getCurrentUser, setToken } from '@/services/github';
+import { buildCacheKey, clearApiCache, getCurrentUser, getUserByLogin, setCached, setToken } from '@/services/github';
 
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -40,6 +40,21 @@ describe('GitHub request resilience', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('revalidates with If-None-Match and serves the cached body on 304', async () => {
+    vi.useFakeTimers();
+    const url = 'https://api.github.com/users/octocat';
+    setCached(buildCacheKey(url), { login: 'cached-user' }, 'etag-1');
+    vi.advanceTimersByTime(31_000);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, {
+      status: 304,
+      headers: { etag: 'etag-1' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getUserByLogin('octocat')).resolves.toMatchObject({ login: 'cached-user' });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['If-None-Match']).toBe('etag-1');
+  });
   it('does not retry a plain permission 403', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(
       { message: 'Resource not accessible by integration' },

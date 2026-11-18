@@ -27,6 +27,7 @@ import type {
 } from '@/types/types';
 import i18n from "@/i18n";
 import { createHttpError, fetchWithResilience } from '@/services/github/http';
+export { formatRelativeTime, formatNumber, getLanguageColor } from '@/services/github/format';
 
 const BASE_URL = 'https://api.github.com';
 
@@ -43,9 +44,12 @@ let authToken: string | null = null;
 interface CacheEntry<T> {
   data: T;
   expireAt: number; // ms 时间戳
+  etag?: string;
+  lastUsed: number;
 }
 const apiCache = new Map<string, CacheEntry<unknown>>();
 const CACHE_TTL_MS = 30_000; // 30s
+const MAX_CACHE_ENTRIES = 300;
 
 /**
  * 需要打时间戳绕过 GitHub CDN 强制缓存（60s）的 URL 前缀集合。
@@ -58,22 +62,54 @@ export function buildCacheKey(url: string): string {
   return `${authToken ?? ''}|${url}`;
 }
 
-/** 读取缓存，过期自动删除并返回 null */
+/** 读取缓存；过期但带 ETag 的条目保留，用于条件请求 */
 export function getCached<T>(key: string): T | null {
   const entry = apiCache.get(key) as CacheEntry<T> | undefined;
   if (!entry) return null;
   if (Date.now() > entry.expireAt) {
-    apiCache.delete(key);
+    if (!entry.etag) apiCache.delete(key);
     return null;
   }
+  entry.lastUsed = Date.now();
   return entry.data;
 }
-
-/** 写入缓存 */
-export function setCached<T>(key: string, data: T): void {
-  apiCache.set(key, { data, expireAt: Date.now() + CACHE_TTL_MS });
+/** 读取原始缓存条目（用于 If-None-Match 条件请求） */
+export function getCacheEntry<T>(key: string): CacheEntry<T> | undefined {
+  return apiCache.get(key) as CacheEntry<T> | undefined;
 }
-
+/** 命中 304 后延长缓存寿命 */
+export function touchCached(key: string, ttl = CACHE_TTL_MS): void {
+  const entry = apiCache.get(key);
+  if (!entry) return;
+  entry.expireAt = Date.now() + ttl;
+  entry.lastUsed = Date.now();
+}
+/** 写入缓存；超过上限时淘汰最久未使用的一条 */
+export function setCached<T>(key: string, data: T, etag?: string, ttl = CACHE_TTL_MS): void {
+  if (apiCache.has(key)) apiCache.delete(key);
+  if (apiCache.size >= MAX_CACHE_ENTRIES) {
+    let oldestKey: string | undefined;
+    let oldestUsed = Number.POSITIVE_INFINITY;
+    for (const [candidate, entry] of apiCache) {
+      if (entry.lastUsed < oldestUsed) {
+        oldestUsed = entry.lastUsed;
+        oldestKey = candidate;
+      }
+    }
+    if (oldestKey !== undefined) apiCache.delete(oldestKey);
+  }
+  const now = Date.now();
+  apiCache.set(key, { data, expireAt: now + ttl, etag, lastUsed: now });
+}
+/** 按端点设置缓存 TTL，降低高频接口的配额消耗 */
+function cacheTtlForUrl(url: string): number {
+  const path = url.startsWith(BASE_URL) ? url.slice(BASE_URL.length) : url;
+  if (/^\/user(\?|$)/.test(path)) return 5 * 60_000;
+  if (path.includes('/contents/')) return 60_000;
+  if (path.includes('/actions/')) return 5_000;
+  if (path.startsWith('/rate_limit')) return 10_000;
+  return CACHE_TTL_MS;
+}
 /** 主动失效包含指定前缀的所有缓存（写操作后调用） */
 export function invalidateCache(urlPrefix: string): void {
   for (const key of apiCache.keys()) {
@@ -220,7 +256,10 @@ export function getOrCreateInFlight<T>(key: string, factory: () => Promise<T>): 
 
 export function setToken(token: string | null) {
   // token 变更（退出登录）时清空所有缓存，防止旧用户数据泄露
-  if (token !== authToken) clearApiCache();
+  if (token !== authToken) {
+    clearApiCache();
+    inFlightMap.clear();
+  }
   authToken = token;
 }
 
@@ -250,8 +289,8 @@ async function request<T>(
 
   if (method === 'GET') {
     const cacheKey = buildCacheKey(url);
-
     // 1. TTL 缓存命中：直接返回，不发网络请求
+    const entry = getCacheEntry<T>(cacheKey);
     const cached = getCached<T>(cacheKey);
     if (cached !== null) return cached;
 
@@ -260,10 +299,19 @@ async function request<T>(
     //    但 cacheKey 始终用干净 URL，确保时间戳不污染内存缓存键。
     const fetchUrl = consumeCacheBust(url);
     return getOrCreateInFlight<T>(cacheKey, async () => {
+      const headers: Record<string, string> = {
+        ...(buildHeaders() as Record<string, string>),
+        ...(options.headers as Record<string, string> | undefined),
+      };
+      if (entry?.etag) headers['If-None-Match'] = entry.etag;
       const response = await fetchWithResilience(fetchUrl, {
         ...options,
-        headers: { ...buildHeaders(), ...options.headers },
+        headers,
       }, method);
+      if (response.status === 304 && entry) {
+        touchCached(cacheKey, cacheTtlForUrl(url));
+        return entry.data;
+      }
       if (!response.ok) {
         let errorMessage = `HTTP ${response.status}`;
         try {
@@ -281,7 +329,7 @@ async function request<T>(
       }
       if (response.status === 204) return undefined as T;
       const data = await response.json() as T;
-      setCached(cacheKey, data);
+      setCached(cacheKey, data, response.headers.get('etag') ?? undefined, cacheTtlForUrl(url));
       return data;
     });
   }
@@ -338,18 +386,27 @@ async function requestWithPagination<T>(
 
   if (method === 'GET') {
     const cacheKey = buildCacheKey(url);
-
     // 1. TTL 缓存命中
+    const entry = getCacheEntry<{ data: T[]; hasNextPage: boolean }>(cacheKey);
     const cached = getCached<{ data: T[]; hasNextPage: boolean }>(cacheKey);
     if (cached !== null) return cached;
 
     // 2. In-flight 合并（fetchUrl 可能附加 _t 绕过 GitHub CDN 强制缓存）
     const fetchUrl = consumeCacheBust(url);
     return getOrCreateInFlight<{ data: T[]; hasNextPage: boolean }>(cacheKey, async () => {
+      const headers: Record<string, string> = {
+        ...(buildHeaders() as Record<string, string>),
+        ...(options.headers as Record<string, string> | undefined),
+      };
+      if (entry?.etag) headers['If-None-Match'] = entry.etag;
       const response = await fetchWithResilience(fetchUrl, {
         ...options,
-        headers: { ...buildHeaders(), ...options.headers },
+        headers,
       }, method);
+      if (response.status === 304 && entry) {
+        touchCached(cacheKey, cacheTtlForUrl(url));
+        return entry.data;
+      }
       if (!response.ok) {
         let errorMessage = `HTTP ${response.status}`;
         try {
@@ -369,11 +426,10 @@ async function requestWithPagination<T>(
       const linkHeader = response.headers.get('Link');
       const links = linkHeader ? parseLinkHeader(linkHeader) : {};
       const result = { data, hasNextPage: !!links.next };
-      setCached(cacheKey, result);
+      setCached(cacheKey, result, response.headers.get('etag') ?? undefined, cacheTtlForUrl(url));
       return result;
     });
   }
-
   // 非 GET 分页请求（极少见，直接发出）
   const response = await fetchWithResilience(url, {
     ...options,
@@ -1751,63 +1807,6 @@ export async function getLicenses(): Promise<Array<{ key: string; name: string; 
 }
 
 // ===== 格式化工具 =====
-
-export function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  const months = Math.floor(days / 30);
-  const years = Math.floor(days / 365);
-
-  if (seconds < 60) return i18n.t('刚刚');
-  if (minutes < 60) return `${minutes} 分钟前`;
-  if (hours < 24) return `${hours} 小时前`;
-  if (days < 30) return `${days} 天前`;
-  if (months < 12) return `${months} 个月前`;
-  return `${years} 年前`;
-}
-
-export function formatNumber(num: number): string {
-  if (num >= 1000) {
-    return `${(num / 1000).toFixed(1)}k`;
-  }
-  return String(num);
-}
-
-export function getLanguageColor(language: string): string {
-  const colors: Record<string, string> = {
-    TypeScript: '#3178c6',
-    JavaScript: '#f1e05a',
-    Python: '#3572A5',
-    Java: '#b07219',
-    Go: '#00ADD8',
-    Rust: '#dea584',
-    C: '#555555',
-    'C++': '#f34b7d',
-    'C#': '#178600',
-    Ruby: '#701516',
-    PHP: '#4F5D95',
-    Swift: '#F05138',
-    Kotlin: '#A97BFF',
-    Dart: '#00B4AB',
-    Shell: '#89e051',
-    HTML: '#e34c26',
-    CSS: '#563d7c',
-    Vue: '#41b883',
-    Svelte: '#ff3e00',
-    Scala: '#c22d40',
-    Elixir: '#6e4a7e',
-    Haskell: '#5e5086',
-    Lua: '#000080',
-    MATLAB: '#e16737',
-    R: '#198CE7',
-  };
-  return colors[language] || '#6b7280';
-}
 
 // ===== GitHub Pages API =====
 

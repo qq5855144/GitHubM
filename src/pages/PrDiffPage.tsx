@@ -100,7 +100,8 @@ function groupCommentsByLine(comments: GitHubComment[]): Map<string, LineComment
     const raw = c as unknown as Record<string, unknown>;
     const path = (raw['path'] as string) ?? '';
     const line = (raw['line'] as number) ?? (raw['original_line'] as number) ?? 0;
-    const key = `${path}:${line}`;
+    const side = raw['side'] === 'LEFT' ? 'LEFT' : 'RIGHT';
+    const key = `${path}:${side}:${line}`;
     if (!map.has(key)) map.set(key, { path, line, comments: [] });
     map.get(key)!.comments.push(c);
   }
@@ -187,7 +188,7 @@ function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onC
 
   const lines = parsePatch(file.patch);
 
-  const handleAddComment = async (body: string, lineNum: number) => {
+  const handleAddComment = async (body: string, lineNum: number, side: 'LEFT' | 'RIGHT') => {
     if (!owner || !repo) return;
     try {
       const comment = await createPullRequestReviewComment(owner, repo, pullNumber, {
@@ -195,7 +196,7 @@ function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onC
         commit_id: prHead,
         path: file.filename,
         line: lineNum,
-        side: 'RIGHT',
+        side,
       });
       onCommentAdded(comment, file.filename, lineNum);
       setActiveCommentLine(null);
@@ -211,8 +212,9 @@ function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onC
       <table className="w-full min-w-max text-xs font-mono border-collapse">
         <tbody>
           {collapsed ? null : lines.map((line, idx) => {
-            const lineNum = line.lineNew ?? line.lineOld ?? 0;
-            const commentKey = `${file.filename}:${lineNum}`;
+            const side: 'LEFT' | 'RIGHT' = line.type === 'remove' ? 'LEFT' : 'RIGHT';
+            const lineNum = side === 'RIGHT' ? (line.lineNew ?? 0) : (line.lineOld ?? 0);
+            const commentKey = `${file.filename}:${side}:${lineNum}`;
             const group = commentGroups.get(commentKey);
             const isCommentActive = activeCommentLine === idx;
 
@@ -284,7 +286,7 @@ function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onC
                 {isCommentActive && (
                   <InlineCommentInput
                     key={`input-${idx}`}
-                    onSubmit={(body) => handleAddComment(body, lineNum)}
+                    onSubmit={(body) => handleAddComment(body, lineNum, side)}
                     onCancel={() => setActiveCommentLine(null)}
                   />
                 )}

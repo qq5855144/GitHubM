@@ -350,7 +350,17 @@ export async function downloadRepoDirectoryZip(params: {
   const basePrefix = prefix ? `${prefix}/` : '';
   const blobs = tree.tree.filter(item => item.type === 'blob' && (!basePrefix || item.path.startsWith(basePrefix)));
   if (blobs.length === 0) throw new Error('目录为空或不存在');
+  if (!prefix) {
+    // 整个仓库：直接用 GitHub zipball 交给原生流式下载，避免在 WebView 内构造整包 ZIP。
+    const zipballUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/${encodeURIComponent(branch)}`;
+    await downloadGithubFile(zipballUrl, `${repo}.zip`, token);
+    return;
+  }
   if (blobs.length > 300) throw new Error(`目录包含 ${blobs.length} 个文件，超过单次下载上限（300）`);
+  const totalBytes = blobs.reduce((sum, item) => sum + (item.size || 0), 0);
+  if (totalBytes > 40 * 1024 * 1024) {
+    throw new Error(`目录总大小约 ${(totalBytes / 1024 / 1024).toFixed(1)} MB，超过 40 MB 安全上限；请缩小下载范围`);
+  }
 
   const entries: Record<string, Uint8Array> = {};
   let done = 0;

@@ -26,6 +26,24 @@ describe('directory ZIP download', () => {
     vi.restoreAllMocks();
   });
 
+  it('streams a whole-repository zipball through the native downloader', async () => {
+    const downloadFile = vi.fn();
+    (window as unknown as { AndroidBridge?: { downloadFile: typeof downloadFile } }).AndroidBridge = {
+      downloadFile,
+    };
+    await downloadRepoDirectoryZip({
+      owner: 'owner',
+      repo: 'repo',
+      branch: 'main',
+      directory: '',
+      token: 'token',
+    });
+    expect(downloadFile).toHaveBeenCalledTimes(1);
+    const [url, filename, token] = downloadFile.mock.calls[0];
+    expect(url).toContain('/repos/owner/repo/zipball/main');
+    expect(filename).toBe('repo.zip');
+    expect(token).toBe('token');
+  });
   it('passes non-empty ZIP data to the Android bridge instead of revoking a blob URL', async () => {
     const saveBlobData = vi.fn();
     (window as unknown as { AndroidBridge?: { saveBlobData: typeof saveBlobData } }).AndroidBridge = {

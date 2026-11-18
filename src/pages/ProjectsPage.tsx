@@ -48,13 +48,17 @@ import {
 import type { GitHubProject, GitHubProjectColumn, GitHubProjectCard } from '@/types/types';
 import { toast } from 'sonner';
 import i18n from "@/i18n";
+import { useAuth } from "@/contexts/AuthContext";
+import { isRepoOwner } from "@/lib/repoPermissions";
 
 function KanbanColumn({
   column,
   onAddCard,
+  canManage,
 }: {
   column: GitHubProjectColumn & { cards: GitHubProjectCard[] };
   onAddCard: (columnId: number, note: string) => Promise<void>;
+  canManage: boolean;
 }) {
   const [addOpen, setAddOpen] = useState(false);
   const [note, setNote] = useState('');
@@ -87,7 +91,7 @@ function KanbanColumn({
           </div>
         ))}
       </div>
-      <div className="p-2 border-t border-border">
+      <div className={`p-2 border-t border-border ${canManage ? '' : 'hidden'}`}>
         {addOpen ? (
           <div className="space-y-2">
             <Textarea
@@ -117,6 +121,8 @@ function KanbanColumn({
 
 export default function ProjectsPage() {
   const { owner, repo } = useParams<{ owner: string; repo: string }>();
+  const { user } = useAuth();
+  const canManage = isRepoOwner(owner, user?.login);
   const navigate = useNavigate();
   const [projects, setProjects] = useState<GitHubProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<GitHubProject | null>(null);
@@ -237,7 +243,7 @@ export default function ProjectsPage() {
           {i18n.t('项目看板')}</h1>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+            <Button className={`bg-primary text-primary-foreground hover:bg-primary/90 ${canManage ? '' : 'hidden'}`}>
               <Plus className="w-4 h-4 mr-2" />{i18n.t('新建看板')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-md bg-card border-border">
@@ -287,7 +293,7 @@ export default function ProjectsPage() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="w-7 h-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                    className={`w-7 h-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 ${canManage ? '' : 'hidden'}`}
                     onClick={(e) => { e.stopPropagation(); setDeleteTarget(proj.id); }}
                     title={i18n.t('删除')}
                   >
@@ -320,10 +326,10 @@ export default function ProjectsPage() {
               </div>
               <div className="flex gap-3 overflow-x-auto pb-3">
                 {columns.map((col) => (
-                  <KanbanColumn key={col.id} column={col} onAddCard={handleAddCard} />
+                  <KanbanColumn key={col.id} column={col} onAddCard={handleAddCard} canManage={canManage} />
                 ))}
                 {/* 添加列 */}
-                <div className="min-w-60 shrink-0">
+                <div className={`min-w-60 shrink-0 ${canManage ? '' : 'hidden'}`}>
                   {addColOpen ? (
                     <div className="bg-secondary/50 border border-border rounded-lg p-3 space-y-2">
                       <Input

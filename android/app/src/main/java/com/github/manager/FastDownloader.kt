@@ -82,7 +82,7 @@ object FastDownloader {
             while (hops < 5) {
                 val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
                     val host = URL(currentUrl).host
-                    if (currentToken.isNotBlank() && (host == "api.github.com" || host == "raw.githubusercontent.com")) {
+                    if (currentToken.isNotBlank() && (host == "api.github.com" || host == "raw.githubusercontent.com" || host == "codeload.github.com")) {
                         setRequestProperty("Authorization", "Bearer $currentToken")
                     }
                     if (host == "api.github.com" && currentUrl.contains("/releases/assets/")) {
@@ -99,7 +99,7 @@ object FastDownloader {
                 val location = conn.getHeaderField("Location")
                 
                 if (code in 301..308 && !location.isNullOrBlank()) {
-                    val isGitHubApi = location.startsWith("https://api.github.com")
+                    val isGitHubApi = location.startsWith("https://api.github.com") || location.startsWith("https://codeload.github.com")
                     currentToken = if (isGitHubApi) currentToken else ""
                     currentUrl = location
                     hops++
@@ -313,7 +313,7 @@ object FastDownloader {
             try {
                 val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                     val host = URL(url).host
-                    if (token.isNotBlank() && (host == "api.github.com" || host == "raw.githubusercontent.com")) {
+                    if (token.isNotBlank() && (host == "api.github.com" || host == "raw.githubusercontent.com" || host == "codeload.github.com")) {
                         setRequestProperty("Authorization", "Bearer $token")
                     }
                     if (host == "api.github.com" && url.contains("/releases/assets/")) {
@@ -367,7 +367,7 @@ object FastDownloader {
                 var currentStart = file.length()
                 val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                     val host = URL(url).host
-                    if (token.isNotBlank() && (host == "api.github.com" || host == "raw.githubusercontent.com")) {
+                    if (token.isNotBlank() && (host == "api.github.com" || host == "raw.githubusercontent.com" || host == "codeload.github.com")) {
                         setRequestProperty("Authorization", "Bearer $token")
                     }
                     if (host == "api.github.com" && url.contains("/releases/assets/")) {

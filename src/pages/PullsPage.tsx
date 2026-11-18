@@ -11,6 +11,7 @@ import {
   GitBranch,
   Plus,
   Loader2,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +35,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { UserLink } from '@/components/common/UserLink';
-import { getPullRequests, createPullRequest, getRepo, getBranches, formatRelativeTime } from '@/services/github';
+import { getPullRequests, createPullRequest, getRepo, getAllBranches, formatRelativeTime } from '@/services/github';
 import type { GitHubPullRequest, PrState } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
@@ -51,6 +52,7 @@ export default function PullsPage() {
   const [sortField, setSortField] = useState<'created' | 'updated' | 'popularity' | 'long-running'>('created');
   const [createOpen, setCreateOpen] = useState(false);
   const [branches, setBranches] = useState<string[]>([]);
+  const [branchQuery, setBranchQuery] = useState('');
   const [head, setHead] = useState('');
   const [base, setBase] = useState('');
   const [title, setTitle] = useState('');
@@ -108,11 +110,11 @@ export default function PullsPage() {
       try {
         const [repoInfo, branchResult] = await Promise.all([
           getRepo(owner, repo),
-          getBranches(owner, repo, 1, 100),
+          getAllBranches(owner, repo),
         ]);
         if (cancelled) return;
-        const names = branchResult.data.map(b => b.name);
-        // 分支接口按名称分页，默认分支可能不在第一页；必须补进来，否则目标分支下拉框为空。
+        const names = branchResult.map(b => b.name);
+        // 兜底：默认分支必定可选，避免仓库分支异常时目标分支为空。
         if (!names.includes(repoInfo.default_branch)) names.unshift(repoInfo.default_branch);
         setBranches(names);
         setBase(prev => prev || repoInfo.default_branch);
@@ -170,6 +172,13 @@ export default function PullsPage() {
     return <Badge variant="outline" className="text-xs border-primary/50 text-primary bg-primary/10">{i18n.t('开放')}</Badge>;
   };
 
+  const normalizedBranchQuery = branchQuery.trim().toLowerCase();
+  const branchOptions = normalizedBranchQuery
+    ? branches.filter(name =>
+        name.toLowerCase().includes(normalizedBranchQuery) || name === head || name === base
+      )
+    : branches;
+
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
       {/* 面包屑 */}
@@ -188,19 +197,28 @@ export default function PullsPage() {
           <Plus className="w-4 h-4 mr-1.5" />{i18n.t('新建 PR')}
         </Button>
       </div>
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setBranchQuery(''); }}>
         <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-foreground">{i18n.t('创建 Pull Request')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                value={branchQuery}
+                onChange={e => setBranchQuery(e.target.value)}
+                placeholder={i18n.t('筛选分支，例如 main')}
+                className="bg-secondary border-border text-foreground"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">{i18n.t('源分支')}</Label>
                 <Select value={head} onValueChange={setHead}>
                   <SelectTrigger className="bg-secondary border-border text-foreground"><SelectValue placeholder={i18n.t('选择分支')} /></SelectTrigger>
                   <SelectContent className="bg-popover border-border max-h-60">
-                    {branches.map(name => <SelectItem key={name} value={name} className="text-foreground">{name}</SelectItem>)}
+                    {branchOptions.map(name => <SelectItem key={name} value={name} className="text-foreground">{name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -209,7 +227,7 @@ export default function PullsPage() {
                 <Select value={base} onValueChange={setBase}>
                   <SelectTrigger className="bg-secondary border-border text-foreground"><SelectValue placeholder={i18n.t('选择分支')} /></SelectTrigger>
                   <SelectContent className="bg-popover border-border max-h-60">
-                    {branches.map(name => <SelectItem key={name} value={name} className="text-foreground">{name}</SelectItem>)}
+                    {branchOptions.map(name => <SelectItem key={name} value={name} className="text-foreground">{name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

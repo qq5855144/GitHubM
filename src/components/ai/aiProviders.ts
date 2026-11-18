@@ -2,7 +2,7 @@
 // - 各平台 OpenAI 兼容端点地址构建
 // - 模型列表拉取（前端直连各家官方 API）
 // - 连接测试（最小 chat 请求）
-// 所有请求均由浏览器直接发出，API Key 仅保存在本机 localStorage。
+// 所有请求均由浏览器直接发出；Android 的 API Key 由 Keystore 加密保存，Web 回退 localStorage。
 import type { ModelType } from './aiTypes';
 import i18n from "@/i18n";
 import { normalizeBaseEndpoint } from '@/lib/ai-endpoint';

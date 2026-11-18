@@ -432,7 +432,7 @@ export default function AiSettingsPage() {
           )}
 
           {def.needKey && (
-            <SettingRow label="API Key" desc={i18n.t('仅保存在本机 localStorage，不会上传到服务器。')}>
+            <SettingRow label="API Key" desc={i18n.t('Android 使用系统 Keystore 加密，Web 使用浏览器存储；不会上传到服务器。')}>
               <div className="flex gap-2">
                 <Input
                   className="min-w-0 flex-1 px-3"

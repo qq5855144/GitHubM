@@ -386,20 +386,29 @@ pnpm tauri build
 
 ## 签名与发布
 
-APK 默认使用仓库内置 `android/release.keystore` 签名，保证跨版本覆盖安装。若要使用自有证书：
+Release APK 使用保存在 **GitHub Actions Secrets** 中的签名证书，仓库中不包含任何 keystore。
+
+每次构建自动读取以下 Secrets，不需要手动提交签名：
+
+| Secret | 内容 |
+|---|---|
+| `RELEASE_KEYSTORE_BASE64` | `release.keystore` 的 base64 |
+| `RELEASE_KEY_ALIAS` | 密钥别名，当前为 `github-manager` |
+| `RELEASE_STORE_PASSWORD` | keystore 口令 |
+| `RELEASE_KEY_PASSWORD` | key 口令 |
+
+缺少任意一项时构建会直接失败，不会回退到仓库内证书或临时证书。
 
 ```bash
-# 推荐：脚本自动写入 4 个 Actions Secrets（需已 gh auth login）
-bash scripts/setup-keystore-secrets.sh
+# 从离线备份恢复后，一次性写入 Secrets（需要 gh auth login）
+RELEASE_STORE_PASSWORD='...' RELEASE_KEY_PASSWORD='...' \
+  bash scripts/setup-keystore-secrets.sh /path/to/release.keystore
 ```
 
-或在 **Settings → Secrets and variables → Actions** 手动添加：`RELEASE_KEYSTORE_BASE64`、`RELEASE_KEY_ALIAS`、`RELEASE_STORE_PASSWORD`、`RELEASE_KEY_PASSWORD`。
-
-CI 还支持**零配置自动持久化**：若上述 Secret 缺失但配置了 `GH_PAT`（需 `repo` 权限），首次构建会自动生成 Keystore 并回写到 Secrets，后续构建复用同一证书。
-
-> ⚠️ 生产使用请替换为你自己的 keystore，不要沿用仓库中的示例证书。签名不一致会导致无法覆盖安装。
+> ⚠️ **v1.0.593 起更换了 Release 签名证书。** 从 v1.0.592 或更早版本升级必须先卸载旧版；卸载会清除登录状态和 AI 配置。之后版本可正常覆盖安装。
 
 ---
+
 
 ## CI/CD
 

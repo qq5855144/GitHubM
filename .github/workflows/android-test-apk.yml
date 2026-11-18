@@ -3,7 +3,7 @@
 # 与 deploy.yml 的区别：
 #   - 不部署 GitHub Pages、不创建 Release / Tag
 #   - 只上传 Actions Artifact，便于在合并前安装到真机回归
-#   - 使用仓库内 android/release.keystore 签名（与正式版同签名，可覆盖安装）
+#   - 使用 Actions Secrets 中的 Release 签名；fork PR 无 Secrets 时回退临时测试签名
 name: Android Test APK
 on:
   workflow_dispatch:
@@ -18,6 +18,16 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+      - name: 检查签名文件未入库
+        run: |
+          set -euo pipefail
+          FILES=$(git ls-files '*.keystore' '*.jks')
+          if [ -n "$FILES" ]; then
+            echo "::error::仓库中不允许提交签名文件："
+            echo "$FILES"
+            exit 1
+          fi
+
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
@@ -71,15 +81,41 @@ jobs:
           echo "code=$(date +%s)" >> "$GITHUB_OUTPUT"
           echo "name=1.0.${{ github.run_number }}-test" >> "$GITHUB_OUTPUT"
 
+      - name: 配置 Release Keystore
+        id: keystore
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEY_ALIAS:       ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_STORE_PASSWORD:  ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD:    ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYSTORE_PATH="${GITHUB_WORKSPACE}/android/release.keystore"
+          if [ -n "${RELEASE_KEYSTORE_BASE64}" ] && [ -n "${RELEASE_KEY_ALIAS}" ] &&              [ -n "${RELEASE_STORE_PASSWORD}" ] && [ -n "${RELEASE_KEY_PASSWORD}" ]; then
+            printf '%s' "${RELEASE_KEYSTORE_BASE64}" | base64 --decode > "${KEYSTORE_PATH}"
+            chmod 600 "${KEYSTORE_PATH}"
+            echo "✅ 使用 Release 签名 Secrets"
+            echo "store_password=${RELEASE_STORE_PASSWORD}" >> "$GITHUB_OUTPUT"
+            echo "key_alias=${RELEASE_KEY_ALIAS}" >> "$GITHUB_OUTPUT"
+            echo "key_password=${RELEASE_KEY_PASSWORD}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::当前 PR 无法读取签名 Secrets，使用临时测试签名；该 APK 不能覆盖正式版"
+            keytool -genkeypair -v -keystore "${KEYSTORE_PATH}" -alias test-key               -keyalg RSA -keysize 2048 -validity 30               -storepass test-signing -keypass test-signing               -dname "CN=GitHub Manager PR Test" -noprompt >/dev/null 2>&1
+            chmod 600 "${KEYSTORE_PATH}"
+            echo "store_password=test-signing" >> "$GITHUB_OUTPUT"
+            echo "key_alias=test-key" >> "$GITHUB_OUTPUT"
+            echo "key_password=test-signing" >> "$GITHUB_OUTPUT"
+          fi
+          echo "keystore_path=${KEYSTORE_PATH}" >> "$GITHUB_OUTPUT"
       - name: 构建签名 Release APK
         working-directory: android
         env:
           VERSION_CODE: ${{ steps.version.outputs.code }}
           VERSION_NAME: ${{ steps.version.outputs.name }}
-          KEYSTORE_PATH: ${{ github.workspace }}/android/release.keystore
-          STORE_PASSWORD: GithubManager@2024
-          KEY_ALIAS: github-manager
-          KEY_PASSWORD: GithubManager@2024
+          KEYSTORE_PATH: ${{ steps.keystore.outputs.keystore_path }}
+          STORE_PASSWORD: ${{ steps.keystore.outputs.store_password }}
+          KEY_ALIAS: ${{ steps.keystore.outputs.key_alias }}
+          KEY_PASSWORD: ${{ steps.keystore.outputs.key_password }}
         run: gradle assembleRelease --no-daemon
 
       - name: 重命名 APK

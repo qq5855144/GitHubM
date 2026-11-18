@@ -100,6 +100,20 @@ describe('AI V2 memory and context', () => {
     ));
   });
 
+  it('does not leave an orphan tool message after the final compaction fallback', () => {
+    const messages = [
+      { role: 'system' as const, content: 'system' },
+      ...Array.from({ length: 10 }, (_, index) => ({
+        role: 'tool' as const,
+        content: `${index}`.repeat(5000),
+        tool_call_id: `call-${index}`,
+        name: 'github_read_file',
+      })),
+    ];
+    const compacted = compactProviderMessages(messages, 4000);
+    const firstBody = compacted.find(item => item.role !== 'system');
+    expect(firstBody?.role).not.toBe('tool');
+  });
   it('builds a unified diff for write approval', () => {
     const diff = buildUnifiedDiff('line1\nline2\nline3', 'line1\nchanged\nline3');
     expect(diff).toContain('-line2');

@@ -1291,29 +1291,64 @@ export async function getStarredRepos(params: {
  * 收藏页需要本地排序，只拿第一页会导致排序与 GitHub 网页不一致。
  * per_page=100 时最多 10 页（1000 个），超出部分忽略，避免无限翻页。
  */
+/**
+ * 获取全部收藏仓库（并发分页，带 starred_at）。
+ * 串行翻页时 529 个星标要 6 次往返（≈10s）；这里先取首页让 UI 立刻出内容，
+ * 剩余页并发拉取，把总耗时压到 2~3 次往返。
+ */
 export async function getAllStarredRepos(
   sort: 'created' | 'updated' = 'created',
   direction: 'asc' | 'desc' = 'desc',
+  onFirstPage?: (repos: GitHubRepo[]) => void,
 ): Promise<GitHubRepo[]> {
   const perPage = 100;
-  const maxPages = 10;
-  const all: GitHubRepo[] = [];
-  for (let page = 1; page <= maxPages; page++) {
-    const batch = await request<unknown[]>(
+  const maxPages = 20;
+  const batchSize = 6;
+
+  const fetchPage = async (page: number): Promise<GitHubRepo[]> => {
+    const rows = await request<unknown[]>(
       `/user/starred?per_page=${perPage}&page=${page}&sort=${sort}&direction=${direction}`,
       { headers: { Accept: 'application/vnd.github.star+json' } },
     );
-    if (!Array.isArray(batch) || batch.length === 0) break;
-    for (const item of batch) {
+    if (!Array.isArray(rows)) return [];
+    return rows.map((item) => {
       const record = item as Record<string, unknown> | null;
       if (record && typeof record === 'object' && 'repo' in record) {
         const repo = record.repo as GitHubRepo;
-        all.push({ ...repo, starred_at: typeof record.starred_at === 'string' ? record.starred_at : undefined });
-      } else {
-        all.push(item as GitHubRepo);
+        return { ...repo, starred_at: typeof record.starred_at === 'string' ? record.starred_at : undefined };
       }
+      return item as GitHubRepo;
+    });
+  };
+
+  const first = await fetchPage(1);
+  if (onFirstPage && first.length > 0) onFirstPage(first);
+  if (first.length < perPage) return first;
+
+  const all: GitHubRepo[] = [...first];
+  let nextPage = 2;
+  let finished = false;
+  while (!finished && nextPage <= maxPages) {
+    const pages: number[] = [];
+    for (let i = 0; i < batchSize && nextPage + i <= maxPages; i += 1) pages.push(nextPage + i);
+    const settled = await Promise.allSettled(pages.map((page) => fetchPage(page)));
+    const ordered: GitHubRepo[][] = pages.map(() => []);
+    const retryPages: number[] = [];
+    settled.forEach((result, index) => {
+      if (result.status === 'fulfilled') ordered[index] = result.value;
+      else retryPages.push(pages[index]);
+    });
+    if (retryPages.length > 0) {
+      const retried = await Promise.allSettled(retryPages.map((page) => fetchPage(page)));
+      retried.forEach((result, index) => {
+        if (result.status === 'fulfilled') ordered[pages.indexOf(retryPages[index])] = result.value;
+      });
     }
-    if (batch.length < perPage) break;
+    for (const rows of ordered) {
+      all.push(...rows);
+      if (rows.length < perPage) { finished = true; break; }
+    }
+    nextPage += pages.length;
   }
   return all;
 }

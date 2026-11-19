@@ -7,12 +7,12 @@
 // 点击后直接报 ERR_FILE_NOT_FOUND。这里在渲染阶段把相对地址还原成
 // 「仓库内路径」，点击时走应用内代码浏览路由；图片则转换为 raw.githubusercontent。
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { useNavigate } from 'react-router-dom';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import type { Options as SanitizeSchema } from 'rehype-sanitize';
-import { useNavigate } from 'react-router-dom';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+import remarkGfm from 'remark-gfm';
 
 export interface RepoLinkContext {
   owner: string;
@@ -28,6 +28,14 @@ interface MarkdownRendererProps {
   className?: string;
   /** 传入后启用「仓库相对路径」解析；不传则保持原有行为 */
   repoContext?: RepoLinkContext;
+  /**
+   * 页内锚点回调。
+   *
+   * 评论里的 `#issuecomment-123` 这类链接，默认会当作外链开新窗口，
+   * 在 app 内等于跳出应用。传入此回调后由宿主决定如何滚动定位。
+   * 返回 true 表示已处理，渲染器不再走默认外链行为。
+   */
+  onAnchor?: (anchor: string) => boolean;
 }
 
 /**
@@ -203,7 +211,7 @@ export function resolveMarkdownImage(src: string | undefined, ctx?: RepoLinkCont
   return rawFileUrl(ctx, resolved);
 }
 
-export default function MarkdownRenderer({ content, className, repoContext }: MarkdownRendererProps) {
+export default function MarkdownRenderer({ content, className, repoContext, onAnchor }: MarkdownRendererProps) {
   const navigate = useNavigate();
 
   return (
@@ -224,7 +232,52 @@ export default function MarkdownRenderer({ content, className, repoContext }: Ma
           ),
           // 链接：外部新标签；仓库内文件/目录走应用内路由
           a: ({ href, children, node: _node, ...props }) => {
-            const target = resolveMarkdownHref(typeof href === 'string' ? href : undefined, repoContext);
+            const rawHref = typeof href === 'string' ? href : undefined;
+
+            // 页内锚点优先：`#issuecomment-123`，或同仓库 issue 链接带的 hash。
+            // 交给宿主处理，避免在 app 内点一下就跳出到浏览器。
+            if (onAnchor && rawHref) {
+              const anchorHash = rawHref.startsWith('#') ? rawHref.slice(1) : '';
+              if (anchorHash && onAnchor(anchorHash)) {
+                return (
+                  <a
+                    href={`#${anchorHash}`}
+                    {...props}
+                    onClick={(e) => {
+                      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                      e.preventDefault();
+                    }}
+                  >
+                    {children}
+                  </a>
+                );
+              }
+            }
+            const target = resolveMarkdownHref(rawHref, repoContext);
+
+            // 同仓库 issue/PR 链接带的 hash（引用块的出处链接就是这种形态），
+            // 也交给宿主，这样点「——来自 @xxx」能直接跳到该评论。
+            if (onAnchor && rawHref && /#issue(comment)?-/.test(rawHref)) {
+              const sameRepo =
+                !!repoContext &&
+                new RegExp(`github\\.com/${repoContext.owner}/${repoContext.repo}/`, 'i').test(rawHref);
+              const hash = rawHref.slice(rawHref.indexOf('#') + 1);
+              if (sameRepo && onAnchor(hash)) {
+                return (
+                  <a
+                    href={`#${hash}`}
+                    {...props}
+                    onClick={(e) => {
+                      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                      e.preventDefault();
+                    }}
+                  >
+                    {children}
+                  </a>
+                );
+              }
+            }
+
 
             if (target?.kind === 'internal') {
               // README 内的语言切换（README.md / README.zh-CN.md 等）应切换 README 渲染，

@@ -289,49 +289,46 @@ export default function NotificationsPage() {
             {notifications.map((notification) => (
               <div
                 key={notification.id}
-                className={`rounded-xl border p-4 transition-colors cursor-pointer ${notification.unread ? 'border-primary/30 bg-primary/5 hover:bg-primary/10' : 'border-border bg-card hover:bg-secondary/40'}`}
-                onClick={() => handleNotificationClick(notification)}
+                className={`bg-card border rounded-xl overflow-hidden ${notification.unread ? 'border-primary/30' : 'border-border'}`}
               >
-                <div className="flex items-start gap-3">
-                  {/* 未读指示点 */}
-                  <div className="mt-1.5 shrink-0">
-                    {notification.unread ? (
-                      <div className="w-2 h-2 rounded-full bg-primary" />
-                    ) : (
-                      <div className="w-2 h-2 rounded-full bg-transparent border border-muted-foreground/30" />
-                    )}
-                  </div>
-                  {/* 类型图标 */}
-                  <div className="mt-0.5 shrink-0">
-                    {getNotificationIcon(notification.subject.type)}
-                  </div>
-                  {/* 通知内容 */}
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm text-balance ${notification.unread ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                      {notification.subject.title}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-xs text-muted-foreground">
-                        {notification.repository.full_name}
-                      </span>
-                      <Badge variant="outline" className="text-xs h-4 px-1 border-border text-muted-foreground">
-                        {getTypeLabel(notification.subject.type)}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {formatRelativeTime(notification.updated_at)}
-                      </span>
+                <button
+                  type="button"
+                  className={`w-full text-left px-4 py-3 transition-colors ${notification.unread ? 'bg-primary/[0.03] hover:bg-primary/[0.06]' : 'hover:bg-secondary/50'}`}
+                  onClick={() => handleNotificationClick(notification)}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${notification.unread ? 'bg-primary/10' : 'bg-secondary/60'}`}>
+                      {getNotificationIcon(notification.subject.type)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-2">
+                        {notification.unread && <span className="mt-1.5 w-2 h-2 rounded-full bg-primary shrink-0" />}
+                        <p className="text-sm font-semibold text-foreground text-balance">
+                          {notification.subject.title}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap text-xs text-muted-foreground">
+                        <span>{notification.repository.full_name}</span>
+                        <span>·</span>
+                        <span>{formatRelativeTime(notification.updated_at)}</span>
+                      </div>
                     </div>
                   </div>
-                  {/* 操作 */}
-                  <div className="shrink-0 flex items-center gap-0.5">
+                </button>
+                <div className={`flex items-center justify-between gap-2 px-3 py-2 border-t ${notification.unread ? 'border-primary/20 bg-primary/5' : 'border-border bg-secondary/20'}`}>
+                  <Badge variant="outline" className="text-xs h-5 px-1.5 border-border text-muted-foreground">
+                    {getTypeLabel(notification.subject.type)}
+                  </Badge>
+                  <div className="flex items-center gap-0.5">
                     {notification.unread && (
                       <Button
                         variant="ghost"
                         size="sm"
                         className="text-muted-foreground hover:bg-secondary h-7 text-xs"
-                        onClick={(e) => { e.stopPropagation(); handleMarkRead(notification.id); }}
+                        onClick={() => handleMarkRead(notification.id)}
                       >
-                        {i18n.t('标为已读')}</Button>
+                        {i18n.t('标为已读')}
+                      </Button>
                     )}
                     <Button
                       variant="ghost"
@@ -339,10 +336,7 @@ export default function NotificationsPage() {
                       className="w-7 h-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                       title={i18n.t('删除通知')}
                       disabled={deletingId === notification.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleDeleteNotification(notification);
-                      }}
+                      onClick={() => void handleDeleteNotification(notification)}
                     >
                       {deletingId === notification.id
                         ? <Loader2 className="w-3.5 h-3.5 animate-spin" />

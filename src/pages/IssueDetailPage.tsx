@@ -88,6 +88,8 @@ export default function IssueDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canManage = isRepoOwner(owner, user?.login);
+  // APK 内底部导航由原生提供，Web 端由 MobileBottomNav（4rem）提供
+  const hasBridge = typeof window !== 'undefined' && !!(window as unknown as { AndroidBridge?: unknown }).AndroidBridge;
   const [issue, setIssue] = useState<GitHubIssue | null>(null);
   const [comments, setComments] = useState<GitHubComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -296,15 +298,23 @@ export default function IssueDetailPage() {
     return quoted + '\n>\n> ——来自 [@' + comment.user.login + '](' + url + ')\n\n';
   };
 
+  /** 聚焦悬浮评论框，并把光标放到末尾 */
+  const focusComposer = () => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    const end = el.value.length;
+    try { el.setSelectionRange(end, end); } catch { /* 某些 WebView 不支持 */ }
+  };
+
   const handleQuoteReply = (comment: GitHubComment) => {
     const block = buildQuote(comment);
     setNewComment((prev) => (prev.trim() ? `${prev.trimEnd()}
 
 ${block}` : block));
-    requestAnimationFrame(() => {
-      composerRef.current?.focus();
-      composerRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    });
+    // 评论框是悬浮固定在底部的，不需要滚动；等 React 提交后立即聚焦（双保险）
+    requestAnimationFrame(focusComposer);
+    window.setTimeout(focusComposer, 60);
   };
 
   const handleQuoteToNewIssue = (comment: GitHubComment) => {
@@ -545,51 +555,45 @@ ${block}` : block));
         </div>
       )}
 
-      {/* 添加评论 */}
+      {/* 添加评论 —— 悬浮底部 */}
       {user && (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-            <Avatar className="w-6 h-6">
-              <AvatarImage src={user.avatar_url} />
-              <AvatarFallback className="bg-secondary text-xs">{user.login[0]}</AvatarFallback>
-            </Avatar>
-            <span className="text-sm font-medium text-foreground">{i18n.t('添加评论')}</span>
-          </div>
-          <div className="p-4 space-y-3">
+        <div
+          className="-mx-4 md:-mx-6 sticky z-30 px-4 md:px-6 pt-2 pb-2 bg-background/95 backdrop-blur-md border-t border-border"
+          style={{ bottom: hasBridge ? 'env(safe-area-inset-bottom)' : 'calc(4rem + env(safe-area-inset-bottom))' }}
+        >
+          <div className="rounded-xl border border-border bg-card shadow-lg overflow-hidden">
             <Textarea
+              ref={composerRef}
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               onKeyDown={handleCommentKeyDown}
               placeholder={i18n.t('撰写评论（支持 Markdown）...')}
-              className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm min-h-24"
-              rows={4}
+              className="border-0 rounded-none bg-transparent text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm min-h-20 focus-visible:ring-0 focus-visible:ring-offset-0"
+              rows={3}
             />
-            <div className="flex justify-between items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-2 flex-wrap">
-                <IssueAttachmentButton
-                  owner={owner || ''}
-                  repo={repo || ''}
-                  disabled={submitting}
-                  onInsert={(markdown) => setNewComment((prev) => (prev.trim() ? `${prev}\n\n${markdown}` : markdown))}
-                />
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Edit2 className="w-3 h-3" />
-                  {i18n.t('支持 Markdown · Ctrl+Enter 快速提交')}</span>
+            <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-t border-border bg-secondary/20">
+              <IssueAttachmentButton
+                owner={owner || ''}
+                repo={repo || ''}
+                disabled={submitting}
+                onInsert={(markdown) => setNewComment((prev) => (prev.trim() ? `${prev}\n\n${markdown}` : markdown))}
+              />
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="hidden sm:flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <Edit2 className="w-3 h-3" />{i18n.t('Ctrl+Enter 提交')}
+                </span>
+                <Button
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3"
+                  onClick={handleComment}
+                  disabled={submitting || !newComment.trim()}
+                  size="sm"
+                >
+                  {submitting ? i18n.t('发布中...') : (
+                    <>
+                      <Send className="w-3.5 h-3.5 mr-1.5" />{i18n.t('发布评论')}</>
+                  )}
+                </Button>
               </div>
-              <Button
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={handleComment}
-                disabled={submitting || !newComment.trim()}
-                size="sm"
-              >
-                {submitting ? (
-                  i18n.t('发布中...')
-                ) : (
-                  <>
-                    <Send className="w-3.5 h-3.5 mr-1.5" />
-                    {i18n.t('发布评论')}</>
-                )}
-              </Button>
             </div>
           </div>
         </div>

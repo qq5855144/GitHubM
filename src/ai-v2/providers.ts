@@ -53,6 +53,52 @@ export function stripReasoningContent(messages: V2ProviderMessage[]): V2Provider
   });
 }
 
+/**
+ * 发送前修复 tool_calls 与 tool 结果的配对关系。
+ *
+ * 供应商（OpenAI / DeepSeek 等）对消息序列有硬约束，违反会直接返回 HTTP 400：
+ *   - `insufficient tool messages following tool_calls`：assistant 声明了调用，
+ *     但紧随其后的不是对应的 tool 结果；
+ *   - `tool message without preceding tool_calls`：tool 结果找不到来源。
+ *
+ * 上下文压缩（截断 / 拼接 / 丢弃旧回合）会把原本配对的 assistant 与 tool 拆散，
+ * 且断点可能落在序列任意位置而非仅末尾，因此这里做位置无关的清理：
+ *   1. 移除 tool_calls 没有紧邻完整回复的 assistant 消息；
+ *   2. 移除孤立的 tool 消息（沿连续 tool 链回溯找来源）。
+ */
+export function sanitizeToolCallPairing(messages: V2ProviderMessage[]): V2ProviderMessage[] {
+  if (messages.length === 0) return [];
+  const result = [...messages];
+
+  // 1. 从后往前移除缺少紧邻 tool 回复的 assistant(tool_calls)。
+  for (let index = result.length - 1; index >= 0; index--) {
+    const message = result[index];
+    const calls = message.role === 'assistant' ? message.tool_calls : undefined;
+    if (!Array.isArray(calls) || calls.length === 0) continue;
+    const paired = calls.every((call, offset) => {
+      const next = result[index + 1 + offset];
+      return Boolean(next) && next.role === 'tool' && next.tool_call_id === call.id;
+    });
+    if (!paired) result.splice(index, 1);
+  }
+
+  // 2. 移除孤立的 tool 消息：沿连续 tool 链回溯，源头必须是声明的 assistant。
+  for (let index = result.length - 1; index >= 0; index--) {
+    const message = result[index];
+    if (message.role !== 'tool' || !message.tool_call_id) continue;
+    let cursor = index - 1;
+    while (cursor >= 0 && result[cursor].role === 'tool') cursor -= 1;
+    const source = cursor >= 0 ? result[cursor] : undefined;
+    const sourced =
+      source?.role === 'assistant' &&
+      Array.isArray(source.tool_calls) &&
+      source.tool_calls.some(call => call.id === message.tool_call_id);
+    if (!sourced) result.splice(index, 1);
+  }
+
+  return result;
+}
+
 export function buildProviderRequest(
   config: ModelConfig,
   messages: V2ProviderMessage[],
@@ -77,7 +123,7 @@ export function buildProviderRequest(
 
   const body: Record<string, unknown> = {
     model: config.model || defaultModelFor(config.type),
-    messages: stripReasoningContent(messages),
+    messages: sanitizeToolCallPairing(stripReasoningContent(messages)),
     stream: true,
     max_tokens: getModelCapabilities(config.type, config.model).maxOutput,
   };

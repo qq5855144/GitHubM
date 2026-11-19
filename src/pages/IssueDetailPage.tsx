@@ -555,48 +555,52 @@ ${block}` : block));
         </div>
       )}
 
-      {/* 添加评论 —— 悬浮底部 */}
+      {/* 添加评论 —— 固定悬浮在底部 */}
       {user && (
-        <div
-          className="-mx-4 md:-mx-6 sticky z-30 px-4 md:px-6 pt-2 pb-2 bg-background/95 backdrop-blur-md border-t border-border"
-          style={{ bottom: hasBridge ? 'env(safe-area-inset-bottom)' : 'calc(4rem + env(safe-area-inset-bottom))' }}
-        >
-          <div className="rounded-xl border border-border bg-card shadow-lg overflow-hidden">
-            <Textarea
-              ref={composerRef}
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              onKeyDown={handleCommentKeyDown}
-              placeholder={i18n.t('撰写评论（支持 Markdown）...')}
-              className="border-0 rounded-none bg-transparent text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm min-h-20 focus-visible:ring-0 focus-visible:ring-offset-0"
-              rows={3}
-            />
-            <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-t border-border bg-secondary/20">
-              <IssueAttachmentButton
-                owner={owner || ''}
-                repo={repo || ''}
-                disabled={submitting}
-                onInsert={(markdown) => setNewComment((prev) => (prev.trim() ? `${prev}\n\n${markdown}` : markdown))}
+        <>
+          {/* 占位，避免固定栏遮挡最后一条评论 */}
+          <div className="h-36" aria-hidden="true" />
+          <div
+            className="fixed inset-x-0 z-30 px-4 md:px-6 pt-2 pb-2 bg-background/95 backdrop-blur-md border-t border-border"
+            style={{ bottom: hasBridge ? 'env(safe-area-inset-bottom)' : 'calc(4rem + env(safe-area-inset-bottom))' }}
+          >
+            <div className="rounded-xl border border-border bg-card shadow-lg overflow-hidden max-w-4xl mx-auto">
+              <Textarea
+                ref={composerRef}
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                onKeyDown={handleCommentKeyDown}
+                placeholder={i18n.t('撰写评论（支持 Markdown）...')}
+                className="border-0 rounded-none bg-transparent text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm min-h-16 focus-visible:ring-0 focus-visible:ring-offset-0"
+                rows={2}
               />
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="hidden sm:flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <Edit2 className="w-3 h-3" />{i18n.t('Ctrl+Enter 提交')}
-                </span>
-                <Button
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3"
-                  onClick={handleComment}
-                  disabled={submitting || !newComment.trim()}
-                  size="sm"
-                >
-                  {submitting ? i18n.t('发布中...') : (
-                    <>
-                      <Send className="w-3.5 h-3.5 mr-1.5" />{i18n.t('发布评论')}</>
-                  )}
-                </Button>
+              <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-t border-border bg-secondary/20">
+                <IssueAttachmentButton
+                  owner={owner || ''}
+                  repo={repo || ''}
+                  disabled={submitting}
+                  onInsert={(markdown) => setNewComment((prev) => (prev.trim() ? `${prev}\n\n${markdown}` : markdown))}
+                />
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="hidden sm:flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <Edit2 className="w-3 h-3" />{i18n.t('Ctrl+Enter 提交')}
+                  </span>
+                  <Button
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3"
+                    onClick={handleComment}
+                    disabled={submitting || !newComment.trim()}
+                    size="sm"
+                  >
+                    {submitting ? i18n.t('发布中...') : (
+                      <>
+                        <Send className="w-3.5 h-3.5 mr-1.5" />{i18n.t('发布评论')}</>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

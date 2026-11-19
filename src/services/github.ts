@@ -606,6 +606,8 @@ export async function getNotifications(params: {
 
 export async function markNotificationRead(threadId: string): Promise<void> {
   await request<void>(`/notifications/threads/${threadId}`, { method: 'PATCH' });
+  // 顶栏红点与通知列表会重新拉取，必须清掉带 ETag 的通知缓存。
+  invalidateAndBust('/notifications');
 }
 
 export async function deleteNotification(threadId: string): Promise<void> {
@@ -620,6 +622,8 @@ export async function markAllNotificationsRead(): Promise<void> {
     body: JSON.stringify({ read: true }),
     headers: { 'Content-Type': 'application/json' },
   });
+  // 全部已读后，顶栏下一次查询必须命中空列表而不是旧 ETag 缓存。
+  invalidateAndBust('/notifications');
 }
 
 // ===== 内容/代码浏览 API =====

@@ -40,6 +40,8 @@ export interface GitHubRepo {
   created_at: string;
   updated_at: string;
   pushed_at: string;
+  /** 仅在 /user/starred 携带 star+json Accept 时返回 */
+  starred_at?: string;
   size: number;
   topics: string[];
   archived: boolean;

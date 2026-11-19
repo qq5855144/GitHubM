@@ -1287,6 +1287,38 @@ export async function getStarredRepos(params: {
 }
 
 /**
+ * 获取全部收藏仓库（分页拉全，带 starred_at）。
+ * 收藏页需要本地排序，只拿第一页会导致排序与 GitHub 网页不一致。
+ * per_page=100 时最多 10 页（1000 个），超出部分忽略，避免无限翻页。
+ */
+export async function getAllStarredRepos(
+  sort: 'created' | 'updated' = 'created',
+  direction: 'asc' | 'desc' = 'desc',
+): Promise<GitHubRepo[]> {
+  const perPage = 100;
+  const maxPages = 10;
+  const all: GitHubRepo[] = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const batch = await request<unknown[]>(
+      `/user/starred?per_page=${perPage}&page=${page}&sort=${sort}&direction=${direction}`,
+      { headers: { Accept: 'application/vnd.github.star+json' } },
+    );
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    for (const item of batch) {
+      const record = item as Record<string, unknown> | null;
+      if (record && typeof record === 'object' && 'repo' in record) {
+        const repo = record.repo as GitHubRepo;
+        all.push({ ...repo, starred_at: typeof record.starred_at === 'string' ? record.starred_at : undefined });
+      } else {
+        all.push(item as GitHubRepo);
+      }
+    }
+    if (batch.length < perPage) break;
+  }
+  return all;
+}
+
+/**
  * 获取当前用户 Star 的仓库总数。
  * 通过 per_page=1 请求并解析 Link header 中的 last page 编号得到总数。
  * 若无 Link header（总数 ≤ 1），则直接返回响应数组长度。

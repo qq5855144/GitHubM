@@ -289,7 +289,7 @@ export default function NotificationsPage() {
             {notifications.map((notification) => (
               <div
                 key={notification.id}
-                className={`bg-card border rounded-xl overflow-hidden ${notification.unread ? 'border-primary/30' : 'border-border'}`}
+                className={`bg-card border border-border rounded-xl overflow-hidden`}
               >
                 <button
                   type="button"
@@ -315,7 +315,7 @@ export default function NotificationsPage() {
                     </div>
                   </div>
                 </button>
-                <div className={`flex items-center justify-between gap-2 px-3 py-2 border-t ${notification.unread ? 'border-primary/20 bg-primary/5' : 'border-border bg-secondary/20'}`}>
+                <div className={`flex items-center justify-between gap-2 px-3 py-2 border-t border-border ${notification.unread ? 'bg-primary/5' : 'bg-secondary/20'}`}>
                   <Badge variant="outline" className="text-xs h-5 px-1.5 border-border text-muted-foreground">
                     {getTypeLabel(notification.subject.type)}
                   </Badge>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { buildCommentQuote } from '@/lib/quote';
 import {
   AlertCircle,
   CheckCircle2,
@@ -291,12 +292,9 @@ export default function IssueDetailPage() {
   };
 
   /** 拼出 GitHub 风格的引用块 */
-  const buildQuote = (comment: GitHubComment): string => {
-    const body = (comment.body || '').trim();
-    const quoted = body.split("\n").map((line) => "> " + line).join("\n");
-    const url = `https://github.com/${owner}/${repo}/issues/${number}#issuecomment-${comment.id}`;
-    return quoted + '\n>\n> ——来自 [@' + comment.user.login + '](' + url + ')\n\n';
-  };
+  const quoteIssueUrl = `https://github.com/${owner}/${repo}/issues/${number}`;
+  const buildQuote = (comment: GitHubComment): string =>
+    buildCommentQuote(comment, quoteIssueUrl);
 
   /** 聚焦悬浮评论框，并把光标放到末尾 */
   const focusComposer = () => {

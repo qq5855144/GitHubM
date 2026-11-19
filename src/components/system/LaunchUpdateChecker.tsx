@@ -3,7 +3,7 @@
 // 仅在 Android WebView 中启用：
 // 1. 写入当前版本号，供原生 checkUpdate 读取
 // 2. 监听原生 appUpdateAvailable 事件
-// 3. 发现新版本时弹出更新对话框
+// 3. 发现新版本时弹出更新对话框（只展示更新内容）
 // 4. 用户可忽略本次版本，忽略记录保存在 localStorage
 import { useEffect, useState } from 'react';
 import { ArrowUpCircle, Download, Loader2 } from 'lucide-react';
@@ -22,6 +22,15 @@ import { toast } from 'sonner';
 import i18n from '@/i18n';
 
 const IGNORED_VERSION_KEY = 'githubm_ignored_update_version';
+
+/** 与「更新内容」无关的 Release 段落，展示前整段剔除 */
+const DROPPED_SECTION_PATTERNS = [
+  /签名/,
+  /signature/i,
+  /构建信息/,
+  /安装方式/,
+  /系统要求/,
+];
 
 interface UpdateInfo {
   version: string;
@@ -47,6 +56,36 @@ function compareVersions(a: string, b: string): number {
     if (diff !== 0) return diff;
   }
   return 0;
+}
+
+/** Release 正文中的段落标题：Markdown 标题行，或「**标题**」独占一行 */
+function isSectionTitle(line: string): boolean {
+  return /^\s*(#{1,6}\s+|\*\*[^*]+\*\*\s*$)/.test(line);
+}
+
+/**
+ * 只保留「更新内容」：Release 正文里混有构建信息、签名证书变更、安装方式、系统要求等
+ * 与本次升级内容无关的段落，这里按段落剔除；正文里没有这些段落时原样返回。
+ */
+function normalizeReleaseNotes(raw: string): string {
+  const lines = raw.replace(/\r\n?/g, '\n').split('\n');
+  const kept: string[] = [];
+  let dropping = false;
+
+  for (const line of lines) {
+    if (isSectionTitle(line)) {
+      const title = line.replace(/^[\s#]+/, '');
+      // 顶部「## GitHub Manager vX.Y.Z」标题由弹窗自己展示版本号，不必重复
+      dropping =
+        /^github\s*manager\b/i.test(title) ||
+        DROPPED_SECTION_PATTERNS.some((pattern) => pattern.test(title));
+      if (dropping) continue;
+    }
+    if (!dropping && line.trim()) kept.push(line);
+  }
+
+  const cleaned = kept.join('\n').trim();
+  return cleaned || raw.trim();
 }
 
 export default function LaunchUpdateChecker() {
@@ -100,7 +139,7 @@ export default function LaunchUpdateChecker() {
       setUpdateInfo({
         version: latest,
         downloadUrl: String(detail?.downloadUrl || ''),
-        releaseNotes: String(detail?.releaseNotes || ''),
+        releaseNotes: normalizeReleaseNotes(String(detail?.releaseNotes || '')),
       });
       setOpen(true);
     };

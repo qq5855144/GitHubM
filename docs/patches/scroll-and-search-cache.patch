@@ -1,0 +1,149 @@
+搜索结果返回复用缓存 + APK 底部 Tab 不再强制归零
+
+应用方式：
+  git apply --recount docs/patches/scroll-and-search-cache.patch
+
+应用后可删除本文件。
+
+diff --git a/src/pages/SearchPage.tsx b/src/pages/SearchPage.tsx
+--- a/src/pages/SearchPage.tsx
++++ b/src/pages/SearchPage.tsx
+@@ -58,4 +58,5 @@
+ import { cn, copyToClipboard } from '@/lib/utils';
++import { pageCache } from '@/lib/page-cache';
+ import i18n from "@/i18n";
+ 
+ // GitHub Search API 最多返回 1000 条结果
+@@ -88,6 +89,16 @@
+   score: number;
+ };
+ 
++/**
++ * 搜索结果缓存载荷（键里已含 type，命中后按 items 回填对应 state）。
++ * 从仓库详情 / 用户主页返回时直接复用，避免重新请求导致列表闪烁、滚动位置丢失。
++ */
++interface SearchCachePayload {
++  items: GitHubRepo[] | GitHubIssue[] | GitHubUser[] | CodeSearchItem[];
++  totalCount: number;
++}
++
+ interface SortConfig {
+   value: SortOption;
+   label: string;
+@@ -122,5 +133,6 @@
+     type: SearchType,
+     page = 1,
+     sort: SortOption = sortOption,
++    force = false,
+   ) => {
+     if (!searchQuery.trim()) return;
+     setLoading(true);
+@@ -130,6 +142,34 @@
+     setSearched(true);
+     setShowHistory(false);
+     // 保存历史记录
+     saveHistory(searchQuery.trim());
+@@ -136,7 +176,33 @@
+     setHistory(loadHistory());
+     try {
+       // 按当前搜索类型取排序配置，注入到对应类型的 GitHub Search API
+-      const effectiveSort = normalizeSort(type, sort);
+       const sortCfg    = findSortOption(effectiveSort);
+       const sortParam  = sortCfg?.apiSort;
+       const orderParam = sortCfg?.apiOrder;
+@@ -149,6 +215,7 @@
+         setTotalCount(result.total_count);
+         setIssues([]);
+         setUsers([]);
+         setCodeResults([]);
++        pageCache.set<SearchCachePayload>(cacheKey, { items: result.items, totalCount: result.total_count });
+       } else if (type === 'issues') {
+@@ -162,6 +229,7 @@
+         setRepos([]);
+         setUsers([]);
+         setCodeResults([]);
++        pageCache.set<SearchCachePayload>(cacheKey, { items: result.items, totalCount: result.total_count });
+       } else if (type === 'code') {
+@@ -175,6 +243,7 @@
+         setRepos([]);
+         setIssues([]);
+         setUsers([]);
++        pageCache.set<SearchCachePayload>(cacheKey, { items: result.items, totalCount: result.total_count });
+       } else {
+@@ -188,6 +257,7 @@
+         setRepos([]);
+         setIssues([]);
+         setCodeResults([]);
++        pageCache.set<SearchCachePayload>(cacheKey, { items: result.items, totalCount: result.total_count });
+       }
+       setCurrentPage(page);
+       // 同步 URL 参数，方便返回时恢复
+@@ -215,7 +285,7 @@
+ 
+   const handleKeyDown = (e: React.KeyboardEvent) => {
+     if (e.key === 'Enter') {
+-      handleSearch(query, searchType, 1);
++      handleSearch(query, searchType, 1, sortOption, true);
+     }
+     if (e.key === 'Escape') {
+       setShowHistory(false);
+@@ -243,7 +313,7 @@
+     saveSortMap(next);
+     setSortByType(next);
+     if (searched && query.trim()) {
+-      handleSearch(query, searchType, 1, newSort);
++      handleSearch(query, searchType, 1, newSort, true);
+     }
+   };
+ 
+@@ -405,7 +475,7 @@
+           <button
+             type="button"
+             aria-label={i18n.t('搜索')}
+-            onClick={() => handleSearch(query, searchType, 1)}
++            onClick={() => handleSearch(query, searchType, 1, sortOption, true)}
+             disabled={loading || !query.trim()}
+             className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-secondary transition-colors disabled:opacity-40 disabled:pointer-events-none"
+           >
+@@ -431,7 +501,7 @@
+                       // 防止 blur 先触发隐藏历史
+                       e.preventDefault();
+                       setQuery(item);
+-                      handleSearch(item, searchType, 1);
++                      handleSearch(item, searchType, 1, sortOption, true);
+                     }}
+                   >
+                     <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+diff --git a/android/app/src/main/java/com/github/manager/MainActivity.kt b/android/app/src/main/java/com/github/manager/MainActivity.kt
+--- a/android/app/src/main/java/com/github/manager/MainActivity.kt
++++ b/android/app/src/main/java/com/github/manager/MainActivity.kt
+@@ -612,26 +612,13 @@
+             if (targetId == currentNavItemId) return@setOnItemSelectedListener false
+ 
+             // 通过修改 location.hash 触发 HashRouter 路由跳转。
+-            // WebView 在 hash 变化后可能沿用上一个页面的原生滚动偏移，
+-            // 因此显式多次归零，避免底部导航切换后停留在上一页的滚动位置。
++            // 滚动位置完全交给前端 RouteScrollManager：一级 Tab 恢复上次停留位置，
++            // 进入详情页等其余路由回到顶部。这里再强制归零会覆盖前端的记忆位置，
++            // 并把归零后的 0 写回上一个 Tab 的存档（导致切回来时丢失位置）。
+             val safeHash = path.replace("'", "\\'")
+-            val js = """
+-                (function(){
+-                    window.location.hash = '$safeHash';
+-                    function resetScroll(){
+-                        try {
+-                            window.scrollTo(0, 0);
+-                            if (document.documentElement) document.documentElement.scrollTop = 0;
+-                            if (document.body) document.body.scrollTop = 0;
+-                        } catch (e) {}
+-                    }
+-                    resetScroll();
+-                    setTimeout(resetScroll, 60);
+-                    setTimeout(resetScroll, 180);
+-                })();
+-            """.trimIndent()
+-            webView.evaluateJavascript(js, null)
++            webView.evaluateJavascript("window.location.hash = '$safeHash';", null)
+             true
+         }
+     }

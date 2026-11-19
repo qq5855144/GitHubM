@@ -1,4 +1,4 @@
-搜索结果返回复用缓存 + APK 底部 Tab 不再强制归零
+搜索结果返回复用缓存 + APK 底部 Tab 不再强制归零 + 更新日志完整展示
 
 应用方式（--recount 会按 hunk 内容重算行号，容忍偏移）：
   git apply --recount docs/patches/scroll-and-search-cache.patch
@@ -183,3 +183,10 @@ diff --git a/android/app/src/main/java/com/github/manager/MainActivity.kt b/andr
              true
          }
      }
+@@ -270,7 +257,7 @@
+                                 val safeNotes = releaseNotes
+                                     .replace("\\", "\\\\")
+                                     .replace("'", "\\'")
+                                     .replace("\n", "\\n")
+-                                    .take(500)
++                                    .take(4000)

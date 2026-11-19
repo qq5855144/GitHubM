@@ -9,7 +9,6 @@ import {
   Trash2,
   Tag,
   Clock,
-  FileArchive,
   AlertCircle,
   ExternalLink,
   RefreshCw,
@@ -75,6 +74,7 @@ import { copyToClipboard } from '@/lib/utils';
 import i18n from "@/i18n";
 import { useAuth } from "@/contexts/AuthContext";
 import { isRepoOwner } from "@/lib/repoPermissions";
+import { getAssetIcon } from '@/lib/assetIcon';
 
 interface ReleasePublishResultDetail {
   success: boolean;
@@ -146,6 +146,7 @@ async function downloadWithAuth(asset: { url: string; browser_download_url: stri
 
 function AssetItem({ asset }: { asset: GitHubReleaseAsset }) {
   const [downloading, setDownloading] = useState(false);
+  const { Icon: AssetIcon, color: assetIconColor, label: assetIconLabel } = getAssetIcon(asset.name);
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -159,8 +160,10 @@ function AssetItem({ asset }: { asset: GitHubReleaseAsset }) {
   return (
     <div className="px-4 py-2.5 hover:bg-secondary/30 transition-colors">
       <div className="flex items-center gap-2 min-w-0">
-        <FileArchive className="w-4 h-4 text-muted-foreground shrink-0" />
-        <p className="text-sm text-foreground font-mono truncate">{asset.name}</p>
+        <span className="shrink-0 flex items-center" title={assetIconLabel} aria-label={assetIconLabel} role="img">
+          <AssetIcon className={`w-4 h-4 ${assetIconColor}`} />
+        </span>
+        <p className="text-sm text-foreground font-mono truncate" title={`${assetIconLabel} · ${asset.name}`}>{asset.name}</p>
       </div>
       <div className="flex items-center justify-between gap-3 mt-1.5 pl-6">
         <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0 flex-wrap">
@@ -711,12 +714,14 @@ export default function ArtifactsPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {artifacts.map((art) => (
+              {artifacts.map((art) => {
+                const artIcon = getAssetIcon(art.name);
+                return (
                 <div key={art.id} className="bg-card border border-border rounded-xl overflow-hidden">
                   <div className="px-4 pt-3 pb-2.5 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap min-w-0">
-                      <FileArchive className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <span className="text-sm font-mono text-foreground break-all min-w-0">{art.name}</span>
+                      <artIcon.Icon className={`w-4 h-4 shrink-0 ${artIcon.color}`} aria-label={artIcon.label} />
+                      <span className="text-sm font-mono text-foreground break-all min-w-0" title={`${artIcon.label} · ${art.name}`}>{art.name}</span>
                       {art.expired && <Badge variant="outline" className="text-xs text-muted-foreground border-border">{i18n.t('已过期')}</Badge>}
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap pl-6">
@@ -758,7 +763,8 @@ export default function ArtifactsPage() {
                     </Button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </TabsContent>

@@ -1,9 +1,7 @@
 pluginManagement {
     repositories {
-        // 优先使用国内镜像，避免 Maven Central 重定向到 GitHub Release 时出现 504。
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+        // GitHub Actions runner 在海外：官方仓库优先，阿里云镜像作为兑底。
+        // 之前镜像在前，偶发 502 / TLS bad_record_mac 会直接让整个构建失败。
         google {
             content {
                 includeGroupByRegex("com\\.android.*")
@@ -13,15 +11,18 @@ pluginManagement {
         }
         mavenCentral()
         gradlePluginPortal()
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
     }
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
         google()
         mavenCentral()
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
     }
 }
 

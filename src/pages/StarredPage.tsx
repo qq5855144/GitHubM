@@ -41,16 +41,27 @@ type SortKey = 'updated' | 'created' | 'stars' | 'name';
 
 const PAGE_SIZE = 30;
 
+function toTime(value?: string): number {
+  return value ? new Date(value).getTime() : 0;
+}
+
 function sortRepos(repos: GitHubRepo[], sort: SortKey): GitHubRepo[] {
   return [...repos].sort((a, b) => {
+    let diff = 0;
     switch (sort) {
-      case 'stars': return b.stargazers_count - a.stargazers_count;
-      case 'name': return a.name.localeCompare(b.name);
-      // 收藏时间：优先 starred_at（与 GitHub 网页排序一致），缺失时回退仓库创建时间
-      case 'created': return new Date(b.starred_at || b.created_at).getTime() - new Date(a.starred_at || a.created_at).getTime();
+      case 'stars': diff = b.stargazers_count - a.stargazers_count; break;
+      case 'name': diff = a.name.localeCompare(b.name); break;
+      // 收藏时间：优先 starred_at（与 GitHub 网页一致），缺失时回退仓库创建时间
+      case 'created': diff = toTime(b.starred_at || b.created_at) - toTime(a.starred_at || a.created_at); break;
+      // 最近活跃 = 最后一次推送；GitHub 官方 /user/starred?sort=updated 就是按 pushed_at 排的
       case 'updated':
-      default: return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      default: diff = toTime(b.pushed_at || b.updated_at) - toTime(a.pushed_at || a.updated_at); break;
     }
+    if (diff !== 0) return diff;
+    // 时间戳相同（批量推送）时用 star 数、全名兜底，避免顺序抖动
+    const byStars = b.stargazers_count - a.stargazers_count;
+    if (byStars !== 0) return byStars;
+    return a.full_name.localeCompare(b.full_name);
   });
 }
 
@@ -66,7 +77,7 @@ export default function StarredPage() {
 
   const CACHE_KEY = 'starred:all';
 
-  // 排序在本地做，必须拿到全量收藏，否则只有默认第一页参与排序，与网页结果不一致。
+  // 排序在本地做，必须拿到全量收藏；首页先回填，剩余页并发补齐。
   const loadStarred = useCallback(async (force = false) => {
     if (!force) {
       const cached = pageCache.get<GitHubRepo[]>(CACHE_KEY);
@@ -79,7 +90,10 @@ export default function StarredPage() {
     if (force) setRefreshing(true);
     else setLoading(true);
     try {
-      const data = await getAllStarredRepos('created', 'desc');
+      const data = await getAllStarredRepos('created', 'desc', (firstPage) => {
+        setRepos(firstPage);
+        setLoading(false);
+      });
       setRepos(data);
       pageCache.set(CACHE_KEY, data);
     } catch {
@@ -161,8 +175,6 @@ export default function StarredPage() {
       <div className="flex gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -213,91 +225,90 @@ export default function StarredPage() {
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {visible.map((repo) => {
-              return (
-                <div
-                  key={repo.id}
-                  className="p-4 hover:bg-secondary/30 transition-colors group"
-                >
-                  <div className="flex items-start gap-3">
-                    {/* 仓库信息 */}
-                    <button
-                      type="button"
-                      className="flex-1 min-w-0 text-left"
-                      onClick={() => navigate(`/repos/${repo.full_name}`)}
-                    >
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {repo.private
-                          ? <Lock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          : <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        }
-                        <span className="text-sm font-semibold text-accent group-hover:underline truncate">
-                          {repo.name}
-                        </span>
-                        {repo.fork && (
-                          <Badge variant="outline" className="text-xs border-border text-muted-foreground h-4 px-1">Fork</Badge>
-                        )}
-                      </div>
-
-                      {repo.description && (
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2 text-pretty">
-                          {repo.description}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-3 mt-2 flex-wrap">
-                        {repo.language && (
-                          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <span
-                              className="w-2.5 h-2.5 rounded-full shrink-0"
-                              style={{ backgroundColor: getLanguageColor(repo.language) }}
-                            />
-                            {repo.language}
-                          </span>
-                        )}
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Star className="w-3 h-3" />
-                          {formatNumber(repo.stargazers_count)}
-                        </span>
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <GitFork className="w-3 h-3" />
-                          {formatNumber(repo.forks_count)}
-                        </span>
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="w-3 h-3" />
-                          {formatRelativeTime(repo.updated_at)}
-                        </span>
-                        {repo.topics && repo.topics.length > 0 && (
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {repo.topics.slice(0, 3).map((topic) => (
-                              <span
-                                key={topic}
-                                className="text-xs bg-accent/10 text-accent border border-accent/20 px-1.5 py-0.5 rounded"
-                              >
-                                {topic}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </button>
-
-                    {/* 取消收藏按钮 */}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0 h-8 text-xs text-warning border border-warning/40 hover:bg-warning/10 hover:text-warning"
-                      disabled={unstarring === repo.id}
-                      onClick={() => handleUnstar(repo)}
-                      title={i18n.t('取消收藏')}
-                    >
-                      <Star className="w-3.5 h-3.5 mr-1 fill-warning" />
-                      {unstarring === repo.id ? i18n.t('处理中…') : i18n.t('已收藏')}
-                    </Button>
+            {visible.map((repo) => (
+              <div
+                key={repo.id}
+                role="button"
+                tabIndex={0}
+                className="px-4 py-3 hover:bg-secondary/30 transition-colors group cursor-pointer"
+                onClick={() => navigate(`/repos/${repo.full_name}`)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    navigate(`/repos/${repo.full_name}`);
+                  }
+                }}
+              >
+                {/* 第一行：仓库名 + 取消收藏（右固定，尺寸随行） */}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    {repo.private
+                      ? <Lock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      : <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    }
+                    <span className="text-sm font-semibold text-accent group-hover:underline truncate">
+                      {repo.name}
+                    </span>
+                    {repo.fork && (
+                      <Badge variant="outline" className="text-[10px] border-border text-muted-foreground h-4 px-1 shrink-0">Fork</Badge>
+                    )}
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 h-7 px-2 text-[11px] text-warning border border-warning/40 hover:bg-warning/10 hover:text-warning gap-1"
+                    disabled={unstarring === repo.id}
+                    onClick={(event) => { event.stopPropagation(); void handleUnstar(repo); }}
+                    title={i18n.t('取消收藏')}
+                  >
+                    <Star className="w-3 h-3 fill-warning" />
+                    {unstarring === repo.id ? i18n.t('处理中…') : i18n.t('已收藏')}
+                  </Button>
                 </div>
-              );
-            })}
+
+                {repo.description && (
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 text-pretty">
+                    {repo.description}
+                  </p>
+                )}
+
+                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                  {repo.language && (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: getLanguageColor(repo.language) }}
+                      />
+                      {repo.language}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Star className="w-3 h-3" />
+                    {formatNumber(repo.stargazers_count)}
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <GitFork className="w-3 h-3" />
+                    {formatNumber(repo.forks_count)}
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="w-3 h-3" />
+                    {formatRelativeTime(repo.pushed_at || repo.updated_at)}
+                  </span>
+                  {repo.topics && repo.topics.length > 0 && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {repo.topics.slice(0, 3).map((topic) => (
+                        <span
+                          key={topic}
+                          className="text-xs bg-accent/10 text-accent border border-accent/20 px-1.5 py-0.5 rounded"
+                        >
+                          {topic}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

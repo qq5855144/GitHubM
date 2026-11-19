@@ -258,8 +258,7 @@ GitHubM/
 │   └── routes.tsx                # 路由表（public / 受保护）
 ├── .skills/                      # 80+ 能力包（OCR、图像/视频生成、检索、支付等）
 ├── .rules/                       # ast-grep 自定义 lint 规则 + check.sh
-├── scripts/                      # i18n 同步、keystore Secrets 配置等工具脚本
-├── docs/prd.md                   # 产品需求文档
+├── scripts/                      # keystore Secrets 配置等工具脚本
 ├── index.html                    # 主题预初始化脚本（防 FOUC）
 ├── vite.config.ts                # base "./" · 移除 crossorigin · WebView 构建优化
 └── tailwind.config.js · biome.json · tsconfig*.json

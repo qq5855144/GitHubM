@@ -1,7 +1,14 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useLocation, useNavigationType } from 'react-router-dom';
 
 const SCROLL_KEY_PREFIX = 'githubm_scroll_position:';
+const RESTORE_TIMEOUT_MS = 2000;
+const RESTORE_INTERVAL_MS = 50;
+
+/** 每个页面（pathname + search）独立记忆滚动位置，不同列表互不覆盖 */
+function scrollKey(pathname: string, search: string): string {
+  return `${pathname}${search}`;
+}
 
 function readScrollPosition(key: string): number | null {
   try {
@@ -22,15 +29,15 @@ function saveScrollPosition(key: string, value: number): void {
 
 /**
  * 全局页面滚动管理：
- * - 新进入页面时回到顶部
- * - 浏览器前进/后退时恢复该历史记录对应的滚动位置
- * - 不同底部 Tab / 路由之间不再共享滚动位置
+ * - 按 pathname + search 分别记忆滚动位置，不同页面互不覆盖
+ * - 新进入页面回到顶部；浏览器前进/后退恢复进入前的位置
+ * - 列表内容是异步渲染的，恢复时轮询重试，直到内容撑开高度或超时
  */
 export default function RouteScrollManager() {
   const location = useLocation();
   const navigationType = useNavigationType();
-  const lastKeyRef = useRef(location.key);
-  const currentKeyRef = useRef(location.key);
+  const keyRef = useRef(scrollKey(location.pathname, location.search));
+  const firstMountRef = useRef(true);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -41,31 +48,53 @@ export default function RouteScrollManager() {
     };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (typeof window === 'undefined') return;
-    const previousKey = lastKeyRef.current;
-    if (previousKey && previousKey !== location.key) {
-      saveScrollPosition(previousKey, window.scrollY);
+    const nextKey = scrollKey(location.pathname, location.search);
+    // 先切 key：新页面渲染时浏览器会把越界的 scrollY 夹到 0 并触发 scroll 事件，
+    // 那时写入的 0 只会落到新页面的 key 上，不会覆盖上一页记住的位置。
+    keyRef.current = nextKey;
+
+    const isFirstMount = firstMountRef.current;
+    firstMountRef.current = false;
+    const saved = readScrollPosition(nextKey);
+    const shouldRestore = !isFirstMount && navigationType === 'POP' && saved !== null && saved > 0;
+
+    if (!shouldRestore) {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      return;
     }
 
-    currentKeyRef.current = location.key;
-    const saved = readScrollPosition(location.key);
-    const target = navigationType === 'POP' && saved !== null ? saved : 0;
-
-    const apply = () => window.scrollTo({ top: target, left: 0, behavior: 'auto' });
-    apply();
-    const raf = window.requestAnimationFrame(apply);
-    // 异步页面内容可能稍后才撑开高度，POP 恢复时短暂重试。
-    const retries = target > 0
-      ? [window.setTimeout(apply, 80), window.setTimeout(apply, 240)]
-      : [];
-
-    lastKeyRef.current = location.key;
-    return () => {
-      window.cancelAnimationFrame(raf);
-      retries.forEach((timer) => window.clearTimeout(timer));
+    const target = saved;
+    const startedAt = Date.now();
+    let timer = 0;
+    let cancelled = false;
+    const stop = () => {
+      cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [location.key, navigationType]);
+
+    const apply = () => {
+      if (cancelled) return;
+      const maxTop = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      window.scrollTo({ top: Math.min(target, maxTop), left: 0, behavior: 'auto' });
+      const reached = Math.abs(window.scrollY - target) <= 2;
+      if (reached || Date.now() - startedAt >= RESTORE_TIMEOUT_MS) return;
+      timer = window.setTimeout(apply, RESTORE_INTERVAL_MS);
+    };
+    apply();
+
+    // 用户主动滚动时立即停止抢位置
+    window.addEventListener('wheel', stop, { passive: true });
+    window.addEventListener('touchstart', stop, { passive: true });
+    window.addEventListener('keydown', stop);
+    return () => {
+      stop();
+      window.removeEventListener('wheel', stop);
+      window.removeEventListener('touchstart', stop);
+      window.removeEventListener('keydown', stop);
+    };
+  }, [location.pathname, location.search, navigationType]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -73,7 +102,7 @@ export default function RouteScrollManager() {
     const handleScroll = () => {
       window.cancelAnimationFrame(raf);
       raf = window.requestAnimationFrame(() => {
-        saveScrollPosition(currentKeyRef.current, window.scrollY);
+        saveScrollPosition(keyRef.current, window.scrollY);
       });
     };
     handleScroll();
@@ -82,7 +111,7 @@ export default function RouteScrollManager() {
       window.cancelAnimationFrame(raf);
       window.removeEventListener('scroll', handleScroll);
     };
-  }, [location.key]);
+  }, [location.pathname, location.search]);
 
   return null;
 }

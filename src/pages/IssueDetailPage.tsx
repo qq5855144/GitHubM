@@ -1,6 +1,6 @@
 // Issue 详情页
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
@@ -17,6 +17,9 @@ import {
   Users,
   Flag,
   Loader2,
+  Quote,
+  MessageSquarePlus,
+  EyeOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -57,9 +60,28 @@ import MarkdownRenderer from '@/components/common/MarkdownRenderer';
 import { UserLink } from '@/components/common/UserLink';
 import { useAuth } from '@/contexts/AuthContext';
 import { isRepoOwner } from '@/lib/repoPermissions';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { minimizeIssueComment } from '@/services/github-graphql';
+import type { HideCommentReason } from '@/services/github-graphql';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
 import i18n from "@/i18n";
+
+const HIDE_REASONS: Array<{ value: HideCommentReason; label: string }> = [
+  { value: 'OFF_TOPIC', label: '偏离主题' },
+  { value: 'OUTDATED', label: '过时' },
+  { value: 'RESOLVED', label: '已解决' },
+  { value: 'SPAM', label: '垃圾信息' },
+  { value: 'ABUSE', label: '滥用' },
+  { value: 'DUPLICATE', label: '重复' },
+];
 
 export default function IssueDetailPage() {
   const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
@@ -77,6 +99,8 @@ export default function IssueDetailPage() {
   const [loadingMoreComments, setLoadingMoreComments] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingCommentBody, setEditingCommentBody] = useState('');
+  const [hiddenComments, setHiddenComments] = useState<Set<number>>(new Set());
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
@@ -264,6 +288,49 @@ export default function IssueDetailPage() {
     }
   };
 
+  /** 拼出 GitHub 风格的引用块 */
+  const buildQuote = (comment: GitHubComment): string => {
+    const body = (comment.body || '').trim();
+    const quoted = body.split("\n").map((line) => "> " + line).join("\n");
+    const url = `https://github.com/${owner}/${repo}/issues/${number}#issuecomment-${comment.id}`;
+    return quoted + '\n>\n> ——来自 [@' + comment.user.login + '](' + url + ')\n\n';
+  };
+
+  const handleQuoteReply = (comment: GitHubComment) => {
+    const block = buildQuote(comment);
+    setNewComment((prev) => (prev.trim() ? `${prev.trimEnd()}
+
+${block}` : block));
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      composerRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  };
+
+  const handleQuoteToNewIssue = (comment: GitHubComment) => {
+    if (!owner || !repo) return;
+    navigate(`/repos/${owner}/${repo}/issues/new`, {
+      state: {
+        title: `引用 #${number}`,
+        body: buildQuote(comment),
+      },
+    });
+  };
+
+  const handleHide = async (comment: GitHubComment, reason: HideCommentReason) => {
+    if (!comment.node_id) {
+      toast.error(i18n.t('该评论缺少 node_id，无法隐藏'));
+      return;
+    }
+    try {
+      await minimizeIssueComment(comment.node_id, reason);
+      setHiddenComments((prev) => new Set(prev).add(comment.id));
+      toast.success(i18n.t('评论已隐藏'));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : i18n.t('隐藏评论失败'));
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
@@ -400,15 +467,8 @@ export default function IssueDetailPage() {
               {user?.login === comment.user.login && (
                 <Badge variant="outline" className="text-xs border-border text-muted-foreground">{i18n.t('你')}</Badge>
               )}
-              {user?.login === comment.user.login && editingCommentId !== comment.id && (
-                <>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => startEditComment(comment)} title={i18n.t('编辑评论')}>
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeComment(comment.id)} title={i18n.t('删除评论')}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </>
+              {hiddenComments.has(comment.id) && (
+                <Badge variant="outline" className="text-xs border-border text-muted-foreground">{i18n.t('已隐藏')}</Badge>
               )}
             </div>
           </div>
@@ -430,10 +490,50 @@ export default function IssueDetailPage() {
                   </Button>
                 </div>
               </div>
+            ) : hiddenComments.has(comment.id) ? (
+              <p className="text-xs text-muted-foreground italic">{i18n.t('这条评论已被隐藏')}</p>
             ) : (
               <MarkdownRenderer content={comment.body} repoContext={owner && repo ? { owner, repo } : undefined} />
             )}
           </div>
+          {editingCommentId !== comment.id && (
+            <div className="flex items-center gap-1 flex-wrap px-2 py-1.5 border-t border-border bg-secondary/20">
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" onClick={() => handleQuoteReply(comment)}>
+                <Quote className="w-3.5 h-3.5 mr-1" />{i18n.t('引用回复')}
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" onClick={() => handleQuoteToNewIssue(comment)}>
+                <MessageSquarePlus className="w-3.5 h-3.5 mr-1" />{i18n.t('引用到新议题')}
+              </Button>
+              {user?.login === comment.user.login && (
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" onClick={() => startEditComment(comment)}>
+                  <Edit2 className="w-3.5 h-3.5 mr-1" />{i18n.t('编辑')}
+                </Button>
+              )}
+              {(user?.login === comment.user.login || canManage) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground">
+                      <EyeOff className="w-3.5 h-3.5 mr-1" />{i18n.t('隐藏')}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="bg-popover border-border">
+                    <DropdownMenuLabel className="text-[11px] text-muted-foreground">{i18n.t('选择隐藏原因')}</DropdownMenuLabel>
+                    <DropdownMenuSeparator className="bg-border" />
+                    {HIDE_REASONS.map((reason) => (
+                      <DropdownMenuItem key={reason.value} className="text-xs cursor-pointer" onClick={() => void handleHide(comment, reason.value)}>
+                        {i18n.t(reason.label)}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {(user?.login === comment.user.login || canManage) && (
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive" onClick={() => void removeComment(comment.id)}>
+                  <Trash2 className="w-3.5 h-3.5 mr-1" />{i18n.t('删除')}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       ))}
       {hasMoreComments && (

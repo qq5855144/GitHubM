@@ -99,6 +99,8 @@ export interface GitHubMilestone {
 
 export interface GitHubComment {
   id: number;
+  /** GraphQL 全局 ID，用于 minimizeComment（隐藏评论） */
+  node_id?: string;
   body: string;
   user: GitHubUser;
   created_at: string;

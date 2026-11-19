@@ -1,7 +1,7 @@
 // 新建 Issue 页面
 
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { AlertCircle, ChevronRight, Loader2, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,8 +24,11 @@ import i18n from '@/i18n';
 export default function NewIssuePage() {
   const { owner, repo } = useParams<{ owner: string; repo: string }>();
   const navigate = useNavigate();
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
+  const location = useLocation();
+  // 从评论「引用到新议题」带入的预填内容
+  const preset = (location.state as { title?: string; body?: string } | null) ?? null;
+  const [title, setTitle] = useState(preset?.title ?? '');
+  const [body, setBody] = useState(preset?.body ?? '');
   const [labels, setLabels] = useState('');
   const [assignees, setAssignees] = useState('');
   const [milestone, setMilestone] = useState('__none');

@@ -15,8 +15,8 @@ describe('AI character cards', () => {
   it('uses the built-in engineer card by default', () => {
     const active = loadActiveCharacter('alice');
     expect(active.id).toBe(DEFAULT_CHARACTER_ID);
-    expect(active.prompt).toContain('资深软件工程师');
-    expect(active.prompt).toContain('根因优先');
+    expect(active.prompt).toContain('全能AI助手');
+    expect(active.prompt).toContain('定位根因');
     expect(loadCharacters('alice')).toHaveLength(1);
   });
 

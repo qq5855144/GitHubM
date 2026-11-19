@@ -30,6 +30,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { UserLink } from '@/components/common/UserLink';
 import RepoCard from '@/components/repo/RepoCard';
+import { pageCache } from '@/lib/page-cache';
 import {
   searchRepositories,
   searchIssues,
@@ -297,6 +298,15 @@ function SearchRepoContextMenu({ repo, children }: { repo: GitHubRepo; children:
   );
 }
 
+interface SearchSnapshot {
+  repos: GitHubRepo[];
+  issues: GitHubIssue[];
+  users: GitHubUser[];
+  codeResults: CodeSearchItem[];
+  totalCount: number;
+  page: number;
+}
+
 export default function SearchPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -340,8 +350,26 @@ export default function SearchPage() {
     type: SearchType,
     page = 1,
     sort: SortOption = sortOption,
+    force = false,
   ) => {
     if (!searchQuery.trim()) return;
+    const cacheKey = `search:${type}:${normalizeSort(type, sort)}:${page}:${searchQuery.trim()}`;
+    // 返回 / 切 Tab 回到搜索页时命中缓存：直接回填，不发请求、不出骨架屏、不重置滚动
+    if (!force) {
+      const cached = pageCache.get<SearchSnapshot>(cacheKey);
+      if (cached) {
+        setRepos(cached.repos);
+        setIssues(cached.issues);
+        setUsers(cached.users);
+        setCodeResults(cached.codeResults);
+        setTotalCount(cached.totalCount);
+        setCurrentPage(cached.page);
+        setSearched(true);
+        setShowHistory(false);
+        setLoading(false);
+        return;
+      }
+    }
     setLoading(true);
     setSearched(true);
     setShowHistory(false);
@@ -355,6 +383,8 @@ export default function SearchPage() {
       const sortParam  = sortCfg?.apiSort;
       const orderParam = sortCfg?.apiOrder;
 
+      let snapshot: SearchSnapshot;
+
       if (type === 'repositories') {
         const result = await searchRepositories(searchQuery, {
           per_page: PER_PAGE,
@@ -363,11 +393,7 @@ export default function SearchPage() {
             ? { sort: sortParam as 'stars' | 'forks' | 'updated' | 'help-wanted-issues', order: orderParam }
             : {}),
         });
-        setRepos(result.items);
-        setTotalCount(result.total_count);
-        setIssues([]);
-        setUsers([]);
-        setCodeResults([]);
+        snapshot = { repos: result.items, issues: [], users: [], codeResults: [], totalCount: result.total_count, page };
       } else if (type === 'issues') {
         const result = await searchIssues(searchQuery, {
           per_page: PER_PAGE,
@@ -376,22 +402,14 @@ export default function SearchPage() {
             ? { sort: sortParam as 'created' | 'updated' | 'comments' | 'reactions' | 'interactions', order: orderParam }
             : {}),
         });
-        setIssues(result.items);
-        setTotalCount(result.total_count);
-        setRepos([]);
-        setUsers([]);
-        setCodeResults([]);
+        snapshot = { repos: [], issues: result.items, users: [], codeResults: [], totalCount: result.total_count, page };
       } else if (type === 'code') {
         const result = await searchCode(searchQuery, {
           per_page: PER_PAGE,
           page,
           ...(sortParam ? { sort: sortParam as 'indexed', order: orderParam } : {}),
         });
-        setCodeResults(result.items);
-        setTotalCount(result.total_count);
-        setRepos([]);
-        setIssues([]);
-        setUsers([]);
+        snapshot = { repos: [], issues: [], users: [], codeResults: result.items, totalCount: result.total_count, page };
       } else {
         const result = await searchUsers(searchQuery, {
           per_page: PER_PAGE,
@@ -400,12 +418,14 @@ export default function SearchPage() {
             ? { sort: sortParam as 'followers' | 'repositories' | 'joined', order: orderParam }
             : {}),
         });
-        setUsers(result.items);
-        setTotalCount(result.total_count);
-        setRepos([]);
-        setIssues([]);
-        setCodeResults([]);
+        snapshot = { repos: [], issues: [], users: result.items, codeResults: [], totalCount: result.total_count, page };
       }
+      setRepos(snapshot.repos);
+      setIssues(snapshot.issues);
+      setUsers(snapshot.users);
+      setCodeResults(snapshot.codeResults);
+      setTotalCount(snapshot.totalCount);
+      pageCache.set(cacheKey, snapshot);
       setCurrentPage(page);
       // 同步 URL 参数，方便返回时恢复
       setSearchParams({ q: searchQuery, type, page: String(page), sort: effectiveSort }, { replace: true });
@@ -473,7 +493,7 @@ export default function SearchPage() {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      handleSearch(query, searchType, 1);
+      handleSearch(query, searchType, 1, sortOption, true);
     }
     if (e.key === 'Escape') {
       setShowHistory(false);
@@ -490,7 +510,7 @@ export default function SearchPage() {
     saveSortMap(next);
     setSortByType(next);
     if (searched && query.trim()) {
-      handleSearch(query, searchType, 1, newSort);
+      handleSearch(query, searchType, 1, newSort, true);
     }
   };
 
@@ -586,7 +606,7 @@ export default function SearchPage() {
           <button
             type="button"
             aria-label={i18n.t('搜索')}
-            onClick={() => handleSearch(query, searchType, 1)}
+            onClick={() => handleSearch(query, searchType, 1, sortOption, true)}
             disabled={loading || !query.trim()}
             className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-secondary transition-colors disabled:opacity-40 disabled:pointer-events-none"
           >
@@ -618,7 +638,7 @@ export default function SearchPage() {
                       // 防止 blur 先触发隐藏历史
                       e.preventDefault();
                       setQuery(item);
-                      handleSearch(item, searchType, 1);
+                      handleSearch(item, searchType, 1, sortOption, true);
                     }}
                   >
                     <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -654,7 +674,7 @@ export default function SearchPage() {
             onClick={() => {
               setSearchType(type);
               setCurrentPage(1);
-              if (query.trim()) handleSearch(query, type, 1, sortByType[type]);
+              if (query.trim()) handleSearch(query, type, 1, sortByType[type], true);
             }}
           >
             <Icon className="w-4 h-4 shrink-0" />

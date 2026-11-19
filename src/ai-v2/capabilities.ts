@@ -1,6 +1,7 @@
 // AI V2 — Capability Registry：按上下文激活能力包，避免一次性注入全部工具
 import type { AgentTool, CapabilityInfo, RepoContext } from './types';
 import { GITHUB_READ_TOOLS, GITHUB_WRITE_TOOLS } from './tools/github';
+import { GITHUB_EDIT_TOOLS } from './tools/githubEdit';
 import { GITHUB_OPS_TOOLS } from './tools/githubOps';
 import { ARTIFACT_TOOLS } from './tools/artifacts';
 import { MEMORY_TOOLS } from './tools/memory';
@@ -35,8 +36,8 @@ export const CAPABILITY_PACKS: CapabilityPack[] = [
   {
     id: 'github-write',
     label: 'GitHub 写入',
-    description: '创建或更新文件，执行前必须用户确认',
-    tools: GITHUB_WRITE_TOOLS,
+    description: '创建、局部编辑或分片追加文件，执行前必须用户确认',
+    tools: [...GITHUB_WRITE_TOOLS, ...GITHUB_EDIT_TOOLS],
     active: ctx => Boolean(ctx.repo),
   },
 ];

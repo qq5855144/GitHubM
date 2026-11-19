@@ -16,7 +16,7 @@ describe('AI character cards', () => {
     const active = loadActiveCharacter('alice');
     expect(active.id).toBe(DEFAULT_CHARACTER_ID);
     expect(active.prompt).toContain('资深软件工程师');
-    expect(active.prompt).toContain('以零已知缺陷为目标');
+    expect(active.prompt).toContain('根因优先');
     expect(loadCharacters('alice')).toHaveLength(1);
   });
 

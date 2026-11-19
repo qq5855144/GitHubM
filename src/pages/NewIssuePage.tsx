@@ -18,6 +18,7 @@ import { createIssue, getRepoLabels, getRepoMilestones } from '@/services/github
 import type { GitHubLabel, GitHubMilestone } from '@/types/types';
 import { pageCache } from '@/lib/page-cache';
 import { toast } from 'sonner';
+import IssueAttachmentButton from '@/components/issues/IssueAttachmentButton';
 import i18n from '@/i18n';
 
 export default function NewIssuePage() {
@@ -113,6 +114,16 @@ export default function NewIssuePage() {
             className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-y font-mono text-sm min-h-40"
             rows={8}
           />
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap -mt-3">
+          <IssueAttachmentButton
+            owner={owner || ''}
+            repo={repo || ''}
+            disabled={creating}
+            onInsert={(markdown) => setBody((prev) => (prev.trim() ? `${prev}\n\n${markdown}` : markdown))}
+          />
+          <span className="text-[11px] text-muted-foreground">{i18n.t('附件会上传到仓库 githubm-assets/issues/ 并插入 Markdown')}</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

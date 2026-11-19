@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import IssueAttachmentButton from '@/components/issues/IssueAttachmentButton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -463,10 +464,18 @@ export default function IssueDetailPage() {
               className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm min-h-24"
               rows={4}
             />
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Edit2 className="w-3 h-3" />
-                {i18n.t('支持 Markdown · Ctrl+Enter 快速提交')}</span>
+            <div className="flex justify-between items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <IssueAttachmentButton
+                  owner={owner || ''}
+                  repo={repo || ''}
+                  disabled={submitting}
+                  onInsert={(markdown) => setNewComment((prev) => (prev.trim() ? `${prev}\n\n${markdown}` : markdown))}
+                />
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Edit2 className="w-3 h-3" />
+                  {i18n.t('支持 Markdown · Ctrl+Enter 快速提交')}</span>
+              </div>
               <Button
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={handleComment}

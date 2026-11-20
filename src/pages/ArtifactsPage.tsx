@@ -163,7 +163,7 @@ function AssetItem({ asset }: { asset: GitHubReleaseAsset }) {
         <span className="shrink-0 flex items-center" title={assetIconLabel} aria-label={assetIconLabel} role="img">
           <AssetIcon className={`w-4 h-4 ${assetIconColor}`} />
         </span>
-        <p className="text-sm text-foreground font-mono truncate" title={`${assetIconLabel} · ${asset.name}`}>{asset.name}</p>
+        <p className="text-sm text-foreground font-mono break-all min-w-0 leading-snug" title={`${assetIconLabel} · ${asset.name}`}>{asset.name}</p>
       </div>
       <div className="flex items-center justify-between gap-3 mt-1.5 pl-6">
         <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0 flex-wrap">
@@ -228,7 +228,7 @@ function ReleaseItem({
             <span className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-semibold text-foreground font-mono">{release.tag_name}</span>
               {release.name && release.name !== release.tag_name && (
-                <span className="text-sm text-muted-foreground truncate">{release.name}</span>
+                <span className="text-sm text-muted-foreground break-all min-w-0">{release.name}</span>
               )}
               {release.draft && <Badge variant="outline" className="text-xs text-muted-foreground border-border">{i18n.t('草稿')}</Badge>}
               {release.prerelease && <Badge className="bg-warning/10 text-warning border-warning/30 text-xs">{i18n.t('预发布')}</Badge>}

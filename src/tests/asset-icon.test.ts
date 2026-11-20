@@ -83,7 +83,7 @@ describe('getAssetIcon 无后缀 artifact 语义识别', () => {
     expect(getAssetIcon('checksums').label).toBe('校验文件');
     expect(getAssetIcon('sha256sums').label).toBe('校验文件');
     expect(getAssetIcon('signature').label).toBe('签名文件');
-    expect(getAssetIcon('source').label).toBe('压缩包');
+    expect(getAssetIcon('source').label).toBe('源码包');
   });
 });
 

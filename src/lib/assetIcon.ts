@@ -4,31 +4,34 @@
 //
 // 注意：GitHub Actions 的 artifact 名通常不带后缀（例如 `github-manager-test-apk`），
 // 因此除扩展名外还要做文件名语义识别，否则一整列都是通用文件图标。
+import type { AssetIconComponent } from '@/components/common/AssetIcons';
 import {
-  FileArchive,
-  FileCode,
-  FileImage,
-  FileJson,
-  FileText,
-  FileVideo,
-  FileAudio,
-  FileBadge,
-  Package,
-  Smartphone,
-  Apple,
-  Monitor,
-  Terminal,
-  Cpu,
-  ShieldCheck,
-  Hash,
-  Database,
-  File,
-  Box,
-  type LucideIcon,
-} from 'lucide-react';
+  AndroidBundleIcon,
+  AndroidIcon,
+  AndroidLibraryIcon,
+  AppImageIcon,
+  AppleIcon,
+  ArchiveBoxIcon,
+  AudioNoteIcon,
+  ChecksumIcon,
+  CoffeeIcon,
+  DiscImageIcon,
+  DocumentIcon,
+  FilmIcon,
+  GenericFileIcon,
+  JsonDataIcon,
+  LinuxIcon,
+  MacOSIcon,
+  PictureIcon,
+  ScriptIcon,
+  SignatureIcon,
+  SourceBoxIcon,
+  WebDistIcon,
+  WindowsIcon,
+} from '@/components/common/AssetIcons';
 
 export interface AssetIconInfo {
-  Icon: LucideIcon;
+  Icon: AssetIconComponent;
   /** tailwind 文本色，用于图标着色 */
   color: string;
   /** 语义标签，用于 tooltip / 读屏 */
@@ -54,29 +57,30 @@ export function compoundExt(name: string): string {
   return extOf(name);
 }
 
-type Rule = { Icon: LucideIcon; color: string; label: string };
+type Rule = { Icon: AssetIconComponent; color: string; label: string };
 
-const APK: Rule = { Icon: Smartphone, color: 'text-emerald-400', label: 'Android 安装包' };
-const AAB: Rule = { Icon: Package, color: 'text-emerald-500', label: 'Android App Bundle' };
-const AAR: Rule = { Icon: Package, color: 'text-emerald-600', label: 'Android Library' };
-const IPA: Rule = { Icon: Apple, color: 'text-zinc-300', label: 'iOS 安装包' };
-const WIN: Rule = { Icon: Monitor, color: 'text-sky-400', label: 'Windows 安装包' };
-const MAC: Rule = { Icon: Apple, color: 'text-zinc-300', label: 'macOS 安装包' };
-const LINUX: Rule = { Icon: Terminal, color: 'text-orange-400', label: 'Linux 安装包' };
-const APPIMAGE: Rule = { Icon: Cpu, color: 'text-orange-300', label: 'AppImage' };
-const ARCHIVE: Rule = { Icon: FileArchive, color: 'text-yellow-500', label: '压缩包' };
-const CHECKSUM: Rule = { Icon: Hash, color: 'text-teal-400', label: '校验文件' };
-const SIGNED: Rule = { Icon: ShieldCheck, color: 'text-teal-300', label: '签名文件' };
-const IMAGE: Rule = { Icon: Database, color: 'text-indigo-400', label: '镜像文件' };
-const JSONFILE: Rule = { Icon: FileJson, color: 'text-yellow-400', label: 'JSON 数据' };
-const DOC: Rule = { Icon: FileText, color: 'text-blue-300', label: '文档' };
-const IMGFILE: Rule = { Icon: FileImage, color: 'text-pink-400', label: '图片' };
-const VIDEO: Rule = { Icon: FileVideo, color: 'text-purple-400', label: '视频' };
-const AUDIO: Rule = { Icon: FileAudio, color: 'text-green-400', label: '音频' };
-const JAVA: Rule = { Icon: FileBadge, color: 'text-orange-400', label: 'Java 构建产物' };
-const SCRIPT: Rule = { Icon: FileCode, color: 'text-yellow-300', label: '脚本产物' };
-const WEBDIST: Rule = { Icon: Box, color: 'text-cyan-400', label: '网页构建产物' };
-const UNKNOWN: Rule = { Icon: File, color: 'text-muted-foreground', label: '文件' };
+const APK: Rule = { Icon: AndroidIcon, color: 'text-emerald-400', label: 'Android 安装包' };
+const AAB: Rule = { Icon: AndroidBundleIcon, color: 'text-emerald-500', label: 'Android App Bundle' };
+const AAR: Rule = { Icon: AndroidLibraryIcon, color: 'text-emerald-600', label: 'Android Library' };
+const IPA: Rule = { Icon: AppleIcon, color: 'text-zinc-300', label: 'iOS 安装包' };
+const WIN: Rule = { Icon: WindowsIcon, color: 'text-sky-400', label: 'Windows 安装包' };
+const MAC: Rule = { Icon: MacOSIcon, color: 'text-zinc-300', label: 'macOS 安装包' };
+const LINUX: Rule = { Icon: LinuxIcon, color: 'text-orange-400', label: 'Linux 安装包' };
+const APPIMAGE: Rule = { Icon: AppImageIcon, color: 'text-orange-300', label: 'AppImage' };
+const ARCHIVE: Rule = { Icon: ArchiveBoxIcon, color: 'text-yellow-500', label: '压缩包' };
+const CHECKSUM: Rule = { Icon: ChecksumIcon, color: 'text-teal-400', label: '校验文件' };
+const SIGNED: Rule = { Icon: SignatureIcon, color: 'text-teal-300', label: '签名文件' };
+const IMAGE: Rule = { Icon: DiscImageIcon, color: 'text-indigo-400', label: '镜像文件' };
+const JSONFILE: Rule = { Icon: JsonDataIcon, color: 'text-yellow-400', label: 'JSON 数据' };
+const DOC: Rule = { Icon: DocumentIcon, color: 'text-blue-300', label: '文档' };
+const IMGFILE: Rule = { Icon: PictureIcon, color: 'text-pink-400', label: '图片' };
+const VIDEO: Rule = { Icon: FilmIcon, color: 'text-purple-400', label: '视频' };
+const AUDIO: Rule = { Icon: AudioNoteIcon, color: 'text-green-400', label: '音频' };
+const JAVA: Rule = { Icon: CoffeeIcon, color: 'text-orange-400', label: 'Java 构建产物' };
+const SCRIPT: Rule = { Icon: ScriptIcon, color: 'text-yellow-300', label: '脚本产物' };
+const WEBDIST: Rule = { Icon: WebDistIcon, color: 'text-cyan-400', label: '网页构建产物' };
+const SOURCE: Rule = { Icon: SourceBoxIcon, color: 'text-amber-400', label: '源码包' };
+const UNKNOWN: Rule = { Icon: GenericFileIcon, color: 'text-muted-foreground', label: '文件' };
 
 /** 扩展名 -> 产物类型 */
 const BY_EXT: Record<string, Rule> = {
@@ -120,7 +124,7 @@ const BY_NAME: { test: RegExp; rule: Rule }[] = [
   { test: /(^|[-_.])(web-?dist|dist|build-?output|webapp|frontend|website|site|pages)([-_.]|$)/, rule: WEBDIST },
   { test: /(^|[-_.])(checksums?|sha\d*(sums?)?|md5|hashes)([-_.]|$)/, rule: CHECKSUM },
   { test: /(^|[-_.])(sig|signature|asc|gpg)([-_.]|$)/, rule: SIGNED },
-  { test: /(^|[-_.])(source|src|sources)([-_.]|$)/, rule: ARCHIVE },
+  { test: /(^|[-_.])(source|src|sources)([-_.]|$)/, rule: SOURCE },
   { test: /(^|[-_.])(coverage|report|junit|test-results|logs?|artifacts)([-_.]|$)/, rule: DOC },
 ];
 

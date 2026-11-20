@@ -106,7 +106,11 @@ const BY_EXT: Record<string, Rule> = {
   mp4: VIDEO, webm: VIDEO, mov: VIDEO, mkv: VIDEO, avi: VIDEO,
   mp3: AUDIO, wav: AUDIO, flac: AUDIO, aac: AUDIO, ogg: AUDIO,
   jar: JAVA, war: JAVA,
-  map: SCRIPT, js: SCRIPT, mjs: SCRIPT, wasm: SCRIPT,
+  // 脚本 / 可执行文本产物：shell、python、powershell、批处理等
+  map: SCRIPT, js: SCRIPT, mjs: SCRIPT, cjs: SCRIPT, wasm: SCRIPT,
+  sh: SCRIPT, bash: SCRIPT, zsh: SCRIPT, fish: SCRIPT, ps1: SCRIPT,
+  bat: SCRIPT, cmd: SCRIPT, py: SCRIPT, rb: SCRIPT, pl: SCRIPT,
+  lua: SCRIPT, tcl: SCRIPT,
 };
 
 /**
@@ -126,6 +130,8 @@ const BY_NAME: { test: RegExp; rule: Rule }[] = [
   { test: /(^|[-_.])(sig|signature|asc|gpg)([-_.]|$)/, rule: SIGNED },
   { test: /(^|[-_.])(source|src|sources)([-_.]|$)/, rule: SOURCE },
   { test: /(^|[-_.])(coverage|report|junit|test-results|logs?|artifacts)([-_.]|$)/, rule: DOC },
+  // 无后缀的脚本产物，例如 `install-script`、`deploy-bash`、`setup-powershell`
+  { test: /(^|[-_.])(scripts?|shell|bash|powershell|psscript)([-_.]|$)/, rule: SCRIPT },
 ];
 
 /**

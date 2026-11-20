@@ -43,6 +43,15 @@ describe('getAssetIcon 按扩展名识别', () => {
     expect(getAssetIcon('app.dmg').label).toBe('macOS 安装包');
     expect(getAssetIcon('app.deb').label).toBe('Linux 安装包');
   });
+
+  it('脚本扩展名识别为脚本产物', () => {
+    expect(getAssetIcon('deploy.sh').label).toBe('脚本产物');
+    expect(getAssetIcon('setup.py').label).toBe('脚本产物');
+    expect(getAssetIcon('build.ps1').label).toBe('脚本产物');
+    expect(getAssetIcon('run.bat').label).toBe('脚本产物');
+    expect(getAssetIcon('init.zsh').label).toBe('脚本产物');
+    expect(getAssetIcon('bundle.js').label).toBe('脚本产物');
+  });
 });
 
 describe('getAssetIcon 校验文件优先', () => {
@@ -84,6 +93,12 @@ describe('getAssetIcon 无后缀 artifact 语义识别', () => {
     expect(getAssetIcon('sha256sums').label).toBe('校验文件');
     expect(getAssetIcon('signature').label).toBe('签名文件');
     expect(getAssetIcon('source').label).toBe('源码包');
+  });
+
+  it('无后缀脚本语义', () => {
+    expect(getAssetIcon('install-script').label).toBe('脚本产物');
+    expect(getAssetIcon('deploy-bash').label).toBe('脚本产物');
+    expect(getAssetIcon('setup-powershell').label).toBe('脚本产物');
   });
 });
 

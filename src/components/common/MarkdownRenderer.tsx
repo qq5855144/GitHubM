@@ -29,13 +29,17 @@ interface MarkdownRendererProps {
   /** 传入后启用「仓库相对路径」解析；不传则保持原有行为 */
   repoContext?: RepoLinkContext;
   /**
-   * 页内锚点回调。
+   * 页内锚点「能否处理」的判定（纯函数，不得有副作用）。
    *
    * 评论里的 `#issuecomment-123` 这类链接，默认会当作外链开新窗口，
-   * 在 app 内等于跳出应用。传入此回调后由宿主决定如何滚动定位。
-   * 返回 true 表示已处理，渲染器不再走默认外链行为。
+   * 在 app 内等于跳出应用。返回 true 表示宿主认领该锚点。
+   *
+   * 注意：这个回调在 render 阶段被调用，必须保持纯粹。任何滚动/toast/请求
+   * 都必须放进 onAnchorClick，否则一屏出现 N 条带锚点的引用会触发 N 次副作用。
    */
   onAnchor?: (anchor: string) => boolean;
+  /** 锚点被点击时调用，跳转等副作用放这里。 */
+  onAnchorClick?: (anchor: string) => void;
 }
 
 /**
@@ -211,7 +215,13 @@ export function resolveMarkdownImage(src: string | undefined, ctx?: RepoLinkCont
   return rawFileUrl(ctx, resolved);
 }
 
-export default function MarkdownRenderer({ content, className, repoContext, onAnchor }: MarkdownRendererProps) {
+export default function MarkdownRenderer({
+  content,
+  className,
+  repoContext,
+  onAnchor,
+  onAnchorClick,
+}: MarkdownRendererProps) {
   const navigate = useNavigate();
 
   return (
@@ -238,6 +248,9 @@ export default function MarkdownRenderer({ content, className, repoContext, onAn
             // 交给宿主处理，避免在 app 内点一下就跳出到浏览器。
             if (onAnchor && rawHref) {
               const anchorHash = rawHref.startsWith('#') ? rawHref.slice(1) : '';
+              // 这里只做「能不能处理」的判断，不能执行跳转：
+              // remark 的 a 组件是在 render 阶段跑的，在这里调宿主回调会变成渲染副作用，
+              // 一屏若有多条带锚点的引用就会一次性触发多次。真正跳转放到 onClick。
               if (anchorHash && onAnchor(anchorHash)) {
                 return (
                   <a
@@ -246,6 +259,7 @@ export default function MarkdownRenderer({ content, className, repoContext, onAn
                     onClick={(e) => {
                       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                       e.preventDefault();
+                      onAnchorClick?.(anchorHash);
                     }}
                   >
                     {children}
@@ -270,6 +284,7 @@ export default function MarkdownRenderer({ content, className, repoContext, onAn
                     onClick={(e) => {
                       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                       e.preventDefault();
+                      onAnchorClick?.(hash);
                     }}
                   >
                     {children}

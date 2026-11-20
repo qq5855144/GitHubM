@@ -343,20 +343,69 @@ export default function IssueDetailPage() {
   };
 
   /**
-   * 跳转到某条评论。
+   * 滚动到某条评论并短暂高亮。
    *
-   * 引用块里的 `#issuecomment-123` 链接在 app 内原本点不动：评论卡片只设了 key，
-   * 没有对应 id，浏览器找不到锚点。这里直接按 id 查 DOM 并滚动 + 高亮。
+   * 评论是分页加载的，被引用的评论很可能还没拉下来。
+   * 这里不做「找不到就报错」，而是继续向后翻页直到命中或没有更多，
+   * 这样点「——来自 @xxx」时体验跟 GitHub 一致。
    */
-  const jumpToComment = (commentId: number) => {
-    const el = document.getElementById(`issuecomment-${commentId}`);
-    if (!el) {
-      toast.error(i18n.t('该评论尚未加载，请先点击「加载更多评论」'));
+  const jumpToComment = async (commentId: number) => {
+    const targetId = `issuecomment-${commentId}`;
+    const highlight = () => {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el.classList.add('ring-2', 'ring-primary/60');
+      window.setTimeout(() => el.classList.remove('ring-2', 'ring-primary/60'), 1600);
+    };
+
+    if (document.getElementById(targetId)) {
+      highlight();
       return;
     }
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    el.classList.add('ring-2', 'ring-primary/60');
-    window.setTimeout(() => el.classList.remove('ring-2', 'ring-primary/60'), 1600);
+    if (!owner || !repo || !number) return;
+
+    // 已经在加载就不再并发翻页，直接等它结束（loading 结束会自动重试一次定位）
+    if (loadingMoreComments) return;
+
+    let nextPage = commentPage;
+    let more = hasMoreComments;
+
+    setLoadingMoreComments(true);
+    try {
+      // 上限兜底：避免超大 issue 卡死，也防 hasNextPage 判断异常时死循环
+      for (let i = 0; i < 20 && more; i += 1) {
+        const result = await getIssueCommentsPage(owner, repo, Number(number), nextPage + 1, 50);
+        nextPage += 1;
+        more = result.hasNextPage;
+        setCommentPage(nextPage);
+        setHasMoreComments(result.hasNextPage);
+
+        // 用函数式更新并把结果并进 comments，同时判断是否命中目标
+        const hit = result.data.some((c) => c.id === commentId);
+        setComments((prev) => {
+          const seen = new Set(prev.map((c) => c.id));
+          const merged = [...prev, ...result.data.filter((c) => !seen.has(c.id))];
+          return merged;
+        });
+
+        if (hit) break;
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : i18n.t('加载评论失败'));
+      return;
+    } finally {
+      setLoadingMoreComments(false);
+    }
+
+    // 等 React 把新评论渲染到 DOM 再滚动
+    requestAnimationFrame(() => {
+      if (!document.getElementById(targetId)) {
+        window.setTimeout(highlight, 120);
+        return;
+      }
+      highlight();
+    });
   };
 
   const handleQuoteToNewIssue = (comment: GitHubComment) => {
@@ -379,11 +428,19 @@ export default function IssueDetailPage() {
     });
   };
 
-  const handleAnchor = (anchor: string): boolean => {
+  /**
+   * 判断锚点能否被本页处理。
+   *
+   * 这个函数会在 MarkdownRenderer 的 render 阶段被调用（每渲染一条带锚点的
+   * 评论就会调一次），所以它必须是纯函数：只做正则判定，绝不能触发跳转、
+   * toast 或请求，否则一屏出现 N 条引用就会弹 N 个提示。
+   */
+  const handleAnchor = (anchor: string): boolean => /^issuecomment-\d+$/.test(anchor);
+  /** 锚点真正被点击时才跳转（找不到评论会自动向后翻页加载）。 */
+  const handleAnchorClick = (anchor: string) => {
     const matched = /^issuecomment-(\d+)$/.exec(anchor);
-    if (!matched) return false;
-    jumpToComment(Number(matched[1]));
-    return true;
+    if (!matched) return;
+    void jumpToComment(Number(matched[1]));
   };
 
   const handleHide = async (comment: GitHubComment, reason: HideCommentReason) => {
@@ -575,7 +632,7 @@ export default function IssueDetailPage() {
             ) : hiddenComments.has(comment.id) ? (
               <p className="text-xs text-muted-foreground italic">{i18n.t('这条评论已被隐藏')}</p>
             ) : (
-              <MarkdownRenderer content={comment.body} repoContext={owner && repo ? { owner, repo } : undefined} onAnchor={handleAnchor} />
+              <MarkdownRenderer content={comment.body} repoContext={owner && repo ? { owner, repo } : undefined} onAnchor={handleAnchor} onAnchorClick={handleAnchorClick} />
             )}
           </div>
           {editingCommentId !== comment.id && (

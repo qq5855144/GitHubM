@@ -13,9 +13,8 @@ import {
   Code2,
   RefreshCw,
   Copy,
-  ExternalLink,
+  Github,
   ChevronDown,
-  ChevronRight,
   Calendar,
   History,
   Languages,
@@ -170,14 +169,6 @@ export default function AppStoreRepoDetailPage() {
       return tb - ta;
     });
 
-  // 平台标签：由最新 Release 产物推断（去重、保序）
-  const platforms: PlatformKey[] = (() => {
-    const set = new Set<PlatformKey>();
-    assets.forEach((a) => set.add(detectPlatform(a.name)));
-    set.delete('other');
-    return Array.from(set);
-  })();
-
   const primaryLanguage = repo?.language ?? Object.keys(languages)[0] ?? null;
   const licenseText =
     repo?.license?.spdx_id && repo.license.spdx_id !== 'NOASSERTION'
@@ -296,12 +287,18 @@ export default function AppStoreRepoDetailPage() {
         className="mx-auto flex flex-col"
         style={{ maxWidth: 720, padding: '12px 12px 48px', gap: 10 }}
       >
-        {/* ===== 应用头部卡片：图标 + 名称 + Stats + 简介 + 平台 + 最新版本横条 ===== */}
+        {/* ===== 应用头部卡片：图标 + 名称 + Stats 块 + 简介 + 进入仓库按钮 ===== */}
         <section
           className="flex flex-col"
-          style={{ backgroundColor: C.cardBg, borderRadius: 18, overflow: 'hidden' }}
+          style={{
+            backgroundColor: C.cardBg,
+            borderRadius: 16,
+            padding: 16,
+            boxShadow: '0 1px 4px rgba(0, 0, 0, 0.07)',
+            gap: 12,
+          }}
         >
-          <div className="flex flex-col" style={{ padding: '16px 16px 0', gap: 12 }}>
+          <div className="flex flex-col" style={{ gap: 12 }}>
             {/* 图标 + 名称 */}
             <div className="flex items-center" style={{ gap: 12 }}>
               <div
@@ -358,8 +355,15 @@ export default function AppStoreRepoDetailPage() {
               </div>
             </div>
 
-            {/* Stats：图标 + 数值 + 标签三段式（纵向，三列等分） */}
-            <div className="flex items-stretch" style={{ gap: 0 }}>
+            {/* Stats：浅灰蓝底整块、br14、三列等分（对齐原版 247,249,252） */}
+            <div
+              className="flex items-stretch"
+              style={{
+                backgroundColor: 'rgb(247,249,252)',
+                borderRadius: 14,
+                gap: 0,
+              }}
+            >
               <StatItem
                 Icon={Star}
                 value={shortNumber(repo.stargazers_count)}
@@ -386,57 +390,51 @@ export default function AppStoreRepoDetailPage() {
                 style={{
                   fontSize: 13,
                   fontWeight: 400,
-                  lineHeight: '20px',
-                  color: C.secondaryText,
+                  lineHeight: '18px',
+                  color: 'rgb(102,102,102)',
                 }}
               >
                 {repo.description}
               </p>
             )}
-
-            {/* 平台 pill */}
-            {platforms.length > 0 && (
-              <div className="flex items-center flex-wrap" style={{ gap: 6 }}>
-                {platforms.map((p) => (
-                  <PlatformPill key={p} platform={p} />
-                ))}
-              </div>
-            )}
           </div>
-          {/* 进入仓库：深色横条，bd14、pad14 0 */}
+          {/* 进入仓库：仿原版「在 GitHub 查看」——满宽、h50、bg #1A1A1A、br14、pad14 0、gap8 */}
           <button
             type="button"
             onClick={() => navigate(`/repos/${repo.full_name}`)}
             className="w-full flex items-center justify-center"
             style={{
               marginTop: 16,
+              height: 50,
+              borderRadius: 14,
               backgroundColor: C.primaryText,
               padding: '14px 0',
               gap: 8,
-              fontSize: 14,
-              fontWeight: 600,
+              fontSize: 15,
+              fontWeight: 700,
               lineHeight: '18px',
               color: '#fff',
             }}
           >
-            <ExternalLink className="w-[15px] h-[15px]" />
+            <Github className="w-[20px] h-[20px] shrink-0" />
             {i18n.t('进入仓库')}
           </button>
-          {/* 最新版本横条：pad 14px 16px、顶部 1px 分割线、整行可点 */}
+        </section>
+
+        {/* ===== 下载区：最新版本产物，按产物平铺 ===== */}
+        <section
+          id="release-assets"
+          className="flex flex-col"
+          style={{ backgroundColor: C.cardBg, borderRadius: 18, overflow: 'hidden' }}
+        >
+          {/* 最新版本横条：作为下载卡首行（原版该信息就位于产物下载区内） */}
           {latestRelease && (
-            <button
-              type="button"
-              onClick={() => {
-                document
-                  .getElementById('release-assets')
-                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
-              className="w-full flex items-center text-left"
+            <div
+              className="flex items-center text-left"
               style={{
-                marginTop: 16,
                 padding: '14px 16px',
                 gap: 8,
-                borderTop: `1px solid ${C.divider}`,
+                borderBottom: `1px solid ${C.divider}`,
               }}
             >
               <Tag className="w-[14px] h-[14px] shrink-0" style={{ color: C.tertiaryText }} />
@@ -462,20 +460,9 @@ export default function AppStoreRepoDetailPage() {
               >
                 {formatDate(latestRelease.published_at)}
               </span>
-              <ChevronRight
-                className="w-[14px] h-[14px] shrink-0"
-                style={{ color: C.tertiaryText }}
-              />
-            </button>
+            </div>
           )}
-        </section>
 
-        {/* ===== 下载区：最新版本产物，按产物平铺 ===== */}
-        <section
-          id="release-assets"
-          className="flex flex-col"
-          style={{ backgroundColor: C.cardBg, borderRadius: 18, overflow: 'hidden' }}
-        >
           {assets.length === 0 ? (
             <div style={{ padding: '24px 16px', textAlign: 'center' }}>
               <p
@@ -504,26 +491,28 @@ export default function AppStoreRepoDetailPage() {
                 >
                   {/* 左列：平台 pill（独立成列，垂直居中） */}
                   <PlatformPill platform={platform} />
-                  {/* 中列：文件名 + 体积/下载量 */}
+                  {/* 中列：文件名 + 体积/下载量（名称过长换行，不截断） */}
                   <div className="flex-1 min-w-0 flex flex-col" style={{ gap: 2 }}>
                     <p
-                      className="truncate"
                       style={{
                         fontSize: 13,
                         fontWeight: 500,
-                        lineHeight: '15px',
+                        lineHeight: '18px',
                         color: C.primaryText,
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-all',
                       }}
                     >
                       {asset.name}
                     </p>
                     <p
-                      className="truncate"
                       style={{
                         fontSize: 11,
                         fontWeight: 400,
-                        lineHeight: '13px',
+                        lineHeight: '15px',
                         color: C.metaText,
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-all',
                       }}
                     >
                       {formatSize(asset.size)},{' '}
@@ -756,7 +745,7 @@ function StatItem({
   return (
     <div
       className="flex flex-col items-center"
-      style={{ gap: 4, flex: '1 1 0%', minWidth: 0 }}
+      style={{ gap: 4, flex: '1 1 0%', minWidth: 0, padding: '14px 0' }}
     >
       <Icon className="w-[20px] h-[20px]" style={{ color }} />
       <span

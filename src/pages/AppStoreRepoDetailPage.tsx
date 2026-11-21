@@ -17,7 +17,6 @@ import {
   ChevronDown,
   Calendar,
   History,
-  Languages,
   Tag,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -370,14 +369,16 @@ export default function AppStoreRepoDetailPage() {
                 label="Stars"
                 color="rgb(255,179,0)"
               />
+              <StatDivider />
               <StatItem
                 Icon={GitFork}
                 value={shortNumber(repo.forks_count)}
                 label="Forks"
                 color="rgb(0,185,107)"
               />
+              <StatDivider />
               <StatItem
-                Icon={Languages}
+                Icon={Code2}
                 value={primaryLanguage || '-'}
                 label={i18n.t('语言')}
                 color="rgb(22,119,255)"
@@ -708,27 +709,54 @@ export default function AppStoreRepoDetailPage() {
               value={formatDate(latestRelease.published_at)}
             />
           )}
-        </section>
 
-        {/* ===== 底部安全提示 ===== */}
-        <p
-          style={{
-            fontSize: 11,
-            fontWeight: 400,
-            lineHeight: '16px',
-            color: C.tertiaryText,
-            textAlign: 'center',
-            padding: '4px 8px',
-          }}
-        >
-          {i18n.t('安装包来自 GitHub Release，请确认来源可信后再安装，建议仅安装您熟悉的开源项目。')}
-        </p>
+          {/* 安全提示：并入项目信息卡片，弱化色，与上方信息行用分隔线区隔 */}
+          <div
+            className="flex items-start"
+            style={{
+              gap: 10,
+              paddingTop: 10,
+              borderTop: `1px solid ${C.divider}`,
+            }}
+          >
+            <AlertCircle
+              className="w-[14px] h-[14px] shrink-0"
+              style={{ color: C.metaText, marginTop: 1 }}
+            />
+            <p
+              style={{
+                fontSize: 11,
+                fontWeight: 400,
+                lineHeight: '16px',
+                color: C.metaText,
+              }}
+            >
+              {i18n.t('安装包来自 GitHub Release，请确认来源可信后再安装，建议仅安装您熟悉的开源项目。')}
+            </p>
+          </div>
+        </section>
       </div>
     </div>
   );
 }
 
 /* ---------------- 子组件 ---------------- */
+
+/** Stats 分隔竖线：1px、上下留白、浅灰蓝（与块底色区分） */
+function StatDivider() {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: 1,
+        alignSelf: 'stretch',
+        margin: '14px 0',
+        backgroundColor: 'rgb(229,232,238)',
+        flex: '0 0 1px',
+      }}
+    />
+  );
+}
 
 /** Stats 单项：图标 + 数值(fs17/700) + 标签(fs12) */
 function StatItem({

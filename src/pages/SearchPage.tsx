@@ -12,8 +12,7 @@ import {
   GitFork,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
-  ExternalLink,
+  FolderGit2,
   Copy,
   Code2,
   Clock,
@@ -29,7 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { UserLink } from '@/components/common/UserLink';
-import RepoCard from '@/components/repo/RepoCard';
+import AppStoreRepoCard from '@/components/repo/AppStoreRepoCard';
 import { pageCache } from '@/lib/page-cache';
 import {
   searchRepositories,
@@ -38,7 +37,6 @@ import {
   searchCode,
   formatRelativeTime,
   formatNumber,
-  getLanguageColor,
   starRepo,
   unstarRepo,
   checkStarred,
@@ -236,6 +234,63 @@ function clearHistory() {
 }
 
 // 搜索结果仓库右键菜单
+/** 仓库搜索空结果：给出可点击的改善建议（参考应用商店的空态引导） */
+function EmptyRepoResult({
+  query,
+  onRetry,
+}: {
+  query: string;
+  onRetry: (keyword: string) => void;
+}) {
+  const keyword = query.trim();
+  // 去掉 GitHub 高级搜索语法后作为更通用的关键词
+  const simpler = keyword
+    .replace(/[a-z-]+:[^\s]+/gi, '')
+    .replace(/["']/g, '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)[0];
+
+  const suggestions = [
+    simpler && simpler !== keyword
+      ? { label: i18n.t('改用更通用的关键词'), keyword: simpler }
+      : { label: i18n.t('减少关键词数量'), keyword: keyword.split(/\s+/)[0] ?? keyword },
+    { label: i18n.t('试试英文关键词'), keyword: keyword },
+  ]
+    // 丢弃与当前查询等价的建议，避免出现点了等于没点的按钮
+    .filter((s) => s.keyword && s.keyword.trim() !== keyword)
+    .filter((s, i, arr) => arr.findIndex((x) => x.keyword === s.keyword) === i);
+
+  return (
+    <div className="py-10 text-center">
+      <p className="text-foreground font-medium">{i18n.t('没有找到相关仓库')}</p>
+      {suggestions.length > 0 ? (
+        <>
+          <p className="text-muted-foreground text-sm mt-1">
+            {i18n.t('可以试试下面的调整方式：')}
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            {suggestions.map((s) => (
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => onRetry(s.keyword)}
+                className="px-3 py-1.5 rounded-full border border-border text-xs text-foreground hover:bg-secondary/60 hover:border-primary/40 transition-colors"
+              >
+                {s.label}
+                <span className="text-muted-foreground ml-1">「{s.keyword}」</span>
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="text-muted-foreground text-sm mt-1">{i18n.t('换个关键词再试试')}</p>
+      )}
+    </div>
+  );
+}
+
 function SearchRepoContextMenu({ repo, children }: { repo: GitHubRepo; children: React.ReactNode }) {
   const navigate = useNavigate();
 
@@ -289,10 +344,9 @@ function SearchRepoContextMenu({ repo, children }: { repo: GitHubRepo; children:
         <ContextMenuSeparator className="bg-border" />
         <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={(e) => { e.stopPropagation(); handleCopyUrl(); }}>
           <Copy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制仓库地址')}</ContextMenuItem>
-        <ContextMenuItem className="text-foreground cursor-pointer text-sm" asChild>
-          <a href={repo.html_url} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="w-3.5 h-3.5 mr-2" />{i18n.t('在 GitHub 中打开')}</a>
-        </ContextMenuItem>
+        <ContextMenuItem className="text-foreground cursor-pointer text-sm"
+          onClick={(e) => { e.stopPropagation(); navigate(`/repos/${repo.full_name}`); }}>
+          <FolderGit2 className="w-3.5 h-3.5 mr-2" />{i18n.t('进入仓库')}</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -344,6 +398,13 @@ export default function SearchPage() {
   const sortOptions = sortOptionsFor(searchType);
 
   const totalPages = Math.min(Math.ceil(totalCount / PER_PAGE), MAX_RESULTS / PER_PAGE);
+
+  // 按当前 tab 判断是否真的拿到了结果；为零时顶部摘要行不渲染，避免“找到约 0 个结果 / 显示 0”这类冗余噪音
+  const hasResults =
+    searchType === 'repositories' ? repos.length > 0
+    : searchType === 'issues'     ? issues.length > 0
+    : searchType === 'code'       ? codeResults.length > 0
+    : users.length > 0;
 
   const handleSearch = useCallback(async (
     searchQuery: string,
@@ -683,13 +744,26 @@ export default function SearchPage() {
         ))}
       </div>
 
-      {/* 结果数量 */}
-      {searched && !loading && (
+      {/* 结果摘要行：关键词 · 共 N 个仓库 / 右侧排序；零结果时交由空态展示，避免“找到 0 个结果”的冗余噪音 */}
+      {searched && !loading && hasResults && (
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground min-w-0">
+            {query.trim() && (
+              <span className="text-foreground font-medium">「{query.trim()}」</span>
+            )}
+            <span className="mx-1">·</span>
             {i18n.t('找到约')}<span className="text-foreground font-medium">{formatNumber(totalCount)}</span> {i18n.t('个结果')}{totalPages > 1 && (
               <span className="ml-2 text-muted-foreground">
                 {i18n.t('· 第')}<span className="text-foreground font-medium">{currentPage}</span> / {totalPages} {i18n.t('页')}</span>
+            )}
+          </p>
+          <p className="text-xs text-muted-foreground shrink-0">
+            {findSortOption(sortOption)?.label}
+            {searchType === 'repositories' && (
+              <>
+                <span className="mx-1">·</span>
+                {i18n.t('显示')} {repos.length}
+              </>
             )}
           </p>
         </div>
@@ -718,12 +792,18 @@ export default function SearchPage() {
           {/* 仓库结果 */}
           {searchType === 'repositories' && (
             repos.length === 0 ? (
-              <div className="py-12 text-center text-muted-foreground">{i18n.t('无搜索结果')}</div>
+              <EmptyRepoResult
+                query={query}
+                onRetry={(q) => {
+                  setQuery(q);
+                  handleSearch(q, 'repositories', 1, sortByType.repositories, true);
+                }}
+              />
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {repos.map((repo) => (
                   <SearchRepoContextMenu key={repo.id} repo={repo}>
-                    <RepoCard repo={repo} showOwner />
+                    <AppStoreRepoCard repo={repo} />
                   </SearchRepoContextMenu>
                 ))}
               </div>

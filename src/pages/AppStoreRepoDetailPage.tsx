@@ -23,6 +23,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import i18n from '@/i18n';
+import { downloadGithubFile, isDownloadProxyEnabled } from '@/lib/githubDownload';
 import { copyToClipboard } from '@/lib/utils';
 import type { GitHubRelease, GitHubReleaseAsset } from '@/services/github';
 import {
@@ -30,6 +31,7 @@ import {
   getReleases,
   getRepo,
   getRepoLanguages,
+  getToken,
 } from '@/services/github';
 import type { GitHubRepo } from '@/types/types';
 
@@ -116,6 +118,68 @@ const C = {
   divider: 'rgb(240,240,240)',
 } as const;
 
+/* ---------------- 下载 ---------------- */
+
+/**
+ * 商店页产物的下载入口，与仓库产物页（ArtifactsPage）保持完全一致的行为：
+ *
+ * 1. 已开启全局下载代理且目标是 github.com → 交给 downloadGithubFile 走代理；
+ * 2. Android WebView → 交原生 DownloadManager（携带 Token，支持私有仓库）；
+ * 3. 浏览器 → 原生导航下载，绕过 api.github.com 302 重定向的 CORS 限制。
+ *
+ * 商店页面向未登录的公开仓库浏览用户，因此无 Token 时不再拦截，
+ * 直接走「公开链接下载」路径，避免出现点了没反应的死路。
+ */
+async function downloadStoreAsset(asset: {
+  url: string;
+  browser_download_url: string;
+  name: string;
+}): Promise<void> {
+  const token = getToken() ?? '';
+
+  // Android 原生桥：优先于代理判断，原生下载器可携带 Token 且不受 CORS 影响
+  const bridge = (
+    window as unknown as {
+      AndroidBridge?: { downloadFile?: (u: string, f: string, t: string) => void };
+    }
+  ).AndroidBridge;
+
+  if (bridge?.downloadFile && token) {
+    bridge.downloadFile(asset.url, asset.name, token);
+    toast.success(`开始下载 ${asset.name}`);
+    return;
+  }
+
+  if (isDownloadProxyEnabled() && asset.browser_download_url.startsWith('https://github.com/')) {
+    try {
+      await downloadGithubFile(asset.browser_download_url, asset.name, token);
+      toast.success(`开始下载 ${asset.name}`);
+      return;
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? `代理下载失败，已切换直连：${err.message}`
+          : '代理下载失败，已切换直连',
+      );
+    }
+  }
+
+  // 无 Token / 代理未开启 / 代理失败 → 公开链接直接下载
+  if (!token && bridge?.downloadFile) {
+    bridge.downloadFile(asset.browser_download_url, asset.name, '');
+    toast.success(`开始下载 ${asset.name}`);
+    return;
+  }
+
+  try {
+    await downloadGithubFile(asset.browser_download_url, asset.name, token);
+    toast.success(`开始下载 ${asset.name}`);
+  } catch {
+    window.open(asset.browser_download_url, '_blank', 'noopener,noreferrer');
+    toast.success(`已在新标签页中打开 ${asset.name} 的下载链接`);
+  }
+}
+
 /* ---------------- 页面 ---------------- */
 
 export default function AppStoreRepoDetailPage() {
@@ -129,6 +193,23 @@ export default function AppStoreRepoDetailPage() {
   const [error, setError] = useState<string | null>(null);
   // 历史版本展开状态：记录已展开的 release id
   const [expandedReleases, setExpandedReleases] = useState<number[]>([]);
+  // 正在下载的产物 id：用于按钮防重复点击与加载态
+  const [downloadingAssetId, setDownloadingAssetId] = useState<number | null>(null);
+
+  const handleDownloadAsset = useCallback(
+    async (asset: GitHubReleaseAsset) => {
+      if (downloadingAssetId !== null) return;
+      setDownloadingAssetId(asset.id);
+      try {
+        await downloadStoreAsset(asset);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : i18n.t('下载失败'));
+      } finally {
+        setDownloadingAssetId(null);
+      }
+    },
+    [downloadingAssetId],
+  );
 
   const load = useCallback(async () => {
     if (!owner || !repoName) return;
@@ -524,10 +605,10 @@ export default function AppStoreRepoDetailPage() {
                     </p>
                   </div>
                   {/* 右列：下载按钮，带描边 */}
-                  <a
-                    href={asset.browser_download_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadAsset(asset)}
+                    disabled={downloadingAssetId !== null}
                     className="shrink-0"
                     style={{
                       fontSize: 13,
@@ -537,10 +618,13 @@ export default function AppStoreRepoDetailPage() {
                       padding: '8px 16px',
                       borderRadius: 20,
                       border: `1px solid ${C.link}`,
+                      opacity: downloadingAssetId === null ? 1 : 0.55,
                     }}
                   >
-                    {i18n.t('下载')}
-                  </a>
+                    {downloadingAssetId === asset.id
+                      ? i18n.t('下载中')
+                      : i18n.t('下载')}
+                  </button>
                 </div>
               );
             })
@@ -656,10 +740,10 @@ export default function AppStoreRepoDetailPage() {
                               {i18n.t('次下载')}
                             </p>
                           </div>
-                          <a
-                            href={asset.browser_download_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadAsset(asset)}
+                            disabled={downloadingAssetId !== null}
                             className="shrink-0"
                             style={{
                               fontSize: 12,
@@ -669,10 +753,13 @@ export default function AppStoreRepoDetailPage() {
                               padding: '6px 12px',
                               borderRadius: 16,
                               border: `1px solid ${C.link}`,
+                              opacity: downloadingAssetId === null ? 1 : 0.55,
                             }}
                           >
-                            {i18n.t('下载')}
-                          </a>
+                            {downloadingAssetId === asset.id
+                              ? i18n.t('下载中')
+                              : i18n.t('下载')}
+                          </button>
                         </div>
                       ))
                     )}

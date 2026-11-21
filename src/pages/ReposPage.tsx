@@ -15,7 +15,6 @@ import {
   ChevronRight,
   BookOpen,
   RefreshCw,
-  ExternalLink,
   Copy,
   GitBranch,
   GitPullRequest,
@@ -148,10 +147,6 @@ function RepoContextMenu({ repo, onDeleteRequest, onDeleteSuccess, canDelete }: 
       <ContextMenuSeparator className="bg-border" />
       <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={(e) => { e.stopPropagation(); handleCopyUrl(); }}>
         <Copy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制仓库地址')}</ContextMenuItem>
-      <ContextMenuItem className="text-foreground cursor-pointer text-sm" asChild>
-        <a href={repo.html_url} target="_blank" rel="noopener noreferrer">
-          <ExternalLink className="w-3.5 h-3.5 mr-2" />{i18n.t('在 GitHub 中打开')}</a>
-      </ContextMenuItem>
       {canDelete && (
         <>
           <ContextMenuSeparator className="bg-border" />
@@ -295,11 +290,6 @@ function RepoCardDropdown({ repo, onDeleteRequest, onDeleteSuccess, canDelete }:
         <DropdownMenuSeparator className="bg-border" />
         <DropdownMenuItem className="text-foreground cursor-pointer text-sm" onClick={(e) => { e.stopPropagation(); handleCopyUrl(); }}>
           <Copy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制仓库地址')}</DropdownMenuItem>
-        <DropdownMenuItem className="text-foreground cursor-pointer text-sm" asChild>
-          <a href={repo.html_url} target="_blank" rel="noopener noreferrer"
-             onClick={(e) => e.stopPropagation()}>
-            <ExternalLink className="w-3.5 h-3.5 mr-2" />{i18n.t('在 GitHub 中打开')}</a>
-        </DropdownMenuItem>
         {canDelete && (
           <>
             <DropdownMenuSeparator className="bg-border" />

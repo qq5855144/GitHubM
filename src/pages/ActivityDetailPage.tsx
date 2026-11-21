@@ -4,7 +4,6 @@ import {
   Activity,
   ArrowLeft,
   Clock,
-  ExternalLink,
   GitBranch,
   GitCommit,
   Tag,
@@ -110,11 +109,10 @@ export default function ActivityDetailPage() {
   const commits = Array.isArray(payload.commits)
     ? payload.commits as Array<{ sha?: string; message?: string; url?: string }>
     : [];
-  const issue = payload.issue as { number?: number; title?: string; html_url?: string; state?: string } | undefined;
-  const pull = payload.pull_request as { number?: number; title?: string; html_url?: string; merged?: boolean } | undefined;
-  const release = payload.release as { name?: string; tag_name?: string; html_url?: string } | undefined;
-  const forkee = payload.forkee as { full_name?: string; html_url?: string } | undefined;
-  const targetUrl = (issue?.html_url || pull?.html_url || release?.html_url || forkee?.html_url) as string | undefined;
+  const issue = payload.issue as { number?: number; title?: string; state?: string } | undefined;
+  const pull = payload.pull_request as { number?: number; title?: string; merged?: boolean } | undefined;
+  const release = payload.release as { name?: string; tag_name?: string } | undefined;
+  const forkee = payload.forkee as { full_name?: string } | undefined;
   const rawPayload = JSON.stringify(payload, null, 2);
 
   return (
@@ -162,13 +160,6 @@ export default function ActivityDetailPage() {
           <Button size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/repos/${repoName}`)}>
             <GitCommit className="w-3.5 h-3.5" />{i18n.t('进入仓库')}
           </Button>
-          {targetUrl && (
-            <a href={targetUrl} target="_blank" rel="noopener noreferrer">
-              <Button size="sm" variant="outline" className="h-8 gap-1.5">
-                <ExternalLink className="w-3.5 h-3.5" />{i18n.t('在 GitHub 查看')}
-              </Button>
-            </a>
-          )}
         </div>
 
         <div className="border-t border-border pt-2">

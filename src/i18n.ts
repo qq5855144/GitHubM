@@ -939,7 +939,6 @@ login: {
         "创建仓库失败": "Failed to create warehouse",
         "请输入仓库名称": "Please enter the warehouse name",
         "加载仓库列表失败": "Failed to load warehouse list",
-         "在 GitHub 中打开": "Open on GitHub",
          "进入仓库": "Open repository",
          "没有找到相关仓库": "No matching repositories found",
          "可以试试下面的调整方式：": "Try one of these adjustments:",
@@ -2241,7 +2240,6 @@ login: {
         "创建仓库失败": "创建仓库失败",
         "请输入仓库名称": "请输入仓库名称",
         "加载仓库列表失败": "加载仓库列表失败",
-        "在 GitHub 中打开": "在 GitHub 中打开",
          "进入仓库": "进入仓库",
          "没有找到相关仓库": "没有找到相关仓库",
          "可以试试下面的调整方式：": "可以试试下面的调整方式：",
@@ -2614,7 +2612,6 @@ login: {
         "历史版本": "历史版本",
         "发布时间": "发布时间",
         "该版本暂无产物": "该版本暂无产物",
-        "在 GitHub 查看": "在 GitHub 查看",
         "仓库不存在": "仓库不存在",
         "其他": "其他"
     }

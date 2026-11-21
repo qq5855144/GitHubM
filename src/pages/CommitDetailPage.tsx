@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   ChevronRight,
   Clock,
-  ExternalLink,
   GitCommit,
   Minus,
   Plus,
@@ -124,11 +123,6 @@ export default function CommitDetailPage() {
                   <code className="font-mono text-accent break-all">{commit.sha}</code>
                 </div>
               </div>
-              <a href={commit.html_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground" title={i18n.t('在 GitHub 查看')}>
-                  <ExternalLink className="w-4 h-4" />
-                </Button>
-              </a>
             </div>
 
             {commit.stats && (

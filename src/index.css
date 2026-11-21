@@ -435,6 +435,81 @@
     border-top: 1px solid hsl(var(--border));
     margin: 1.5rem 0;
   }
+
+  /*
+   * 紧凑版 Markdown：用于更新弹窗、商店详情页发布说明等「小字号摘要」场景。
+   * README 那套排版按正文阅读设计（h2 = 1.25rem、段间距 1rem、标题上留 1.5rem），
+   * 直接塞进 12px 的弹窗窄框里会显得又大又空，所以这里整体降到正文级字号。
+   */
+  .markdown-compact {
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .markdown-compact > :first-child {
+    margin-top: 0;
+  }
+  .markdown-compact > :last-child {
+    margin-bottom: 0;
+  }
+  .markdown-compact h1,
+  .markdown-compact h2,
+  .markdown-compact h3,
+  .markdown-compact h4,
+  .markdown-compact h5,
+  .markdown-compact h6 {
+    font-size: 12px;
+    font-weight: 600;
+    margin: 12px 0 4px;
+    padding: 0;
+    border: none;
+    line-height: 1.5;
+  }
+  .markdown-compact p {
+    margin: 0 0 8px;
+  }
+  .markdown-compact ul,
+  .markdown-compact ol {
+    padding-left: 16px;
+    margin: 0 0 8px;
+  }
+  .markdown-compact li {
+    margin-bottom: 2px;
+  }
+  /* 任务列表（- [x]）由 remark-gfm 渲染，去掉默认圆点，避免和方框重复 */
+  .markdown-compact li:has(> input[type='checkbox']) {
+    list-style: none;
+    margin-left: -16px;
+  }
+  .markdown-compact blockquote {
+    margin: 8px 0;
+    padding-left: 8px;
+    border-left-width: 3px;
+  }
+  .markdown-compact pre {
+    padding: 8px;
+    margin-bottom: 8px;
+    font-size: 11px;
+  }
+  .markdown-compact pre code {
+    font-size: 11px;
+  }
+  .markdown-compact code {
+    font-size: 11px;
+  }
+  .markdown-compact table {
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+  .markdown-compact th,
+  .markdown-compact td {
+    padding: 4px 8px;
+  }
+  .markdown-compact hr {
+    margin: 12px 0;
+  }
+  .markdown-compact img {
+    margin: 4px 0;
+  }
 }
 
 /*

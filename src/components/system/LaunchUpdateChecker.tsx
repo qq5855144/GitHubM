@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import MarkdownRenderer from '@/components/common/MarkdownRenderer';
 import { downloadGithubFile, isDownloadProxyEnabled } from '@/lib/githubDownload';
 import { getSecureItem } from '@/lib/secureStorage';
 import { useAuth } from '@/contexts/AuthContext';
@@ -240,8 +241,8 @@ export default function LaunchUpdateChecker() {
         <div className="rounded-lg border border-border bg-secondary/35 p-3">
           <p className="text-xs font-medium text-foreground mb-1.5">{i18n.t('更新内容')}</p>
           {updateInfo.releaseNotes ? (
-            <div className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">
-              {updateInfo.releaseNotes}
+            <div className="max-h-40 overflow-y-auto text-muted-foreground">
+              <MarkdownRenderer content={updateInfo.releaseNotes} className="markdown-compact" />
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">{i18n.t('包含功能改进与问题修复')}</p>

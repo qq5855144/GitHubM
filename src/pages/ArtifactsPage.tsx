@@ -18,6 +18,7 @@ import {
   Upload,
   Share2,
 } from 'lucide-react';
+import MarkdownRenderer from '@/components/common/MarkdownRenderer';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -273,8 +274,8 @@ function ReleaseItem({
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="px-4 py-3 border-b border-border/50">
-                  <div className="text-sm text-foreground whitespace-pre-wrap break-words leading-relaxed max-h-72 overflow-y-auto rounded-md bg-background/60 border border-border/50 p-3">
-                    {release.body}
+                  <div className="text-sm text-foreground max-h-72 overflow-y-auto rounded-md bg-background/60 border border-border/50 p-3">
+                    <MarkdownRenderer content={release.body} className="markdown-compact" />
                   </div>
                 </div>
               </CollapsibleContent>

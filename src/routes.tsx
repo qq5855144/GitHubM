@@ -38,6 +38,7 @@ const ExportPage = lazy(() => import('./pages/ExportPage'));
 const UploadPage = lazy(() => import('./pages/UploadPage'));
 const PagesDeployPage = lazy(() => import('./pages/PagesDeployPage'));
 const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'));
+const AppStoreRepoDetailPage = lazy(() => import('./pages/AppStoreRepoDetailPage'));
 const GraphQLPlaygroundPage = lazy(() => import('./pages/GraphQLPlaygroundPage'));
 const FollowListPage = lazy(() => import('./pages/FollowListPage'));
 const StarredPage = lazy(() => import('./pages/StarredPage'));
@@ -83,6 +84,12 @@ export const routes: RouteConfig[] = [
   { nameKey: '仓库列表', path: '/repos', element: page(<ReposPage />) },
   { nameKey: '新建仓库', path: '/repos/new', element: page(<NewRepoPage />), visible: false },
   { nameKey: '仓库详情', path: '/repos/:owner/:repo', element: page(<RepoDetailPage />) },
+  {
+    nameKey: '应用商店详情',
+    path: '/store/:owner/:repo',
+    element: page(<AppStoreRepoDetailPage />),
+    visible: false,
+  },
   { nameKey: 'Issues', path: '/repos/:owner/:repo/issues', element: page(<IssuesPage />) },
   { nameKey: '新建 Issue', path: '/repos/:owner/:repo/issues/new', element: page(<NewIssuePage />), visible: false },
   { nameKey: 'Issue 详情', path: '/repos/:owner/:repo/issues/:number', element: page(<IssueDetailPage />) },

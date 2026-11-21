@@ -345,7 +345,7 @@ function SearchRepoContextMenu({ repo, children }: { repo: GitHubRepo; children:
         <ContextMenuItem className="text-foreground cursor-pointer text-sm" onClick={(e) => { e.stopPropagation(); handleCopyUrl(); }}>
           <Copy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制仓库地址')}</ContextMenuItem>
         <ContextMenuItem className="text-foreground cursor-pointer text-sm"
-          onClick={(e) => { e.stopPropagation(); navigate(`/repos/${repo.full_name}`); }}>
+          onClick={(e) => { e.stopPropagation(); navigate(`/store/${repo.full_name}`); }}>
           <FolderGit2 className="w-3.5 h-3.5 mr-2" />{i18n.t('进入仓库')}</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

@@ -32,7 +32,7 @@ export default function AppStoreRepoCard({
   className,
 }: AppStoreRepoCardProps) {
   const navigate = useNavigate();
-  const open = onClick ?? (() => navigate(`/repos/${repo.full_name}`));
+  const open = onClick ?? (() => navigate(`/store/${repo.full_name}`));
   const displayName = repo.name || repo.full_name.split('/')[1] || repo.full_name;
 
   return (

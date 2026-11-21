@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, GitFork, Star } from 'lucide-react';
+import { GitFork, Star } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { formatNumber, formatRelativeTime, getLanguageColor } from '@/services/github';
@@ -68,7 +68,7 @@ export default function AppStoreRepoCard({
 
         {/* 主体信息 */}
         <div className="flex-1 min-w-0">
-          {/* 标题行：名称 + 查看胶囊 */}
+          {/* 标题行：名称 +（可选）外部操作 */}
           <div className="flex items-center gap-2">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 min-w-0">
@@ -89,18 +89,10 @@ export default function AppStoreRepoCard({
               </span>
             </div>
 
-            {actions ? (
+            {actions && (
               <div className="shrink-0 flex items-center" onClick={(e) => e.stopPropagation()}>
                 {actions}
               </div>
-            ) : (
-              <span
-                className="shrink-0 inline-flex items-center gap-0.5 pl-3 pr-2 py-1 rounded-full border-[1.5px] border-primary text-primary text-[13px] font-semibold leading-none"
-                aria-hidden
-              >
-                {i18n.t('查看')}
-                <ChevronRight className="w-3.5 h-3.5" />
-              </span>
             )}
           </div>
 

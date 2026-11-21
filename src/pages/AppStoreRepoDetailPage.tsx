@@ -98,8 +98,8 @@ function formatDate(iso?: string | null): string {
 /** 统计口径：参照站用 k 缩写（3.1k） */
 function shortNumber(n: number): string {
   if (n >= 1000) {
-    const v = n / 1000;
-    return `${v >= 10 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, '')}k`;
+    // 统一保留一位小数（去掉末尾 .0），与参照站 28.7k / 2k 的展示一致
+    return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
   }
   return String(n);
 }

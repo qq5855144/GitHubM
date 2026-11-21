@@ -1,40 +1,42 @@
 // 仓库列表页
 
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  Search,
-  Plus,
-  Star,
-  GitFork,
-  Lock,
-  Globe,
+  AlertCircle,
+  AlertTriangle,
+  BookOpen,
+  ChevronRight,
+  Code2,
+  Copy,
   Filter,
+  GitBranch,
+  GitFork,
+  GitPullRequest,
+  Globe,
+  Lock,
+  MoreHorizontal,
+  Plus,
+  RefreshCw,
+  Search,
   SortAsc,
   SortDesc,
-  ChevronRight,
-  BookOpen,
-  RefreshCw,
-  Copy,
-  GitBranch,
-  GitPullRequest,
-  Code2,
+  Star,
   Trash2,
-  AlertTriangle,
-  AlertCircle,
-  MoreHorizontal,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -49,43 +51,40 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  getUserRepos,
-  formatRelativeTime,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/contexts/AuthContext';
+import { useDebounce } from '@/hooks/use-debounce';
+import i18n from "@/i18n";
+import { pageCache } from '@/lib/page-cache';
+import { isRepoOwner } from '@/lib/repoPermissions';
+import { copyToClipboard } from '@/lib/utils';
+import {
+  checkStarred,
+  deleteRepo,
+  forkRepo,
   formatNumber,
+  formatRelativeTime,
   getLanguageColor,
+  getUserRepos,
   starRepo,
   unstarRepo,
-  checkStarred,
-  forkRepo,
-  deleteRepo,
 } from '@/services/github';
 import type { GitHubRepo, RepoSortField, SortDirection } from '@/types/types';
-import { toast } from 'sonner';
-import { useDebounce } from '@/hooks/use-debounce';
-import { pageCache } from '@/lib/page-cache';
-import { copyToClipboard } from '@/lib/utils';
-import i18n from "@/i18n";
-import { useAuth } from '@/contexts/AuthContext';
-import { isRepoOwner } from '@/lib/repoPermissions';
 
 // 仓库右键上下文菜单
 // ContextMenu 菜单内容（不含任何弹窗，只触发回调）
-function RepoContextMenu({ repo, onDeleteRequest, onDeleteSuccess, canDelete }: {
+function RepoContextMenu({ repo, onDeleteRequest, canDelete }: {
   repo: GitHubRepo;
   onDeleteRequest: () => void;
-  onDeleteSuccess: (name: string) => void;
   canDelete: boolean;
 }) {
   const navigate = useNavigate();
@@ -228,7 +227,7 @@ function RepoDeleteDialog({ repo, open, onOpenChange, onDeleteSuccess }: {
 }
 
 // 移动端仓库卡片下拉菜单（补全移动端的右键菜单功能）
-function RepoCardDropdown({ repo, onDeleteRequest, onDeleteSuccess, canDelete }: { repo: GitHubRepo; onDeleteRequest: () => void; onDeleteSuccess: (name: string) => void; canDelete: boolean }) {
+function RepoCardDropdown({ repo, onDeleteRequest, canDelete }: { repo: GitHubRepo; onDeleteRequest: () => void; canDelete: boolean }) {
   const navigate = useNavigate();
 
   const handleToggleStar = async () => {
@@ -547,13 +546,6 @@ export default function ReposPage() {
                             setDeleteTarget(repo);
                             setDeleteDialogOpen(true);
                           }}
-                          onDeleteSuccess={(name) => {
-                            // 立即从列表中移除（乐观更新），无需等待 API 响应
-                            setRepos(prev => prev.filter(r => r.name !== name));
-                            pageCache.invalidate('repos:');
-                            // 异步静默刷新，同步最终数据（时间戳绕过 GitHub CDN 60s 缓存）
-                            loadRepos(1, false, true);
-                          }}
                         />
                         <ChevronRight className="w-4 h-4 text-muted-foreground hidden md:block group-hover:text-foreground transition-colors" />
                       </div>
@@ -567,11 +559,6 @@ export default function ReposPage() {
                     // 只设置目标，弹窗在 ContextMenu 树之外渲染
                     setDeleteTarget(repo);
                     setDeleteDialogOpen(true);
-                  }}
-                  onDeleteSuccess={(name) => {
-                    setRepos(prev => prev.filter(r => r.name !== name));
-                    pageCache.invalidate('repos:');
-                    loadRepos(1, false, true);
                   }}
                 />
               </ContextMenu>

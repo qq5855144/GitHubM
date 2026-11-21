@@ -1,36 +1,37 @@
 // 开源应用商店风格仓库详情页
 // 搜索结果点击后先进本页，页内「进入仓库」再跳本项目 /repos/:owner/:repo
 // 视觉基准：参照站（appmiaoda 开源应用商店）真实 DOM 计算样式，逐项对齐字号/字重/间距/圆角/配色
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+
 import {
-  ArrowLeft,
-  Star,
-  GitFork,
   AlertCircle,
-  Clock,
-  Scale,
-  Code2,
-  RefreshCw,
-  Copy,
-  Github,
-  ChevronDown,
+  ArrowLeft,
   Calendar,
+  ChevronDown,
+  Clock,
+  Code2,
+  Copy,
+  GitFork,
+  Github,
   History,
+  RefreshCw,
+  Scale,
+  Star,
   Tag,
 } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import {
-  getRepo,
-  getReleases,
-  getRepoLanguages,
-  formatRelativeTime,
-} from '@/services/github';
-import type { GitHubRelease, GitHubReleaseAsset } from '@/services/github';
-import type { GitHubRepo } from '@/types/types';
-import { copyToClipboard } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 import i18n from '@/i18n';
+import { copyToClipboard } from '@/lib/utils';
+import type { GitHubRelease, GitHubReleaseAsset } from '@/services/github';
+import {
+  formatRelativeTime,
+  getReleases,
+  getRepo,
+  getRepoLanguages,
+} from '@/services/github';
+import type { GitHubRepo } from '@/types/types';
 
 /* ---------------- 平台识别 ---------------- */
 
@@ -501,7 +502,8 @@ export default function AppStoreRepoDetailPage() {
                         lineHeight: '18px',
                         color: C.primaryText,
                         whiteSpace: 'normal',
-                        wordBreak: 'break-all',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'anywhere',
                       }}
                     >
                       {asset.name}
@@ -629,18 +631,19 @@ export default function AppStoreRepoDetailPage() {
                         >
                           <div className="flex-1 min-w-0 flex flex-col" style={{ gap: 2 }}>
                             <p
-                              className="truncate"
                               style={{
                                 fontSize: 12,
                                 fontWeight: 500,
                                 lineHeight: '15px',
                                 color: C.primaryText,
+                                whiteSpace: 'normal',
+                                wordBreak: 'break-word',
+                                overflowWrap: 'anywhere',
                               }}
                             >
                               {asset.name}
                             </p>
                             <p
-                              className="truncate"
                               style={{
                                 fontSize: 11,
                                 fontWeight: 400,

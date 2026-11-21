@@ -399,13 +399,6 @@ export default function SearchPage() {
 
   const totalPages = Math.min(Math.ceil(totalCount / PER_PAGE), MAX_RESULTS / PER_PAGE);
 
-  // 按当前 tab 判断是否真的拿到了结果；为零时顶部摘要行不渲染，避免“找到约 0 个结果 / 显示 0”这类冗余噪音
-  const hasResults =
-    searchType === 'repositories' ? repos.length > 0
-    : searchType === 'issues'     ? issues.length > 0
-    : searchType === 'code'       ? codeResults.length > 0
-    : users.length > 0;
-
   const handleSearch = useCallback(async (
     searchQuery: string,
     type: SearchType,
@@ -744,30 +737,8 @@ export default function SearchPage() {
         ))}
       </div>
 
-      {/* 结果摘要行：关键词 · 共 N 个仓库 / 右侧排序；零结果时交由空态展示，避免“找到 0 个结果”的冗余噪音 */}
-      {searched && !loading && hasResults && (
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <p className="text-sm text-muted-foreground min-w-0">
-            {query.trim() && (
-              <span className="text-foreground font-medium">「{query.trim()}」</span>
-            )}
-            <span className="mx-1">·</span>
-            {i18n.t('找到约')}<span className="text-foreground font-medium">{formatNumber(totalCount)}</span> {i18n.t('个结果')}{totalPages > 1 && (
-              <span className="ml-2 text-muted-foreground">
-                {i18n.t('· 第')}<span className="text-foreground font-medium">{currentPage}</span> / {totalPages} {i18n.t('页')}</span>
-            )}
-          </p>
-          <p className="text-xs text-muted-foreground shrink-0">
-            {findSortOption(sortOption)?.label}
-            {searchType === 'repositories' && (
-              <>
-                <span className="mx-1">·</span>
-                {i18n.t('显示')} {repos.length}
-              </>
-            )}
-          </p>
-        </div>
-      )}
+      {/* 结果摘要行已移除：关键词/总数/页码/排序对移动端属冗余噪音，会挤占首屏第一条结果；
+          当前排序仍可从搜索框左侧排序按钮的 title / aria-label 获知 */}
 
       {/* 搜索结果 */}
       {loading ? (

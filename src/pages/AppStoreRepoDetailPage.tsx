@@ -281,10 +281,10 @@ export default function AppStoreRepoDetailPage() {
         </button>
       </header>
 
-      {/* 内容区：padding 12px 12px 48px、flex column、gap 10px */}
+      {/* 内容区：padding 12px 12px 48px、flex column、gap 14px（拉开各卡片间距） */}
       <div
         className="mx-auto flex flex-col"
-        style={{ maxWidth: 720, padding: '12px 12px 48px', gap: 10 }}
+        style={{ maxWidth: 720, padding: '12px 12px 48px', gap: 14 }}
       >
         {/* ===== 应用头部卡片：图标 + 名称 + Stats 块 + 简介 + 进入仓库按钮 ===== */}
         <section
@@ -399,28 +399,28 @@ export default function AppStoreRepoDetailPage() {
               </p>
             )}
           </div>
-          {/* 进入仓库：仿原版「在 GitHub 查看」——满宽、h50、bg #1A1A1A、br14、pad14 0、gap8 */}
-          <button
-            type="button"
-            onClick={() => navigate(`/repos/${repo.full_name}`)}
-            className="w-full flex items-center justify-center"
-            style={{
-              marginTop: 16,
-              height: 50,
-              borderRadius: 14,
-              backgroundColor: C.primaryText,
-              padding: '14px 0',
-              gap: 8,
-              fontSize: 15,
-              fontWeight: 700,
-              lineHeight: '18px',
-              color: '#fff',
-            }}
-          >
-            <Github className="w-[20px] h-[20px] shrink-0" />
-            {i18n.t('进入仓库')}
-          </button>
         </section>
+
+        {/* ===== 进入仓库：独立按钮，不套卡片容器 ===== */}
+        <button
+          type="button"
+          onClick={() => navigate(`/repos/${repo.full_name}`)}
+          className="w-full flex items-center justify-center"
+          style={{
+            height: 50,
+            borderRadius: 14,
+            backgroundColor: C.primaryText,
+            padding: '14px 0',
+            gap: 8,
+            fontSize: 15,
+            fontWeight: 700,
+            lineHeight: '18px',
+            color: '#fff',
+          }}
+        >
+          <Github className="w-[20px] h-[20px] shrink-0" />
+          {i18n.t('进入仓库')}
+        </button>
 
         {/* ===== 下载区：最新版本产物，按产物平铺 ===== */}
         <section

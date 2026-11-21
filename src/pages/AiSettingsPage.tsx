@@ -367,7 +367,7 @@ export default function AiSettingsPage() {
                 key={item.id}
                 type="button"
                 onClick={() => go(item.id)}
-                className="group flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-primary/35 hover:bg-primary/5"
+                className="group flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left transition-colors hover:bg-secondary/40"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary">
                   <Icon className="h-4 w-4" />

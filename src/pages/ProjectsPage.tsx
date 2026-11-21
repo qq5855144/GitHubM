@@ -351,7 +351,7 @@ export default function ProjectsPage() {
                   ) : (
                     <button
                       type="button"
-                      className="w-full min-h-16 border-2 border-dashed border-border rounded-lg flex items-center justify-center gap-2 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+                      className="w-full min-h-16 border-2 border-dashed border-border rounded-lg flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
                       onClick={() => setAddColOpen(true)}
                     >
                       <Plus className="w-4 h-4" />{i18n.t('添加列')}</button>

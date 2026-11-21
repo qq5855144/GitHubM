@@ -925,7 +925,7 @@ function ContextContent({
           <button
             type="button"
             onClick={onAddRepo}
-            className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-3 text-left text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground"
+            className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-3 text-left text-xs text-muted-foreground hover:text-foreground"
           >
             <Plus className="h-4 w-4" />
             {i18n.t('选择仓库')}
@@ -2160,7 +2160,7 @@ export default function AiAssistantV2Page() {
                       key={prompt.label}
                       type="button"
                       onClick={() => setInput(prompt.text)}
-                      className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                      className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
                     >
                       {prompt.label}
                     </button>
@@ -2256,7 +2256,7 @@ export default function AiAssistantV2Page() {
                   <button
                     type="button"
                     onClick={() => setRepoDialogOpen(true)}
-                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
                   >
                     <Plus className="h-3 w-3" />
                     {i18n.t('选择仓库')}

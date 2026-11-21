@@ -299,7 +299,7 @@ export default function UploadPage() {
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
         className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-          isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+          isDragging ? 'border-primary bg-primary/5' : 'border-border hover:bg-secondary/30'
         }`}
         onClick={() => fileInputRef.current?.click()}
       >

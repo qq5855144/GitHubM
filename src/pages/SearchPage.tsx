@@ -276,7 +276,7 @@ function EmptyRepoResult({
                 key={s.label}
                 type="button"
                 onClick={() => onRetry(s.keyword)}
-                className="px-3 py-1.5 rounded-full border border-border text-xs text-foreground hover:bg-secondary/60 hover:border-primary/40 transition-colors"
+                className="px-3 py-1.5 rounded-full border border-border text-xs text-foreground hover:bg-secondary/60 transition-colors"
               >
                 {s.label}
                 <span className="text-muted-foreground ml-1">「{s.keyword}」</span>

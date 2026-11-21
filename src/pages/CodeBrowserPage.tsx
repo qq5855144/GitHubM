@@ -2042,7 +2042,7 @@ export default function CodeBrowserPage() {
               onDragLeave={() => setIsDragging(false)}
               onDrop={(e) => { e.preventDefault(); setIsDragging(false); addUploadFiles(e.dataTransfer.files); }}
               className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
-                isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                isDragging ? 'border-primary bg-primary/5' : 'border-border hover:bg-secondary/30'
               }`}
               onClick={() => uploadInputRef.current?.click()}
             >

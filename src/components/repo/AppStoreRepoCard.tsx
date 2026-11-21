@@ -48,7 +48,8 @@ export default function AppStoreRepoCard({
       }}
       className={cn(
         'w-full bg-card border border-border rounded-2xl text-left cursor-pointer',
-        'p-4 hover:border-primary/40 hover:bg-secondary/20 active:scale-[0.995] transition-all',
+        'p-4 hover:bg-secondary/20 focus:border-border focus-visible:border-border',
+        'outline-none focus:outline-none focus-visible:outline-none active:scale-[0.995] transition-all',
         className,
       )}
     >

@@ -57,6 +57,9 @@
     --info-foreground: 0 0% 100%;
     --code-bg: 220 14% 96%;
     --code-border: 0 0% 91%;
+    /* 引用块（blockquote）：用中性灰底色分层，不用彩色也不用边框，
+       靠底色明度差区分「这是被引用的原文」，避免抢正文注意力。 */
+    --quote-bg: 220 9% 95%;
     /* 登录页：卡片阴影（浅色，做了淡化） */
     --login-card-shadow: 6px 6px 14px rgba(163, 177, 198, 0.30), -6px -6px 14px rgba(255, 255, 255, 0.90);
     --login-cta-shadow: 0 10px 20px -14px rgba(22, 119, 255, 0.60);
@@ -109,6 +112,9 @@
     --info-foreground: 0 0% 100%;
     --code-bg: 0 0% 9%;
     --code-border: 0 0% 20%;
+    /* 引用块（blockquote）：深色下走中性灰，但要比卡片(card 12%)明显浅一档，
+     深色屏幕里「更深」几乎看不出差别，必须往上提亮度才能分辨。 */
+    --quote-bg: 0 0% 19%;
     /* 登录页：卡片阴影（深色，做了淡化） */
     --login-card-shadow: 4px 4px 12px rgba(0, 0, 0, 0.40), -4px -4px 12px rgba(255, 255, 255, 0.025);
     --login-cta-shadow: 0 10px 20px -14px rgba(22, 119, 255, 0.45);
@@ -393,9 +399,11 @@
     margin-bottom: 0.25rem;
   }
 
+  /* 引用块（被引用的原文）：靠底色明度差与正文区分，不用彩色、不用边框线 */
   .markdown-body blockquote {
-    border-left: 4px solid hsl(var(--border));
-    padding-left: 1rem;
+    background: hsl(var(--quote-bg));
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius);
     color: hsl(var(--muted-foreground));
     margin: 1rem 0;
   }
@@ -480,10 +488,12 @@
     list-style: none;
     margin-left: -16px;
   }
+    /* 紧凑场景（列表预览等）：同步用底色区分，内边距收窄 */
   .markdown-compact blockquote {
+    background: hsl(var(--quote-bg));
     margin: 8px 0;
-    padding-left: 8px;
-    border-left-width: 3px;
+    padding: 6px 8px;
+    border-radius: 6px;
   }
   .markdown-compact pre {
     padding: 8px;

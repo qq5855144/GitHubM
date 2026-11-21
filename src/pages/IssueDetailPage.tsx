@@ -142,11 +142,20 @@ export default function IssueDetailPage() {
     load();
   }, [owner, repo, number]);
 
-  /** 正文 + 引用块拼成最终提交内容；引用块永远排在正文之后，像 GitHub 的回复引用 */
+  /**
+   * 正文 + 引用块拼成最终提交内容。
+   *
+   * 顺序为：**引用块在前、回复在后**，中间空一行。
+   * 即被引用的消息显示在上、自己的回复显示在下，符合引用回复的阅读语义。
+   * 实测校验（qq5855144/GitHubM#32）：
+   * body 为 `> Actions工作流记录没有删除按钮。\n>\n> ——来自 [@mymine](...)\n\n这个我看看能不能排到下一个版本`。
+   * 注意：不要改回「回复在前、引用块在后」。那样读起来像回复先于被引用的原文，语义颠倒。
+   */
   const composeCommentBody = (): string => {
     const text = newComment.trim();
     if (!pendingQuote) return text;
-    return text ? `${text}\n\n${pendingQuote.block}` : pendingQuote.block.trim();
+    // 引用块必须在回复之前：被引用的消息在上、回复在下，与 GitHub 原生行为一致。
+    return text ? `${pendingQuote.block.trim()}\n\n${text}` : pendingQuote.block.trim();
   };
 
   const handleComment = async () => {

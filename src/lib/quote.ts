@@ -165,12 +165,19 @@ export function buildCommentQuote(
 
   const { head, rest } = splitPreview(body, previewLines, previewChars);
 
-  let out = prefixQuoteLines(head) + '\n>\n' + source + '\n';
+  // 顺序（与 GitHub 观感一致）：预览 → 折叠的剩余原文 → 出处行收尾。
+  //
+  // 早先的写法把 `——来自` 拼在预览之后、再追加 <details>，导致出处行夹在
+  // 正文中间，读起来像「出处说完又冒出更多原文」。出处是整段引用的结束标记，
+  // 必须排在最末，不能被打断。
+  let out = prefixQuoteLines(head) + '\n';
 
   if (rest) {
     const folded = prefixQuoteLines(rest);
     out += `>\n> <details><summary>${summaryText}</summary>\n>\n${folded}\n>\n> </details>\n`;
   }
+
+  out += '>\n' + source + '\n';
 
   return out + '\n';
 }

@@ -20,6 +20,7 @@ import {
   ArrowUpCircle,
   Bot,
   CheckCircle2,
+  Check,
   BarChart3,
   ChevronDown,
   ChevronRight,
@@ -42,7 +43,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme, type ThemeMode, ACCENT_SCHEMES } from '@/contexts/ThemeContext';
+import {
+  useTheme,
+  type ThemeMode,
+  parseColor,
+  rgbToHex,
+  rgbToHsl,
+  hslToRgb,
+} from '@/contexts/ThemeContext';
+import { MONET_PALETTES, toAccentConfig, isPaletteActive } from '@/lib/monetPalettes';
 import { updateUserProfile } from '@/services/github';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -257,7 +266,50 @@ function saveCollapsed(data: Record<string, boolean>) {
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const { user, rateLimit, login, token, refreshRateLimit } = useAuth();
-  const { theme: currentTheme, setTheme, accentSchemeId, setAccentScheme } = useTheme();
+  const { theme: currentTheme, setTheme, accent, derived, setAccent, resetAccent } = useTheme();
+  // 强调色输入框草稿：允许用户输一半（如 "#16"）而不立即应用
+  const [accentInput, setAccentInput] = useState(() => accent.color);
+  const [accent2Input, setAccent2Input] = useState(() => accent.color2 ?? '');
+  // 外部改色（重置 / 跨标签页同步）时回填输入框
+  useEffect(() => {
+    setAccentInput(accent.color);
+    setAccent2Input(accent.color2 ?? '');
+  }, [accent.color, accent.color2]);
+  /** 由主色推导一个同色相的浅色，用作「切到渐变」时的第二色兜底 */
+  const derivePartnerColor = useCallback((hex: string): string => {
+    const rgb = parseColor(hex);
+    if (!rgb) return hex;
+    const hsl = rgbToHsl(rgb);
+    // 提亮到 78% 左右，同时略降饱和，避免高饱和色发荧光
+    const lightened = hslToRgb({
+      h: hsl.h,
+      s: Math.max(0, Math.min(100, hsl.s * 0.75)),
+      l: 78,
+    });
+    return rgbToHex(lightened);
+  }, []);
+
+  /** 提交输入：主色非法则回退，第二色留空即单色 */
+  const commitAccent = useCallback(() => {
+    const mainRgb = parseColor(accentInput);
+    const secondRgb = parseColor(accent2Input);
+    if (!mainRgb) {
+      setAccentInput(accent.color);
+      setAccent2Input(accent.color2 ?? '');
+      return;
+    }
+    const color = rgbToHex(mainRgb);
+    if (!secondRgb) {
+      setAccent({ color });
+      setAccentInput(color);
+      setAccent2Input('');
+      return;
+    }
+    const color2 = rgbToHex(secondRgb);
+    setAccent({ color, color2, angle: accent.angle ?? 135 });
+    setAccentInput(color);
+    setAccent2Input(color2);
+  }, [accentInput, accent2Input, accent.color, accent.color2, accent.angle, setAccent]);
 
   // 折叠状态：key = 分组 id，value = true 表示折叠
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => loadCollapsed());
@@ -688,38 +740,177 @@ export default function SettingsPage() {
           <p className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
             <Palette className="w-3.5 h-3.5" />{t('settings.accentScheme')}
           </p>
-          <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
-            {ACCENT_SCHEMES.map((scheme) => (
-              <button
-                key={scheme.id}
-                type="button"
-                onClick={() => setAccentScheme(scheme.id)}
-                title={scheme.label}
-                className={cn(
-                  'flex flex-col items-center gap-1.5 py-2.5 px-1 rounded-lg border-2 transition-all',
-                  accentSchemeId === scheme.id
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border bg-secondary/50 hover:bg-secondary'
-                )}
-              >
-                <span
-                  className="w-6 h-6 rounded-full shadow-sm ring-1 ring-border/30 shrink-0"
-                  style={{ backgroundColor: scheme.previewColor }}
-                />
-                <span className={cn(
-                  'text-[10px] font-medium leading-tight text-center',
-                  accentSchemeId === scheme.id ? 'text-primary' : 'text-muted-foreground'
-                )}>
-                  {scheme.label}
-                </span>
-              </button>
-            ))}
+          {/* 模式切换：两个小圆球，单选式。单色=清空第二色，渐变=无第二色时自动补浅色兜底 */}
+          <div className="flex items-center gap-3 mb-2">
+            {([
+              { id: 'solid', label: t('settings.accentModeSolid'), fill: accent.color },
+              {
+                id: 'gradient',
+                label: t('settings.accentModeGradient'),
+                fill: `linear-gradient(135deg, ${accent.color}, ${accent.color2 ?? derivePartnerColor(accent.color)})`,
+              },
+            ] as const).map((m) => {
+              const selected = m.id === 'gradient' ? derived.isGradient : !derived.isGradient;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={m.label}
+                  onClick={() => {
+                    if (m.id === 'gradient') {
+                      if (derived.isGradient) return;
+                      const color2 = derivePartnerColor(accent.color);
+                      setAccent({ color: accent.color, color2, angle: accent.angle ?? 135 });
+                      setAccentInput(accent.color);
+                      setAccent2Input(color2);
+                      return;
+                    }
+                    if (!derived.isGradient) return;
+                    setAccent({ color: accent.color });
+                    setAccentInput(accent.color);
+                    setAccent2Input('');
+                  }}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-full pl-1 pr-2.5 py-1 text-xs transition-colors',
+                    selected
+                      ? 'bg-primary/10 text-primary ring-1 ring-primary/40'
+                      : 'text-muted-foreground hover:bg-secondary/60',
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'w-4 h-4 rounded-full shrink-0',
+                      selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'ring-1 ring-border',
+                    )}
+                    style={{ background: m.fill }}
+                  />
+                  {m.label}
+                </button>
+              );
+            })}
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            当前方案：<span className="text-foreground font-medium">
-              {ACCENT_SCHEMES.find(s => s.id === accentSchemeId)?.label ?? '紫罗兰'}
-            </span>，选择后立即生效并持久化保存
-          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {/* 主色输入 */}
+            <label className="flex items-center gap-2 rounded-lg border border-border bg-secondary/40 px-2.5 py-2 focus-within:border-primary/60 transition-colors">
+              <span
+                className="w-6 h-6 rounded-md shrink-0 ring-1 ring-border/40"
+                style={{ background: accent.color }}
+              />
+              <input
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                spellCheck={false}
+                value={accentInput}
+                onChange={(e) => setAccentInput(e.target.value)}
+                onBlur={commitAccent}
+                onKeyDown={(e) => { if (e.key === 'Enter') commitAccent(); }}
+                placeholder="#1677FF"
+                className="w-full bg-transparent text-sm font-mono outline-none placeholder:text-muted-foreground/60"
+              />
+              <span className="text-[10px] text-muted-foreground shrink-0">{t('settings.accentMain')}</span>
+            </label>
+            {/* 第二色输入（留空即单色） */}
+            <label className="flex items-center gap-2 rounded-lg border border-border bg-secondary/40 px-2.5 py-2 focus-within:border-primary/60 transition-colors">
+              <span
+                className="w-6 h-6 rounded-md shrink-0 ring-1 ring-border/40"
+                style={{ background: derived.isGradient ? `linear-gradient(135deg, ${accent.color}, ${accent.color2})` : 'hsl(var(--muted))' }}
+              />
+              <input
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                spellCheck={false}
+                value={accent2Input}
+                onChange={(e) => setAccent2Input(e.target.value)}
+                onBlur={commitAccent}
+                onKeyDown={(e) => { if (e.key === 'Enter') commitAccent(); }}
+                placeholder={t('settings.accentSecondPlaceholder')}
+                className="w-full bg-transparent text-sm font-mono outline-none placeholder:text-muted-foreground/60"
+              />
+              <span className="text-[10px] text-muted-foreground shrink-0">{t('settings.accentSecond')}</span>
+            </label>
+          </div>
+          {/* 渐变角度（仅渐变时出现） */}
+          {derived.isGradient && (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-xs text-muted-foreground shrink-0">{t('settings.accentAngle')}</span>
+              <input
+                type="range"
+                min={0}
+                max={360}
+                step={5}
+                value={accent.angle ?? 135}
+                onChange={(e) => setAccent({ ...accent, angle: Number(e.target.value) })}
+                className="flex-1 accent-[hsl(var(--primary))]"
+              />
+              <span className="text-xs font-mono text-muted-foreground w-10 text-right">{accent.angle ?? 135}°</span>
+            </div>
+          )}
+          {/* 预览条 */}
+          <div
+            className="mt-2 h-9 rounded-lg flex items-center justify-center text-xs font-medium text-white shadow-sm"
+            style={{
+              background: derived.gradient ?? accent.color,
+              color: derived.primaryForeground,
+            }}
+          >
+            {derived.isGradient ? t('settings.accentPreviewGradient') : t('settings.accentPreviewSolid')}
+          </div>
+          {/* 莫奈色板：一键应用同族双色，与上方手动输入互补 */}
+          <div className="mt-3">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <p className="text-xs font-medium text-muted-foreground">{t('settings.monetTitle')}</p>
+              <p className="text-[10px] text-muted-foreground/70">{t('settings.monetHint')}</p>
+            </div>
+            {/* 12 套色板，6 列正好排成 6/6 两行，无空档 */}
+            <div className="grid grid-cols-6 gap-1.5">
+              {MONET_PALETTES.map((p) => {
+                const active = isPaletteActive(p, accent);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    title={t(`settings.monet${p.id.charAt(0).toUpperCase()}${p.id.slice(1)}`)}
+                    aria-label={t(`settings.monet${p.id.charAt(0).toUpperCase()}${p.id.slice(1)}`)}
+                    aria-pressed={active}
+                    onClick={() => {
+                      // 整组写入，deriveAccent 会自动派生 --primary / --accent-gradient 等
+                      setAccent(toAccentConfig(p));
+                      setAccentInput(p.color);
+                      setAccent2Input(p.color2);
+                    }}
+                    className={cn(
+                      'relative h-8 rounded-md ring-1 transition-all',
+                      active
+                        ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+                        : 'ring-border/40 hover:scale-105 active:scale-95',
+                    )}
+                    style={{ background: `linear-gradient(135deg, ${p.color}, ${p.color2})` }}
+                  >
+                    {active && (
+                      <Check className="absolute inset-0 m-auto w-3.5 h-3.5 text-white drop-shadow" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <p className="text-xs text-muted-foreground">
+              {t('settings.accentHint')}
+            </p>
+            <button
+              type="button"
+              onClick={() => { setAccentInput('#1677FF'); setAccent2Input(''); resetAccent(); }}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 shrink-0"
+            >
+              {t('settings.accentReset')}
+            </button>
+          </div>
         </div>
       </SectionGroup>
 

@@ -3,50 +3,50 @@ import type { AccentConfig } from '@/contexts/ThemeContext';
 /**
  * 莫奈（Material You）风格强调色板。
  *
- * 设计原则：
+ * 设计原则（“高级感”来自克制，不是来自鲜艳）：
  * - 每套只有一个纯色，不做渐变；
- * - 亮度统一落在 L≈42~62 区间（旧版多为 L≈21~49，视觉上偏脏偏暗）；
- * - 白字/深字由 `deriveAccent` 根据对比度自动二选一，
- *   因此黄、青、薄荷这类高明度色相会自动配深色文字，全部色板均满足 WCAG AA；
- * - 色相拉开但保持低~中饱和，避免像纯 RGB 原色那样刺眼。
+ * - 饱和度收敛到 S≈16~58：高饱和会带来塑料感/番茄酱红，低饱和才有质感；
+ * - 色相拉开到 12 个不同色相（旧版 monet/violet/lavender 三紫撞色、
+ *   teal/mint 两青撞色，实际只有 8 个色相）；
+ * - 明度做深浅节奏（L≈36~62），而不是一排等亮的塑料色卡；
+ * - 白字/深字由 `pickForeground` 按对比度自动二选一，
+ *   因此黄、青、薄荷这类高明度色相会自动配深色文字。
  *
- * 点击色板后会整组写入 `setAccent`，因此 `deriveAccent` 会自动派生出
- * `--primary` / `--accent` / `--accent-solid` / `--primary-foreground`，
- * 无需在此重复计算。
+ * 所有色板在浅色与深色模式下均满足 WCAG AA（>=4.5）。
  */
 export interface MonetPalette {
   /** 稳定 id，用于 i18n 与选中态判断 */
   id: string;
-  /** 主色：白底对比度 >= 4.5（或深字对比度 >= 4.5） */
+  /** 主色：与白字或深字之一对比度 >= 4.5 */
   color: string;
 }
 
-/** 色板列表：12 套，覆盖 M3 参考色相的主要分支 */
+/** 色板列表：12 套，每套一个独立色相 */
 export const MONET_PALETTES: MonetPalette[] = [
-  // 默认紫（M3 Purple）
-  { id: 'monet', color: '#7B5DC0' },
-  // 靛蓝（Indigo）
-  { id: 'indigo', color: '#4A5ECF' },
-  // 青蓝（Teal）
-  { id: 'teal', color: '#2DADB4' },
-  // 森林绿（Green）
-  { id: 'green', color: '#3E986E' },
-  // 暖橙（Orange）
-  { id: 'orange', color: '#E36C1C' },
-  // 玫瑰红（Rose）
-  { id: 'rose', color: '#CF3060' },
-  // 珊瑚（Coral）
-  { id: 'coral', color: '#C33D28' },
-  // 石墨蓝（Neutral，低饱和）
-  { id: 'graphite', color: '#6585A4' },
-  // 薰衣草（Lavender，柔和紫）
-  { id: 'lavender', color: '#9B75C7' },
-  // 蜂蜜黄（Honey，深字）
-  { id: 'honey', color: '#D39E22' },
-  // 薄荷（Mint）
-  { id: 'mint', color: '#36A18F' },
-  // 幽紫（Violet）
-  { id: 'violet', color: '#8258CA' },
+  // 雾紫（默认）H264 S38 L55
+  { id: 'monet', color: '#8461B8' },
+  // 靛蓝 H232 S45 L50
+  { id: 'indigo', color: '#4655B9' },
+  // 深青 H190 S42 L44
+  { id: 'teal', color: '#41909F' },
+  // 松绿 H155 S34 L36
+  { id: 'green', color: '#3D7B61' },
+  // 陶土橙 H26 S54 L47
+  { id: 'orange', color: '#B96F37' },
+  // 豆沙玫 H344 S48 L48
+  { id: 'rose', color: '#B5405F' },
+  // 砖红 H12 S52 L46
+  { id: 'coral', color: '#B25138' },
+  // 石板灰蓝 H212 S16 L45
+  { id: 'graphite', color: '#607285' },
+  // 雾薰衣草 H280 S34 L62
+  { id: 'lavender', color: '#A97DBF' },
+  // 琥珀 H44 S50 L50
+  { id: 'honey', color: '#BF9D40' },
+  // 灰薄荷 H168 S34 L50
+  { id: 'mint', color: '#54AB9A' },
+  // 藕荷 H308 S34 L58
+  { id: 'violet', color: '#B86FAF' },
 ];
 
 /** 把色板转换成可直接传给 `setAccent` 的配置 */

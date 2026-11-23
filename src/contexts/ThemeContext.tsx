@@ -6,7 +6,7 @@ export type ThemeMode = 'dark' | 'light' | 'system';
 // ── 强调色配置 ──────────────────────────────────────────────────────────────
 /**
  * 用户自定义强调色。
- * 只有一个色值：{ color: '#7b5dc0' }
+ * 只有一个色值：{ color: '#8461b8' }
  * 旧存储中遗留的 color2 / angle 字段在读取时会被自动丢弃。
  */
 export interface AccentConfig {
@@ -146,8 +146,8 @@ const toHslTriplet = (c: RGB): string => {
 };
 
 export const DEFAULT_ACCENT: AccentConfig = {
-  color: '#7b5dc0',
-};  // 莫奈紫：H258 S44% L56%，白底对比度 5.04（WCAG AA 通过）
+  color: '#8461b8',
+};  // 雾紫：H264 S38 L55，白底对比度 4.79（WCAG AA 通过）
 
 const ACCENT_STORAGE_KEY_V2 = 'github_manager_accent_v2';
 const LEGACY_ACCENT_STORAGE_KEY = 'github_manager_accent';
@@ -203,15 +203,23 @@ export function loadAccentConfig(): AccentConfig {
   return { ...DEFAULT_ACCENT };
 }
 
+/**
+ * 在给定底色上选择对比度更高的前景色（白或近黑）。
+ * 深色模式会把主色提亮，因此必须基于「提亮后的实际底色」重新计算，
+ * 不能复用浅色模式的结果。
+ */
+export function pickForeground(bg: RGB): string {
+  const white: RGB = { r: 255, g: 255, b: 255 };
+  const nearBlack: RGB = { r: 17, g: 24, b: 39 };
+  return contrastRatio(bg, white) >= contrastRatio(bg, nearBlack) ? '#ffffff' : '#111827';
+}
+
 /** 由配置派生全部可用色值 */
 export function deriveAccent(config: AccentConfig): AccentDerived {
   const cfg = normalizeAccent(config);
   const c1 = parseColor(cfg.color)!;
   const primaryHex = rgbToHex(c1);
-  const white: RGB = { r: 255, g: 255, b: 255 };
-  const nearBlack: RGB = { r: 17, g: 24, b: 39 };
-  const primaryForeground =
-    contrastRatio(c1, white) >= contrastRatio(c1, nearBlack) ? '#ffffff' : '#111827';
+  const primaryForeground = pickForeground(c1);
   return {
     primaryHex,
     primaryForeground,
@@ -261,6 +269,9 @@ function applyAccent(config: AccentConfig, resolved: 'dark' | 'light') {
     return hslToRgb({ ...hsl, l: Math.min(96, hsl.l + (hsl.l < 60 ? 12 : 6)) });
   };
   const p = isDark ? lighten(parseColor(d.primaryHex)!) : parseColor(d.primaryHex)!;
+  // 前景色必须跟随「实际生效的底色」重新二选一：
+  // 深色模式会把主色提亮，若沿用浅色模式算出的 foreground，
+  // 就会出现“浅底 + 白字”的低对比组合（对比度可低至 2.9）。
   // --accent 在本项目里是「与主色一致的强调色」（非 shadcn 的 hover 底色），
   // 所以直接跟随 --primary，避免链接色与按钮色分裂。
 
@@ -272,7 +283,10 @@ function applyAccent(config: AccentConfig, resolved: 'dark' | 'light') {
   root.style.setProperty('--ring', primaryTriplet);
   root.style.setProperty('--sidebar-primary', primaryTriplet);
   root.style.setProperty('--sidebar-ring', primaryTriplet);
-  root.style.setProperty('--primary-foreground', toHslTriplet(parseColor(d.primaryForeground)!));
+  root.style.setProperty(
+    '--primary-foreground',
+    toHslTriplet(parseColor(pickForeground(p))),
+  );
 
   // 纯色 hex，给需要直接色值的场景（登录页 Logo / CTA、内联 SVG fill 等）用
   root.style.setProperty('--accent-solid', rgbToHex(p));

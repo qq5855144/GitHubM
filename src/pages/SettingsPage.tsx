@@ -808,7 +808,7 @@ export default function SettingsPage() {
                 onChange={(e) => setAccentInput(e.target.value)}
                 onBlur={commitAccent}
                 onKeyDown={(e) => { if (e.key === 'Enter') commitAccent(); }}
-                placeholder="#1677FF"
+                placeholder="#6750A4"
                 className="w-full bg-transparent text-sm font-mono outline-none placeholder:text-muted-foreground/60"
               />
               <span className="text-[10px] text-muted-foreground shrink-0">{t('settings.accentMain')}</span>
@@ -905,7 +905,7 @@ export default function SettingsPage() {
             </p>
             <button
               type="button"
-              onClick={() => { setAccentInput('#1677FF'); setAccent2Input(''); resetAccent(); }}
+              onClick={() => { setAccentInput('#6750A4'); setAccent2Input(''); resetAccent(); }}
               className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 shrink-0"
             >
               {t('settings.accentReset')}

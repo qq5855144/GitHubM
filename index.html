@@ -10,9 +10,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 
     <!-- 主题色（Android WebView 工具栏 / PWA 标题栏） -->
-    <meta name="theme-color" content="#1e1b4b" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f3ff" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)"  content="#1e1b4b" />
+    <meta name="theme-color" content="#8976BC" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#E8E1F5" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)"  content="#8976BC" />
 
     <!-- iOS PWA / WKWebView 全屏模式 -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -41,6 +41,7 @@
       (function () {
         // ── 强调色映射表（与 ThemeContext.tsx ACCENT_SCHEMES 保持同步） ──
         var ACCENT_COLORS = {
+          monet:   { dark: '#8976BC', light: '#6750A4' },
           purple:  { dark: '#7c3aed', light: '#6d28d9' },
           blue:    { dark: '#1d6be3', light: '#1d4ed8' },
           green:   { dark: '#16a34a', light: '#15803d' },
@@ -81,8 +82,8 @@
         }
 
         // 读取已保存的强调色，更新 theme-color meta
-        var accentId = localStorage.getItem('github_manager_accent') || 'blue';
-        var accentEntry = ACCENT_COLORS[accentId] || ACCENT_COLORS.purple;
+        var accentId = localStorage.getItem('github_manager_accent') || 'monet';
+        var accentEntry = ACCENT_COLORS[accentId] || ACCENT_COLORS.monet;
         var accentHex = isDark ? accentEntry.dark : accentEntry.light;
 
         var metaThemeColor = document.querySelector('meta[name="theme-color"]:not([media])');

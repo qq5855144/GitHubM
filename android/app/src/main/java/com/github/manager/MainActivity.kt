@@ -1307,7 +1307,7 @@ class MainActivity : AppCompatActivity() {
                             val accentId = accentResult?.trim('"') ?: "monet"
                             // 完整映射表，与 ThemeContext.tsx ACCENT_SCHEMES 保持同步
                             val accentMap = mapOf(
-                                "monet"   to "#6750A4",
+                                "monet"   to "#9484BD",
                                 "purple"  to "#7c3aed",
                                 "blue"    to "#1d6be3",
                                 "green"   to "#16a34a",

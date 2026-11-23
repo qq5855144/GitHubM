@@ -11,8 +11,8 @@
         <!-- API 28+ 刘海屏延伸；低版本忽略 -->
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <!-- 深色主题 Material3 主色：更亮的紫色，深底上对比度更好 -->
-        <item name="colorPrimary">#8976BC</item>
-        <item name="colorPrimaryVariant">#5B4B8A</item>
+        <item name="colorPrimary">#A598C8</item>
+        <item name="colorPrimaryVariant">#423663</item>
         <item name="colorOnPrimary">#ffffff</item>
         <!-- M3 Active Indicator 填充色（深色模式）：深紫 -->
         <item name="colorSecondaryContainer">#3D2B6B</item>

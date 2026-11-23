@@ -27,8 +27,8 @@ export interface MonetPalette {
 
 /** 色板列表：8 套，覆盖 M3 参考色相的主要分支 */
 export const MONET_PALETTES: MonetPalette[] = [
-  // M3 默认紫（Purple，比 #7c3aed 更近原生 Material You）
-  { id: 'monet', color: '#6750A4', color2: '#9A82DB', angle: 135 },
+  // M3 默认紫（Purple，比 #7c3aed 更近原生 Material You）——与 DEFAULT_ACCENT 保持一致
+  { id: 'monet', color: '#6750A4', color2: '#C0B8D5', angle: 135 },
   // 靛蓝（Indigo）
   { id: 'indigo', color: '#4355B9', color2: '#7583DE', angle: 135 },
   // 青蓝（Teal，M3 的 cyan/sky 分支）

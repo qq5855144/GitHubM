@@ -18,7 +18,7 @@
     --card-foreground: 0 0% 10%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 10%;
-    --primary: 211 100% 54%;          /* #1677FF */
+    --primary: 256 34% 48%;          /* #6750A4 莫奈紫，与 DEFAULT_ACCENT 一致 */
     --primary-foreground: 0 0% 100%;
     --secondary: 220 9% 96%;          /* #F2F3F5 */
     --secondary-foreground: 0 0% 10%;
@@ -573,17 +573,44 @@ html.theme-transitioning *::after {
     line-height: 24px !important;
   }
 }
-/* ── 登录页：轻拟态卡片 + 下划线输入 ─────────────────────────────── */
-.login-page {
-  background: hsl(var(--background));
+/* ── 登录页 Logo 遮罩 ───────────────────────────────────────────────
+   GitHub 图形内联为 data URI，配合 .login-logo 的 mask 使用，
+   这样既能跟随 --accent-gradient，又不必依赖 public/assets/logo.svg。
+   同源同 path，与原先 <img> 显示的形状完全一致。 */
+:root {
+  --login-logo-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23000' d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59c.4.07.55-.17.55-.38c0-.19-.01-.82-.01-1.49c-2.01.37-2.53-.49-2.69-.94c-.09-.23-.48-.94-.82-1.13c-.28-.15-.68-.52-.01-.53c.63-.01 1.08.58 1.23.82c.72 1.21 1.87.87 2.33.66c.07-.52.28-.87.51-1.07c-1.78-.2-3.64-.89-3.64-3.95c0-.87.31-1.59.82-2.15c-.08-.2-.36-1.02.08-2.12c0 0 .67-.21 2.2.82c.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82c.44 1.1.16 1.92.08 2.12c.51.56.82 1.27.82 2.15c0 3.07-1.87 3.75-3.65 3.95c.29.25.54.73.54 1.48c0 1.07-.01 1.93-.01 2.2c0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8'/%3E%3C/svg%3E");
 }
 
+/* ── 登录页：轻拟态卡片 + 下划线输入 ─────────────────────────────── */
+/* 登录页：底板 #F7F7F7 + 卡片 #FDFDFD（相差 6 阶的微分层），
+   卡片用「1px 描边 + 柔投影」而非拟态高光，避免白高光比底板更亮而发白斑。 */
+.login-page {
+  background: #F7F7F7;
+}
+/* 登录页 Logo：用 mask 取 GitHub 图形，填充跟随强调色。
+   --accent-gradient 单色时回退为纯色 hex、渐变时为 linear-gradient，
+   所以同一份 background 声明即可覆盖两种模式，无需条件判断。 */
+.login-logo {
+  display: block;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  background: var(--accent-gradient);
+  -webkit-mask-image: var(--login-logo-mask);
+  mask-image: var(--login-logo-mask);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
 .login-card {
-  background: hsl(var(--background));
+  background: #FDFDFD;
   border: 0;
   border-radius: 22px;
   padding: 22px 20px 20px;
-  box-shadow: var(--login-card-shadow);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.05), 0 4px 16px rgba(15, 23, 42, 0.07);
 }
 
 .login-card .login-underline {
@@ -595,7 +622,7 @@ html.theme-transitioning *::after {
   padding-left: 32px !important;
   padding-right: 32px !important;
   text-align: center !important;
-  caret-color: #1677FF !important;
+  caret-color: hsl(var(--primary)) !important;
 }
 
 .login-card .login-underline:focus,
@@ -606,8 +633,8 @@ html.theme-transitioning *::after {
 }
 
 .login-cta {
-  background: #1677FF;
-  color: #fff;
+  background: var(--accent-gradient);
+  color: hsl(var(--primary-foreground));
   border: 0;
   border-radius: 12px;
   box-shadow: var(--login-cta-shadow);

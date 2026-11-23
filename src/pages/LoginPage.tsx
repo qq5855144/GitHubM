@@ -96,10 +96,10 @@ export default function LoginPage() {
           <div className="w-full">
             {/* Logo 与标题：卡片之外 */}
             <div className="mb-6 flex flex-col items-center text-center">
-              <img
-                src={`${import.meta.env.BASE_URL}assets/logo.svg`}
-                alt={t('login.title')}
-                className="h-20 w-20"
+              <span
+                className="login-logo"
+                role="img"
+                aria-label={t('login.title')}
               />
               <h1 className="mt-4 text-[21px] font-semibold tracking-tight text-foreground">
                 {t('login.title')}

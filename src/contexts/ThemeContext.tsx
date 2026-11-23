@@ -1,274 +1,338 @@
-// 主题上下文 - 支持深色/浅色/跟随系统 + 主题色自定义
-
+// 主题上下文 - 支持深色/浅色/跟随系统 + 强调色完全自定义（单色 / 渐变）
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import i18n from "@/i18n";
 
 export type ThemeMode = 'dark' | 'light' | 'system';
 
-// ── 预设主题色方案 ──────────────────────────────────────────────────────────
-export interface AccentScheme {
-  id: string;
-  label: string;
-  /** HSL 字符串（不含 hsl()），浅色模式 */
-  lightPrimary: string;
-  lightAccent: string;
-  lightRing: string;
-  /** HSL 字符串，深色模式（稍亮） */
-  darkPrimary: string;
-  darkAccent: string;
-  darkRing: string;
-  /** 用于预览的 hex 色（同时作为 Android theme-color 基准） */
-  previewColor: string;
-  /** Android 状态栏浅色背景下的深色变体（可选，默认用 previewColor） */
-  lightThemeColor?: string;
+// ── 强调色配置 ──────────────────────────────────────────────────────────────
+/**
+ * 用户自定义强调色。
+ * 单色：{ color: '#7c3aed' }
+ * 渐变：{ color: '#7c3aed', color2: '#ec4899', angle: 135 }
+ * 规则极简：填了 color2 就是渐变，没填就是单色。
+ */
+export interface AccentConfig {
+  color: string;
+  color2?: string;
+  /** 渐变角度（deg），仅渐变时生效 */
+  angle?: number;
 }
 
-export const ACCENT_SCHEMES: AccentScheme[] = [
-  // ── 原有色 ──────────────────────────────────────────────────────────────
-  {
-    id: 'purple',
-    label: i18n.t('紫罗兰'),
-    lightPrimary: '263 70% 58%',
-    lightAccent:  '258 88% 66%',
-    lightRing:    '263 70% 58%',
-    darkPrimary:  '263 72% 68%',
-    darkAccent:   '258 88% 74%',
-    darkRing:     '263 72% 68%',
-    previewColor: '#7c3aed',
-    lightThemeColor: '#6d28d9',
-  },
-  {
-    id: 'blue',
-    label: i18n.t('海洋蓝'),
-    lightPrimary: '217 91% 50%',
-    lightAccent:  '210 100% 56%',
-    lightRing:    '217 91% 50%',
-    darkPrimary:  '217 91% 65%',
-    darkAccent:   '210 100% 70%',
-    darkRing:     '217 91% 65%',
-    previewColor: '#1d6be3',
-    lightThemeColor: '#1d4ed8',
-  },
-  {
-    id: 'green',
-    label: i18n.t('翠绿'),
-    lightPrimary: '142 71% 40%',
-    lightAccent:  '152 80% 42%',
-    lightRing:    '142 71% 40%',
-    darkPrimary:  '142 65% 52%',
-    darkAccent:   '152 72% 54%',
-    darkRing:     '142 65% 52%',
-    previewColor: '#16a34a',
-    lightThemeColor: '#15803d',
-  },
-  {
-    id: 'orange',
-    label: i18n.t('暖橙'),
-    lightPrimary: '24 95% 50%',
-    lightAccent:  '32 95% 52%',
-    lightRing:    '24 95% 50%',
-    darkPrimary:  '24 95% 62%',
-    darkAccent:   '32 95% 64%',
-    darkRing:     '24 95% 62%',
-    previewColor: '#f97316',
-    lightThemeColor: '#ea580c',
-  },
-  {
-    id: 'rose',
-    label: i18n.t('玫瑰红'),
-    lightPrimary: '346 77% 50%',
-    lightAccent:  '354 83% 57%',
-    lightRing:    '346 77% 50%',
-    darkPrimary:  '346 77% 64%',
-    darkAccent:   '354 83% 70%',
-    darkRing:     '346 77% 64%',
-    previewColor: '#e11d48',
-    lightThemeColor: '#be123c',
-  },
-  {
-    id: 'cyan',
-    label: i18n.t('青碧'),
-    lightPrimary: '192 90% 40%',
-    lightAccent:  '186 88% 44%',
-    lightRing:    '192 90% 40%',
-    darkPrimary:  '192 88% 54%',
-    darkAccent:   '186 84% 58%',
-    darkRing:     '192 88% 54%',
-    previewColor: '#0891b2',
-    lightThemeColor: '#0e7490',
-  },
-  // ── 新增色 ──────────────────────────────────────────────────────────────
-  {
-    id: 'indigo',
-    label: i18n.t('靛蓝'),
-    lightPrimary: '239 84% 58%',
-    lightAccent:  '245 88% 64%',
-    lightRing:    '239 84% 58%',
-    darkPrimary:  '239 84% 70%',
-    darkAccent:   '245 88% 76%',
-    darkRing:     '239 84% 70%',
-    previewColor: '#4f46e5',
-    lightThemeColor: '#4338ca',
-  },
-  {
-    id: 'sky',
-    label: i18n.t('天空蓝'),
-    lightPrimary: '199 89% 46%',
-    lightAccent:  '204 94% 50%',
-    lightRing:    '199 89% 46%',
-    darkPrimary:  '199 89% 60%',
-    darkAccent:   '204 94% 64%',
-    darkRing:     '199 89% 60%',
-    previewColor: '#0ea5e9',
-    lightThemeColor: '#0284c7',
-  },
-  {
-    id: 'emerald',
-    label: i18n.t('祖母绿'),
-    lightPrimary: '160 84% 36%',
-    lightAccent:  '166 90% 38%',
-    lightRing:    '160 84% 36%',
-    darkPrimary:  '160 80% 50%',
-    darkAccent:   '166 86% 54%',
-    darkRing:     '160 80% 50%',
-    previewColor: '#059669',
-    lightThemeColor: '#047857',
-  },
-  {
-    id: 'teal',
-    label: i18n.t('青绿'),
-    lightPrimary: '174 72% 38%',
-    lightAccent:  '178 76% 40%',
-    lightRing:    '174 72% 38%',
-    darkPrimary:  '174 68% 52%',
-    darkAccent:   '178 72% 56%',
-    darkRing:     '174 68% 52%',
-    previewColor: '#0d9488',
-    lightThemeColor: '#0f766e',
-  },
-  {
-    id: 'amber',
-    label: i18n.t('琥珀'),
-    lightPrimary: '38 92% 48%',
-    lightAccent:  '45 96% 50%',
-    lightRing:    '38 92% 48%',
-    darkPrimary:  '38 92% 60%',
-    darkAccent:   '45 96% 64%',
-    darkRing:     '38 92% 60%',
-    previewColor: '#d97706',
-    lightThemeColor: '#b45309',
-  },
-  {
-    id: 'pink',
-    label: i18n.t('樱花粉'),
-    lightPrimary: '330 81% 54%',
-    lightAccent:  '336 84% 58%',
-    lightRing:    '330 81% 54%',
-    darkPrimary:  '330 81% 68%',
-    darkAccent:   '336 84% 72%',
-    darkRing:     '330 81% 68%',
-    previewColor: '#ec4899',
-    lightThemeColor: '#db2777',
-  },
-  {
-    id: 'violet',
-    label: i18n.t('薰衣草'),
-    lightPrimary: '280 68% 56%',
-    lightAccent:  '275 72% 62%',
-    lightRing:    '280 68% 56%',
-    darkPrimary:  '280 68% 68%',
-    darkAccent:   '275 72% 74%',
-    darkRing:     '280 68% 68%',
-    previewColor: '#8b5cf6',
-    lightThemeColor: '#7c3aed',
-  },
-  {
-    id: 'gold',
-    label: i18n.t('金色'),
-    lightPrimary: '43 96% 42%',
-    lightAccent:  '48 98% 46%',
-    lightRing:    '43 96% 42%',
-    darkPrimary:  '43 96% 58%',
-    darkAccent:   '48 98% 62%',
-    darkRing:     '43 96% 58%',
-    previewColor: '#ca8a04',
-    lightThemeColor: '#a16207',
-  },
-  // ── 扩展色 ──────────────────────────────────────────────────────────────
-  {
-    id: 'coral',
-    label: i18n.t('珊瑚橙'),
-    lightPrimary: '16 88% 50%',
-    lightAccent:  '22 92% 54%',
-    lightRing:    '16 88% 50%',
-    darkPrimary:  '16 88% 64%',
-    darkAccent:   '22 92% 68%',
-    darkRing:     '16 88% 64%',
-    previewColor: '#f0572a',
-    lightThemeColor: '#d94420',
-  },
-  {
-    id: 'lime',
-    label: i18n.t('荧光绿'),
-    lightPrimary: '82 66% 38%',
-    lightAccent:  '90 70% 40%',
-    lightRing:    '82 66% 38%',
-    darkPrimary:  '82 66% 54%',
-    darkAccent:   '90 70% 58%',
-    darkRing:     '82 66% 54%',
-    previewColor: '#65a30d',
-    lightThemeColor: '#4d7c0f',
-  },
-];
+/** 由 AccentConfig 派生出的、可直接使用的色值集合 */
+export interface AccentDerived {
+  /** 主色 hex（单色时为 color，渐变时为两色中点） */
+  primaryHex: string;
+  /** 副色 hex（仅渐变时有值） */
+  secondaryHex?: string;
+  isGradient: boolean;
+  /** 渐变 CSS 值；单色时为 null */
+  gradient: string | null;
+  /** 主色上应使用的文字色（按对比度自动选白或近黑） */
+  primaryForeground: string;
+  /** 强调色 hex（用于链接、图标等单色消费点） */
+  accentHex: string;
+}
 
+// ── 色值工具链 ──────────────────────────────────────────────────────────────
+interface RGB { r: number; g: number; b: number }
+interface HSL { h: number; s: number; l: number }
+
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+/** 解析用户输入：支持 #rgb / #rrggbb / rgb() / hsl()，无 # 也接受 */
+export function parseColor(input: string): RGB | null {
+  if (!input) return null;
+  const s = input.trim().toLowerCase();
+
+  const hex = s.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    const h = hex[1];
+    if (h.length === 3) {
+      return {
+        r: parseInt(h[0] + h[0], 16),
+        g: parseInt(h[1] + h[1], 16),
+        b: parseInt(h[2] + h[2], 16),
+      };
+    }
+    return {
+      r: parseInt(h.slice(0, 2), 16),
+      g: parseInt(h.slice(2, 4), 16),
+      b: parseInt(h.slice(4, 6), 16),
+    };
+  }
+
+  const rgb = s.match(/^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/);
+  if (rgb) {
+    return {
+      r: clamp(parseInt(rgb[1], 10), 0, 255),
+      g: clamp(parseInt(rgb[2], 10), 0, 255),
+      b: clamp(parseInt(rgb[3], 10), 0, 255),
+    };
+  }
+
+  const hsl = s.match(/^hsla?\(\s*([\d.]+)[\s,]+([\d.]+)%[\s,]+([\d.]+)%/);
+  if (hsl) {
+    return hslToRgb({
+      h: parseFloat(hsl[1]),
+      s: parseFloat(hsl[2]),
+      l: parseFloat(hsl[3]),
+    });
+  }
+
+  return null;
+}
+
+export function rgbToHex({ r, g, b }: RGB): string {
+  const to = (v: number) => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0');
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
+
+export function rgbToHsl({ r, g, b }: RGB): HSL {
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  let h = 0;
+  let s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case rn: h = (gn - bn) / d + (gn < bn ? 6 : 0); break;
+      case gn: h = (bn - rn) / d + 2; break;
+      default: h = (rn - gn) / d + 4; break;
+    }
+    h /= 6;
+  }
+  return { h: h * 360, s: s * 100, l: l * 100 };
+}
+
+export function hslToRgb({ h, s, l }: HSL): RGB {
+  const hn = ((h % 360) + 360) % 360 / 360;
+  const sn = clamp(s, 0, 100) / 100;
+  const ln = clamp(l, 0, 100) / 100;
+  if (sn === 0) {
+    const v = Math.round(ln * 255);
+    return { r: v, g: v, b: v };
+  }
+  const q = ln < 0.5 ? ln * (1 + sn) : ln + sn - ln * sn;
+  const p = 2 * ln - q;
+  const hue = (t: number) => {
+    let tt = t;
+    if (tt < 0) tt += 1;
+    if (tt > 1) tt -= 1;
+    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+    if (tt < 1 / 2) return q;
+    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+    return p;
+  };
+  return {
+    r: Math.round(hue(hn + 1 / 3) * 255),
+    g: Math.round(hue(hn) * 255),
+    b: Math.round(hue(hn - 1 / 3) * 255),
+  };
+}
+
+function relativeLuminance({ r, g, b }: RGB): number {
+  const ch = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+}
+
+function contrastRatio(a: RGB, b: RGB): number {
+  const l1 = relativeLuminance(a);
+  const l2 = relativeLuminance(b);
+  const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** 混合两色，t=0 取 a，t=1 取 b */
+function mix(a: RGB, b: RGB, t: number): RGB {
+  return {
+    r: Math.round(a.r + (b.r - a.r) * t),
+    g: Math.round(a.g + (b.g - a.g) * t),
+    b: Math.round(a.b + (b.b - a.b) * t),
+  };
+}
+
+/** 以三元组字符串写入 CSS 变量（项目里全部按 hsl(var(--x)) 消费） */
+const toHslTriplet = (c: RGB): string => {
+  const { h, s, l } = rgbToHsl(c);
+  return `${Math.round(h)} ${Math.round(s)}% ${Math.round(l)}%`;
+};
+
+export const DEFAULT_ACCENT: AccentConfig = { color: '#6750a4' };  // 莫奈紫：与 Android 应用图标 / 首个莫奈色板保持一致
+
+const ACCENT_STORAGE_KEY_V2 = 'github_manager_accent_v2';
+const LEGACY_ACCENT_STORAGE_KEY = 'github_manager_accent';
+
+/** 旧版预设方案 id → hex（一次性迁移） */
+const LEGACY_SCHEME_MAP: Record<string, string> = {
+  purple: '#7c3aed',
+  blue: '#1677ff',
+  green: '#22c55e',
+  orange: '#f97316',
+  rose: '#f43f5e',
+  cyan: '#06b6d4',
+  indigo: '#6366f1',
+  sky: '#0ea5e9',
+  emerald: '#10b981',
+  teal: '#14b8a6',
+  amber: '#f59e0b',
+  pink: '#ec4899',
+  violet: '#8b5cf6',
+  gold: '#eab308',
+  coral: '#ff6b6b',
+  lime: '#84cc16',
+};
+
+/** 规范化并夹取用户输入的配置 */
+function normalizeAccent(config: AccentConfig | null | undefined): AccentConfig {
+  if (!config) return { ...DEFAULT_ACCENT };
+  const base = parseColor(config.color) ?? parseColor(DEFAULT_ACCENT.color)!;
+  const out: AccentConfig = { color: rgbToHex(base) };
+  const second = config.color2 ? parseColor(config.color2) : null;
+  if (second) {
+    out.color2 = rgbToHex(second);
+    out.angle = typeof config.angle === 'number' && Number.isFinite(config.angle)
+      ? clamp(config.angle, 0, 360)
+      : 135;
+  }
+  return out;
+}
+
+/** 读取已保存的强调色配置，兼容旧版预设 id */
+export function loadAccentConfig(): AccentConfig {
+  try {
+    const rawV2 = localStorage.getItem(ACCENT_STORAGE_KEY_V2);
+    if (rawV2) {
+      const parsed = JSON.parse(rawV2) as AccentConfig;
+      if (parsed && typeof parsed.color === 'string') return normalizeAccent(parsed);
+    }
+    // 迁移旧版预设 id
+    const legacy = localStorage.getItem(LEGACY_ACCENT_STORAGE_KEY);
+    if (legacy) {
+      const migrated = normalizeAccent({
+        color: LEGACY_SCHEME_MAP[legacy] ?? (parseColor(legacy) ? legacy : DEFAULT_ACCENT.color),
+      });
+      localStorage.setItem(ACCENT_STORAGE_KEY_V2, JSON.stringify(migrated));
+      localStorage.removeItem(LEGACY_ACCENT_STORAGE_KEY);
+      return migrated;
+    }
+  } catch {
+    // 存储损坏时退回默认色
+  }
+  return { ...DEFAULT_ACCENT };
+}
+
+/** 由配置派生全部可用色值 */
+export function deriveAccent(config: AccentConfig): AccentDerived {
+  const cfg = normalizeAccent(config);
+  const c1 = parseColor(cfg.color)!;
+  const c2 = cfg.color2 ? parseColor(cfg.color2) : null;
+  const isGradient = !!c2;
+
+  // 渐变时主色取中点，保证单色消费点（按钮、图标）也有协调的观感
+  const primaryRgb = c2 ? mix(c1, c2, 0.5) : c1;
+  const primaryHex = rgbToHex(primaryRgb);
+  const accentHex = rgbToHex(c1);
+
+  const white: RGB = { r: 255, g: 255, b: 255 };
+  const nearBlack: RGB = { r: 17, g: 24, b: 39 };
+  const primaryForeground =
+    contrastRatio(primaryRgb, white) >= contrastRatio(primaryRgb, nearBlack) ? '#ffffff' : '#111827';
+
+  const gradient = c2
+    ? `linear-gradient(${cfg.angle ?? 135}deg, ${rgbToHex(c1)}, ${rgbToHex(c2)})`
+    : null;
+
+  return {
+    primaryHex,
+    secondaryHex: c2 ? rgbToHex(c2) : undefined,
+    isGradient,
+    gradient,
+    primaryForeground,
+    accentHex,
+  };
+}
+
+// ── Context 定义 ────────────────────────────────────────────────────────────
 interface ThemeContextValue {
   theme: ThemeMode;
   setTheme: (t: ThemeMode) => void;
   resolvedTheme: 'dark' | 'light';
-  accentSchemeId: string;
-  setAccentScheme: (id: string) => void;
+  /** 当前强调色配置（用户输入值） */
+  accent: AccentConfig;
+  /** 派生色值，供组件内联使用（图标、渐变背景等） */
+  derived: AccentDerived;
+  /** 更新强调色，传 null 恢复默认 */
+  setAccent: (config: AccentConfig | null) => void;
+  /** 恢复默认强调色 */
+  resetAccent: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
-const STORAGE_KEY        = 'github_manager_theme';
-const ACCENT_STORAGE_KEY = 'github_manager_accent';
+const STORAGE_KEY = 'github_manager_theme';
 
 function getSystemTheme(): 'dark' | 'light' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-/**
- * 同步更新 <meta name="theme-color">：
- * - 有 scheme 时：用强调色作为状态栏颜色，让安卓 WebView 工具栏跟随主题色
- * - 无 scheme 时：退回默认深/浅背景色
- */
-function updateThemeColorMeta(isDark: boolean, scheme?: AccentScheme) {
+/** 同步更新 <meta name="theme-color">，让安卓 WebView 工具栏跟随强调色 */
+function updateThemeColorMeta(_isDark: boolean, config: AccentConfig) {
   const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]:not([media])');
   if (!meta) return;
-  if (scheme) {
-    // 深色：直接用预览色；浅色：用可选的浅色变体（对比度更好）
-    meta.setAttribute('content', isDark ? scheme.previewColor : (scheme.lightThemeColor ?? scheme.previewColor));
-  } else {
-    meta.setAttribute('content', isDark ? '#1e1b4b' : '#f5f3ff');
-  }
+  meta.setAttribute('content', deriveAccent(config).primaryHex);
 }
 
-/** 将主题色方案注入 CSS 变量，更新 theme-color meta，并通知 Android 原生层 */
-function applyAccentScheme(scheme: AccentScheme, resolved: 'dark' | 'light') {
+/** 将强调色注入 CSS 变量（三元组格式），更新 meta、favicon，并通知 Android 原生层 */
+function applyAccent(config: AccentConfig, resolved: 'dark' | 'light') {
   const root = document.documentElement;
   const isDark = resolved === 'dark';
-  root.style.setProperty('--primary', isDark ? scheme.darkPrimary : scheme.lightPrimary);
-  root.style.setProperty('--accent',  isDark ? scheme.darkAccent  : scheme.lightAccent);
-  root.style.setProperty('--ring',    isDark ? scheme.darkRing    : scheme.lightRing);
-  // sidebar-primary / sidebar-ring 同步
-  root.style.setProperty('--sidebar-primary', isDark ? scheme.darkPrimary : scheme.lightPrimary);
-  root.style.setProperty('--sidebar-ring',    isDark ? scheme.darkRing    : scheme.lightRing);
-  // 更新 theme-color meta（影响 Android WebView 状态栏/工具栏颜色）
-  updateThemeColorMeta(isDark, scheme);
-  // 动态更新 favicon（浏览器标签页 + PWA 主屏快捷方式图标）
-  updateFaviconAccent(scheme.previewColor);
-  // 通知 Android 原生层同步强调色（底部导航选中色 + 最近任务图标色）
-  notifyAndroidAccent(scheme.previewColor);
+  const cfg = normalizeAccent(config);
+  const c1 = parseColor(cfg.color)!;
+  const c2 = cfg.color2 ? parseColor(cfg.color2) : null;
+  const d = deriveAccent(cfg);
+
+  // 深色模式把颜色提亮，避免在深底上偏暗
+  const lighten = (c: RGB): RGB => {
+    const hsl = rgbToHsl(c);
+    return hslToRgb({ ...hsl, l: Math.min(96, hsl.l + (hsl.l < 60 ? 12 : 6)) });
+  };
+  const p = isDark ? lighten(parseColor(d.primaryHex)!) : parseColor(d.primaryHex)!;
+  // --accent 在本项目里是「与主色一致的强调色」（非 shadcn 的 hover 底色），
+  // 所以跟随 --primary（渐变时即两色中点），避免链接色与按钮色分裂。
+  const a = p;
+  const a2 = c2 ? (isDark ? lighten(c2) : c2) : null;
+
+  const primaryTriplet = toHslTriplet(p);
+  const accentTriplet = primaryTriplet;
+
+  root.style.setProperty('--primary', primaryTriplet);
+  root.style.setProperty('--accent', accentTriplet);
+  root.style.setProperty('--ring', primaryTriplet);
+  root.style.setProperty('--sidebar-primary', primaryTriplet);
+  root.style.setProperty('--sidebar-ring', primaryTriplet);
+  root.style.setProperty('--primary-foreground', toHslTriplet(parseColor(d.primaryForeground)!));
+
+  // 渐变变量：单色时 --accent-gradient 回退为纯色，消费点不会失效
+  if (a2) {
+    const angle = cfg.angle ?? 135;
+    root.style.setProperty('--accent-gradient', `linear-gradient(${angle}deg, ${rgbToHex(a)}, ${rgbToHex(a2)})`);
+    root.style.setProperty('--accent-secondary', toHslTriplet(a2));
+    root.style.setProperty('--accent-is-gradient', '1');
+  } else {
+    root.style.setProperty('--accent-gradient', rgbToHex(a));
+    root.style.setProperty('--accent-secondary', accentTriplet);
+    root.style.setProperty('--accent-is-gradient', '0');
+  }
+  // 纯色 hex，给需要直接色值的场景（内联 SVG fill 等）用
+  root.style.setProperty('--accent-solid', rgbToHex(a));
+
+  updateThemeColorMeta(isDark, cfg);
+  updateFaviconAccent(cfg);
+  notifyAndroidAccent(d.primaryHex);
 }
 
 function applyTheme(mode: ThemeMode) {
@@ -305,39 +369,57 @@ function notifyAndroidTheme(isDark: boolean) {
  * 原生壳可通过以下方式响应：
  *   1. notifyAccent(hex)  → 底部导航栏选中色
  *   2. notifyAccentIcon(hex) → 调用 setTaskDescription() 更新最近任务图标色
- *      示例 Kotlin：
- *        setTaskDescription(ActivityManager.TaskDescription(null, null, Color.parseColor(hex)))
- * @param primaryHex 当前方案的 hex 色值，如 "#7c3aed"
+ * @param primaryHex 当前强调色的 hex 值
  */
 function notifyAndroidAccent(primaryHex: string) {
   try {
     const bridge = (window as unknown as {
       AndroidBridge?: {
-        notifyAccent?:     (hex: string) => void;
+        notifyAccent?: (hex: string) => void;
         notifyAccentIcon?: (hex: string) => void;
       }
     }).AndroidBridge;
     bridge?.notifyAccent?.(primaryHex);
-    // notifyAccentIcon 用于原生层更新最近任务栏图标色
     bridge?.notifyAccentIcon?.(primaryHex);
   } catch {
     // 非 APK 环境或旧版本壳，静默忽略
   }
 }
 
+/** base64 编码（先做 UTF-8 转义，避免特殊字符报错） */
+function svgToDataUri(svg: string): string {
+  try {
+    return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+  } catch {
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  }
+}
+
 /**
  * 动态更新 favicon / apple-touch-icon。
- * 将 logo.svg 的填充色替换为当前强调色，生成 data URI SVG 并写入 <link rel="icon">。
- * 这样浏览器标签页图标、PWA 主屏快捷方式图标均会跟随主题色变化。
+ * 单色：直接用强调色填充；渐变：在 SVG 内注入 linearGradient 并引用。
  */
-function updateFaviconAccent(hex: string) {
+function updateFaviconAccent(config: AccentConfig) {
+  const cfg = normalizeAccent(config);
+  const c1 = parseColor(cfg.color)!;
+  const c2 = cfg.color2 ? parseColor(cfg.color2) : null;
   // GitHub Octocat path (与 public/logo.svg 保持一致)
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 16 16">
-    <path fill="${hex}" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59c.4.07.55-.17.55-.38c0-.19-.01-.82-.01-1.49c-2.01.37-2.53-.49-2.69-.94c-.09-.23-.48-.94-.82-1.13c-.28-.15-.68-.52-.01-.53c.63-.01 1.08.58 1.23.82c.72 1.21 1.87.87 2.33.66c.07-.52.28-.87.51-1.07c-1.78-.2-3.64-.89-3.64-3.95c0-.87.31-1.59.82-2.15c-.08-.2-.36-1.02.08-2.12c0 0 .67-.21 2.2.82c.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82c.44 1.1.16 1.92.08 2.12c.51.56.82 1.27.82 2.15c0 3.07-1.87 3.75-3.65 3.95c.29.25.54.73.54 1.48c0 1.07-.01 1.93-.01 2.2c0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/>
-  </svg>`;
-  const dataUri = `data:image/svg+xml;base64,${btoa(svg)}`;
+  const path = 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59c.4.07.55-.17.55-.38c0-.19-.01-.82-.01-1.49c-2.01.37-2.53-.49-2.69-.94c-.09-.23-.48-.94-.82-1.13c-.28-.15-.68-.52-.01-.53c.63-.01 1.08.58 1.23.82c.72 1.21 1.87.87 2.33.66c.07-.52.28-.87.51-1.07c-1.78-.2-3.64-.89-3.64-3.95c0-.87.31-1.59.82-2.15c-.08-.2-.36-1.02.08-2.12c0 0 .67-.21 2.2.82c.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82c.44 1.1.16 1.92.08 2.12c.51.56.82 1.27.82 2.15c0 3.07-1.87 3.75-3.65 3.95c.29.25.54.73.54 1.48c0 1.07-.01 1.93-.01 2.2c0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8';
 
-  // 更新 favicon
+  const svg = c2
+    ? `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 16 16">
+    <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${rgbToHex(c1)}"/>
+      <stop offset="100%" stop-color="${rgbToHex(c2)}"/>
+    </linearGradient></defs>
+    <path fill="url(#g)" d="${path}"/>
+  </svg>`
+    : `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 16 16">
+    <path fill="${rgbToHex(c1)}" d="${path}"/>
+  </svg>`;
+
+  const dataUri = svgToDataUri(svg);
+
   let link: HTMLLinkElement | null =
     document.querySelector('link[rel*="icon"]') ||
     document.querySelector('link[rel="shortcut icon"]');
@@ -349,11 +431,8 @@ function updateFaviconAccent(hex: string) {
   link.type = 'image/svg+xml';
   link.href = dataUri;
 
-  // 更新 apple-touch-icon
-  let appleLink: HTMLLinkElement | null = document.querySelector('link[rel="apple-touch-icon"]');
-  if (appleLink) {
-    appleLink.href = dataUri;
-  }
+  const appleLink: HTMLLinkElement | null = document.querySelector('link[rel="apple-touch-icon"]');
+  if (appleLink) appleLink.href = dataUri;
 }
 
 /**
@@ -365,38 +444,28 @@ function triggerThemeTransition(callback: () => void) {
   const html = document.documentElement;
   html.classList.add('theme-transitioning');
   callback();
-  // 等待最长过渡时长后移除（300ms 与 CSS 对齐）
   setTimeout(() => html.classList.remove('theme-transitioning'), 350);
 }
+
+const currentResolved = (): 'dark' | 'light' =>
+  document.documentElement.classList.contains('dark') ? 'dark' : 'light';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
     return saved || 'system';
   });
-  // 同步初始化：applyTheme + applyAccentScheme 在同一个 useState 初始化器里执行，
-  // 确保 notifyAndroidTheme / notifyAndroidAccent / notifyAccentIcon 在 React mount
-  // 之前就已通知 AndroidBridge，避免原生层收不到首次颜色信号。
+
+  const [accent, setAccentState] = useState<AccentConfig>(() => loadAccentConfig());
+
+  // 同步初始化：applyTheme + applyAccent 在同一个 useState 初始化器里执行，
+  // 确保原生桥在 React mount 之前就收到首次颜色信号。
   const [resolvedTheme, setResolvedTheme] = useState<'dark' | 'light'>(() => {
     const mode = (localStorage.getItem(STORAGE_KEY) as ThemeMode | null) || 'system';
     const resolved = applyTheme(mode);
-    const savedId = localStorage.getItem(ACCENT_STORAGE_KEY) || 'blue';
-    const scheme = ACCENT_SCHEMES.find(s => s.id === savedId) ?? ACCENT_SCHEMES[0];
-    applyAccentScheme(scheme, resolved);
+    applyAccent(loadAccentConfig(), resolved);
     return resolved;
   });
-
-  // ── 主题色方案 ──────────────────────────────────────────────────────────
-  const [accentSchemeId, setAccentSchemeIdState] = useState<string>(() => {
-    return localStorage.getItem(ACCENT_STORAGE_KEY) || 'blue';
-  });
-
-  const setAccentScheme = useCallback((id: string) => {
-    const scheme = ACCENT_SCHEMES.find(s => s.id === id) ?? ACCENT_SCHEMES[0];
-    localStorage.setItem(ACCENT_STORAGE_KEY, scheme.id);
-    setAccentSchemeIdState(scheme.id);
-    applyAccentScheme(scheme, resolvedTheme);
-  }, [resolvedTheme]);
 
   const setTheme = useCallback((t: ThemeMode) => {
     localStorage.setItem(STORAGE_KEY, t);
@@ -404,14 +473,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     triggerThemeTransition(() => {
       const resolved = applyTheme(t);
       setResolvedTheme(resolved);
-      // 切换明暗时重新应用当前色方案，确保色值对应正确的明暗变体
-      const savedId = localStorage.getItem(ACCENT_STORAGE_KEY) || 'blue';
-      const scheme = ACCENT_SCHEMES.find(s => s.id === savedId) ?? ACCENT_SCHEMES[0];
-      applyAccentScheme(scheme, resolved);
+      // 切换明暗时重新应用强调色，确保用正确的明暗变体
+      applyAccent(loadAccentConfig(), resolved);
     });
   }, []);
 
-  // 跟随系统变化
+  const setAccent = useCallback((config: AccentConfig | null) => {
+    const next = normalizeAccent(config ?? DEFAULT_ACCENT);
+    localStorage.setItem(ACCENT_STORAGE_KEY_V2, JSON.stringify(next));
+    setAccentState(next);
+    applyAccent(next, currentResolved());
+  }, []);
+
+  const resetAccent = useCallback(() => setAccent(null), [setAccent]);
+
+  // 跟随系统明暗变化
   useEffect(() => {
     if (theme !== 'system') return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -419,17 +495,29 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       triggerThemeTransition(() => {
         const resolved = applyTheme('system');
         setResolvedTheme(resolved);
-        const savedId = localStorage.getItem(ACCENT_STORAGE_KEY) || 'blue';
-        const scheme = ACCENT_SCHEMES.find(s => s.id === savedId) ?? ACCENT_SCHEMES[0];
-        applyAccentScheme(scheme, resolved);
+        applyAccent(loadAccentConfig(), resolved);
       });
     };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, [theme]);
 
+  // 其他标签页修改强调色时同步
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key !== ACCENT_STORAGE_KEY_V2) return;
+      const next = loadAccentConfig();
+      setAccentState(next);
+      applyAccent(next, currentResolved());
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, []);
+
+  const derived = deriveAccent(accent);
+
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme, accentSchemeId, setAccentScheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme, accent, derived, setAccent, resetAccent }}>
       {children}
     </ThemeContext.Provider>
   );

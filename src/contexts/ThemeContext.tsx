@@ -208,10 +208,15 @@ export function loadAccentConfig(): AccentConfig {
  * 深色模式会把主色提亮，因此必须基于「提亮后的实际底色」重新计算，
  * 不能复用浅色模式的结果。
  */
-export function pickForeground(bg: RGB): string {
+export function pickForegroundRgb(bg: RGB): RGB {
   const white: RGB = { r: 255, g: 255, b: 255 };
   const nearBlack: RGB = { r: 17, g: 24, b: 39 };
-  return contrastRatio(bg, white) >= contrastRatio(bg, nearBlack) ? '#ffffff' : '#111827';
+  return contrastRatio(bg, white) >= contrastRatio(bg, nearBlack) ? white : nearBlack;
+}
+
+/** 同上，但返回 hex 字符串（供直接落 CSS 变量的场景使用） */
+export function pickForeground(bg: RGB): string {
+  return rgbToHex(pickForegroundRgb(bg));
 }
 
 /** 由配置派生全部可用色值 */
@@ -268,7 +273,9 @@ function applyAccent(config: AccentConfig, resolved: 'dark' | 'light') {
     const hsl = rgbToHsl(c);
     return hslToRgb({ ...hsl, l: Math.min(96, hsl.l + (hsl.l < 60 ? 12 : 6)) });
   };
-  const p = isDark ? lighten(parseColor(d.primaryHex)!) : parseColor(d.primaryHex)!;
+  const baseRgb = parseColor(d.primaryHex);
+  if (!baseRgb) throw new Error(`无效的主色：${d.primaryHex}`);
+  const p: RGB = isDark ? lighten(baseRgb) : baseRgb;
   // 前景色必须跟随「实际生效的底色」重新二选一：
   // 深色模式会把主色提亮，若沿用浅色模式算出的 foreground，
   // 就会出现“浅底 + 白字”的低对比组合（对比度可低至 2.9）。
@@ -285,7 +292,7 @@ function applyAccent(config: AccentConfig, resolved: 'dark' | 'light') {
   root.style.setProperty('--sidebar-ring', primaryTriplet);
   root.style.setProperty(
     '--primary-foreground',
-    toHslTriplet(parseColor(pickForeground(p))),
+    toHslTriplet(pickForegroundRgb(p)),
   );
 
   // 纯色 hex，给需要直接色值的场景（登录页 Logo / CTA、内联 SVG fill 等）用

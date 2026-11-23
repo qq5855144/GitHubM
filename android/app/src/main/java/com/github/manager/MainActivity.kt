@@ -1302,11 +1302,12 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         // 首次安装/未存储：读 localStorage 并写入 SharedPreferences
                         view?.evaluateJavascript(
-                            "(function(){ return localStorage.getItem('github_manager_accent') || 'purple'; })()"
+                            "(function(){ return localStorage.getItem('github_manager_accent') || 'monet'; })()"
                         ) { accentResult ->
-                            val accentId = accentResult?.trim('"') ?: "purple"
+                            val accentId = accentResult?.trim('"') ?: "monet"
                             // 完整映射表，与 ThemeContext.tsx ACCENT_SCHEMES 保持同步
                             val accentMap = mapOf(
+                                "monet"   to "#6750A4",
                                 "purple"  to "#7c3aed",
                                 "blue"    to "#1d6be3",
                                 "green"   to "#16a34a",

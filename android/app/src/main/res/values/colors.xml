@@ -13,11 +13,11 @@
 
     <!-- 底部导航栏颜色 -->
     <color name="bottom_nav_background">@color/sidebar_bg</color>
-    <color name="bottom_nav_selected">#1677FF</color>     <!-- 选中色：主题紫色 primary -->
+    <color name="bottom_nav_selected">#6750A4</color>     <!-- 选中色：主题紫色 primary -->
     <color name="bottom_nav_unselected">@color/nav_unselected</color>
     <color name="bottom_nav_divider">#E8E8E8</color>      <!-- 分割线：冷灰 border -->
     <!-- M3 Active Indicator 背景色：primaryContainer（浅色模式 = 淡紫） -->
-    <color name="bottom_nav_indicator_bg">#EAF2FF</color>
+    <color name="bottom_nav_indicator_bg">#E8E1F5</color>
     <!--
       ══ 启动画面 · 浅色模式配色 ══
       与主界面同色系，柔和不刺眼

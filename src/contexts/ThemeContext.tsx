@@ -1,4 +1,4 @@
-// 主题上下文 - 支持深色/浅色/跟随系统 + 强调色完全自定义（单色 / 渐变）
+// 主题上下文 - 支持深色/浅色/跟随系统 + 强调色完全自定义（单色）
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
@@ -6,26 +6,17 @@ export type ThemeMode = 'dark' | 'light' | 'system';
 // ── 强调色配置 ──────────────────────────────────────────────────────────────
 /**
  * 用户自定义强调色。
- * 单色：{ color: '#7c3aed' }
- * 渐变：{ color: '#7c3aed', color2: '#ec4899', angle: 135 }
- * 规则极简：填了 color2 就是渐变，没填就是单色。
+ * 只有一个色值：{ color: '#7b5dc0' }
+ * 旧存储中遗留的 color2 / angle 字段在读取时会被自动丢弃。
  */
 export interface AccentConfig {
   color: string;
-  color2?: string;
-  /** 渐变角度（deg），仅渐变时生效 */
-  angle?: number;
 }
 
 /** 由 AccentConfig 派生出的、可直接使用的色值集合 */
 export interface AccentDerived {
-  /** 主色 hex（单色时为 color，渐变时为两色中点） */
+  /** 主色 hex */
   primaryHex: string;
-  /** 副色 hex（仅渐变时有值） */
-  secondaryHex?: string;
-  isGradient: boolean;
-  /** 渐变 CSS 值；单色时为 null */
-  gradient: string | null;
   /** 主色上应使用的文字色（按对比度自动选白或近黑） */
   primaryForeground: string;
   /** 强调色 hex（用于链接、图标等单色消费点） */
@@ -147,14 +138,6 @@ function contrastRatio(a: RGB, b: RGB): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-/** 混合两色，t=0 取 a，t=1 取 b */
-function mix(a: RGB, b: RGB, t: number): RGB {
-  return {
-    r: Math.round(a.r + (b.r - a.r) * t),
-    g: Math.round(a.g + (b.g - a.g) * t),
-    b: Math.round(a.b + (b.b - a.b) * t),
-  };
-}
 
 /** 以三元组字符串写入 CSS 变量（项目里全部按 hsl(var(--x)) 消费） */
 const toHslTriplet = (c: RGB): string => {
@@ -163,10 +146,8 @@ const toHslTriplet = (c: RGB): string => {
 };
 
 export const DEFAULT_ACCENT: AccentConfig = {
-  color: '#6750a4',
-  color2: '#c0b8d5',
-  angle: 135,
-};  // 莫奈紫渐变：与 Android 应用图标 / 启动屏配色对齐
+  color: '#7b5dc0',
+};  // 莫奈紫：H258 S44% L56%，白底对比度 5.04（WCAG AA 通过）
 
 const ACCENT_STORAGE_KEY_V2 = 'github_manager_accent_v2';
 const LEGACY_ACCENT_STORAGE_KEY = 'github_manager_accent';
@@ -195,15 +176,7 @@ const LEGACY_SCHEME_MAP: Record<string, string> = {
 function normalizeAccent(config: AccentConfig | null | undefined): AccentConfig {
   if (!config) return { ...DEFAULT_ACCENT };
   const base = parseColor(config.color) ?? parseColor(DEFAULT_ACCENT.color)!;
-  const out: AccentConfig = { color: rgbToHex(base) };
-  const second = config.color2 ? parseColor(config.color2) : null;
-  if (second) {
-    out.color2 = rgbToHex(second);
-    out.angle = typeof config.angle === 'number' && Number.isFinite(config.angle)
-      ? clamp(config.angle, 0, 360)
-      : 135;
-  }
-  return out;
+  return { color: rgbToHex(base) };
 }
 
 /** 读取已保存的强调色配置，兼容旧版预设 id */
@@ -234,30 +207,15 @@ export function loadAccentConfig(): AccentConfig {
 export function deriveAccent(config: AccentConfig): AccentDerived {
   const cfg = normalizeAccent(config);
   const c1 = parseColor(cfg.color)!;
-  const c2 = cfg.color2 ? parseColor(cfg.color2) : null;
-  const isGradient = !!c2;
-
-  // 渐变时主色取中点，保证单色消费点（按钮、图标）也有协调的观感
-  const primaryRgb = c2 ? mix(c1, c2, 0.5) : c1;
-  const primaryHex = rgbToHex(primaryRgb);
-  const accentHex = rgbToHex(c1);
-
+  const primaryHex = rgbToHex(c1);
   const white: RGB = { r: 255, g: 255, b: 255 };
   const nearBlack: RGB = { r: 17, g: 24, b: 39 };
   const primaryForeground =
-    contrastRatio(primaryRgb, white) >= contrastRatio(primaryRgb, nearBlack) ? '#ffffff' : '#111827';
-
-  const gradient = c2
-    ? `linear-gradient(${cfg.angle ?? 135}deg, ${rgbToHex(c1)}, ${rgbToHex(c2)})`
-    : null;
-
+    contrastRatio(c1, white) >= contrastRatio(c1, nearBlack) ? '#ffffff' : '#111827';
   return {
     primaryHex,
-    secondaryHex: c2 ? rgbToHex(c2) : undefined,
-    isGradient,
-    gradient,
     primaryForeground,
-    accentHex,
+    accentHex: primaryHex,
   };
 }
 
@@ -268,7 +226,7 @@ interface ThemeContextValue {
   resolvedTheme: 'dark' | 'light';
   /** 当前强调色配置（用户输入值） */
   accent: AccentConfig;
-  /** 派生色值，供组件内联使用（图标、渐变背景等） */
+  /** 派生色值，供组件内联使用（图标、纯色背景等） */
   derived: AccentDerived;
   /** 更新强调色，传 null 恢复默认 */
   setAccent: (config: AccentConfig | null) => void;
@@ -295,8 +253,6 @@ function applyAccent(config: AccentConfig, resolved: 'dark' | 'light') {
   const root = document.documentElement;
   const isDark = resolved === 'dark';
   const cfg = normalizeAccent(config);
-  const c1 = parseColor(cfg.color)!;
-  const c2 = cfg.color2 ? parseColor(cfg.color2) : null;
   const d = deriveAccent(cfg);
 
   // 深色模式把颜色提亮，避免在深底上偏暗
@@ -306,9 +262,7 @@ function applyAccent(config: AccentConfig, resolved: 'dark' | 'light') {
   };
   const p = isDark ? lighten(parseColor(d.primaryHex)!) : parseColor(d.primaryHex)!;
   // --accent 在本项目里是「与主色一致的强调色」（非 shadcn 的 hover 底色），
-  // 所以跟随 --primary（渐变时即两色中点），避免链接色与按钮色分裂。
-  const a = p;
-  const a2 = c2 ? (isDark ? lighten(c2) : c2) : null;
+  // 所以直接跟随 --primary，避免链接色与按钮色分裂。
 
   const primaryTriplet = toHslTriplet(p);
   const accentTriplet = primaryTriplet;
@@ -320,19 +274,8 @@ function applyAccent(config: AccentConfig, resolved: 'dark' | 'light') {
   root.style.setProperty('--sidebar-ring', primaryTriplet);
   root.style.setProperty('--primary-foreground', toHslTriplet(parseColor(d.primaryForeground)!));
 
-  // 渐变变量：单色时 --accent-gradient 回退为纯色，消费点不会失效
-  if (a2) {
-    const angle = cfg.angle ?? 135;
-    root.style.setProperty('--accent-gradient', `linear-gradient(${angle}deg, ${rgbToHex(a)}, ${rgbToHex(a2)})`);
-    root.style.setProperty('--accent-secondary', toHslTriplet(a2));
-    root.style.setProperty('--accent-is-gradient', '1');
-  } else {
-    root.style.setProperty('--accent-gradient', rgbToHex(a));
-    root.style.setProperty('--accent-secondary', accentTriplet);
-    root.style.setProperty('--accent-is-gradient', '0');
-  }
-  // 纯色 hex，给需要直接色值的场景（内联 SVG fill 等）用
-  root.style.setProperty('--accent-solid', rgbToHex(a));
+  // 纯色 hex，给需要直接色值的场景（登录页 Logo / CTA、内联 SVG fill 等）用
+  root.style.setProperty('--accent-solid', rgbToHex(p));
 
   updateThemeColorMeta(isDark, cfg);
   updateFaviconAccent(cfg);
@@ -401,24 +344,15 @@ function svgToDataUri(svg: string): string {
 
 /**
  * 动态更新 favicon / apple-touch-icon。
- * 单色：直接用强调色填充；渐变：在 SVG 内注入 linearGradient 并引用。
+ * 直接用主题强调色填充。
  */
 function updateFaviconAccent(config: AccentConfig) {
   const cfg = normalizeAccent(config);
   const c1 = parseColor(cfg.color)!;
-  const c2 = cfg.color2 ? parseColor(cfg.color2) : null;
   // GitHub Octocat path (与 public/logo.svg 保持一致)
   const path = 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59c.4.07.55-.17.55-.38c0-.19-.01-.82-.01-1.49c-2.01.37-2.53-.49-2.69-.94c-.09-.23-.48-.94-.82-1.13c-.28-.15-.68-.52-.01-.53c.63-.01 1.08.58 1.23.82c.72 1.21 1.87.87 2.33.66c.07-.52.28-.87.51-1.07c-1.78-.2-3.64-.89-3.64-3.95c0-.87.31-1.59.82-2.15c-.08-.2-.36-1.02.08-2.12c0 0 .67-.21 2.2.82c.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82c.44 1.1.16 1.92.08 2.12c.51.56.82 1.27.82 2.15c0 3.07-1.87 3.75-3.65 3.95c.29.25.54.73.54 1.48c0 1.07-.01 1.93-.01 2.2c0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8';
 
-  const svg = c2
-    ? `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 16 16">
-    <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="${rgbToHex(c1)}"/>
-      <stop offset="100%" stop-color="${rgbToHex(c2)}"/>
-    </linearGradient></defs>
-    <path fill="url(#g)" d="${path}"/>
-  </svg>`
-    : `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 16 16">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 16 16">
     <path fill="${rgbToHex(c1)}" d="${path}"/>
   </svg>`;
 

@@ -14,8 +14,8 @@
         <!-- API 28+ 刘海屏延伸；低版本自动忽略 -->
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <!-- Material3 主题色 -->
-        <item name="colorPrimary">#9484BD</item>
-        <item name="colorPrimaryVariant">#584884</item>
+        <item name="colorPrimary">#7B5DC0</item>
+        <item name="colorPrimaryVariant">#5D3FA1</item>
         <item name="colorOnPrimary">#ffffff</item>
         <!-- M3 Active Indicator 填充色（BottomNav 选中指示器背景）：浅紫 -->
         <item name="colorSecondaryContainer">#E3DFEC</item>

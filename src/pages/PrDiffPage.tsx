@@ -1,15 +1,13 @@
 // PR Diff 对比视图页
 
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronRight,
   Plus,
   Minus,
   MessageSquare,
   Send,
-  Check,
-  X,
   Columns2,
   AlignJustify,
   ChevronDown,
@@ -23,27 +21,22 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   getPullRequest,
   getPullRequestFiles,
   getPullRequestReviewComments,
   createPullRequestReviewComment,
   submitPullRequestReview,
+  samePullRevision,
   type ReviewEvent,
 } from '@/services/github';
 import type { GitHubPullRequest, GitHubFile, GitHubComment } from '@/types/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { isRepoOwner } from '@/lib/repoPermissions';
 import i18n from "@/i18n";
 
 // ===== 类型 =====
@@ -202,7 +195,6 @@ function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onC
       toast.success(i18n.t('评论已提交'));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : i18n.t('提交评论失败'));
-      throw err;
     }
   };
 
@@ -381,7 +373,6 @@ function SideBySideDiff({ file, commentGroups, prHead, owner, repo, pullNumber, 
       toast.success(i18n.t('评论已提交'));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : i18n.t('提交评论失败'));
-      throw err;
     }
   };
 
@@ -488,15 +479,15 @@ function FileDiffCard({ file, mode, collapsed, onToggle, commentGroups, prHead, 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
       {/* 文件头 */}
-      <div
-        className="flex items-center gap-2 px-3 py-2.5 bg-secondary/40 border-b border-border cursor-pointer hover:bg-secondary/70 transition-colors"
+      <button
+        type="button"
+        aria-expanded={!collapsed}
+        className="flex w-full items-center gap-2 border-b border-border bg-secondary/40 px-3 py-2.5 text-left transition-colors hover:bg-secondary/70"
         onClick={onToggle}
       >
-        <button type="button" className="shrink-0 text-muted-foreground">
-          {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-        </button>
+        {collapsed ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
         <code className="text-xs text-foreground font-mono flex-1 min-w-0 truncate">{file.filename}</code>
-        <div className="flex items-center gap-2 shrink-0">
+        <span className="flex items-center gap-2 shrink-0">
           <span className="text-xs text-success flex items-center gap-0.5">
             <Plus className="w-3 h-3" />{file.additions}
           </span>
@@ -506,8 +497,8 @@ function FileDiffCard({ file, mode, collapsed, onToggle, commentGroups, prHead, 
           <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${statusColor}`}>
             {file.status}
           </Badge>
-        </div>
-      </div>
+        </span>
+      </button>
       {!collapsed && (
         mode === 'unified'
           ? <UnifiedDiff file={file} commentGroups={commentGroups} prHead={prHead} owner={owner} repo={repo} pullNumber={pullNumber} onCommentAdded={onCommentAdded} />
@@ -520,49 +511,95 @@ function FileDiffCard({ file, mode, collapsed, onToggle, commentGroups, prHead, 
 // ===== 主页面 =====
 export default function PrDiffPage() {
   const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  return <PrDiff key={`${owner}/${repo}/${number}`} owner={owner!} repo={repo!} number={Number(number)} />;
+}
 
+function PrDiff({ owner, repo, number }: { owner: string; repo: string; number: number }) {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const detailPath = `/repos/${owner}/${repo}/pulls/${number}`;
   const [pr, setPr] = useState<GitHubPullRequest | null>(null);
   const [files, setFiles] = useState<GitHubFile[]>([]);
+  const [filesPage, setFilesPage] = useState(1);
+  const [moreFiles, setMoreFiles] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [reviewComments, setReviewComments] = useState<GitHubComment[]>([]);
+  const [commentsError, setCommentsError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [revisionChanged, setRevisionChanged] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [mode, setMode] = useState<'unified' | 'side'>(isMobile ? 'unified' : 'side');
-  // 逐个文件独立记忆折叠状态，让全部展开/全部折叠与单文件切换能共存
   const [collapsedFiles, setCollapsedFiles] = useState<Set<string>>(new Set());
 
-  // 快速评审 Dialog
-  const [reviewDialog, setReviewDialog] = useState<ReviewEvent | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewEvent, setReviewEvent] = useState<ReviewEvent>('COMMENT');
   const [reviewBody, setReviewBody] = useState('');
+  const [reviewError, setReviewError] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
-
-  // 从 state 中读取 PR 数据（从 PullDetailPage 传来）
-  const prFromState = (location.state as { pr?: GitHubPullRequest } | null)?.pr;
+  const [reviewPublished, setReviewPublished] = useState(false);
+  const changedMessage = i18n.t('分支已有更新，请刷新变更后再评审');
 
   useEffect(() => {
-    if (!owner || !repo || !number) return;
+    let cancelled = false;
     const load = async () => {
-      setLoading(true);
       try {
-        const [prData, filesData, commentsData] = await Promise.all([
-          prFromState ? Promise.resolve(prFromState) : getPullRequest(owner, repo, Number(number)),
-          getPullRequestFiles(owner, repo, Number(number)),
-          getPullRequestReviewComments(owner, repo, Number(number)),
-        ]);
-        setPr(prData);
-        setFiles(filesData);
-        setReviewComments(commentsData);
+        const latest = await getPullRequest(owner, repo, number, { fresh: true });
+        if (cancelled) return;
+        const result = await getPullRequestFiles(owner, repo, number);
+        if (cancelled) return;
+        setPr(latest);
+        setFiles(result.data);
+        setFilesPage(1);
+        setMoreFiles(result.hasNextPage);
+        setCollapsedFiles(new Set());
       } catch (err) {
-        toast.error(i18n.t('加载 Diff 失败'));
-        console.error(err);
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : i18n.t('加载 Diff 失败'));
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [owner, repo, number]);
+    void load();
+    getPullRequestReviewComments(owner, repo, number).then((data) => {
+      if (!cancelled) setReviewComments(data);
+    }).catch(() => { if (!cancelled) setCommentsError(true); });
+    return () => { cancelled = true; };
+  }, [owner, repo, number, retry]);
+
+  const reloadDiff = () => {
+    setReviewOpen(false);
+    setLoading(true);
+    setPr(null);
+    setLoadError('');
+    setReviewError('');
+    setCommentsError(false);
+    setReviewComments([]);
+    setRevisionChanged(false);
+    setRetry(retry + 1);
+  };
+
+  const loadMoreFiles = async () => {
+    if (!pr || loadingMore || revisionChanged || !moreFiles) return;
+    setLoadingMore(true);
+    setLoadError('');
+    try {
+      const page = filesPage + 1;
+      const result = await getPullRequestFiles(owner, repo, number, page);
+      const latest = await getPullRequest(owner, repo, number, { fresh: true });
+      if (!samePullRevision(pr, latest)) {
+        setRevisionChanged(true);
+        throw new Error(changedMessage);
+      }
+      setFiles((previous) => [...previous, ...result.data]);
+      setFilesPage(page);
+      setMoreFiles(result.hasNextPage);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : i18n.t('加载 Diff 失败'));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const commentGroups = groupCommentsByLine(reviewComments);
   const allCollapsed = files.length > 0 && files.every((item) => collapsedFiles.has(item.filename));
@@ -580,51 +617,44 @@ export default function PrDiffPage() {
     setReviewComments((prev) => [...prev, comment]);
   };
 
-  const handleSubmitReview = async () => {
-    if (!owner || !repo || !number || !reviewDialog) return;
+  const reviewOptions: Record<ReviewEvent, string> = {
+    APPROVE: i18n.t('批准'),
+    REQUEST_CHANGES: i18n.t('请求更改'),
+    COMMENT: i18n.t('仅评论'),
+  };
+  const isAuthor = isRepoOwner(pr?.user.login, user?.login);
+  const canReview = !!user && pr?.state === 'open';
+  const reviewRequiresBody = reviewEvent !== 'APPROVE';
+
+  const handleSubmitReview = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!pr || !canReview || revisionChanged || submittingReview || (reviewRequiresBody && !reviewBody.trim())) return;
     setSubmittingReview(true);
+    setReviewError('');
     try {
-      await submitPullRequestReview(owner, repo, Number(number), {
-        event: reviewDialog,
+      const latest = await getPullRequest(owner, repo, number, { fresh: true });
+      if (!samePullRevision(pr, latest)) {
+        setRevisionChanged(true);
+        throw new Error(changedMessage);
+      }
+      if (latest.state !== 'open') {
+        setPr(latest);
+        throw new Error(i18n.t('此 PR 已结束'));
+      }
+      await submitPullRequestReview(owner, repo, number, {
+        event: reviewEvent,
         body: reviewBody.trim(),
+        commit_id: pr.head.sha,
       });
-      const labels: Record<ReviewEvent, string> = {
-        APPROVE: i18n.t('已批准 PR'),
-        REQUEST_CHANGES: i18n.t('已请求更改'),
-        COMMENT: i18n.t('评审评论已提交'),
-      };
-      toast.success(labels[reviewDialog]);
-      setReviewDialog(null);
+      toast.success(i18n.t('评审已提交'));
+      setReviewOpen(false);
       setReviewBody('');
+      setReviewPublished(true);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : i18n.t('提交评审失败'));
+      setReviewError(err instanceof Error ? err.message : i18n.t('提交评审失败'));
     } finally {
       setSubmittingReview(false);
     }
-  };
-
-  const reviewDialogMeta: Record<ReviewEvent, { title: string; desc: string; icon: React.ReactNode; confirmClass: string; confirmLabel: string }> = {
-    APPROVE: {
-      title: i18n.t('批准 Pull Request'),
-      desc: i18n.t('表示代码审查通过，同意合并此 PR。'),
-      icon: <CheckCircle2 className="w-4 h-4 text-success" />,
-      confirmClass: 'bg-success text-success-foreground hover:bg-success/90',
-      confirmLabel: i18n.t('批准'),
-    },
-    REQUEST_CHANGES: {
-      title: i18n.t('请求更改'),
-      desc: i18n.t('表示需要作者修改后才能合并。'),
-      icon: <X className="w-4 h-4 text-destructive" />,
-      confirmClass: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-      confirmLabel: i18n.t('请求更改'),
-    },
-    COMMENT: {
-      title: i18n.t('提交评论'),
-      desc: i18n.t('添加评审评论，不改变 PR 的合并状态。'),
-      icon: <MessageCircle className="w-4 h-4 text-primary" />,
-      confirmClass: 'bg-primary text-primary-foreground hover:bg-primary/90',
-      confirmLabel: i18n.t('提交评论'),
-    },
   };
 
   if (loading) {
@@ -641,7 +671,8 @@ export default function PrDiffPage() {
     return (
       <div className="p-6 text-center">
         <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-3" />
-        <p className="text-foreground">{i18n.t('无法加载 PR 信息')}</p>
+        <p className="mb-3 break-words text-foreground">{loadError || i18n.t('无法加载 PR 信息')}</p>
+        <Button variant="outline" onClick={reloadDiff}>{i18n.t('重试')}</Button>
       </div>
     );
   }
@@ -656,7 +687,7 @@ export default function PrDiffPage() {
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}/pulls`)}>Pull Requests</button>
         <ChevronRight className="w-3 h-3" />
-        <button type="button" className="hover:text-accent" onClick={() => navigate(-1)}>#{pr.number}</button>
+        <Link to={detailPath} className="hover:text-accent">#{pr.number}</Link>
         <ChevronRight className="w-3 h-3" />
         <span className="text-foreground">Diff</span>
       </div>
@@ -664,45 +695,28 @@ export default function PrDiffPage() {
       {/* 标题栏 + 操作 */}
       <div className="flex items-start gap-3 flex-wrap">
         <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-bold text-foreground text-balance">{pr.title}</h1>
+          <h1 className="break-words text-lg font-bold text-foreground">{pr.title}</h1>
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
-            <span>{files.length} {i18n.t('个文件变更')}</span>
+            <span>{pr.changed_files} {i18n.t('个文件变更')}</span>
             <span className="text-success">+{pr.additions} {i18n.t('行')}</span>
             <span className="text-destructive">-{pr.deletions} {i18n.t('行')}</span>
-            <span>{reviewComments.length} {i18n.t('条行内评论')}</span>
+            <span>{pr.review_comments} {i18n.t('条行内评论')}</span>
           </div>
         </div>
 
-        {/* 快速评审按钮组 */}
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 text-xs border border-border text-muted-foreground hover:bg-secondary gap-1"
-            onClick={() => setReviewDialog('COMMENT')}
-          >
-            <MessageCircle className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">{i18n.t('评论')}</span>
+        {canReview && (
+          <Button size="sm" className="shrink-0 gap-1.5" onClick={() => { setReviewError(''); setReviewOpen(true); }} disabled={revisionChanged}>
+            <MessageCircle className="h-4 w-4" />{i18n.t('提交评审')}
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 text-xs border border-destructive/40 text-destructive hover:bg-destructive/10 gap-1"
-            onClick={() => setReviewDialog('REQUEST_CHANGES')}
-          >
-            <X className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">{i18n.t('请求更改')}</span>
-          </Button>
-          <Button
-            size="sm"
-            className="h-8 text-xs bg-success text-success-foreground hover:bg-success/90 gap-1"
-            onClick={() => setReviewDialog('APPROVE')}
-          >
-            <Check className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">{i18n.t('批准')}</span>
-          </Button>
-        </div>
+        )}
       </div>
+      {reviewPublished && (
+        <div role="status" className="flex flex-wrap items-center gap-2 text-sm text-success">
+          <CheckCircle2 className="h-4 w-4" />{i18n.t('评审已提交')}
+          <Button variant="link" size="sm" asChild><Link to={`${detailPath}?tab=reviews`}>{i18n.t('查看评审记录')}</Link></Button>
+        </div>
+      )}
+      {commentsError && <p role="status" className="text-sm text-muted-foreground">{i18n.t('暂时无法加载行内评论')}</p>}
 
       {/* 展示模式与折叠控制 */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -761,46 +775,57 @@ export default function PrDiffPage() {
         ))}
       </div>
 
-      {/* 快速评审 Dialog */}
-      <AlertDialog open={!!reviewDialog} onOpenChange={(open) => { if (!open) { setReviewDialog(null); setReviewBody(''); } }}>
-        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
-          {reviewDialog && (
-            <>
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-foreground flex items-center gap-2 text-balance">
-                  {reviewDialogMeta[reviewDialog].icon}
-                  {reviewDialogMeta[reviewDialog].title}
-                </AlertDialogTitle>
-                <AlertDialogDescription className="text-muted-foreground text-sm">
-                  {reviewDialogMeta[reviewDialog].desc}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <div className="py-2">
-                <Textarea
-                  value={reviewBody}
-                  onChange={(e) => setReviewBody(e.target.value)}
-                  placeholder={i18n.t('添加评审说明（可选）...')}
-                  className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none text-sm min-h-24"
-                  rows={4}
-                />
-              </div>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
-                <AlertDialogAction
-                  className={reviewDialogMeta[reviewDialog].confirmClass}
-                  onClick={handleSubmitReview}
-                  disabled={submittingReview}
-                >
-                  {submittingReview
-                    ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />{i18n.t('提交中...')}</>
-                    : reviewDialogMeta[reviewDialog].confirmLabel
-                  }
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </>
-          )}
-        </AlertDialogContent>
-      </AlertDialog>
+      {revisionChanged && !reviewOpen && (
+        <div role="status" className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          {changedMessage}<Button variant="outline" size="sm" onClick={reloadDiff}>{i18n.t('刷新变更')}</Button>
+        </div>
+      )}
+      {moreFiles && !revisionChanged && (
+        <div className="space-y-2 text-center">
+          {loadError && <p role="alert" className="break-words text-sm text-destructive">{loadError}</p>}
+          <Button variant="outline" onClick={loadMoreFiles} disabled={loadingMore}>
+            {loadingMore ? i18n.t('加载中...') : `${i18n.t('加载更多文件')} (${files.length}/${pr.changed_files})`}
+          </Button>
+        </div>
+      )}
+      {!moreFiles && files.length < pr.changed_files && (
+        <Button size="sm" variant="outline" asChild>
+          <a href={`https://github.com/${owner}/${repo}/pull/${number}/files`} target="_blank" rel="noopener noreferrer">{i18n.t('在 GitHub 查看其余文件')}</a>
+        </Button>
+      )}
+
+      <Dialog open={reviewOpen} onOpenChange={(open) => { if (!submittingReview) setReviewOpen(open); }}>
+        <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] overflow-y-auto">
+          <form onSubmit={handleSubmitReview} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>{i18n.t('提交评审')}</DialogTitle>
+              <DialogDescription>{i18n.t('评审的提交')} <code>{pr.head.sha.slice(0, 7)}</code></DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="pr-review-event">{i18n.t('评审结果')}</Label>
+              <Select value={reviewEvent} onValueChange={(value: ReviewEvent) => setReviewEvent(value)} disabled={submittingReview}>
+                <SelectTrigger id="pr-review-event"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="COMMENT">{reviewOptions.COMMENT}</SelectItem>
+                  {!isAuthor && <SelectItem value="APPROVE">{reviewOptions.APPROVE}</SelectItem>}
+                  {!isAuthor && <SelectItem value="REQUEST_CHANGES">{reviewOptions.REQUEST_CHANGES}</SelectItem>}
+                </SelectContent>
+              </Select>
+              <Label htmlFor="pr-review-body">{reviewRequiresBody ? i18n.t('评审说明') : i18n.t('评审说明（可选）')}</Label>
+              <Textarea id="pr-review-body" value={reviewBody} onChange={(event) => setReviewBody(event.target.value)} rows={4} disabled={submittingReview} required={reviewRequiresBody} />
+            </div>
+            {reviewError && <p role="alert" className="break-words text-sm text-destructive">{reviewError}</p>}
+            <DialogFooter className="gap-y-2">
+              <Button type="button" variant="outline" disabled={submittingReview} onClick={() => setReviewOpen(false)}>{i18n.t('取消')}</Button>
+              {revisionChanged
+                ? <Button type="button" onClick={reloadDiff}>{i18n.t('刷新变更')}</Button>
+                : <Button type="submit" disabled={submittingReview || !canReview || (reviewRequiresBody && !reviewBody.trim())}>
+                  {submittingReview && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}{i18n.t('提交评审')}
+                </Button>}
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

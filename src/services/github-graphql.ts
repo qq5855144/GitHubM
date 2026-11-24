@@ -400,6 +400,18 @@ export async function gqlGetPinnedRepos(login: string): Promise<GQL_PinnedRepo[]
 
 // ================== PR Reviews ==================
 
+export async function gqlSetPullRequestDraft(pullRequestId: string, draft: boolean): Promise<boolean> {
+  const mutation = draft ? 'convertPullRequestToDraft' : 'markPullRequestReadyForReview';
+  const data = await gql<{ result: { pullRequest: { isDraft: boolean } } }>(`
+    mutation SetPullRequestDraft($pullRequestId: ID!) {
+      result: ${mutation}(input: { pullRequestId: $pullRequestId }) {
+        pullRequest { isDraft }
+      }
+    }
+  `, { pullRequestId });
+  return data.result.pullRequest.isDraft;
+}
+
 /** 获取 PR 的 review 状态（GraphQL 一次性获取完整数据） */
 export async function gqlGetPRReviews(
   owner: string,
@@ -425,7 +437,7 @@ export async function gqlGetPRReviews(
               }
             }
           }
-          reviews(first: 50, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) {
+          reviews(last: 50, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) {
             nodes {
               id
               databaseId

@@ -34,6 +34,7 @@ import {
   clearApiCache,
   setToken,
   getToken,
+  getPullRequest,
 } from '@/services/github';
 
 describe('GitHub API 缓存层', () => {
@@ -45,7 +46,22 @@ describe('GitHub API 缓存层', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.useRealTimers();
+  });
+
+  it('reads a fresh PR without reusing its cached revision', async () => {
+    const url = 'https://api.github.com/repos/owner/repo/pulls/12';
+    const cached = { head: { sha: 'old' } };
+    setCached(buildCacheKey(url), cached, 'old-etag');
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ head: { sha: 'new' } })));
+    vi.stubGlobal('fetch', fetch);
+
+    expect(await getPullRequest('owner', 'repo', 12)).toEqual(cached);
+    expect(await getPullRequest('owner', 'repo', 12, { fresh: true })).toEqual({ head: { sha: 'new' } });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toContain(`${url}?_t=`);
+    expect(fetch.mock.calls[0][1].headers).not.toHaveProperty('If-None-Match');
   });
 
   // ── buildCacheKey ────────────────────────────────────────────────

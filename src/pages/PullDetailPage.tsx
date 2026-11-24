@@ -1,7 +1,7 @@
 // PR 详情页
 
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   GitPullRequest,
   GitMerge,
@@ -13,8 +13,6 @@ import {
   GitBranch,
   Plus,
   Minus,
-  Check,
-  X,
   AlertCircle,
   UserCheck,
   CheckCircle2,
@@ -34,8 +32,8 @@ import {
   getPullRequestFiles,
   getPullRequestComments,
   createPullRequestComment,
-  mergePullRequest,
-  updatePullRequest,
+  getRepo,
+  samePullRevision,
   formatRelativeTime,
 } from '@/services/github';
 import { gqlGetPRReviews } from '@/services/github-graphql';
@@ -43,24 +41,15 @@ import type {
   GitHubPullRequest,
   GitHubComment,
   GitHubFile,
+  GitHubRepo,
   GQL_PRReview,
   GQL_ReviewDecision,
 } from '@/types/types';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer';
 import { UserLink } from '@/components/common/UserLink';
 import { useAuth } from '@/contexts/AuthContext';
-import { isRepoOwner } from '@/lib/repoPermissions';
+import { PullActions } from '@/components/repo/PullActions';
 import { toast } from 'sonner';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import i18n from "@/i18n";
 
 /** Review 状态图标与颜色 */
@@ -97,7 +86,7 @@ function ReviewDecisionBanner({ decision }: { decision: GQL_ReviewDecision | nul
     return (
       <div className="flex items-center gap-2 bg-success/10 border border-success/30 rounded-lg px-4 py-2.5">
         <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-        <span className="text-sm text-success font-medium">{i18n.t('所有审查者已批准，可以合并')}</span>
+        <span className="text-sm text-success font-medium">{i18n.t('评审已通过')}</span>
       </div>
     );
   }
@@ -105,7 +94,7 @@ function ReviewDecisionBanner({ decision }: { decision: GQL_ReviewDecision | nul
     return (
       <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/30 rounded-lg px-4 py-2.5">
         <XCircleIcon className="w-4 h-4 text-destructive shrink-0" />
-        <span className="text-sm text-destructive font-medium">{i18n.t('有审查者请求更改，需要修复后才能合并')}</span>
+        <span className="text-sm text-destructive font-medium">{i18n.t('有审查者请求更改')}</span>
       </div>
     );
   }
@@ -113,7 +102,7 @@ function ReviewDecisionBanner({ decision }: { decision: GQL_ReviewDecision | nul
     return (
       <div className="flex items-center gap-2 bg-warning/10 border border-warning/30 rounded-lg px-4 py-2.5">
         <Shield className="w-4 h-4 text-warning shrink-0" />
-        <span className="text-sm text-warning font-medium">{i18n.t('需要至少一个审查批准才能合并')}</span>
+        <span className="text-sm text-warning font-medium">{i18n.t('仓库规则要求评审批准')}</span>
       </div>
     );
   }
@@ -122,63 +111,83 @@ function ReviewDecisionBanner({ decision }: { decision: GQL_ReviewDecision | nul
 
 export default function PullDetailPage() {
   const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
+  return <PullDetail key={`${owner}/${repo}/${number}`} owner={owner!} repo={repo!} number={Number(number)} />;
+}
+
+function PullDetail({ owner, repo, number }: { owner: string; repo: string; number: number }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [params] = useSearchParams();
   const { user } = useAuth();
-  const canManage = isRepoOwner(owner, user?.login);
+  const pullsPath = `/repos/${owner}/${repo}/pulls`;
+  const detailPath = `${pullsPath}/${number}`;
+  const fromList = (location.state as { fromList?: string } | null)?.fromList;
+  const backFromDetail = fromList === pullsPath || fromList?.startsWith(`${pullsPath}?`);
   const [pr, setPr] = useState<GitHubPullRequest | null>(null);
+  const [repository, setRepository] = useState<GitHubRepo | null>(null);
   const [comments, setComments] = useState<GitHubComment[]>([]);
-  const [files, setFiles] = useState<GitHubFile[]>([]);
+  const [commentsError, setCommentsError] = useState(false);
+  const [files, setFiles] = useState<GitHubFile[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [newComment, setNewComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [merging, setMerging] = useState(false);
-  const [mergeConfirmOpen, setMergeConfirmOpen] = useState(false);
-  const [closing, setClosing] = useState(false);
-
-  // GraphQL Reviews 数据
+  const [retry, setRetry] = useState(0);
   const [reviews, setReviews] = useState<GQL_PRReview[]>([]);
   const [reviewDecision, setReviewDecision] = useState<GQL_ReviewDecision | null>(null);
   const [requestedReviewers, setRequestedReviewers] = useState<Array<{ login: string; avatarUrl: string }>>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reviewsError, setReviewsError] = useState(false);
 
   useEffect(() => {
-    if (!owner || !repo || !number) return;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [prData, commentsData, filesData] = await Promise.all([
-          getPullRequest(owner, repo, Number(number)),
-          getPullRequestComments(owner, repo, Number(number)),
-          getPullRequestFiles(owner, repo, Number(number)),
-        ]);
-        setPr(prData);
-        setComments(commentsData);
-        setFiles(filesData);
-      } catch (err) {
-        toast.error(i18n.t('加载 PR 详情失败'));
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [owner, repo, number]);
+    let cancelled = false;
+    getPullRequest(owner, repo, number, { fresh: true }).then((data) => {
+      if (!cancelled) setPr(data);
+    }).catch((err) => {
+      if (!cancelled) setLoadError(err instanceof Error ? err.message : i18n.t('加载 PR 详情失败'));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    getRepo(owner, repo).then((data) => {
+      if (!cancelled) setRepository(data);
+    }).catch(() => {});
+    getPullRequestComments(owner, repo, number).then((data) => {
+      if (!cancelled) setComments(data);
+    }).catch(() => { if (!cancelled) setCommentsError(true); });
+    getPullRequestFiles(owner, repo, number).then(({ data }) => {
+      if (!cancelled) setFiles(data);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [owner, repo, number, retry]);
 
-  // 独立加载 GraphQL Reviews 数据
   useEffect(() => {
-    if (!owner || !repo || !number) return;
-    setReviewsLoading(true);
-    gqlGetPRReviews(owner, repo, Number(number))
-      .then(({ reviews: r, reviewDecision: rd, requestedReviewers: rr }) => {
-        setReviews(r);
-        setReviewDecision(rd);
-        setRequestedReviewers(rr);
+    let cancelled = false;
+    gqlGetPRReviews(owner, repo, number)
+      .then(({ reviews: result, reviewDecision: decision, requestedReviewers: reviewers }) => {
+        if (cancelled) return;
+        setReviews(result);
+        setReviewDecision(decision);
+        setRequestedReviewers(reviewers);
       })
-      .catch(() => {
-        // 静默失败，Reviews 面板不影响主功能
-      })
-      .finally(() => setReviewsLoading(false));
-  }, [owner, repo, number]);
+      .catch(() => { if (!cancelled) setReviewsError(true); })
+      .finally(() => { if (!cancelled) setReviewsLoading(false); });
+    return () => { cancelled = true; };
+  }, [owner, repo, number, retry]);
+
+  const pendingMergeCheck = pr?.state === 'open' && !pr.draft && pr.mergeable === null;
+  useEffect(() => {
+    if (!pendingMergeCheck) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      getPullRequest(owner, repo, number, { fresh: true }).then((latest) => {
+        if (cancelled) return;
+        setPr((current) => current && samePullRevision(current, latest) && current.mergeable === null
+          ? { ...current, mergeable: latest.mergeable, mergeable_state: latest.mergeable_state }
+          : current);
+      }).catch(() => {});
+    }, 1500);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [owner, repo, number, pendingMergeCheck]);
 
   const handleComment = async () => {
     if (!owner || !repo || !number || !newComment.trim()) return;
@@ -203,39 +212,9 @@ export default function PullDetailPage() {
     }
   };
 
-  const handleMerge = async () => {
-    if (!owner || !repo || !number) return;
-    setMerging(true);
-    try {
-      await mergePullRequest(owner, repo, Number(number), { merge_method: 'merge' });
-      toast.success(i18n.t('Pull Request 已合并！'));
-      const updated = await getPullRequest(owner, repo, Number(number));
-      setPr(updated);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : i18n.t('合并失败'));
-    } finally {
-      setMerging(false);
-    }
-  };
-
-  const handleClose = async () => {
-    if (!owner || !repo || !number || !pr) return;
-    setClosing(true);
-    try {
-      const newState = pr.state === 'open' ? 'closed' : 'open';
-      const updated = await updatePullRequest(owner, repo, Number(number), { state: newState });
-      setPr(updated);
-      toast.success(newState === 'closed' ? i18n.t('PR 已关闭') : i18n.t('PR 已重新打开'));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : i18n.t('操作失败'));
-    } finally {
-      setClosing(false);
-    }
-  };
-
   const getPrIcon = () => {
     if (!pr) return null;
-    if (pr.merged) return <GitMerge className="w-5 h-5 text-chart-4" />;
+    if (pr.merged || pr.merged_at) return <GitMerge className="w-5 h-5 text-chart-4" />;
     if (pr.state === 'closed') return <XCircle className="w-5 h-5 text-destructive" />;
     return <GitPullRequest className="w-5 h-5 text-primary" />;
   };
@@ -253,7 +232,8 @@ export default function PullDetailPage() {
     return (
       <div className="p-6 text-center">
         <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-3" />
-        <p className="text-foreground">{i18n.t('PR 不存在')}</p>
+        <p className="mb-3 break-words text-foreground">{loadError || i18n.t('PR 不存在')}</p>
+        <Button variant="outline" onClick={() => { setLoading(true); setLoadError(''); setRetry(retry + 1); }}>{i18n.t('重试')}</Button>
       </div>
     );
   }
@@ -266,7 +246,7 @@ export default function PullDetailPage() {
         <ChevronRight className="w-3 h-3" />
         <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}`)}>{owner}/{repo}</button>
         <ChevronRight className="w-3 h-3" />
-        <button type="button" className="hover:text-accent" onClick={() => navigate(`/repos/${owner}/${repo}/pulls`)}>Pull Requests</button>
+        <button type="button" className="hover:text-accent" onClick={() => backFromDetail ? navigate(-1) : navigate(pullsPath)}>Pull Requests</button>
         <ChevronRight className="w-3 h-3" />
         <span className="text-foreground">#{pr.number}</span>
       </div>
@@ -275,17 +255,18 @@ export default function PullDetailPage() {
       <div className="flex items-start gap-3">
         <div className="mt-1 shrink-0">{getPrIcon()}</div>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-foreground text-balance">
+          <h1 className="break-words text-xl font-bold text-foreground">
             {pr.title}
             <span className="text-muted-foreground font-normal ml-2">#{pr.number}</span>
           </h1>
           <div className="flex items-center gap-2 mt-1 flex-wrap text-sm text-muted-foreground">
+            <Badge variant="outline">{pr.merged || pr.merged_at ? i18n.t('已合并') : pr.state === 'closed' ? i18n.t('已关闭') : pr.draft ? i18n.t('草稿') : i18n.t('开放')}</Badge>
             <span>{pr.user.login}</span>
             <span>·</span>
             <span>{formatRelativeTime(pr.created_at)} {i18n.t('创建')}</span>
-            <div className="flex items-center gap-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-1 break-all">
               <GitBranch className="w-3.5 h-3.5" />
-              <code className="font-mono text-xs">{pr.head.ref}</code>
+              <code className="font-mono text-xs">{pr.head.repo?.full_name === pr.base.repo?.full_name ? pr.head.ref : pr.head.label || pr.head.ref}</code>
               <span>→</span>
               <code className="font-mono text-xs">{pr.base.ref}</code>
             </div>
@@ -293,73 +274,27 @@ export default function PullDetailPage() {
         </div>
       </div>
 
-      {/* 统计信息 */}
-      <div className="flex flex-wrap gap-3 text-sm items-center">
-        <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
-          <FileDiff className="w-4 h-4 text-muted-foreground" />
-          <span className="text-muted-foreground">{pr.changed_files} {i18n.t('个文件')}</span>
+      <div className="space-y-2 rounded-lg border border-border bg-card p-3">
+        <div className="flex flex-wrap items-start gap-2">
+          <Button variant="outline" size="sm" className="gap-1.5" asChild>
+            <Link to={`${detailPath}/diff`}>
+              <FileDiff className="h-4 w-4" />
+              {pr.state === 'open' && user ? i18n.t('查看变更 / 评审') : i18n.t('查看变更')}
+            </Link>
+          </Button>
+          <PullActions owner={owner} repo={repo} pr={pr} repository={repository} login={user?.login} onUpdate={setPr} />
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span>{pr.changed_files} {i18n.t('个文件')}</span>
           <span className="text-primary">+{pr.additions}</span>
           <span className="text-destructive">-{pr.deletions}</span>
+          <span className="flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" />{pr.comments + pr.review_comments} {i18n.t('条评论')}</span>
         </div>
-        <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
-          <MessageSquare className="w-4 h-4 text-muted-foreground" />
-          <span className="text-muted-foreground">{pr.comments + pr.review_comments} {i18n.t('条评论')}</span>
-        </div>
-        {/* 查看完整 Diff */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-9 gap-1.5 border border-border text-muted-foreground hover:bg-secondary text-xs"
-          onClick={() => navigate(`/repos/${owner}/${repo}/pulls/${number}/diff`, { state: { pr } })}
-        >
-          <FileDiff className="w-3.5 h-3.5" />
-          {i18n.t('查看 Diff')}</Button>
       </div>
-
-      {/* GraphQL：Review Decision 横幅 */}
       {!reviewsLoading && <ReviewDecisionBanner decision={reviewDecision} />}
 
-      {/* 操作按钮 */}
-      {canManage && pr.state === 'open' && (
-        <div className="flex flex-wrap gap-3 bg-card border border-border rounded-lg p-4">
-          {!pr.merged && pr.state === 'open' && (
-            <>
-              <Button
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={() => setMergeConfirmOpen(true)}
-                disabled={merging}
-              >
-                <GitMerge className="w-4 h-4 mr-2" />
-                {merging ? i18n.t('合并中...') : i18n.t('合并 Pull Request')}
-              </Button>
-              <Button
-                variant="outline"
-                className="border-border hover:bg-secondary"
-                onClick={handleClose}
-                disabled={closing}
-              >
-                <X className="w-4 h-4 mr-2" />
-                {i18n.t('关闭 PR')}</Button>
-            </>
-          )}
-        </div>
-      )}
-
-      {canManage && pr.state === 'closed' && !pr.merged && (
-        <div className="flex gap-3 bg-card border border-border rounded-lg p-4">
-          <Button
-            variant="outline"
-            className="border-primary text-primary hover:bg-primary/10"
-            onClick={handleClose}
-            disabled={closing}
-          >
-            <Check className="w-4 h-4 mr-2" />
-            {i18n.t('重新打开 PR')}</Button>
-        </div>
-      )}
-
       {/* 主内容标签 */}
-      <Tabs defaultValue="description">
+      <Tabs defaultValue={params.get('tab') === 'reviews' ? 'reviews' : 'description'}>
         <TabsList className="bg-secondary border border-border">
           <TabsTrigger value="description" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground">
             {i18n.t('描述与评论')}</TabsTrigger>
@@ -367,7 +302,7 @@ export default function PullDetailPage() {
             {i18n.t('审查')}{reviews.length > 0 ? `(${reviews.length})` : ''}
           </TabsTrigger>
           <TabsTrigger value="files" className="data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground">
-            {i18n.t('文件变更 (')}{files.length})
+            {i18n.t('文件变更')} ({pr.changed_files})
           </TabsTrigger>
         </TabsList>
 
@@ -414,6 +349,8 @@ export default function PullDetailPage() {
             </div>
           ))}
 
+          {commentsError && <p role="status" className="text-sm text-muted-foreground">{i18n.t('暂时无法加载评论')}</p>}
+
           {/* 添加评论 */}
           {user && (
             <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -456,6 +393,8 @@ export default function PullDetailPage() {
                 </div>
               ))}
             </div>
+          ) : reviewsError ? (
+            <p role="status" className="p-3 text-sm text-muted-foreground">{i18n.t('暂时无法加载评审记录')}</p>
           ) : (
             <>
               {/* 待审查的 Reviewers */}
@@ -483,7 +422,7 @@ export default function PullDetailPage() {
               )}
 
               {/* Reviews 记录 */}
-              {reviews.length === 0 && requestedReviewers.length === 0 ? (
+              {reviews.length === 0 ? (
                 <div className="bg-card border border-border rounded-lg py-12 text-center">
                   <UserCheck className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground">{i18n.t('该 PR 暂无 Code Review 记录')}</p>
@@ -530,7 +469,10 @@ export default function PullDetailPage() {
 
         {/* 文件变更 */}
         <TabsContent value="files" className="space-y-3">
-          {files.map((file) => (
+          {(!files || files.length < pr.changed_files) && (
+            <Button size="sm" variant="outline" asChild><Link to={`${detailPath}/diff`}>{i18n.t('查看全部文件')}</Link></Button>
+          )}
+          {files?.map((file) => (
             <div key={file.filename} className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-secondary/30">
                 <code className="text-xs text-foreground font-mono flex-1 min-w-0 truncate">{file.filename}</code>
@@ -568,33 +510,6 @@ export default function PullDetailPage() {
         </TabsContent>
       </Tabs>
 
-      {/* 合并 PR 二次确认 */}
-      <AlertDialog open={mergeConfirmOpen} onOpenChange={setMergeConfirmOpen}>
-        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground flex items-center gap-2">
-              <GitMerge className="w-4 h-4 text-primary" />
-              {i18n.t('确认合并 Pull Request？')}</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground text-sm space-y-2">
-              <span>{i18n.t('将把分支')}</span>
-              <code className="font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded text-xs">{pr.head.ref}</code>
-              <span> {i18n.t('合并到')}</span>
-              <code className="font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded text-xs">{pr.base.ref}</code>
-              <span>{i18n.t('，合并后不可撤销。')}</span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="border-border hover:bg-secondary">{i18n.t('取消')}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={() => { setMergeConfirmOpen(false); handleMerge(); }}
-              disabled={merging}
-            >
-              <GitMerge className="w-4 h-4 mr-2" />
-              {i18n.t('确认合并')}</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

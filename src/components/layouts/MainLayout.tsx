@@ -1,3 +1,4 @@
+import type { ChatViewport } from '@/hooks/use-chat-viewport';
 // 主布局组件 - 包含侧边栏导航 + 移动端底部 Tab 栏
 
 import { useState } from 'react';
@@ -118,7 +119,7 @@ const bottomTabs = [
   { label: i18n.t('我的'),  path: '/settings',     icon: User },
 ];
 
-function MobileBottomNav({ sidebarCollapsed }: { sidebarCollapsed: boolean }) {
+function MobileBottomNav({ sidebarCollapsed, insideChat = false }: { sidebarCollapsed: boolean; insideChat?: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -129,7 +130,8 @@ function MobileBottomNav({ sidebarCollapsed }: { sidebarCollapsed: boolean }) {
   return (
     <nav
       className={cn(
-        'fixed bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-border',
+        'bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-border',
+        insideChat ? 'absolute' : 'fixed',
         'flex items-center h-16 safe-area-inset-bottom',
         sidebarCollapsed ? 'lg:left-14' : 'lg:left-56'
       )}
@@ -354,7 +356,14 @@ function SidebarNav({
   );
 }
 
-export default function MainLayout({ children, active = true }: { children: React.ReactNode; active?: boolean }) {
+export default function MainLayout({ children, active = true, chatViewport }: {
+  children: React.ReactNode;
+  active?: boolean;
+  chatViewport?: ChatViewport | null;
+}) {
+  const isNativeApp = Boolean((window as Window & { AndroidBridge?: unknown }).AndroidBridge);
+  const keyboardOpen = chatViewport?.keyboardOpen === true;
+  const showHeader = !keyboardOpen || !chatViewport || chatViewport.height >= 230;
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, rateLimit, logout } = useAuth();
@@ -420,7 +429,10 @@ export default function MainLayout({ children, active = true }: { children: Reac
   };
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
+    <div
+      className={cn('flex w-full bg-background', chatViewport ? 'fixed inset-x-0 overflow-hidden' : 'min-h-screen')}
+      style={chatViewport ? { top: chatViewport.top, height: chatViewport.height } : undefined}
+    >
       <AutoTranslatorInit />
       {/* 桌面端侧边栏 */}
       <aside
@@ -433,9 +445,9 @@ export default function MainLayout({ children, active = true }: { children: Reac
       </aside>
 
       {/* 主内容区 */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className={cn("flex min-w-0 flex-1 flex-col", chatViewport && "min-h-0")}>
         {/* 顶部导航栏 */}
-        <header className="sticky top-0 z-40 flex items-center h-14 px-4 gap-3 bg-card/95 backdrop-blur-sm border-b border-border">
+        <header className={cn("sticky top-0 z-40 h-14 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur-sm", showHeader ? "flex" : "hidden", chatViewport && "shrink-0")}>
           {/* 移动端菜单按钮 */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
@@ -587,11 +599,11 @@ export default function MainLayout({ children, active = true }: { children: Reac
         </header>
 
         {/* 页面内容 — Web 端统一为底部导航栏留出高度，APK 内由原生导航栏占位 */}
-        <main className={`flex-1 overflow-x-hidden ${typeof window !== 'undefined' && !!(window as unknown as { AndroidBridge?: unknown }).AndroidBridge ? '' : 'pb-16'}`}>
+        <main className={cn("flex-1 overflow-x-hidden", chatViewport && "flex min-h-0 flex-col overflow-hidden", !isNativeApp && !keyboardOpen && "pb-16")}>
           {children}
         </main>
       </div>
-      <MobileBottomNav sidebarCollapsed={collapsed} />
+      {!keyboardOpen && <MobileBottomNav sidebarCollapsed={collapsed} insideChat={Boolean(chatViewport)} />}
     </div>
   );
 }

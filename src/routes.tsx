@@ -78,8 +78,8 @@ export function routeName(route: RouteConfig): string {
 
 export const ASSISTANT_PATH = '/ai-assistant';
 
-export function assistantPage(visible: boolean) {
-  return page(<AiAssistantV2Page visible={visible} />);
+export function assistantPage(visible: boolean, compactKeyboard: boolean) {
+  return page(<AiAssistantV2Page visible={visible} compactKeyboard={compactKeyboard} />);
 }
 
 export const routes: RouteConfig[] = [

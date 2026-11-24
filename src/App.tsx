@@ -10,6 +10,7 @@ import { GitHubRateLimitBanner } from '@/components/system/GitHubRateLimitBanner
 import LaunchUpdateChecker from '@/components/system/LaunchUpdateChecker';
 import RouteScrollManager from '@/components/system/RouteScrollManager';
 import { ASSISTANT_PATH, assistantPage, routes } from './routes';
+import { useChatViewport } from '@/hooks/use-chat-viewport';
 import { recordVisit, recordGlobalVisit } from '@/lib/visitStats';
 
 // 路由守卫：未登录跳转到 /login
@@ -73,6 +74,9 @@ function AccountAssistant() {
   const location = useLocation();
   const visible = location.pathname.replace(/\/+$/, '').toLowerCase() === ASSISTANT_PATH;
   const [visited, setVisited] = useState(visible);
+  const isNativeApp = Boolean((window as Window & { AndroidBridge?: unknown }).AndroidBridge);
+  const webViewport = useChatViewport(visible && !isNativeApp);
+  const compactKeyboard = Boolean(webViewport?.keyboardOpen && webViewport.height < 320);
   useEffect(() => {
     if (visible) setVisited(true);
   }, [visible]);
@@ -80,7 +84,9 @@ function AccountAssistant() {
 
   return (
     <div hidden={!visible}>
-      <MainLayout active={visible}>{assistantPage(visible)}</MainLayout>
+      <MainLayout active={visible} chatViewport={webViewport}>
+        {assistantPage(visible, compactKeyboard)}
+      </MainLayout>
     </div>
   );
 }

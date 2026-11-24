@@ -59,7 +59,6 @@ import { getModelCapabilities } from '@/ai-v2/modelCapabilities';
 import type { ModelConfig } from '@/components/ai/aiTypes';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { GitHubRepo } from '@/types/types';
-import { useKeyboardInset } from '@/hooks/use-keyboard-inset';
 import { Button } from '@/components/ui/button';
 import { confirmAction } from '@/components/ui/confirm-dialog';
 import { Badge } from '@/components/ui/badge';
@@ -928,7 +927,7 @@ function ContextContent({
   );
 }
 
-export default function AiAssistantV2Page({ visible = true }: { visible?: boolean } = {}) {
+export default function AiAssistantV2Page({ visible = true, compactKeyboard = false }: { visible?: boolean; compactKeyboard?: boolean } = {}) {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<V2Session[]>([]);
@@ -939,8 +938,6 @@ export default function AiAssistantV2Page({ visible = true }: { visible?: boolea
     () => typeof window !== 'undefined' && !!(window as unknown as { AndroidBridge?: unknown }).AndroidBridge,
     [],
   );
-  // Android 由原生把 WebView 缩短来避让键盘，这里只给 Web 端兜底，避免双倍补偿
-  const keyboardInset = useKeyboardInset(!isAndroid);
   const [streaming, setStreaming] = useState(false);
   const [modelConfig, setModelConfig] = useState<ModelConfig>(loadModelConfig);
   const [character, setCharacter] = useState<CharacterCard>(() => loadActiveCharacter(user?.login));
@@ -978,14 +975,15 @@ export default function AiAssistantV2Page({ visible = true }: { visible?: boolea
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
   const abortRef = useRef<AbortController | null>(null);
-  const [viewportHeight, setViewportHeight] = useState(() => (
+  const [nativeViewportHeight, setNativeViewportHeight] = useState(() => (
     typeof window === 'undefined' ? 800 : window.innerHeight
   ));
   useEffect(() => {
+    if (!isAndroid) return;
     let timer = 0;
     const apply = () => {
       const next = window.innerHeight;
-      setViewportHeight(prev => (Math.abs(prev - next) > 1 ? next : prev));
+      setNativeViewportHeight(prev => (Math.abs(prev - next) > 1 ? next : prev));
     };
     // 键盘弹出/收起是一段连续 resize，逐帧改高度会让整页反复重排（抖动）
     const sync = () => {
@@ -1000,9 +998,8 @@ export default function AiAssistantV2Page({ visible = true }: { visible?: boolea
       window.removeEventListener('resize', sync);
       window.visualViewport?.removeEventListener('resize', sync);
     };
-  }, []);
+  }, [isAndroid]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const hydratedRef = useRef(false);
 
@@ -1224,18 +1221,18 @@ export default function AiAssistantV2Page({ visible = true }: { visible?: boolea
     scrollToBottom();
   }, [messages, streaming, scrollToBottom]);
 
-  // 键盘开合改变可视高度时，若原本贴底就继续保持贴底
-  useEffect(() => {
-    scrollToBottom();
-  }, [viewportHeight, scrollToBottom]);
-
-  // 虚拟列表高度测量后补一次底部对齐，避免流式输出时被"截断"在中间
+  // 只滚动消息容器，避免浏览器为焦点自动平移页面时同它争用。
   const virtualTotalSize = virtualizer.getTotalSize();
   useEffect(() => {
-    if (!stickToBottomRef.current) return;
-    const frame = requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: 'end' }));
-    return () => cancelAnimationFrame(frame);
-  }, [virtualTotalSize]);
+    scrollToBottom();
+  }, [nativeViewportHeight, virtualTotalSize, scrollToBottom]);
+
+  useEffect(() => {
+    if (isAndroid || !visible || typeof ResizeObserver === 'undefined' || !scrollRef.current) return;
+    const observer = new ResizeObserver(() => scrollToBottom());
+    observer.observe(scrollRef.current);
+    return () => observer.disconnect();
+  }, [isAndroid, visible, scrollToBottom]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -2084,8 +2081,8 @@ export default function AiAssistantV2Page({ visible = true }: { visible?: boolea
 
   return (
     <div
-      className="flex min-h-0 w-full min-w-0 overflow-hidden bg-background"
-      style={{ height: `${Math.max(240, viewportHeight - (isAndroid ? 56 : 120))}px` }}
+      className={cn("flex min-h-0 w-full min-w-0 overflow-hidden bg-background", !isAndroid && "h-full flex-1")}
+      style={isAndroid ? { height: Math.max(240, nativeViewportHeight - 56) } : undefined}
     >
       {/* 桌面端会话侧栏 */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-muted/10 2xl:flex">
@@ -2117,113 +2114,116 @@ export default function AiAssistantV2Page({ visible = true }: { visible?: boolea
 
       {/* 主聊天列 */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-border px-2 sm:px-3">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 2xl:hidden"
-            onClick={() => setSessionDialogOpen(true)}
-            title={i18n.t('会话列表')}
-          >
-            <Menu className="h-4 w-4" />
-          </Button>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <h1 className="truncate text-sm font-semibold">{activeSession?.title || i18n.t('AI 助手')}</h1>
-            </div>
-            <p className="truncate text-[10px] text-muted-foreground">
-              {repoContext ? `${repoContext.fullName} · ${repoContext.branch || repoContext.defaultBranch}` : i18n.t('通用模式 · 仓库可选')}
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setContextDialogOpen(true)}
-            title={i18n.t('上下文')}
-          >
-            <PanelRight className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground"
-            onClick={handleClear}
-            disabled={streaming || !hasConversation}
-            title={i18n.t('清空当前对话')}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </header>
-
-        {(!hasModelKey || needsCustomEndpoint) && (
-          <button
-            type="button"
-            onClick={() => navigate('/ai-settings/model')}
-            className="mx-2 mt-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-700 dark:text-amber-300 sm:mx-3"
-          >
-            <Settings className="h-4 w-4 shrink-0" />
-            <span className="flex-1">{needsCustomEndpoint
-              ? i18n.t('请先填写接口地址')
-              : i18n.t('还没有配置模型，点击选择 DeepSeek / OpenRouter / Gemini')}</span>
-            <ChevronRight className="h-4 w-4 shrink-0" />
-          </button>
-        )}
-        {storageError && (
-          <div className="mx-2 mt-2 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive sm:mx-3">
-            <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span className="flex-1">{storageError}</span>
-            <button type="button" onClick={() => setStorageError('')} className="shrink-0 opacity-70 hover:opacity-100">
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        )}
-        {resumableSnapshot && resumableSnapshot.sessionId === activeId && !streaming && (
-          <div className="mx-2 mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs sm:mx-3">
-            <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
-            <span className="min-w-0 flex-1 truncate">
-              {i18n.t('上次运行中断于第 {{step}} 步', { step: resumableSnapshot.steps })}：{resumableSnapshot.title}
-            </span>
-            {resumableSnapshot.binding && !resumableSnapshot.writeInFlight
-              && JSON.stringify(resumableSnapshot.binding) === JSON.stringify(binding) ? (
-                <Button type="button" size="sm" className="h-7 gap-1 px-2 text-[10px]" onClick={() => void handleResume()}>
-                  {i18n.t('继续/重试')}
-                </Button>
-              ) : (
-                <p className="text-[11px]">
-                  {resumableSnapshot.writeInFlight
-                    ? i18n.t('上次写入结果未确认，请在 GitHub 核对后再发起任务。')
-                    : i18n.t('此恢复点需使用原仓库、分支与模型。旧版恢复点请重新发起任务。')}
-                </p>
-              )}
-            {resumableSnapshot.writeInFlight && resumableSnapshot.pendingWrite?.verification && (
-              <Button type="button" size="sm" variant="outline" disabled={checkingWrite} onClick={() => void handleVerifyWrite()}>
-                {checkingWrite ? i18n.t('正在核对…') : i18n.t('核对 GitHub 状态')}
-              </Button>
-            )}
+        <div className={compactKeyboard ? "flex min-h-0 max-h-[35%] flex-col overflow-y-auto" : "contents"}>
+          <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-border px-2 sm:px-3">
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-[10px] text-muted-foreground"
-              disabled={checkingWrite}
-              onClick={async () => {
-                if (resumableSnapshot.writeInFlight && !await confirmAction({
-                  title: i18n.t('放弃恢复这项写入？'),
-                  description: i18n.t('请先检查 GitHub 的实际结果。放弃只会移除本地恢复点。'),
-                  confirmText: i18n.t('放弃恢复'),
-                })) return;
-                if (user?.login) await clearRunSnapshot(user.login, resumableSnapshot.runId);
-                setResumableSnapshot(current => current?.runId === resumableSnapshot.runId ? null : current);
-              }}
+              size="icon"
+              className="h-8 w-8 2xl:hidden"
+              onClick={() => setSessionDialogOpen(true)}
+              title={i18n.t('会话列表')}
             >
-              {resumableSnapshot.writeInFlight ? i18n.t('放弃恢复') : i18n.t('忽略')}
+              <Menu className="h-4 w-4" />
             </Button>
-          </div>
-        )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <h1 className="truncate text-sm font-semibold">{activeSession?.title || i18n.t('AI 助手')}</h1>
+              </div>
+              <p className="truncate text-[10px] text-muted-foreground">
+                {repoContext ? `${repoContext.fullName} · ${repoContext.branch || repoContext.defaultBranch}` : i18n.t('通用模式 · 仓库可选')}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setContextDialogOpen(true)}
+              title={i18n.t('上下文')}
+            >
+              <PanelRight className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              onClick={handleClear}
+              disabled={streaming || !hasConversation}
+              title={i18n.t('清空当前对话')}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </header>
+
+          {(!hasModelKey || needsCustomEndpoint) && (
+            <button
+              type="button"
+              onClick={() => navigate('/ai-settings/model')}
+              className="mx-2 mt-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-700 dark:text-amber-300 sm:mx-3"
+            >
+              <Settings className="h-4 w-4 shrink-0" />
+              <span className="flex-1">{needsCustomEndpoint
+                ? i18n.t('请先填写接口地址')
+                : i18n.t('还没有配置模型，点击选择 DeepSeek / OpenRouter / Gemini')}</span>
+              <ChevronRight className="h-4 w-4 shrink-0" />
+            </button>
+          )}
+          {storageError && (
+            <div className="mx-2 mt-2 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive sm:mx-3">
+              <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span className="flex-1">{storageError}</span>
+              <button type="button" onClick={() => setStorageError('')} className="shrink-0 opacity-70 hover:opacity-100">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+          {resumableSnapshot && resumableSnapshot.sessionId === activeId && !streaming && (
+            <div className="mx-2 mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs sm:mx-3">
+              <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="min-w-0 flex-1 truncate">
+                {i18n.t('上次运行中断于第 {{step}} 步', { step: resumableSnapshot.steps })}：{resumableSnapshot.title}
+              </span>
+              {resumableSnapshot.binding && !resumableSnapshot.writeInFlight
+                && JSON.stringify(resumableSnapshot.binding) === JSON.stringify(binding) ? (
+                  <Button type="button" size="sm" className="h-7 gap-1 px-2 text-[10px]" onClick={() => void handleResume()}>
+                    {i18n.t('继续/重试')}
+                  </Button>
+                ) : (
+                  <p className="text-[11px]">
+                    {resumableSnapshot.writeInFlight
+                      ? i18n.t('上次写入结果未确认，请在 GitHub 核对后再发起任务。')
+                      : i18n.t('此恢复点需使用原仓库、分支与模型。旧版恢复点请重新发起任务。')}
+                  </p>
+                )}
+              {resumableSnapshot.writeInFlight && resumableSnapshot.pendingWrite?.verification && (
+                <Button type="button" size="sm" variant="outline" disabled={checkingWrite} onClick={() => void handleVerifyWrite()}>
+                  {checkingWrite ? i18n.t('正在核对…') : i18n.t('核对 GitHub 状态')}
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-[10px] text-muted-foreground"
+                disabled={checkingWrite}
+                onClick={async () => {
+                  if (resumableSnapshot.writeInFlight && !await confirmAction({
+                    title: i18n.t('放弃恢复这项写入？'),
+                    description: i18n.t('请先检查 GitHub 的实际结果。放弃只会移除本地恢复点。'),
+                    confirmText: i18n.t('放弃恢复'),
+                  })) return;
+                  if (user?.login) await clearRunSnapshot(user.login, resumableSnapshot.runId);
+                  setResumableSnapshot(current => current?.runId === resumableSnapshot.runId ? null : current);
+                }}
+              >
+                {resumableSnapshot.writeInFlight ? i18n.t('放弃恢复') : i18n.t('忽略')}
+              </Button>
+            </div>
+          )}
+
+        </div>
 
         <div
           ref={scrollRef}
@@ -2304,7 +2304,6 @@ export default function AiAssistantV2Page({ visible = true }: { visible?: boolea
                 );
               })()
             )}
-            <div ref={bottomRef} />
           </div>
 
           {showScrollButton && (
@@ -2320,9 +2319,7 @@ export default function AiAssistantV2Page({ visible = true }: { visible?: boolea
         </div>
 
         <div
-          className="w-full min-w-0 shrink-0 border-t border-border bg-background/95 px-2 pt-2 sm:px-3"
-          // 键盘弹出时整条输入区上移，避免被输入法遮住（pb 由 style 动态给出）
-          style={{ paddingBottom: keyboardInset > 0 ? keyboardInset + 8 : 8 }}
+          className={cn("w-full min-w-0 shrink-0 border-t border-border bg-background/95 px-2 py-2 sm:px-3", compactKeyboard && "max-h-full overflow-y-auto")}
         >
           <div className="mx-auto w-full min-w-0 max-w-3xl">
             <div className="rounded-[22px] border border-border/80 bg-card p-2 shadow-sm transition-colors">

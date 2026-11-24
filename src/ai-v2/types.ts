@@ -198,7 +198,7 @@ export interface UiToolRun {
   endedAt?: number;
 }
 
-/** 助手消息内的有序区块：与 Operit 一样按发生顺序渲染 */
+/** 助手消息内记录的思考、正文和工具调用区块 */
 export interface UiAssistantBlock {
   id: string;
   type: 'text' | 'reasoning' | 'tool';

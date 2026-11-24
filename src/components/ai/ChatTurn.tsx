@@ -188,8 +188,7 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff, onRegenerate }: {
     }
   };
 
-  // 新消息按区块顺序渲染：思考 → 工具 → 正文 → 工具 → 正文…
-  // 区块合并成展示分组：连续工具调用收进执行面板，正文保持独立
+  // 同一阶段内思考在正文上方，只有工具调用分隔正文。
   const groups = buildRenderGroups(blocks);
   const lastGroupIndex = groups.length - 1;
   const renderedBlocks = groups.map((group, index) => {

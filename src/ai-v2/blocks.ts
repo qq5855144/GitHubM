@@ -49,15 +49,23 @@ export type AssistantRenderGroup =
   | { kind: 'text'; id: string; text: string }
   | { kind: 'execution'; id: string; toolIds: string[] };
 
-/**
- * 把有序区块合并成展示分组：
- * 连续的工具调用合并成一个执行组，其余按原顺序保留。
- */
+/** 工具调用分隔输出阶段。每个阶段先显示合并后的思考，再显示连续正文。 */
 export function buildRenderGroups(blocks: UiAssistantBlock[]): AssistantRenderGroup[] {
   const groups: AssistantRenderGroup[] = [];
+  let reasoning: Extract<AssistantRenderGroup, { kind: 'reasoning' }> | undefined;
+  let answer: Extract<AssistantRenderGroup, { kind: 'text' }> | undefined;
+
+  const flushOutput = () => {
+    if (reasoning) groups.push(reasoning);
+    if (answer) groups.push(answer);
+    reasoning = undefined;
+    answer = undefined;
+  };
+
   for (const block of blocks) {
     if (block.type === 'tool') {
       if (!block.toolId) continue;
+      flushOutput();
       const last = groups[groups.length - 1];
       if (last && last.kind === 'execution') {
         last.toolIds.push(block.toolId);
@@ -67,7 +75,15 @@ export function buildRenderGroups(blocks: UiAssistantBlock[]): AssistantRenderGr
       continue;
     }
     if (!block.text) continue;
-    groups.push({ kind: block.type === 'reasoning' ? 'reasoning' : 'text', id: block.id, text: block.text });
+    if (block.type === 'reasoning') {
+      if (reasoning) reasoning.text += block.text;
+      else reasoning = { kind: 'reasoning', id: block.id, text: block.text };
+    } else if (answer) {
+      answer.text += block.text;
+    } else {
+      answer = { kind: 'text', id: block.id, text: block.text };
+    }
   }
+  flushOutput();
   return groups;
 }

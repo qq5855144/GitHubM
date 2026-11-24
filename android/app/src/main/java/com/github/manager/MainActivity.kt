@@ -509,6 +509,74 @@ class MainActivity : AppCompatActivity() {
     // ── MediaStore / Legacy 存储写入 ────────────────────────────────
 
     /**
+     * 同步等待一段 JS 表达式的字符串结果。
+     *
+     * `webView.evaluateJavascript` 只能异步回调，而更新检查需要先拿到 token 再建请求。
+     * 这里用 CountDownLatch 在 IO 线程上等待，不阻塞主线程；500ms 拿不到就返回空串，
+     * 保证任何情况下都不会卡住更新检查。
+     */
+    private fun readJsString(expr: String, timeoutMs: Long = 500): String {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val holder = arrayOfNulls<String>(1)
+        runOnUiThread {
+            try {
+                webView.evaluateJavascript(
+                    "(function(){ try { return String($expr) } catch(e) { return '' } })()",
+                ) { raw ->
+                    val cleaned = raw?.removeSurrounding("\"")?.trim() ?: ""
+                    // evaluateJavascript 对 null/undefined 会返回字面量字符串，按空值处理
+                    holder[0] = if (cleaned == "null" || cleaned == "undefined") "" else cleaned
+                    latch.countDown()
+                }
+            } catch (e: Exception) {
+                latch.countDown()
+            }
+        }
+        latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        return holder[0] ?: ""
+    }
+
+    /**
+     * 请求 GitHub Releases latest，返回 (状态码, 响应体)。
+     *
+     * 有 token 时附带 Authorization，限额 5000 次/小时；无 token 时 60 次/小时。
+     * 带 token 反而失败（例如 token 过期）时自动回退到匿名请求一次，
+     * 避免“配了失效 token 就永远查不到更新”。
+     */
+    private fun fetchLatestRelease(token: String): Pair<Int, String> {
+        val url = "https://api.github.com/repos/qq5855144/GitHubM/releases/latest"
+
+        fun request(withToken: String?): Pair<Int, String> {
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                setRequestProperty("Accept", "application/vnd.github.v3+json")
+                setRequestProperty("User-Agent", "GitHubM-Android-UpdateChecker")
+                if (!withToken.isNullOrBlank()) {
+                    setRequestProperty("Authorization", "Bearer $withToken")
+                }
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                instanceFollowRedirects = true
+            }
+            return try {
+                conn.connect()
+                val code = conn.responseCode
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val body = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                code to body
+            } finally {
+                conn.disconnect()
+            }
+        }
+
+        val primary = request(token)
+        // 带 token 却拿到 401/403，多半是 token 失效；退回匿名再试一次
+        if (primary.first != 200 && !token.isNullOrBlank()) {
+            return request(null)
+        }
+        return primary
+    }
+
+    /**
      * 检查 GitHub Releases 最新版本，若有新版本则通过 JS 事件通知前端展示更新提示。
      *
      * 调用方式：window.AndroidBridge.checkUpdate()
@@ -523,27 +591,28 @@ class MainActivity : AppCompatActivity() {
      *   - 与 GitHub Releases latest tag 比较（去掉前缀 'v'）
      *   - 任何网络/解析错误均通过 appUpdateError 事件通知前端
      */
+
     private fun checkUpdateInternal() {
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
                 // 网络/解析异常通过 appUpdateError 事件通知前端
+                // 先从前端 localStorage 取用户 token：未认证调用只有 60 次/小时，
+                // 移动网络共享出口 IP 很容易被同网其他用户耗尽，耗尽后 GitHub 返回 403。
+                // 带上 token 后限额提升到 5000 次/小时，能从根本上避开这个问题。
+                val userToken = readJsString("localStorage.getItem('github_manager_token') || ''")
+
                 val result: Result<Triple<String, String, String>> = runCatching {
-                    val conn = (URL("https://api.github.com/repos/qq5855144/GitHubM/releases/latest")
-                        .openConnection() as HttpURLConnection).apply {
-                        setRequestProperty("Accept", "application/vnd.github.v3+json")
-                        setRequestProperty("User-Agent", "GitHubM-Android-UpdateChecker")
-                        connectTimeout = 10_000
-                        readTimeout = 10_000
-                        instanceFollowRedirects = true
-                    }
-                    conn.connect()
-                    val code = conn.responseCode
+                    val (code, body) = fetchLatestRelease(userToken)
                     if (code != 200) {
-                        conn.disconnect()
-                        throw IOException("GitHub API 返回 $code")
+                        // 403 最常见的原因是未认证限额耗尽，给出可操作的提示而不是裸状态码
+                        val hint = when {
+                            code == 403 || code == 429 ->
+                                "GitHub API 请求次数超出限制（403），请稍后重试或先在设置中登录 GitHub 账号"
+                            code == 404 -> "GitHub 上未找到发布版本（404）"
+                            else -> "GitHub API 返回 $code"
+                        }
+                        throw IOException(hint)
                     }
-                    val body = conn.inputStream.bufferedReader().use { it.readText() }
-                    conn.disconnect()
 
                     // 简单 JSON 解析：避免引入额外依赖，只提取需要的字段
                     val tagMatch = Regex(""""tag_name"\s*:\s*"([^"]+)"""").find(body)

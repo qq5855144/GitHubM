@@ -184,6 +184,7 @@ export const QUICK_PROMPTS = [
 // ── 纯工具函数 ──────────────────────────────────────────────────────────────────
 
 const MODEL_CONFIG_KEY = 'ai_assistant_model_config';
+const CUSTOM_MODEL_SETTINGS_KEY = 'ai_assistant_custom_model_settings';
 /** 旧版本内置代理默认值：仅在用户从未主动选择时自动迁移为直连 */
 const LEGACY_DEFAULT_PROXY = 'https://llm.callact.xyz';
 
@@ -229,7 +230,28 @@ export function loadModelConfig(): ModelConfig {
   return { type: 'deepseek' };
 }
 
+export function loadCustomModelSettings(config: ModelConfig): Pick<ModelConfig, 'endpoint' | 'model'> {
+  if (config.type === 'custom') {
+    return { endpoint: config.endpoint, model: config.model };
+  }
+  try {
+    const raw = getSecureItem(CUSTOM_MODEL_SETTINGS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 export function saveModelConfig(cfg: ModelConfig): void {
+  // 切换默认提供商前保留自定义接口，也兼容只存在于旧版全局配置中的旧数据。
+  if (cfg.type !== 'custom') {
+    const previous = loadModelConfig();
+    if (previous.type === 'custom') {
+      const { endpoint, model, api_key } = previous;
+      setSecureItem(CUSTOM_MODEL_SETTINGS_KEY, JSON.stringify({ endpoint, model }));
+      if (api_key) setSecureItem('ai_api_key_custom', api_key);
+    }
+  }
   setSecureItem(MODEL_CONFIG_KEY, JSON.stringify(cfg));
   // 同步更新独立 key 存储，保持两者一致
   if (cfg.api_key && cfg.type !== 'wenxin') {

@@ -47,11 +47,13 @@ import {
   MODEL_DEFS,
   ModelAvatar,
   getModelDef,
+  loadCustomModelSettings,
   loadModelConfig,
   loadProviderKey,
   modelDisplayName,
   renderMarkdown,
 } from '@/components/ai/aiUtils';
+import { getDefaultProviderModel } from '@/components/ai/aiProviders';
 import type { ModelType } from '@/components/ai/aiTypes';
 import { getModelCapabilities } from '@/ai-v2/modelCapabilities';
 import type { ModelConfig } from '@/components/ai/aiTypes';
@@ -1027,15 +1029,27 @@ export default function AiAssistantV2Page() {
   const sessionType = (activeSession?.modelType as ModelType | undefined) || modelConfig.type;
   const providerDef = useMemo(() => getModelDef(sessionType), [sessionType]);
   const defaultProviderModel = providerDef.models?.[0]?.value || '';
-  const sessionModel = activeSession?.model
-    || (sessionType === modelConfig.type ? modelConfig.model || '' : defaultProviderModel);
-  const sessionApiKey = (sessionType === modelConfig.type ? modelConfig.api_key : loadProviderKey(sessionType)) || '';
-  const effectiveConfig = useMemo<ModelConfig>(
-    () => ({ ...modelConfig, type: sessionType, model: sessionModel, api_key: sessionApiKey }),
-    [modelConfig, sessionType, sessionModel, sessionApiKey],
+  const customSettings = useMemo(() => loadCustomModelSettings(modelConfig), [modelConfig]);
+  const customModel = customSettings.model?.trim() || getDefaultProviderModel('custom');
+  const sessionModel = activeSession?.model || (
+    sessionType === 'custom' ? customModel
+      : sessionType === modelConfig.type ? modelConfig.model || '' : defaultProviderModel
   );
+  const sessionApiKey = (sessionType === modelConfig.type ? modelConfig.api_key : loadProviderKey(sessionType)) || '';
+  const sessionEndpoint = sessionType === 'custom' ? customSettings.endpoint : undefined;
+  const effectiveConfig = useMemo<ModelConfig>(
+    () => ({ ...modelConfig, type: sessionType, model: sessionModel, api_key: sessionApiKey, endpoint: sessionEndpoint }),
+    [modelConfig, sessionType, sessionModel, sessionApiKey, sessionEndpoint],
+  );
+  const pickerProviders = useMemo(() => MODEL_DEFS.map(provider => {
+    if (provider.type !== 'custom' || !customSettings.endpoint?.trim()) return provider;
+    const models = new Set([customModel]);
+    if (sessionType === 'custom' && sessionModel) models.add(sessionModel);
+    return { ...provider, models: [...models].map(value => ({ value, label: value })) };
+  }), [customSettings.endpoint, customModel, sessionType, sessionModel]);
   const modelDef = providerDef;
   const hasModelKey = Boolean(effectiveConfig.api_key?.trim());
+  const needsCustomEndpoint = sessionType === 'custom' && !sessionEndpoint?.trim();
   const modelCapabilities = useMemo(
     () => getModelCapabilities(effectiveConfig.type, sessionModel),
     [effectiveConfig.type, sessionModel],
@@ -1606,9 +1620,9 @@ export default function AiAssistantV2Page() {
       toast.error(i18n.t('登录状态已失效，请重新登录'));
       return;
     }
-    if (!hasModelKey) {
+    if (!hasModelKey || needsCustomEndpoint) {
       navigate('/ai-settings/model');
-      toast.error(i18n.t('请先配置模型 API Key'));
+      toast.error(needsCustomEndpoint ? i18n.t('请先填写接口地址') : i18n.t('请先配置模型 API Key'));
       return;
     }
 
@@ -1696,7 +1710,7 @@ export default function AiAssistantV2Page() {
 
         // OpenRouter 免费额度用尽：无仓库上下文时自动切到 Cloudflare Workers AI 免费额度。
         const fallbackProxy = modelConfig.proxy_url?.trim().replace(/\/+$/, '') || '';
-        if (isOpenRouterDailyLimit(message) && modelConfig.type === 'openrouter' && !repoContext && fallbackProxy) {
+        if (isOpenRouterDailyLimit(message) && effectiveConfig.type === 'openrouter' && !repoContext && fallbackProxy) {
           toast.info(i18n.t('OpenRouter 免费额度已用尽，正在切换 Cloudflare AI 重试'));
           patchAssistant(assistantId, {
             content: `> ${i18n.t('OpenRouter 免费额度已用尽，已切换到 Cloudflare AI 重试。')}\n\n`,
@@ -2096,14 +2110,16 @@ export default function AiAssistantV2Page() {
           </Button>
         </header>
 
-        {!hasModelKey && (
+        {(!hasModelKey || needsCustomEndpoint) && (
           <button
             type="button"
             onClick={() => navigate('/ai-settings/model')}
             className="mx-2 mt-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-700 dark:text-amber-300 sm:mx-3"
           >
             <Settings className="h-4 w-4 shrink-0" />
-            <span className="flex-1">{i18n.t('还没有配置模型，点击选择 DeepSeek / OpenRouter / Gemini')}</span>
+            <span className="flex-1">{needsCustomEndpoint
+              ? i18n.t('请先填写接口地址')
+              : i18n.t('还没有配置模型，点击选择 DeepSeek / OpenRouter / Gemini')}</span>
             <ChevronRight className="h-4 w-4 shrink-0" />
           </button>
         )}
@@ -2521,7 +2537,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
       <ModelPickerDialog
         open={modelDialogOpen}
         onOpenChange={setModelDialogOpen}
-        providers={MODEL_DEFS}
+        providers={pickerProviders}
         currentType={sessionType}
         currentModel={sessionModel}
         capabilities={modelCapabilities}

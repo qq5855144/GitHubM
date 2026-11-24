@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { loadModelConfig, saveModelConfig, loadProviderKey, saveProviderKey } from '@/components/ai/aiUtils';
+import { loadCustomModelSettings, loadModelConfig, saveModelConfig, loadProviderKey, saveProviderKey } from '@/components/ai/aiUtils';
 
 interface Bridge {
   secureGet?: (key: string) => string | null;
@@ -50,5 +50,21 @@ describe('AI model config secure storage', () => {
     expect(loadModelConfig().api_key).toBe('sk-openai');
     expect(localStorage.getItem('ai_assistant_model_config')).toBeNull();
     expect(store.get('ai_assistant_model_config')).toContain('sk-openai');
+  });
+
+  it('keeps the endpoint, model and key of an existing custom provider when changing the default', () => {
+    const store = installBridge();
+    localStorage.setItem('ai_assistant_model_config', JSON.stringify({
+      type: 'custom', endpoint: 'https://custom.example/v1', model: 'my-model', api_key: 'sk-custom',
+    }));
+
+    saveModelConfig({ type: 'openai', model: 'gpt-4o-mini', api_key: 'sk-openai' });
+    expect(loadModelConfig().type).toBe('openai');
+    expect(loadCustomModelSettings(loadModelConfig())).toEqual({
+      endpoint: 'https://custom.example/v1', model: 'my-model',
+    });
+    expect(loadProviderKey('custom')).toBe('sk-custom');
+    expect(store.get('ai_assistant_custom_model_settings')).not.toContain('sk-custom');
+    expect(localStorage.getItem('ai_assistant_custom_model_settings')).toBeNull();
   });
 });

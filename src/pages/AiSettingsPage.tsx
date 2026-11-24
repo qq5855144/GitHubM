@@ -6,6 +6,7 @@ import {
   MODEL_DEFS,
   ModelAvatar,
   getModelDef,
+  loadCustomModelSettings,
   loadModelConfig,
   loadProviderKey,
   saveModelConfig,
@@ -232,13 +233,15 @@ export default function AiSettingsPage() {
   };
 
   const changeProvider = (type: ModelConfig['type']) => {
-    const savedKey = loadProviderKey(type);
+    const saved = loadModelConfig();
+    const savedKey = (type === saved.type && saved.api_key) || loadProviderKey(type);
+    const custom = type === 'custom' ? loadCustomModelSettings(saved) : undefined;
     setConfig(prev => ({
       ...prev,
       type,
       api_key: savedKey || undefined,
-      endpoint: type === 'custom' ? prev.endpoint : undefined,
-      model: getDefaultProviderModel(type),
+      endpoint: custom?.endpoint,
+      model: custom?.model || getDefaultProviderModel(type),
     }));
     setTestState('idle');
     setTestResult('');

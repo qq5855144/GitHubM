@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
 import { ConfirmDialogHost } from '@/components/ui/confirm-dialog';
@@ -9,7 +9,7 @@ import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import { GitHubRateLimitBanner } from '@/components/system/GitHubRateLimitBanner';
 import LaunchUpdateChecker from '@/components/system/LaunchUpdateChecker';
 import RouteScrollManager from '@/components/system/RouteScrollManager';
-import { routes } from './routes';
+import { ASSISTANT_PATH, assistantPage, routes } from './routes';
 import { recordVisit, recordGlobalVisit } from '@/lib/visitStats';
 
 // 路由守卫：未登录跳转到 /login
@@ -63,6 +63,28 @@ function VisitTracker() {
   return null;
 }
 
+function AssistantHost() {
+  const { isAuthenticated, loading, token, user } = useAuth();
+  if (loading || !isAuthenticated || !token || !user) return null;
+  return <AccountAssistant key={token} />;
+}
+
+function AccountAssistant() {
+  const location = useLocation();
+  const visible = location.pathname.replace(/\/+$/, '').toLowerCase() === ASSISTANT_PATH;
+  const [visited, setVisited] = useState(visible);
+  useEffect(() => {
+    if (visible) setVisited(true);
+  }, [visible]);
+  if (!visited && !visible) return null;
+
+  return (
+    <div hidden={!visible}>
+      <MainLayout active={visible}>{assistantPage(visible)}</MainLayout>
+    </div>
+  );
+}
+
 function AppContent() {
   const { loading } = useAuth();
 
@@ -79,6 +101,7 @@ function AppContent() {
       <VisitTracker />
       <RouteScrollManager />
       <LaunchUpdateChecker />
+      <AssistantHost />
       <Routes>
         {/* 公开路由（登录页） */}
         {routes
@@ -96,7 +119,7 @@ function AppContent() {
               path={route.path}
               element={
                 <RouteGuard>
-                  <MainLayout>{route.element}</MainLayout>
+                  {route.path !== ASSISTANT_PATH && <MainLayout>{route.element}</MainLayout>}
                 </RouteGuard>
               }
             />

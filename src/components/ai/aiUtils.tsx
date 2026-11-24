@@ -144,7 +144,7 @@ export const MODEL_DEFS: ModelDef[] = [
     type: 'custom',
     label: i18n.t('自定义接口'),
     desc: i18n.t('兼容 OpenAI 格式的任意接口'),
-    needKey: true,
+    needKey: false,
     needEndpoint: true,
     keyPlaceholder: i18n.t('Bearer token 或 API Key'),
     avatarText: '{}',
@@ -230,9 +230,10 @@ export function loadModelConfig(): ModelConfig {
   return { type: 'deepseek' };
 }
 
-export function loadCustomModelSettings(config: ModelConfig): Pick<ModelConfig, 'endpoint' | 'model'> {
+export function loadCustomModelSettings(config: ModelConfig): Pick<ModelConfig, 'endpoint' | 'model' | 'supportsTools' | 'supportsVision' | 'stream'> {
   if (config.type === 'custom') {
-    return { endpoint: config.endpoint, model: config.model };
+    const { endpoint, model, supportsTools, supportsVision, stream } = config;
+    return { endpoint, model, supportsTools, supportsVision, stream };
   }
   try {
     const raw = getSecureItem(CUSTOM_MODEL_SETTINGS_KEY);
@@ -247,15 +248,16 @@ export function saveModelConfig(cfg: ModelConfig): void {
   if (cfg.type !== 'custom') {
     const previous = loadModelConfig();
     if (previous.type === 'custom') {
-      const { endpoint, model, api_key } = previous;
-      setSecureItem(CUSTOM_MODEL_SETTINGS_KEY, JSON.stringify({ endpoint, model }));
+      const { endpoint, model, api_key, supportsTools, supportsVision, stream } = previous;
+      setSecureItem(CUSTOM_MODEL_SETTINGS_KEY, JSON.stringify({ endpoint, model, supportsTools, supportsVision, stream }));
       if (api_key) setSecureItem('ai_api_key_custom', api_key);
     }
   }
   setSecureItem(MODEL_CONFIG_KEY, JSON.stringify(cfg));
   // 同步更新独立 key 存储，保持两者一致
-  if (cfg.api_key && cfg.type !== 'wenxin') {
-    setSecureItem(`ai_api_key_${cfg.type}`, cfg.api_key);
+  if (cfg.type !== 'wenxin') {
+    if (cfg.api_key?.trim()) setSecureItem(`ai_api_key_${cfg.type}`, cfg.api_key.trim());
+    else removeSecureItem(`ai_api_key_${cfg.type}`);
   }
 }
 

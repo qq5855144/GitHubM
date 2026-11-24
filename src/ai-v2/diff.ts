@@ -9,10 +9,23 @@ export function buildUnifiedDiff(
   const oldLines = oldText ? oldText.replace(/\r\n/g, '\n').split('\n') : [];
   const newLines = newText ? newText.replace(/\r\n/g, '\n').split('\n') : [];
   if (oldLines.length > 700 || newLines.length > 700) {
+    let first = 0;
+    let oldEnd = oldLines.length;
+    let newEnd = newLines.length;
+    while (first < oldEnd && first < newEnd && oldLines[first] === newLines[first]) first++;
+    if (first === oldEnd && first === newEnd) return '没有内容变化。';
+    while (oldEnd > first && newEnd > first && oldLines[oldEnd - 1] === newLines[newEnd - 1]) {
+      oldEnd--;
+      newEnd--;
+    }
+    const changed = [
+      ...oldLines.slice(first, oldEnd).map(line => `-${line}`),
+      ...newLines.slice(first, newEnd).map(line => `+${line}`),
+    ];
     return [
-      `旧文件 ${oldLines.length} 行 → 新文件 ${newLines.length} 行`,
-      `新增 ${Math.max(0, newLines.length - oldLines.length)} 行，删除 ${Math.max(0, oldLines.length - newLines.length)} 行`,
-      '（文件较大，已省略逐行 Diff，请查看内容预览）',
+      `@@ -${first + 1},${oldEnd - first} +${first + 1},${newEnd - first} @@`,
+      ...changed.slice(0, maxLines),
+      ...(changed.length > maxLines ? ['...（Diff 已截断）'] : []),
     ].join('\n');
   }
 

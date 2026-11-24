@@ -1,7 +1,10 @@
 // AI Assistant V2 — GitHub 只读工具包（按需加载）
-import type { AgentTool, RepoContext, ToolRunResult, ToolRuntimeContext } from '../types';
+import type { WritePreview, WriteVerification, AgentTool, RepoContext, ToolRunResult, ToolRuntimeContext } from '../types';
 import { isTextFilePath } from '../attachments';
 import { fetchWithResilience } from '@/services/github/http';
+
+import { buildUnifiedDiff } from '../diff';
+import { applyEdits } from './githubEdit';
 
 const API = 'https://api.github.com';
 
@@ -23,7 +26,7 @@ async function githubFetch(
   ctx: ToolRuntimeContext,
   path: string,
   accept = 'application/vnd.github+json',
-  init: Pick<RequestInit, 'method' | 'body'> = {},
+  init: Pick<RequestInit, 'method' | 'body' | 'cache'> = {},
 ): Promise<unknown> {
   const res = await fetchWithResilience(`${API}${path}`, {
     ...init,
@@ -281,6 +284,173 @@ const repoInfo: AgentTool = {
   },
 };
 
+const FILE_WRITES = new Set(['github_write_file', 'github_edit_file', 'github_append_file']);
+
+function readGitHubState(ctx: ToolRuntimeContext, path: string) {
+  return githubFetch(ctx, path, 'application/vnd.github+json', { cache: 'no-store' });
+}
+
+async function readApprovalFile(ctx: ToolRuntimeContext, repo: string, path: string, ref: string) {
+  try {
+    const data = await readGitHubState(ctx, `/repos/${repo}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`) as {
+      content?: string; encoding?: string; sha?: string; type?: string;
+    };
+    if (data.type !== 'file' || data.encoding !== 'base64' || !data.sha || typeof data.content !== 'string') {
+      throw new Error(`无法为 ${path} 生成可核对的文本变更预览`);
+    }
+    return { sha: data.sha, content: decodeBase64Utf8(data.content) };
+  } catch (error) {
+    if ((error as { status?: number }).status === 404) return null;
+    throw error;
+  }
+}
+
+async function readBranchHead(ctx: ToolRuntimeContext, repo: string, branch: string): Promise<string> {
+  const ref = await readGitHubState(ctx, `/repos/${repo}/git/ref/heads/${encodePath(branch)}`) as {
+    object?: { sha?: string };
+  };
+  if (!ref.object?.sha) throw new Error(`无法确认分支 ${branch} 的版本`);
+  return ref.object.sha;
+}
+
+function requireApprovedVersion(actual: string, expected?: string): void {
+  if (expected !== undefined && actual !== expected) {
+    throw new Error('远端版本已变化，请刷新预览并重新批准');
+  }
+}
+
+async function blobObjectId(content: string): Promise<string> {
+  if (!globalThis.crypto?.subtle) return '';
+  const bytes = new TextEncoder().encode(content);
+  const header = new TextEncoder().encode(`blob ${bytes.length}\0`);
+  const object = new Uint8Array(header.length + bytes.length);
+  object.set(header);
+  object.set(bytes, header.length);
+  const digest = await crypto.subtle.digest('SHA-1', object);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** Verifies the intended remote state using GET only. Uncertain operations are never retried here. */
+export async function verifyGitHubWrite(check: WriteVerification, token: string, signal: AbortSignal): Promise<boolean> {
+  const ctx = { token, signal };
+  if (check.kind === 'files') {
+    for (const file of check.files) {
+      const actual = await readApprovalFile(ctx, check.repository, file.path, check.branch);
+      if (actual?.sha !== file.sha) return false;
+    }
+    return check.files.length > 0;
+  }
+  try {
+    if (check.kind === 'branch') {
+      return await readBranchHead(ctx, check.repository, check.branch) === check.sha;
+    }
+    if (check.kind === 'merge') {
+      const pr = await readGitHubState(ctx, `/repos/${check.repository}/pulls/${check.number}`) as {
+        merged?: boolean; head?: { sha?: string };
+      };
+      return pr.merged === true && pr.head?.sha === check.sha;
+    }
+    const owner = check.repository.split('/')[0];
+    const head = check.head.includes(':') ? check.head : `${owner}:${check.head}`;
+    const params = new URLSearchParams({ state: 'all', head, base: check.base, per_page: '30' });
+    const prs = await readGitHubState(ctx, `/repos/${check.repository}/pulls?${params}`) as Array<{
+      title?: string; head?: { sha?: string };
+    }>;
+    return prs.some(pr => pr.title === check.title && pr.head?.sha === check.sha);
+  } catch (error) {
+    if ((error as { status?: number }).status === 404) return false;
+    throw error;
+  }
+}
+
+export async function prepareGitHubWrite(tool: string, args: Record<string, unknown>, ctx: ToolRuntimeContext): Promise<WritePreview | undefined> {
+  if (!ctx.repo) return undefined;
+  const { owner, name, branch: defaultBranch } = repoParts(ctx.repo);
+  const repository = `${owner}/${name}`;
+  if (FILE_WRITES.has(tool)) {
+    const branch = normalizeBranch(String(args.branch || defaultBranch));
+    const path = String(args.path || '').replace(/^\/+/, '').trim();
+    if (!path || path.split('/').includes('..')) throw new Error('文件路径无效');
+    const remote = await readApprovalFile(ctx, repository, path, branch);
+    const previous = remote?.content ?? '';
+    let next = String(args.content ?? '');
+    if (tool === 'github_edit_file') {
+      if (!remote) throw new Error(`文件不存在：${path}`);
+      next = applyEdits(previous, Array.isArray(args.edits) ? args.edits : []);
+    } else if (tool === 'github_append_file') {
+      const separator = args.separator === undefined ? '\n' : String(args.separator);
+      next = previous + (separator && previous && !previous.endsWith(separator) ? separator : '') + next;
+    }
+    if (args.sha) requireApprovedVersion(remote?.sha || '', String(args.sha));
+    const sha = await blobObjectId(next);
+    return {
+      repository, branch, fileSha: remote?.sha ?? null,
+      changes: [{ path, diff: buildUnifiedDiff(previous, next, { maxLines: Infinity }) }],
+      verification: sha ? { kind: 'files', repository, branch, files: [{ path, sha }] } : undefined,
+    };
+  }
+  if (tool === 'github_write_files') {
+    const branch = normalizeBranch(String(args.branch || defaultBranch));
+    const baseBranch = normalizeBranch(String(args.base_branch || defaultBranch));
+    let headSha: string;
+    let createsBranch = false;
+    try {
+      headSha = await readBranchHead(ctx, repository, branch);
+    } catch (error) {
+      if ((error as { status?: number }).status !== 404) throw error;
+      headSha = await readBranchHead(ctx, repository, baseBranch);
+      createsBranch = true;
+    }
+    const files = Array.isArray(args.files) ? args.files : [];
+    if (!files.length || files.length > 20) throw new Error('一次应提交 1 到 20 个文件');
+    const changes: NonNullable<WritePreview['changes']> = [];
+    const expectedFiles: Array<{ path: string; sha: string }> = [];
+    for (const file of files) {
+      const path = String(file?.path || '').replace(/^\/+/, '').trim();
+      if (!path || path.split('/').includes('..')) throw new Error('文件路径无效');
+      const remote = await readApprovalFile(ctx, repository, path, headSha);
+      const next = String(file?.content ?? '');
+      changes.push({ path, diff: buildUnifiedDiff(remote?.content ?? '', next, { maxLines: Infinity }) });
+      expectedFiles.push({ path, sha: await blobObjectId(next) });
+    }
+    return {
+      repository, branch, baseBranch, headSha, createsBranch, changes,
+      verification: expectedFiles.every(file => file.sha)
+        ? { kind: 'files', repository, branch, files: expectedFiles }
+        : undefined,
+    };
+  }
+  if (tool === 'github_create_branch') {
+    const branch = normalizeBranch(String(args.branch || ''));
+    const baseBranch = normalizeBranch(String(args.base_branch || defaultBranch));
+    const baseSha = await readBranchHead(ctx, repository, baseBranch);
+    return { repository, branch, baseBranch, baseSha, verification: { kind: 'branch', repository, branch, sha: baseSha } };
+  }
+  if (tool === 'github_create_pull_request') {
+    const branch = normalizeBranch(String(args.head || ''));
+    const baseBranch = normalizeBranch(String(args.base || defaultBranch));
+    const [headOwner, headBranch] = branch.includes(':') ? branch.split(':', 2) : [owner, branch];
+    const headSha = await readBranchHead(ctx, `${encodeURIComponent(headOwner)}/${name}`, headBranch);
+    return {
+      repository, branch, baseBranch, headSha,
+      verification: { kind: 'pull', repository, head: branch, base: baseBranch, title: String(args.title || '').trim(), sha: headSha },
+    };
+  }
+  if (tool === 'github_merge_pull_request') {
+    const number = Number(args.number);
+    if (!Number.isSafeInteger(number) || number < 1) throw new Error('PR 编号无效');
+    const pr = await readGitHubState(ctx, `/repos/${repository}/pulls/${number}`) as {
+      head?: { sha?: string; ref?: string }; base?: { ref?: string }; title?: string;
+    };
+    if (!pr.head?.sha) throw new Error('无法确认 PR 的来源版本');
+    return {
+      repository, branch: pr.head.ref, baseBranch: pr.base?.ref, headSha: pr.head.sha, pullTitle: pr.title,
+      verification: { kind: 'merge', repository, number, sha: pr.head.sha },
+    };
+  }
+  return undefined;
+}
+
 const writeFile: AgentTool = {
   name: 'github_write_file',
   description: '创建或更新当前仓库中的一个文本文件。这是写操作，执行前必须经过用户确认。更新已有文件时会自动读取最新 SHA。',
@@ -298,14 +468,14 @@ const writeFile: AgentTool = {
   risk: 'write',
   async execute(args, ctx): Promise<ToolRunResult> {
     const { owner, name, branch: defaultBranch } = repoParts(ctx.repo);
-    const path = String(args.path || '').replace(/^\/+/, '');
+    const path = String(args.path || '').replace(/^\/+/, '').trim();
     const content = String(args.content ?? '');
     const message = String(args.message || '').trim() || `Update ${path}`;
-    const branch = String(args.branch || defaultBranch);
+    const branch = ctx.approvedWrite?.branch || String(args.branch || defaultBranch);
     if (!path) throw new Error('path 不能为空');
 
-    let sha = String(args.sha || '').trim();
-    if (!sha) {
+    let sha = ctx.approvedWrite ? ctx.approvedWrite.fileSha || '' : String(args.sha || '').trim();
+    if (!ctx.approvedWrite && !sha) {
       try {
         const existing = await githubFetch(
           ctx,
@@ -397,13 +567,16 @@ const writeFiles: AgentTool = {
         object?: { sha?: string };
       };
       headSha = String(ref.object?.sha || '');
+      if (ctx.approvedWrite?.createsBranch) throw new Error('目标分支已创建，请重新预览');
+      requireApprovedVersion(headSha, ctx.approvedWrite?.headSha);
     } catch (error) {
-      if (!String((error as Error).message || error).includes('HTTP 404')) throw error;
+      if ((error as { status?: number }).status !== 404 || (ctx.approvedWrite && !ctx.approvedWrite.createsBranch)) throw error;
       const baseRef = await githubFetch(ctx, `/repos/${owner}/${name}/git/ref/heads/${encodePath(baseBranch)}`) as {
         object?: { sha?: string };
       };
       const baseSha = String(baseRef.object?.sha || '');
       if (!baseSha) throw new Error(`无法读取基础分支：${baseBranch}`);
+      requireApprovedVersion(baseSha, ctx.approvedWrite?.headSha);
       const created = await githubFetch(ctx, `/repos/${owner}/${name}/git/refs`, 'application/vnd.github+json', {
         method: 'POST',
         body: JSON.stringify({ ref: `refs/heads/${targetBranch}`, sha: baseSha }),
@@ -411,6 +584,32 @@ const writeFiles: AgentTool = {
       headSha = String(created.object?.sha || baseSha);
     }
     if (!headSha) throw new Error(`无法读取分支：${targetBranch}`);
+
+    if (ctx.approvedWrite) {
+      const data = await githubFetch(ctx, '/graphql', 'application/vnd.github+json', {
+        method: 'POST',
+        body: JSON.stringify({
+          query: 'mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url } } }',
+          variables: {
+            input: {
+              branch: { repositoryNameWithOwner: `${owner}/${name}`, refName: targetBranch },
+              expectedHeadOid: headSha,
+              message: { headline: message.split('\n')[0], body: message.split('\n').slice(1).join('\n') || undefined },
+              fileChanges: { additions: files.map(file => ({ path: file.path, contents: base64EncodeUtf8(file.content) })) },
+            },
+          },
+        }),
+      }) as {
+        data?: { createCommitOnBranch?: { commit?: { oid?: string; url?: string } } };
+        errors?: Array<{ message?: string }>;
+      };
+      const commit = data.data?.createCommitOnBranch?.commit;
+      if (!commit?.oid) throw new Error(data.errors?.[0]?.message || '无法确认批量提交是否完成');
+      return {
+        ok: true,
+        content: [`已提交 ${files.length} 个文件`, `分支：${targetBranch}`, `提交：${commit.oid}`, `链接：${commit.url || '-'}`].join('\n'),
+      };
+    }
 
     const headCommit = await githubFetch(ctx, `/repos/${owner}/${name}/git/commits/${headSha}`) as {
       tree?: { sha?: string };
@@ -483,6 +682,7 @@ const createBranch: AgentTool = {
     };
     const sha = String(baseRef.object?.sha || '');
     if (!sha) throw new Error(`无法读取基础分支：${base}`);
+    requireApprovedVersion(sha, ctx.approvedWrite?.baseSha);
     await githubFetch(ctx, `/repos/${owner}/${name}/git/refs`, 'application/vnd.github+json', {
       method: 'POST',
       body: JSON.stringify({ ref: `refs/heads/${branch}`, sha }),
@@ -512,6 +712,10 @@ const createPullRequest: AgentTool = {
     const head = normalizeBranch(String(args.head || ''));
     const base = normalizeBranch(String(args.base || defaultBranch));
     if (!title) throw new Error('title 不能为空');
+    if (ctx.approvedWrite?.headSha) {
+      const [headOwner, headBranch] = head.includes(':') ? head.split(':', 2) : [owner, head];
+      requireApprovedVersion(await readBranchHead(ctx, `${encodeURIComponent(headOwner)}/${name}`, headBranch), ctx.approvedWrite.headSha);
+    }
     const pr = await githubFetch(ctx, `/repos/${owner}/${name}/pulls`, 'application/vnd.github+json', {
       method: 'POST',
       body: JSON.stringify({
@@ -550,10 +754,18 @@ const mergePullRequest: AgentTool = {
     const method = ['merge', 'squash', 'rebase'].includes(String(args.merge_method))
       ? String(args.merge_method)
       : 'squash';
+    if (ctx.approvedWrite) {
+      const current = await readGitHubState(ctx, `/repos/${owner}/${name}/pulls/${number}`) as {
+        base?: { ref?: string }; head?: { sha?: string };
+      };
+      requireApprovedVersion(current.head?.sha || '', ctx.approvedWrite.headSha);
+      requireApprovedVersion(current.base?.ref || '', ctx.approvedWrite.baseBranch);
+    }
     const data = await githubFetch(ctx, `/repos/${owner}/${name}/pulls/${number}/merge`, 'application/vnd.github+json', {
       method: 'PUT',
       body: JSON.stringify({
         merge_method: method,
+        ...(ctx.approvedWrite?.headSha ? { sha: ctx.approvedWrite.headSha } : {}),
         ...(args.commit_title ? { commit_title: String(args.commit_title) } : {}),
         ...(args.commit_message ? { commit_message: String(args.commit_message) } : {}),
       }),

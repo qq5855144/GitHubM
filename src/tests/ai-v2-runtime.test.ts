@@ -121,9 +121,9 @@ describe('AI V2 memory and context', () => {
   });
 
   it('persists runtime settings', () => {
-    saveV2Settings({ allowAllPermissions: true, contextBudget: 64000, memoryEnabled: false });
+    saveV2Settings({ contextBudget: 64000, memoryEnabled: false });
     const loaded = loadV2Settings();
-    expect(loaded.allowAllPermissions).toBe(true);
+    expect(loaded).not.toHaveProperty('allowAllPermissions');
     expect(loaded.contextBudget).toBe(64000);
     expect(loaded.memoryEnabled).toBe(false);
   });

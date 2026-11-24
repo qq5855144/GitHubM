@@ -45,7 +45,7 @@ describe('AI memory budget', () => {
       }
     });
 
-    it('drops images and clamps long text', () => {
+    it('retains images and clamps long text', () => {
       const compact = compactSnapshotMessages([
         { role: 'system', content: 'sys' },
         {
@@ -59,8 +59,7 @@ describe('AI memory budget', () => {
       const content = compact[1].content;
       expect(Array.isArray(content)).toBe(true);
       const parts = content as Array<{ type: string; text?: string }>;
-      expect(parts[1].type).toBe('text');
-      expect(parts[1].text).toBe('[图片附件已省略]');
+      expect(parts[1]).toEqual({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,AAAA' } });
       expect(parts[0].text?.length).toBe(4000);
     });
 

@@ -198,7 +198,7 @@ export function buildAgentContext(params: {
   let used = 0;
   for (let i = params.history.length - 1; i >= 0; i--) {
     const item = params.history[i];
-    const cost = estimateTokens(item.content);
+    const cost = messageTokens(item);
     if (selected.length > 0 && used + cost > historyBudget) break;
     selected.unshift(item);
     used += cost;

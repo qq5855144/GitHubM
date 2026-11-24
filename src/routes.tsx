@@ -76,6 +76,12 @@ export function routeName(route: RouteConfig): string {
   return i18n.t(route.nameKey);
 }
 
+export const ASSISTANT_PATH = '/ai-assistant';
+
+export function assistantPage(visible: boolean) {
+  return page(<AiAssistantV2Page visible={visible} />);
+}
+
 export const routes: RouteConfig[] = [
   // 公开路由
   { nameKey: '登录', path: '/login', element: page(<LoginPage />), public: true },
@@ -131,7 +137,7 @@ export const routes: RouteConfig[] = [
   { nameKey: '仓库收藏者', path: '/repos/:owner/:repo/stargazers', element: page(<StargazersPage />) },
   { nameKey: '设置', path: '/settings', element: page(<SettingsPage />) },
   { nameKey: 'GraphQL Playground', path: '/graphql-playground', element: page(<GraphQLPlaygroundPage />) },
-  { nameKey: 'AI 助手', path: '/ai-assistant', element: page(<AiAssistantV2Page />) },
+  { nameKey: 'AI 助手', path: ASSISTANT_PATH, element: null },
   { nameKey: 'AI 助手', path: '/ai-assistant-v1', element: <Navigate to="/ai-assistant" replace />, visible: false },
   { nameKey: 'AI 设置', path: '/ai-settings', element: page(<AiSettingsPage />) },
   { nameKey: 'AI 设置', path: '/ai-settings/:section', element: page(<AiSettingsPage />) },

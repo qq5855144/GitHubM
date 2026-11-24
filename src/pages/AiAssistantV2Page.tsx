@@ -1,17 +1,17 @@
+import { flushSync } from 'react-dom';
 // AI Assistant V2 — 通用聊天优先，仓库可选，Operit 风格对话流
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { runGeneralAgent, toAgentHistory, toolCallLabel } from '@/ai-v2/agent';
-import type { AgentEvent, ApprovalRequest, ArtifactMeta, RepoContext, UiAssistantBlock, UiChatMessage, UiToolRun, V2ProviderMessage } from '@/ai-v2/types';
+import { runGeneralAgent, toAgentHistory } from '@/ai-v2/agent';
+import { verifyGitHubWrite } from '@/ai-v2/tools/github';
+import type { AgentCheckpoint, AgentEvent, ApprovalRequest, ArtifactMeta, RepoContext, UiChatMessage, UiToolRun } from '@/ai-v2/types';
 import { readArtifact } from '@/ai-v2/artifacts';
-import { appendRunEvent, clearRunSnapshot, clearRunSnapshots, finishRun, latestRunSnapshot, resumeRun, saveRunSnapshot, startRun } from '@/ai-v2/runStore';
+import { appendRunEvent, clearRunSnapshot, clearRunSnapshots, finishRun, latestRunSnapshot, resumeRun, runBinding, saveRunSnapshot, startRun } from '@/ai-v2/runStore';
 import type { RunSnapshot } from '@/ai-v2/runStore';
 import { loadV2Settings } from '@/ai-v2/settings';
-import { buildUnifiedDiff } from '@/ai-v2/diff';
 import { applyUnifiedDiff, diffStats } from '@/ai-v2/patch';
 import {
-  buildModelUserContent,
   buildModelUserParts,
   filterRepoFiles,
   formatFileSize,
@@ -31,12 +31,13 @@ import {
   deleteSessionMessages,
   loadSessionIndex,
   loadSessionMessages,
+  queueSessionWrite,
   saveSessionIndex,
   saveSessionMessages,
   toSessionMeta,
 } from '@/ai-v2/sessionStore';
 import type { SessionIndex, V2Session } from '@/ai-v2/sessionStore';
-import { appendBlockDelta, appendToolBlock, buildRenderGroups, ensureBlocks } from '@/ai-v2/blocks';
+import { appendBlockDelta, appendToolBlock, ensureBlocks } from '@/ai-v2/blocks';
 import AiExecutionPanel from '@/components/ai/AiExecutionPanel';
 import { ConversationTurnView, buildTurns } from '@/components/ai/ChatTurn';
 import type { ConversationTurn } from '@/components/ai/ChatTurn';
@@ -51,7 +52,6 @@ import {
   loadModelConfig,
   loadProviderKey,
   modelDisplayName,
-  renderMarkdown,
 } from '@/components/ai/aiUtils';
 import { getDefaultProviderModel } from '@/components/ai/aiProviders';
 import type { ModelType } from '@/components/ai/aiTypes';
@@ -111,9 +111,6 @@ import {
 } from 'lucide-react';
 
 const LEGACY_PREFIX = 'githubm_ai_v2_session:';
-const MAX_SESSIONS = 20;
-const MAX_SAVED_MESSAGES = 40;
-const MAX_TOOL_RESULT = 4000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 /** 流式增量合并窗口（毫秒）：只做渲染合批，不做速度限制 */
 const STREAM_FLUSH_MS = 24;
@@ -129,6 +126,7 @@ function readFileAsDataUrl(blob: Blob): Promise<string> {
 
 const CLOUDFLARE_FALLBACK_CONFIG: ModelConfig = {
   type: 'cloudflare',
+  supportsTools: false,
   api_key: 'cloudflare-free',
   model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
 };
@@ -180,45 +178,37 @@ function migrateLegacyRoundLimit(messages: UiChatMessage[]): UiChatMessage[] {
           : tool)),
       };
     }
-    if (next.role !== 'assistant' || !next.content.includes('已达到最大工具轮数')) return next;
-    return {
-      ...next,
-      content: i18n.t('这条消息来自旧版 AI（v1.0.528 之前）。V2 已移除固定工具轮数限制，可以直接继续任务。'),
-      error: false,
-      streaming: false,
-    };
+    return next;
   });
 }
 
-function compactMessages(messages: UiChatMessage[]): UiChatMessage[] {
-  return messages.slice(-MAX_SAVED_MESSAGES).map(message => {
-    let attachmentBudget = 30_000;
-    const attachments = message.attachments?.map(attachment => {
-      const content = attachment.content.slice(0, Math.max(0, attachmentBudget));
-      attachmentBudget -= content.length;
-      return {
-        ...attachment,
-        content,
-        // 图片正文存 IndexedDB（imageBlobId），持久化时只保留缩略图
-        dataUrl: attachment.imageBlobId ? undefined : attachment.dataUrl,
-      };
-    });
-    return {
-      ...message,
-      content: message.content.slice(0, 20000),
-      modelContent: undefined,
-      attachments,
-      reasoning: message.reasoning?.slice(0, 8000),
-      blocks: message.blocks?.slice(-20).map(block => ({
-        ...block,
-        text: block.text ? block.text.slice(0, 12000) : undefined,
-      })),
-      tools: message.tools?.map(tool => ({
-        ...tool,
-        content: tool.content?.slice(0, MAX_TOOL_RESULT),
-      })),
-    };
-  });
+function messagesForStorage(messages: UiChatMessage[]): UiChatMessage[] {
+  return messages.map(message => ({
+    ...message,
+    modelContent: undefined,
+    attachments: message.attachments?.map(attachment => (
+      attachment.imageBlobId ? { ...attachment, dataUrl: undefined } : attachment
+    )),
+  }));
+}
+
+type AgentBridge = { startAgentTask?: (title: string) => void; stopAgentTask?: () => void };
+
+let androidTaskOwner: AbortController | undefined;
+
+function setAndroidTask(owner: AbortController, title?: string) {
+  const bridge = (window as Window & { AndroidBridge?: AgentBridge }).AndroidBridge;
+  try {
+    if (title) {
+      androidTaskOwner = owner;
+      bridge?.startAgentTask?.(title);
+    } else if (androidTaskOwner === owner) {
+      androidTaskOwner = undefined;
+      bridge?.stopAgentTask?.();
+    }
+  } catch (error) {
+    console.warn('Android AI task service unavailable', error);
+  }
 }
 
 function formatTime(iso: string): string {
@@ -413,7 +403,7 @@ function ModelPickerDialog({
               <div className="mb-1 flex items-center gap-1.5 px-1 text-[10px] text-muted-foreground">
                 <ModelAvatar modelDef={provider} size="sm" />
                 <span className="font-medium">{modelDisplayName(provider.label)}</span>
-                {!loadProviderKey(provider.type) && provider.type !== currentType && <span>· {i18n.t('未配置 Key')}</span>}
+                {provider.needKey && !loadProviderKey(provider.type) && provider.type !== currentType && <span>· {i18n.t('未配置 Key')}</span>}
               </div>
               <div className="space-y-1">
                 {(provider.models || []).map(model => {
@@ -938,7 +928,7 @@ function ContextContent({
   );
 }
 
-export default function AiAssistantV2Page() {
+export default function AiAssistantV2Page({ visible = true }: { visible?: boolean } = {}) {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<V2Session[]>([]);
@@ -952,9 +942,9 @@ export default function AiAssistantV2Page() {
   // Android 由原生把 WebView 缩短来避让键盘，这里只给 Web 端兜底，避免双倍补偿
   const keyboardInset = useKeyboardInset(!isAndroid);
   const [streaming, setStreaming] = useState(false);
-  const [modelConfig] = useState<ModelConfig>(() => loadModelConfig());
+  const [modelConfig, setModelConfig] = useState<ModelConfig>(loadModelConfig);
   const [character, setCharacter] = useState<CharacterCard>(() => loadActiveCharacter(user?.login));
-  const [v2Settings] = useState(() => loadV2Settings());
+  const [v2Settings, setV2Settings] = useState(() => loadV2Settings());
   const [repoDialogOpen, setRepoDialogOpen] = useState(false);
   const [branchDialogOpen, setBranchDialogOpen] = useState(false);
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
@@ -965,23 +955,28 @@ export default function AiAssistantV2Page() {
   const [artifactMeta, setArtifactMeta] = useState<ArtifactMeta | null>(null);
   const [artifactContent, setArtifactContent] = useState('');
   const [artifactDialogOpen, setArtifactDialogOpen] = useState(false);
-  const [approvalDiff, setApprovalDiff] = useState('');
-  const [approvalDiffLoading, setApprovalDiffLoading] = useState(false);
-  const [approvalRemoteMissing, setApprovalRemoteMissing] = useState(false);
+  const [checkingWrite, setCheckingWrite] = useState(false);
+  const verificationRef = useRef<AbortController | null>(null);
   const [resumableSnapshot, setResumableSnapshot] = useState<RunSnapshot | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<UiAttachment[]>([]);
   const [repoFileDialogOpen, setRepoFileDialogOpen] = useState(false);
   const [patchRequest, setPatchRequest] = useState<{ path: string; diff: string } | null>(null);
   const [storageError, setStorageError] = useState('');
-  const [sessionLoading, setSessionLoading] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const sessionLoadSequence = useRef(0);
+  const pendingSessionSaveRef = useRef<(() => void) | null>(null);
+  const sessionWritesRef = useRef(Promise.resolve());
+  const sessionWriteFailure = useRef('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadedSessionsRef = useRef<Set<string>>(new Set());
-  const dirtySessionsRef = useRef<Set<string>>(new Set());
+  const queuedMessagesRef = useRef(new Map<string, UiChatMessage[]>());
   const runCapabilitiesRef = useRef<string[]>([]);
   const runMetricsRef = useRef<{ runId: string; startedAt: number; firstTokenAt?: number } | null>(null);
   const pendingStreamRef = useRef<{ assistantId: string; content: string; reasoning: string } | null>(null);
   const streamFlushTimerRef = useRef<number | null>(null);
   const approvalResolverRef = useRef<((approved: boolean) => void) | null>(null);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const abortRef = useRef<AbortController | null>(null);
   const [viewportHeight, setViewportHeight] = useState(() => (
     typeof window === 'undefined' ? 800 : window.innerHeight
@@ -1037,22 +1032,32 @@ export default function AiAssistantV2Page() {
   );
   const sessionApiKey = (sessionType === modelConfig.type ? modelConfig.api_key : loadProviderKey(sessionType)) || '';
   const sessionEndpoint = sessionType === 'custom' ? customSettings.endpoint : undefined;
-  const effectiveConfig = useMemo<ModelConfig>(
-    () => ({ ...modelConfig, type: sessionType, model: sessionModel, api_key: sessionApiKey, endpoint: sessionEndpoint }),
-    [modelConfig, sessionType, sessionModel, sessionApiKey, sessionEndpoint],
-  );
+  const effectiveConfig = useMemo<ModelConfig>(() => {
+    const capabilities = getModelCapabilities(sessionType, sessionModel);
+    return {
+      ...modelConfig, type: sessionType, model: sessionModel, api_key: sessionApiKey, endpoint: sessionEndpoint,
+      stream: sessionType === 'custom' ? customSettings.stream : undefined,
+      supportsTools: sessionType === 'custom' ? customSettings.supportsTools ?? capabilities.supportsTools : capabilities.supportsTools,
+      supportsVision: sessionType === 'custom' ? customSettings.supportsVision ?? capabilities.supportsVision : capabilities.supportsVision,
+    };
+  }, [modelConfig, sessionType, sessionModel, sessionApiKey, sessionEndpoint, customSettings]);
   const pickerProviders = useMemo(() => MODEL_DEFS.map(provider => {
     if (provider.type !== 'custom' || !customSettings.endpoint?.trim()) return provider;
     const models = new Set([customModel]);
     if (sessionType === 'custom' && sessionModel) models.add(sessionModel);
     return { ...provider, models: [...models].map(value => ({ value, label: value })) };
   }), [customSettings.endpoint, customModel, sessionType, sessionModel]);
+  const binding = useMemo(() => runBinding(repoContext, effectiveConfig), [repoContext, effectiveConfig]);
   const modelDef = providerDef;
-  const hasModelKey = Boolean(effectiveConfig.api_key?.trim());
+  const hasModelKey = sessionType === 'custom' || Boolean(effectiveConfig.api_key?.trim());
   const needsCustomEndpoint = sessionType === 'custom' && !sessionEndpoint?.trim();
   const modelCapabilities = useMemo(
-    () => getModelCapabilities(effectiveConfig.type, sessionModel),
-    [effectiveConfig.type, sessionModel],
+    () => ({
+      ...getModelCapabilities(effectiveConfig.type, sessionModel),
+      supportsTools: effectiveConfig.supportsTools !== false,
+      supportsVision: effectiveConfig.supportsVision === true,
+    }),
+    [effectiveConfig, sessionModel],
   );
   const modelLabel = useMemo(() => {
     const option = modelDef.models?.find(item => item.value === sessionModel);
@@ -1060,18 +1065,23 @@ export default function AiAssistantV2Page() {
   }, [modelDef, sessionModel]);
 
   useEffect(() => {
+    if (!visible) return;
+    setModelConfig(loadModelConfig());
+    setV2Settings(loadV2Settings());
     setCharacter(loadActiveCharacter(user?.login));
-  }, [user?.login]);
+  }, [user?.login, visible]);
 
   useEffect(() => {
     hydratedRef.current = false;
+    setSessionLoading(Boolean(user?.login));
     loadedSessionsRef.current = new Set();
-    dirtySessionsRef.current = new Set();
+    queuedMessagesRef.current.clear();
     let cancelled = false;
     if (!user?.login) {
       setSessions([]);
       setActiveId('');
       hydratedRef.current = true;
+      setSessionLoading(false);
       return;
     }
     const login = user.login;
@@ -1089,9 +1099,14 @@ export default function AiAssistantV2Page() {
             migrated.repo = legacy.repo || null;
             migrated.title = deriveSessionTitle(legacyMessages);
             migrated.titleSource = 'auto';
-            await saveSessionMessages(login, migrated.id, compactMessages(legacyMessages));
-            loadedSessionsRef.current.add(migrated.id);
-            index = { sessions: [toSessionMeta(migrated)], activeId: migrated.id };
+            const saved = await saveSessionMessages(login, migrated.id, messagesForStorage(legacyMessages));
+            if (cancelled) return;
+            if (!saved.ok) throw new Error(saved.error);
+            const migratedIndex = { sessions: [toSessionMeta(migrated)], activeId: migrated.id };
+            const savedIndex = await saveSessionIndex(login, migratedIndex);
+            if (cancelled) return;
+            if (!savedIndex.ok) throw new Error(savedIndex.error);
+            index = migratedIndex;
             if (legacyKey) localStorage.removeItem(legacyKey);
           }
         } catch {
@@ -1108,66 +1123,79 @@ export default function AiAssistantV2Page() {
         ? index.activeId
         : metas[0].id;
       // 只有当前会话的消息进入内存，其余会话等待切换时再加载
-      setSessions(metas.map(meta => ({ ...meta, messages: [] })));
-      setActiveId(nextActive);
-      hydratedRef.current = true;
-
-      if (loadedSessionsRef.current.has(nextActive)) return;
       const loadedMessages = migrateLegacyRoundLimit(await loadSessionMessages(login, nextActive));
       if (cancelled) return;
       loadedSessionsRef.current.add(nextActive);
-      setSessions(prev => prev.map(session => session.id === nextActive
-        ? {
-            ...session,
-            messages: loadedMessages,
-            title: session.titleSource === 'manual' ? session.title : deriveSessionTitle(loadedMessages),
-          }
-        : session));
+      setSessions(metas.map(meta => ({
+        ...meta,
+        messages: meta.id === nextActive ? loadedMessages : [],
+      })));
+      setActiveId(nextActive);
+      hydratedRef.current = true;
+      setSessionLoading(false);
     })();
     return () => { cancelled = true; };
   }, [user?.login, legacyKey]);
-  useEffect(() => {
-    if (!hydratedRef.current || !user?.login) return;
+  useLayoutEffect(() => {
+    if (!hydratedRef.current || !user?.login || !activeId) return;
     const login = user.login;
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      const dirty = [...dirtySessionsRef.current];
-      dirtySessionsRef.current.clear();
-      const index: SessionIndex = {
-        sessions: sessions.slice(0, MAX_SESSIONS).map(session => toSessionMeta({ ...session, messages: [] })),
-        activeId,
-      };
-      void (async () => {
-        const indexResult = await saveSessionIndex(login, index);
-        let messagesOk = true;
-        let fallback = Boolean(indexResult.fallback);
-        for (const id of dirty) {
-          const session = sessions.find(item => item.id === id);
-          if (!session || !loadedSessionsRef.current.has(id)) continue;
-          const result = await saveSessionMessages(login, id, compactMessages(session.messages));
-          if (!result.ok) messagesOk = false;
-          if (result.fallback) fallback = true;
+    const flush = () => {
+      if (pendingSessionSaveRef.current !== flush) return;
+      pendingSessionSaveRef.current = null;
+      const changed = sessions.filter(session => loadedSessionsRef.current.has(session.id)
+        && queuedMessagesRef.current.get(session.id) !== session.messages);
+      for (const session of changed) queuedMessagesRef.current.set(session.id, session.messages);
+      const index = { sessions: sessions.map(toSessionMeta), activeId };
+      sessionWritesRef.current = queueSessionWrite(login, async () => {
+        let failure = '';
+        let fallback = false;
+        for (const session of changed) {
+          const result = await saveSessionMessages(login, session.id, messagesForStorage(session.messages));
+          if (!result.ok) {
+            failure = result.error || i18n.t('会话保存失败，可能存储空间不足');
+            if (queuedMessagesRef.current.get(session.id) === session.messages) {
+              queuedMessagesRef.current.delete(session.id);
+            }
+          }
+          fallback ||= Boolean(result.fallback);
         }
-        if (cancelled) return;
-        if (messagesOk) {
-          setStorageError(fallback ? i18n.t('存储受限，已使用兼容模式保存') : '');
-        } else {
-          setStorageError(indexResult.error || i18n.t('会话保存失败，可能存储空间不足'));
+        if (!failure) {
+          const result = await saveSessionIndex(login, index);
+          if (!result.ok) failure = result.error || i18n.t('会话保存失败，可能存储空间不足');
+          fallback ||= Boolean(result.fallback);
         }
-      })();
-    }, 400);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
+        sessionWriteFailure.current = failure;
+        setStorageError(failure || (fallback ? i18n.t('存储受限，已使用兼容模式保存') : ''));
+      });
     };
+    pendingSessionSaveRef.current = flush;
+    const timer = window.setTimeout(flush, 300);
+    return () => window.clearTimeout(timer);
   }, [sessions, activeId, user?.login]);
+
+  useLayoutEffect(() => {
+    const save = () => pendingSessionSaveRef.current?.();
+    const onVisibility = () => { if (document.visibilityState === 'hidden') save(); };
+    window.addEventListener('pagehide', save);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      save();
+      window.removeEventListener('pagehide', save);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
 
   useEffect(() => {
     if (!user?.login || !activeId) {
       setResumableSnapshot(null);
       return;
     }
-    void latestRunSnapshot(user.login, activeId).then(snapshot => setResumableSnapshot(snapshot));
+    let active = true;
+    setResumableSnapshot(null);
+    void latestRunSnapshot(user.login, activeId).then(snapshot => {
+      if (active) setResumableSnapshot(snapshot);
+    });
+    return () => { active = false; };
   }, [user?.login, activeId]);
 
   useEffect(() => {
@@ -1175,6 +1203,8 @@ export default function AiAssistantV2Page() {
       approvalResolverRef.current?.(false);
       approvalResolverRef.current = null;
       abortRef.current?.abort();
+      verificationRef.current?.abort();
+      if (abortRef.current) setAndroidTask(abortRef.current);
       if (streamFlushTimerRef.current !== null) window.clearTimeout(streamFlushTimerRef.current);
     };
   }, []);
@@ -1215,18 +1245,25 @@ export default function AiAssistantV2Page() {
     setShowScrollButton(!nearBottom);
   };
 
-  const requestApproval = useCallback((request: ApprovalRequest) => {
-    if (v2Settings.allowAllPermissions) return Promise.resolve(true);
-    return new Promise<boolean>(resolve => {
-      approvalResolverRef.current = resolve;
-      setApprovalRequest(request);
-    });
-  }, [v2Settings.allowAllPermissions]);
-
   const resolveApproval = useCallback((approved: boolean) => {
     approvalResolverRef.current?.(approved);
-    approvalResolverRef.current = null;
-    setApprovalRequest(null);
+  }, []);
+
+  const requestApproval = useCallback((request: ApprovalRequest, signal: AbortSignal) => {
+    if (signal.aborted) return Promise.resolve(false);
+    return new Promise<boolean>(resolve => {
+      const onAbort = () => finish(false);
+      const finish = (approved: boolean) => {
+        signal.removeEventListener('abort', onAbort);
+        approvalResolverRef.current = null;
+        setApprovalRequest(null);
+        resolve(approved);
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      approvalResolverRef.current = finish;
+      setApprovalRequest(request);
+      if (!visibleRef.current) toast.info(i18n.t('AI 助手正在等待写入确认'));
+    });
   }, []);
 
   const handleApplyDiff = useCallback((path: string, diff: string) => {
@@ -1248,54 +1285,6 @@ export default function AiAssistantV2Page() {
     setArtifactDialogOpen(true);
   }, [user?.login]);
 
-  useEffect(() => {
-    setApprovalDiff('');
-    setApprovalRemoteMissing(false);
-    if (!approvalRequest || approvalRequest.toolName !== 'github_write_file' || !repoContext || !token) {
-      setApprovalDiffLoading(false);
-      return;
-    }
-    const args = approvalRequest.arguments as Record<string, unknown>;
-    const path = String(args.path || '');
-    const branch = String(args.branch || repoContext.branch || repoContext.defaultBranch || 'main');
-    const nextContent = String(args.content || '');
-    if (!path) return;
-
-    let cancelled = false;
-    setApprovalDiffLoading(true);
-    const encodedPath = path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
-    fetch(`https://api.github.com/repos/${repoContext.fullName}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    }).then(async response => {
-      if (cancelled) return;
-      if (response.status === 404) {
-        setApprovalRemoteMissing(true);
-        setApprovalDiff(buildUnifiedDiff('', nextContent));
-        return;
-      }
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json() as { content?: string; encoding?: string };
-      if (!data.content || data.encoding !== 'base64') throw new Error('无法读取远端文件');
-      const binary = atob(data.content.replace(/\s/g, ''));
-      const bytes = new Uint8Array(binary.length);
-      for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
-      const oldContent = new TextDecoder().decode(bytes);
-      setApprovalDiff(buildUnifiedDiff(oldContent, nextContent));
-    }).catch(error => {
-      if (!cancelled) setApprovalDiff(`无法生成 Diff：${(error as Error).message}`);
-    }).finally(() => {
-      if (!cancelled) setApprovalDiffLoading(false);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [approvalRequest, repoContext, token]);
-
   const updateActiveSession = useCallback((
     updater: (session: V2Session) => V2Session,
   ) => {
@@ -1305,7 +1294,6 @@ export default function AiAssistantV2Page() {
   const setMessages = useCallback((
     updater: UiChatMessage[] | ((previous: UiChatMessage[]) => UiChatMessage[]),
   ) => {
-    if (activeId) dirtySessionsRef.current.add(activeId);
     updateActiveSession(session => {
       const nextMessages = typeof updater === 'function' ? updater(session.messages) : updater;
       return {
@@ -1319,6 +1307,7 @@ export default function AiAssistantV2Page() {
   }, [updateActiveSession]);
 
   const setRepoContext = useCallback((repo: RepoContext | null) => {
+    if (abortRef.current) return;
     updateActiveSession(session => ({
       ...session,
       repo,
@@ -1457,8 +1446,7 @@ export default function AiAssistantV2Page() {
       case 'error':
         flushStreamDelta();
         patchAssistant(assistantId, {
-          content: event.message,
-          blocks: [{ id: makeId('blk'), type: 'text', text: event.message }],
+          errorDetail: event.message,
           streaming: false,
           error: true,
         });
@@ -1485,15 +1473,21 @@ export default function AiAssistantV2Page() {
     assistantId: string,
     sessionId: string,
     title: string,
-  ) => (snapshot: { messages: V2ProviderMessage[]; steps: number }) => {
-    if (!user?.login) return;
-    void saveRunSnapshot(user.login, {
+    binding: ReturnType<typeof runBinding>,
+  ) => async (snapshot: AgentCheckpoint) => {
+    if (!user?.login) return false;
+    if (!snapshot.toolCalls || snapshot.writeInFlight) {
+      pendingSessionSaveRef.current?.();
+      await sessionWritesRef.current;
+      if (sessionWriteFailure.current) return false;
+    }
+    return saveRunSnapshot(user.login, {
+      ...snapshot,
       runId,
       assistantId,
       sessionId,
       title,
-      messages: snapshot.messages,
-      steps: snapshot.steps,
+      binding,
       capabilities: runCapabilitiesRef.current,
       savedAt: new Date().toISOString(),
     });
@@ -1606,16 +1600,15 @@ export default function AiAssistantV2Page() {
   const handleSend = async (options?: { text?: string; attachments?: UiAttachment[]; editTargetId?: string }) => {
     const text = (options?.text ?? input).trim();
     const attachments = options ? (options.attachments ?? []) : pendingAttachments;
-    if ((!text && !attachments.length) || streaming) return;
+    if ((!text && !attachments.length) || abortRef.current || sessionLoading || !activeSession || !hydratedRef.current) return;
+    if (resumableSnapshot?.sessionId === activeId && resumableSnapshot.writeInFlight) {
+      toast.warning(i18n.t('请先核对上次仓库写入的结果'));
+      return;
+    }
     if (attachments.some(item => item.kind === 'image') && !modelCapabilities.supportsVision) {
       toast.error(i18n.t('当前模型不支持图片，请切换到视觉模型'));
       return;
     }
-    const userText = text || i18n.t('请查看附件');
-    // 图片正文存放在 IndexedDB，发送前再回填成 dataUrl
-    const hydratedAttachments = await hydrateAttachmentImages(attachments);
-    const modelContent = buildModelUserParts(userText, hydratedAttachments);
-    const displayText = text || `${i18n.t('请查看附件')}：${attachments.map(item => item.path || item.name).join('、')}`;
     if (!token) {
       toast.error(i18n.t('登录状态已失效，请重新登录'));
       return;
@@ -1626,154 +1619,168 @@ export default function AiAssistantV2Page() {
       return;
     }
 
-    const now = new Date().toISOString();
-    const userMessage: UiChatMessage = {
-      id: `u-${Date.now()}`,
-      role: 'user',
-      content: displayText,
-      modelContent,
-      attachments: attachments.length ? attachments : undefined,
-      createdAt: now,
-    };
-    const assistantId = `a-${Date.now()}`;
-    const assistantMessage: UiChatMessage = {
-      id: assistantId,
-      role: 'assistant',
-      content: '',
-      reasoning: '',
-      tools: [],
-      blocks: [],
-      streaming: true,
-      metrics: { model: effectiveConfig.model },
-      createdAt: now,
-    };
-
-    const targetId = options?.editTargetId ?? editTargetId ?? undefined;
-    const targetIndex = targetId ? messages.findIndex(message => message.id === targetId) : -1;
-    const baseMessages = targetIndex >= 0 ? messages.slice(0, targetIndex) : messages;
-    const historyMessages = await hydrateMessageImages(baseMessages);
-    const previousHistory = toAgentHistory(historyMessages.map(message => ({
-      role: message.role,
-      content: message.content,
-      modelContent: message.modelContent,
-      attachments: message.attachments,
-    })));
-    const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    runCapabilitiesRef.current = [];
-    startRun({
-      login: user?.login,
-      id: runId,
-      sessionId: activeSession?.id,
-      title: text || `${i18n.t('附件')} ${attachments[0]?.name || ''}`,
-    });
-    setMessages([...baseMessages, userMessage, assistantMessage]);
-    setInput('');
-    setPendingAttachments([]);
-    setEditTargetId(null);
-    setStreaming(true);
-    stickToBottomRef.current = true;
-
     const controller = new AbortController();
     abortRef.current = controller;
-    runMetricsRef.current = { runId, startedAt: Date.now() };
-
-    const onEvent = (event: AgentEvent) => handleAgentEvent(assistantId, runId, event);
-
-    const history = previousHistory;
-    let runStatus: 'done' | 'error' | 'stopped' = 'done';
-    let runError: string | undefined;
-
+    setStreaming(true);
+    setResumableSnapshot(null);
     try {
-      await runGeneralAgent({
-        token,
-        userLogin: user?.login,
-        runId,
-        repo: repoContext || undefined,
-        config: effectiveConfig,
-        history,
-        currentUserContent: modelContent,
-        currentUserText: userText,
-        contextBudget: Math.min(v2Settings.contextBudget, modelCapabilities.contextWindow),
-        memoryEnabled: v2Settings.memoryEnabled,
-        persona: character.prompt,
-        signal: controller.signal,
-        requestApproval,
-        onSnapshot: persistRunSnapshot(runId, assistantId, activeSession?.id || '', text),
-        onEvent,
-      });
-    } catch (error) {
-      if ((error as Error)?.name === 'AbortError') {
-        runStatus = 'stopped';
-        patchAssistant(assistantId, { streaming: false });
-      } else {
-        let message = (error as Error)?.message || String(error);
+      const userText = text || i18n.t('请查看附件');
+      const hydratedAttachments = await hydrateAttachmentImages(attachments);
+      const modelContent = buildModelUserParts(userText, hydratedAttachments);
+      const displayText = text || `${i18n.t('请查看附件')}：${attachments.map(item => item.path || item.name).join('、')}`;
+      if (controller.signal.aborted) return;
+      const now = new Date().toISOString();
+      const userMessage: UiChatMessage = {
+        id: makeId('user'),
+        role: 'user',
+        content: displayText,
+        modelContent,
+        attachments: attachments.length ? attachments : undefined,
+        createdAt: now,
+      };
+      const assistantId = makeId('assistant');
+      const assistantMessage: UiChatMessage = {
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+        reasoning: '',
+        tools: [],
+        blocks: [],
+        streaming: true,
+        metrics: { model: effectiveConfig.model },
+        createdAt: now,
+      };
 
-        // OpenRouter 免费额度用尽：无仓库上下文时自动切到 Cloudflare Workers AI 免费额度。
-        const fallbackProxy = modelConfig.proxy_url?.trim().replace(/\/+$/, '') || '';
-        if (isOpenRouterDailyLimit(message) && effectiveConfig.type === 'openrouter' && !repoContext && fallbackProxy) {
-          toast.info(i18n.t('OpenRouter 免费额度已用尽，正在切换 Cloudflare AI 重试'));
-          patchAssistant(assistantId, {
-            content: `> ${i18n.t('OpenRouter 免费额度已用尽，已切换到 Cloudflare AI 重试。')}\n\n`,
-            reasoning: '',
-            tools: [],
-            blocks: [],
-            streaming: true,
-            error: false,
-          });
-          try {
-            await runGeneralAgent({
-              token,
-              userLogin: user?.login,
-              runId,
-              config: { ...CLOUDFLARE_FALLBACK_CONFIG, proxy_url: fallbackProxy },
-              history,
-              currentUserContent: modelContent,
-              currentUserText: userText,
-              contextBudget: Math.min(v2Settings.contextBudget, modelCapabilities.contextWindow),
-              memoryEnabled: v2Settings.memoryEnabled,
-              persona: character.prompt,
-              signal: controller.signal,
-              requestApproval,
-              onSnapshot: persistRunSnapshot(runId, assistantId, activeSession?.id || '', text),
-              onEvent,
+      const targetId = options?.editTargetId ?? editTargetId ?? undefined;
+      const targetIndex = targetId ? messages.findIndex(message => message.id === targetId) : -1;
+      const baseMessages = targetIndex >= 0 ? messages.slice(0, targetIndex) : messages;
+      const historyMessages = await hydrateMessageImages(baseMessages.slice(-20));
+      if (controller.signal.aborted) return;
+      const previousHistory = toAgentHistory(historyMessages.map(message => ({
+        role: message.role,
+        content: message.content,
+        modelContent: message.modelContent,
+        attachments: message.attachments,
+      })));
+      const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      runCapabilitiesRef.current = [];
+      startRun({
+        login: user?.login,
+        id: runId,
+        sessionId: activeSession?.id,
+        title: text || `${i18n.t('附件')} ${attachments[0]?.name || ''}`,
+      });
+      flushSync(() => {
+        setMessages([...baseMessages, userMessage, assistantMessage]);
+        setInput('');
+        setPendingAttachments([]);
+        setEditTargetId(null);
+      });
+      stickToBottomRef.current = true;
+      setAndroidTask(controller, i18n.t('AI 助手正在执行任务'));
+      runMetricsRef.current = { runId, startedAt: Date.now() };
+
+      const onEvent = (event: AgentEvent) => handleAgentEvent(assistantId, runId, event);
+
+      const history = previousHistory;
+      let runStatus: 'done' | 'error' | 'stopped' = 'done';
+      let runError: string | undefined;
+
+      try {
+        await runGeneralAgent({
+          token,
+          userLogin: user?.login,
+          runId,
+          repo: repoContext || undefined,
+          config: effectiveConfig,
+          history,
+          currentUserContent: modelContent,
+          currentUserText: userText,
+          contextBudget: Math.min(v2Settings.contextBudget, modelCapabilities.contextWindow),
+          memoryEnabled: v2Settings.memoryEnabled,
+          persona: character.prompt,
+          signal: controller.signal,
+          requestApproval,
+          onSnapshot: persistRunSnapshot(runId, assistantId, activeSession.id, text, binding),
+          onEvent,
+        });
+      } catch (error) {
+        if ((error as Error)?.name === 'AbortError') {
+          runStatus = 'stopped';
+          patchAssistant(assistantId, { streaming: false });
+        } else {
+          let message = (error as Error)?.message || String(error);
+
+          // OpenRouter 免费额度用尽：无仓库上下文时自动切到 Cloudflare Workers AI 免费额度。
+          const fallbackProxy = modelConfig.proxy_url?.trim().replace(/\/+$/, '') || '';
+          if (!controller.signal.aborted && isOpenRouterDailyLimit(message) && effectiveConfig.type === 'openrouter' && !repoContext && fallbackProxy) {
+            toast.info(i18n.t('OpenRouter 免费额度已用尽，正在切换 Cloudflare AI 重试'));
+            patchAssistant(assistantId, {
+              content: `> ${i18n.t('OpenRouter 免费额度已用尽，已切换到 Cloudflare AI 重试。')}\n\n`,
+              reasoning: '',
+              tools: [],
+              blocks: [],
+              streaming: true,
+              error: false,
             });
-            message = '';
-          } catch (fallbackError) {
-            if ((fallbackError as Error)?.name === 'AbortError') {
-              runStatus = 'stopped';
-              patchAssistant(assistantId, { streaming: false });
+            try {
+              await runGeneralAgent({
+                token,
+                userLogin: user?.login,
+                runId,
+                config: { ...CLOUDFLARE_FALLBACK_CONFIG, proxy_url: fallbackProxy },
+                history,
+                currentUserContent: modelContent,
+                currentUserText: userText,
+                contextBudget: Math.min(v2Settings.contextBudget, modelCapabilities.contextWindow),
+                memoryEnabled: v2Settings.memoryEnabled,
+                persona: character.prompt,
+                signal: controller.signal,
+                requestApproval,
+                onEvent,
+              });
               message = '';
-            } else {
-              runStatus = 'error';
-              const fallbackMessage = (fallbackError as Error)?.message || String(fallbackError);
-              message = `${message}\n\nCloudflare AI 兜底也失败：${fallbackMessage}`;
+            } catch (fallbackError) {
+              if ((fallbackError as Error)?.name === 'AbortError') {
+                runStatus = 'stopped';
+                patchAssistant(assistantId, { streaming: false });
+                message = '';
+              } else {
+                runStatus = 'error';
+                const fallbackMessage = (fallbackError as Error)?.message || String(fallbackError);
+                message = `${message}\n\nCloudflare AI 兜底也失败：${fallbackMessage}`;
+              }
             }
           }
-        }
 
-        if (message) {
-          runStatus = runStatus === 'stopped' ? 'stopped' : 'error';
-          runError = message;
-          const failureText = `${i18n.t('请求失败：')}${friendlyModelError(message)}`;
-          patchAssistant(assistantId, {
-            content: failureText,
-            blocks: [{ id: makeId('blk'), type: 'text', text: failureText }],
-            streaming: false,
-            error: true,
-          });
-          toast.error(friendlyModelError(message).slice(0, 160));
+          if (message) {
+            runStatus = runStatus === 'stopped' ? 'stopped' : 'error';
+            runError = message;
+            const failureText = `${i18n.t('请求失败：')}${friendlyModelError(message)}`;
+            patchAssistant(assistantId, {
+              errorDetail: failureText,
+              streaming: false,
+              error: true,
+            });
+            toast.error(friendlyModelError(message).slice(0, 160));
+          }
         }
+      } finally {
+        flushStreamDelta();
+        settleRunningTools(assistantId);
+        finishRun(user?.login, runId, runStatus, runError);
+        if (runStatus !== 'done' && user?.login) {
+          void latestRunSnapshot(user.login, activeSession?.id).then(snapshot => setResumableSnapshot(snapshot));
+        }
+        pendingSessionSaveRef.current?.();
+        scrollToBottom(true);
       }
+    } catch (error) {
+      if (!controller.signal.aborted) toast.error((error as Error).message);
     } finally {
-      flushStreamDelta();
-      settleRunningTools(assistantId);
-      finishRun(user?.login, runId, runStatus, runError);
-      if (runStatus !== 'done' && user?.login) {
-        void latestRunSnapshot(user.login, activeSession?.id).then(snapshot => setResumableSnapshot(snapshot));
-      }
       setStreaming(false);
       abortRef.current = null;
-      scrollToBottom(true);
+      setAndroidTask(controller);
     }
   };
 
@@ -1791,27 +1798,68 @@ export default function AiAssistantV2Page() {
       editTargetId: userMessage.id,
     });
   };
+  const handleVerifyWrite = async () => {
+    const snapshot = resumableSnapshot;
+    const pending = snapshot?.pendingWrite;
+    if (!snapshot || !pending?.verification || !token || !user?.login || verificationRef.current
+      || snapshot.sessionId !== activeId) return;
+    const controller = new AbortController();
+    verificationRef.current = controller;
+    setCheckingWrite(true);
+    try {
+      if (!await verifyGitHubWrite(pending.verification, token, controller.signal)) {
+        toast.warning(i18n.t('远端状态尚未匹配，任务仍暂停'));
+        return;
+      }
+      if (controller.signal.aborted) return;
+      const resultText = '已在 GitHub 核对目标状态；该写入不再执行。';
+      const verified: RunSnapshot = {
+        ...snapshot,
+        writeInFlight: false,
+        pendingWrite: undefined,
+        completedWrites: [...(snapshot.completedWrites || []), pending.id],
+        messages: snapshot.messages.map(message => message.tool_call_id === pending.callId
+          ? { ...message, content: resultText }
+          : message),
+      };
+      if (!await saveRunSnapshot(user.login, verified)) throw new Error('无法保存核对结果');
+      if (snapshot.assistantId) patchTool(snapshot.assistantId, pending.callId, {
+        status: 'done', content: resultText, endedAt: Date.now(),
+      });
+      setResumableSnapshot(current => current?.runId === snapshot.runId ? verified : current);
+      toast.success(i18n.t('已核对远端写入结果'));
+    } catch (error) {
+      if (!controller.signal.aborted) toast.error((error as Error).message);
+    } finally {
+      verificationRef.current = null;
+      setCheckingWrite(false);
+    }
+  };
+
   const handleResume = async () => {
     const snapshot = resumableSnapshot;
-    if (!snapshot || streaming || !token) return;
+    if (!snapshot || abortRef.current || sessionLoading || !token || !user?.login || snapshot.sessionId !== activeId) return;
+    if (!snapshot.binding || snapshot.writeInFlight || JSON.stringify(snapshot.binding) !== JSON.stringify(binding)) {
+      toast.warning(i18n.t('恢复任务需保持原仓库、分支和模型。存在未确认写入时，请先在 GitHub 核对结果。'));
+      return;
+    }
     const assistantId = snapshot.assistantId;
     const assistantExists = assistantId && messages.some(message => message.id === assistantId);
     if (!assistantId || !assistantExists) {
-      if (user?.login) void clearRunSnapshot(user.login, snapshot.runId);
-      setResumableSnapshot(null);
       toast.error(i18n.t('原会话消息已不存在，无法继续'));
       return;
     }
 
     setResumableSnapshot(null);
     setStreaming(true);
-    patchAssistant(assistantId, { streaming: true, error: false, metrics: { model: effectiveConfig.model } });
+    patchAssistant(assistantId, { streaming: true, error: false, errorDetail: undefined, metrics: { model: effectiveConfig.model } });
     runCapabilitiesRef.current = snapshot.capabilities;
     runMetricsRef.current = { runId: snapshot.runId, startedAt: Date.now() };
     if (user?.login) resumeRun(user.login, snapshot.runId);
 
     const controller = new AbortController();
     abortRef.current = controller;
+    setAndroidTask(controller, i18n.t('AI 助手正在执行任务'));
     const onEvent = (event: AgentEvent) => handleAgentEvent(assistantId, snapshot.runId, event);
     let runStatus: 'done' | 'error' | 'stopped' = 'done';
     let runError: string | undefined;
@@ -1824,14 +1872,16 @@ export default function AiAssistantV2Page() {
         repo: repoContext || undefined,
         config: effectiveConfig,
         history: [],
-        resumeMessages: snapshot.messages as V2ProviderMessage[],
+        resumeMessages: snapshot.messages,
         resumeSteps: snapshot.steps,
+        resumeToolCalls: snapshot.toolCalls,
+        completedWrites: snapshot.completedWrites,
         contextBudget: Math.min(v2Settings.contextBudget, modelCapabilities.contextWindow),
         memoryEnabled: v2Settings.memoryEnabled,
         persona: character.prompt,
         signal: controller.signal,
         requestApproval,
-        onSnapshot: persistRunSnapshot(snapshot.runId, assistantId, snapshot.sessionId || activeSession?.id || '', snapshot.title),
+        onSnapshot: persistRunSnapshot(snapshot.runId, assistantId, activeId, snapshot.title, snapshot.binding),
         onEvent,
       });
     } catch (error) {
@@ -1844,8 +1894,7 @@ export default function AiAssistantV2Page() {
         runError = message;
         const failureText = `${i18n.t('恢复失败：')}${friendlyModelError(message)}`;
         patchAssistant(assistantId, {
-          content: failureText,
-          blocks: [{ id: makeId('blk'), type: 'text', text: failureText }],
+          errorDetail: failureText,
           streaming: false,
           error: true,
         });
@@ -1858,8 +1907,10 @@ export default function AiAssistantV2Page() {
       if (runStatus !== 'done' && user?.login) {
         void latestRunSnapshot(user.login, activeSession?.id).then(snapshot => setResumableSnapshot(snapshot));
       }
+      pendingSessionSaveRef.current?.();
       setStreaming(false);
       abortRef.current = null;
+      setAndroidTask(controller);
       scrollToBottom(true);
     }
   };
@@ -1875,11 +1926,10 @@ export default function AiAssistantV2Page() {
     approvalResolverRef.current = null;
     setApprovalRequest(null);
     abortRef.current?.abort();
-    setStreaming(false);
   };
 
   const handleNewSession = () => {
-    if (streaming) return;
+    if (streaming || sessionLoading) return;
     if (activeSession && loadedSessionsRef.current.has(activeSession.id) && activeSession.messages.length === 0) {
       setSessionDialogOpen(false);
       requestAnimationFrame(() => scrollToBottom(true));
@@ -1887,16 +1937,7 @@ export default function AiAssistantV2Page() {
     }
     const session = newSession();
     loadedSessionsRef.current.add(session.id);
-    dirtySessionsRef.current.add(session.id);
-    const merged = [session, ...sessions];
-    const overflow = merged.slice(MAX_SESSIONS);
-    if (user?.login) {
-      for (const droppedSession of overflow) {
-        loadedSessionsRef.current.delete(droppedSession.id);
-        void deleteSessionMessages(user.login, droppedSession.id);
-      }
-    }
-    setSessions(merged.slice(0, MAX_SESSIONS));
+    setSessions([session, ...sessions]);
     setActiveId(session.id);
     setInput('');
     setPendingAttachments([]);
@@ -1905,10 +1946,12 @@ export default function AiAssistantV2Page() {
   };
   const handleSelectSession = (id: string) => {
     if (streaming) return;
+    sessionLoadSequence.current++;
+    setSessionLoading(false);
     setSessionDialogOpen(false);
     setPendingAttachments([]);
     stickToBottomRef.current = true;
-    if (id === activeId) {
+    if (id === activeId && loadedSessionsRef.current.has(id)) {
       requestAnimationFrame(() => scrollToBottom(true));
       return;
     }
@@ -1919,8 +1962,10 @@ export default function AiAssistantV2Page() {
     }
     const login = user.login;
     setSessionLoading(true);
+    const sequence = ++sessionLoadSequence.current;
     void loadSessionMessages(login, id)
       .then(loaded => {
+        if (sessionLoadSequence.current !== sequence) return;
         loadedSessionsRef.current.add(id);
         const nextMessages = migrateLegacyRoundLimit(loaded);
         setSessions(prev => prev.map(session => session.id === id
@@ -1931,10 +1976,11 @@ export default function AiAssistantV2Page() {
             }
           : session));
       })
-      .finally(() => setSessionLoading(false));
+      .finally(() => { if (sessionLoadSequence.current === sequence) setSessionLoading(false); });
   };
 
   const handleSelectModel = (type: string, model: string) => {
+    if (abortRef.current || sessionLoading) return;
     updateActiveSession(session => ({
       ...session,
       modelType: type,
@@ -1964,9 +2010,12 @@ export default function AiAssistantV2Page() {
     });
     if (!confirmed) return;
     if (user?.login) void clearRunSnapshots(user.login, id);
-    if (user?.login) void deleteSessionMessages(user.login, id);
+    if (user?.login) {
+      const login = user.login;
+      sessionWritesRef.current = queueSessionWrite(login, () => deleteSessionMessages(login, id));
+    }
     loadedSessionsRef.current.delete(id);
-    dirtySessionsRef.current.delete(id);
+    queuedMessagesRef.current.delete(id);
     const remaining = sessions.filter(session => session.id !== id);
     if (remaining.length === 0) {
       const session = newSession();
@@ -2132,26 +2181,46 @@ export default function AiAssistantV2Page() {
             </button>
           </div>
         )}
-        {resumableSnapshot && !streaming && (
+        {resumableSnapshot && resumableSnapshot.sessionId === activeId && !streaming && (
           <div className="mx-2 mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs sm:mx-3">
             <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
             <span className="min-w-0 flex-1 truncate">
               {i18n.t('上次运行中断于第 {{step}} 步', { step: resumableSnapshot.steps })}：{resumableSnapshot.title}
             </span>
-            <Button type="button" size="sm" className="h-7 gap-1 px-2 text-[10px]" onClick={() => void handleResume()}>
-              {i18n.t('继续/重试')}
-            </Button>
+            {resumableSnapshot.binding && !resumableSnapshot.writeInFlight
+              && JSON.stringify(resumableSnapshot.binding) === JSON.stringify(binding) ? (
+                <Button type="button" size="sm" className="h-7 gap-1 px-2 text-[10px]" onClick={() => void handleResume()}>
+                  {i18n.t('继续/重试')}
+                </Button>
+              ) : (
+                <p className="text-[11px]">
+                  {resumableSnapshot.writeInFlight
+                    ? i18n.t('上次写入结果未确认，请在 GitHub 核对后再发起任务。')
+                    : i18n.t('此恢复点需使用原仓库、分支与模型。旧版恢复点请重新发起任务。')}
+                </p>
+              )}
+            {resumableSnapshot.writeInFlight && resumableSnapshot.pendingWrite?.verification && (
+              <Button type="button" size="sm" variant="outline" disabled={checkingWrite} onClick={() => void handleVerifyWrite()}>
+                {checkingWrite ? i18n.t('正在核对…') : i18n.t('核对 GitHub 状态')}
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-[10px] text-muted-foreground"
-              onClick={() => {
-                if (user?.login) void clearRunSnapshot(user.login, resumableSnapshot.runId);
-                setResumableSnapshot(null);
+              disabled={checkingWrite}
+              onClick={async () => {
+                if (resumableSnapshot.writeInFlight && !await confirmAction({
+                  title: i18n.t('放弃恢复这项写入？'),
+                  description: i18n.t('请先检查 GitHub 的实际结果。放弃只会移除本地恢复点。'),
+                  confirmText: i18n.t('放弃恢复'),
+                })) return;
+                if (user?.login) await clearRunSnapshot(user.login, resumableSnapshot.runId);
+                setResumableSnapshot(current => current?.runId === resumableSnapshot.runId ? null : current);
               }}
             >
-              {i18n.t('忽略')}
+              {resumableSnapshot.writeInFlight ? i18n.t('放弃恢复') : i18n.t('忽略')}
             </Button>
           </div>
         )}
@@ -2326,7 +2395,7 @@ export default function AiAssistantV2Page() {
                 }}
                 placeholder={i18n.t('输入消息… Enter 发送，Shift+Enter 换行')}
                 rows={1}
-                disabled={streaming}
+                disabled={streaming || sessionLoading}
                 className="max-h-44 min-h-[42px] resize-none border-0 bg-transparent px-2.5 py-2 text-sm shadow-none outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
               />
 
@@ -2361,6 +2430,7 @@ export default function AiAssistantV2Page() {
                 </Button>
                 <button
                   type="button"
+                  disabled={streaming || sessionLoading}
                   onClick={() => setModelDialogOpen(true)}
                   className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1.5 py-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
@@ -2373,7 +2443,7 @@ export default function AiAssistantV2Page() {
                   size="icon"
                   className="ml-auto h-9 w-9 shrink-0 rounded-full"
                   onClick={streaming ? handleStop : () => { void handleSend(); }}
-                  disabled={!streaming && ((!input.trim() && pendingAttachments.length === 0) || !token)}
+                  disabled={!streaming && (sessionLoading || (!input.trim() && pendingAttachments.length === 0) || !token)}
                   title={streaming ? i18n.t('停止生成') : i18n.t('发送')}
                 >
                   {streaming ? <Square className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
@@ -2402,7 +2472,7 @@ export default function AiAssistantV2Page() {
       </aside>
 
       <Dialog
-        open={Boolean(approvalRequest)}
+        open={visible && Boolean(approvalRequest)}
         onOpenChange={open => {
           if (!open) resolveApproval(false);
         }}
@@ -2416,12 +2486,10 @@ export default function AiAssistantV2Page() {
           </DialogHeader>
           {approvalRequest && (() => {
 const args = approvalRequest.arguments as Record<string, unknown>;
-             const content = String(args.content || '');
              const files = Array.isArray(args.files)
                ? args.files as Array<{ path?: unknown; content?: unknown }>
                : [];
-             const previewContent = content || String(files[0]?.content || '');
-             const isSingleWrite = approvalRequest.toolName === 'github_write_file';
+             const target = approvalRequest.target;
             return (
               <div className="space-y-3">
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-5 text-amber-700 dark:text-amber-300">
@@ -2430,6 +2498,17 @@ const args = approvalRequest.arguments as Record<string, unknown>;
                 <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3 text-xs">
                   <p className="flex items-center gap-1.5 font-mono font-medium"><Wrench className="h-3.5 w-3.5" />{approvalRequest.toolName}</p>
                   <p className="text-[11px] leading-5 text-muted-foreground">{approvalRequest.description}</p>
+                  {target && <>
+                    <p className="break-all font-mono">{target.repository}</p>
+                    {(target.branch || target.baseBranch) && (
+                      <p className="break-all">{[target.branch, target.baseBranch].filter(Boolean).join(' → ')}</p>
+                    )}
+                    {target.pullTitle && <p>{target.pullTitle}</p>}
+                    {target.createsBranch && <p>{i18n.t('新建分支')}</p>}
+                    {(target.fileSha || target.headSha || target.baseSha) && (
+                      <p className="break-all font-mono text-[10px]">{target.fileSha || target.headSha || target.baseSha}</p>
+                    )}
+                  </>}
 {args.path !== undefined && <p><span className="text-muted-foreground">{i18n.t('路径')}：</span><span className="font-mono">{String(args.path)}</span></p>}
                    {args.branch !== undefined && <p><span className="text-muted-foreground">{i18n.t('分支')}：</span><span className="font-mono">{String(args.branch)}</span></p>}
                    {args.base_branch !== undefined && <p><span className="text-muted-foreground">{i18n.t('基础分支')}：</span><span className="font-mono">{String(args.base_branch)}</span></p>}
@@ -2451,27 +2530,12 @@ const args = approvalRequest.arguments as Record<string, unknown>;
                        </div>
                      </div>
                    )}
-                   {isSingleWrite && (
-                     <div>
-                       <p className="mb-1 text-[10px] text-muted-foreground">
-                         {i18n.t('变更预览')} {approvalRemoteMissing && `· ${i18n.t('新建文件')}`}
-                       </p>
-                       {approvalDiffLoading ? (
-                         <div className="flex items-center gap-2 py-2 text-[11px] text-muted-foreground">
-                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                           {i18n.t('正在生成 Diff…')}
-                         </div>
-                       ) : (
-                         <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/70 p-2 font-mono text-[10px] leading-4">{approvalDiff || i18n.t('无法读取远端版本，仅显示新内容预览。')}</pre>
-                       )}
-                     </div>
-                   )}
-                   {previewContent && (
-                     <div>
-                       <p className="mb-1 text-[10px] text-muted-foreground">{files.length > 0 ? i18n.t('首个文件内容') : i18n.t('内容预览')} · {previewContent.length} {i18n.t('字符')}</p>
-                       <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-background/70 p-2 font-mono text-[10px]">{previewContent.slice(0, 2000)}</pre>
-                     </div>
-                   )}
+                  {target?.changes?.map(change => (
+                    <details key={change.path} open={target.changes?.length === 1}>
+                      <summary className="break-all font-mono">{change.path}</summary>
+                      <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/70 p-2 font-mono text-[10px]">{change.diff || i18n.t('无文本变更')}</pre>
+                    </details>
+                  ))}
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => resolveApproval(false)}>
@@ -2489,7 +2553,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
         </DialogContent>
       </Dialog>
 
-      <Dialog open={artifactDialogOpen} onOpenChange={setArtifactDialogOpen}>
+      <Dialog open={visible && artifactDialogOpen} onOpenChange={setArtifactDialogOpen}>
         <DialogContent className="max-h-[85dvh] max-w-[calc(100%-2rem)] overflow-y-auto p-4 md:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
@@ -2522,7 +2586,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
         </DialogContent>
       </Dialog>
 
-      <Dialog open={repoDialogOpen} onOpenChange={setRepoDialogOpen}>
+      <Dialog open={visible && repoDialogOpen} onOpenChange={setRepoDialogOpen}>
         <DialogContent className="max-h-[85dvh] max-w-[calc(100%-2rem)] overflow-y-auto p-4 md:max-w-xl">
           <DialogHeader>
             <DialogTitle className="text-base">{i18n.t('选择仓库')}</DialogTitle>
@@ -2535,7 +2599,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
       </Dialog>
 
       <ModelPickerDialog
-        open={modelDialogOpen}
+        open={visible && modelDialogOpen}
         onOpenChange={setModelDialogOpen}
         providers={pickerProviders}
         currentType={sessionType}
@@ -2549,7 +2613,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
       />
 
       <BranchPickerDialog
-        open={branchDialogOpen}
+        open={visible && branchDialogOpen}
         onOpenChange={setBranchDialogOpen}
         repo={repoContext}
         token={token || ''}
@@ -2561,7 +2625,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
       />
 
       <RepoFilePicker
-        open={repoFileDialogOpen}
+        open={visible && repoFileDialogOpen}
         onOpenChange={setRepoFileDialogOpen}
         repo={repoContext}
         token={token || ''}
@@ -2576,13 +2640,13 @@ const args = approvalRequest.arguments as Record<string, unknown>;
       />
 
       <ApplyPatchDialog
-        request={patchRequest}
+        request={visible ? patchRequest : null}
         repo={repoContext}
         token={token || ''}
         onClose={() => setPatchRequest(null)}
       />
 
-      <Sheet open={sessionDialogOpen} onOpenChange={setSessionDialogOpen}>
+      <Sheet open={visible && sessionDialogOpen} onOpenChange={setSessionDialogOpen}>
         <SheetContent side="left" className="flex w-[86vw] max-w-sm flex-col gap-0 p-0">
           <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border px-3 pr-14">
             <SheetTitle className="text-sm font-semibold">{i18n.t('对话历史')}</SheetTitle>
@@ -2604,7 +2668,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
         </SheetContent>
       </Sheet>
 
-      <Dialog open={contextDialogOpen} onOpenChange={setContextDialogOpen}>
+      <Dialog open={visible && contextDialogOpen} onOpenChange={setContextDialogOpen}>
         <DialogContent className="max-h-[85dvh] max-w-[calc(100%-2rem)] overflow-y-auto p-4 md:max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-base">{i18n.t('会话上下文')}</DialogTitle>

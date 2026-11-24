@@ -97,7 +97,7 @@ async function readRemoteFile(
     throw error;
   }
   if (data?.type === 'dir') throw new Error(`该路径是目录，不能写入文件：${path}`);
-  if (!data?.content || data.encoding !== 'base64') {
+  if (typeof data?.content !== 'string' || data.encoding !== 'base64' || !data.sha) {
     throw new Error(`无法读取 ${branch}/${path} 的文本内容（可能是二进制文件或超过 1 MB），请先用 github_read_file 确认`);
   }
   return { content: decodeBase64Utf8(data.content), sha: String(data.sha || '') };
@@ -150,7 +150,7 @@ function countOccurrences(text: string, needle: string): number {
   return count;
 }
 
-function applyEdits(text: string, edits: FileEdit[]): string {
+export function applyEdits(text: string, edits: FileEdit[]): string {
   let next = text;
   edits.forEach((edit, index) => {
     const label = `第 ${index + 1} 条替换`;
@@ -207,6 +207,9 @@ const editFile: AgentTool = {
     if (!rawEdits.length) throw new Error('edits 不能为空；新建或整篇重写请使用 github_write_file');
 
     const remote = await readRemoteFile(ctx, owner, name, path, branch);
+    if (ctx.approvedWrite && (remote?.sha ?? null) !== ctx.approvedWrite.fileSha) {
+      throw new Error('远端文件已变化，请重新预览并批准');
+    }
     if (!remote) {
       throw new Error(`文件不存在：${branch}/${path}。新建文件请使用 github_write_file，超大文件可用 github_append_file 分片写入`);
     }
@@ -261,6 +264,9 @@ const appendFile: AgentTool = {
     const separator = args.separator === undefined ? '\n' : String(args.separator);
 
     const remote = await readRemoteFile(ctx, owner, name, path, branch);
+    if (ctx.approvedWrite && (remote?.sha ?? null) !== ctx.approvedWrite.fileSha) {
+      throw new Error('远端文件已变化，请重新预览并批准');
+    }
     const base = remote?.content ?? '';
     const needsSeparator = separator.length > 0 && base.length > 0 && !base.endsWith(separator);
     const nextContent = `${base}${needsSeparator ? separator : ''}${piece}`;

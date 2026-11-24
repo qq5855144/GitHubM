@@ -1,5 +1,6 @@
+import type { ModelConfig } from '@/components/ai/aiTypes';
 // AI V2 — Run Store：持久化运行摘要，用于历史、诊断和后续恢复
-import type { AgentEvent, V2ProviderMessage } from './types';
+import type { AgentCheckpoint, AgentEvent, RepoContext, V2ProviderMessage } from './types';
 import { idbDelete, idbGet, idbKeys, idbSet } from './idbKv';
 
 export type RunStatus = 'running' | 'done' | 'error' | 'stopped';
@@ -50,7 +51,9 @@ export function listRuns(login?: string, limit = 20): RunRecord[] {
 }
 
 function writeRuns(login: string | undefined, runs: RunRecord[]): void {
-  localStorage.setItem(key(login), JSON.stringify(runs.slice(0, MAX_RUNS)));
+  try {
+    localStorage.setItem(key(login), JSON.stringify(runs.slice(0, MAX_RUNS)));
+  } catch { /* 运行摘要写入失败不影响任务快照。 */ }
 }
 
 export function startRun(params: {
@@ -167,13 +170,36 @@ export function finishRun(
   }
 }
 
-export interface RunSnapshot {
+export interface RunBinding {
+  repo: RepoContext | null;
+  provider: ModelConfig['type'];
+  model: string;
+  endpoint: string;
+  proxy: string;
+  tools: boolean;
+  stream: boolean;
+  vision: boolean;
+}
+
+export function runBinding(repo: RepoContext | null, config: ModelConfig): RunBinding {
+  return {
+    repo: repo ? { fullName: repo.fullName, defaultBranch: repo.defaultBranch, branch: repo.branch || repo.defaultBranch } : null,
+    provider: config.type,
+    model: config.model || '',
+    endpoint: config.endpoint?.trim() || '',
+    proxy: config.proxy_url?.trim() || '',
+    tools: config.supportsTools !== false,
+    stream: config.stream !== false,
+    vision: config.supportsVision === true,
+  };
+}
+
+export interface RunSnapshot extends AgentCheckpoint {
   runId: string;
   sessionId?: string;
   assistantId?: string;
   title: string;
-  messages: V2ProviderMessage[];
-  steps: number;
+  binding?: RunBinding;
   capabilities: string[];
   savedAt: string;
 }
@@ -185,7 +211,7 @@ const MAX_SNAPSHOT_MESSAGES = 24;
 const MAX_SNAPSHOT_TOOL_ROUNDS = 10;
 const MAX_SNAPSHOT_TOOL_CHARS = 1500;
 const MAX_SNAPSHOT_TEXT_CHARS = 4000;
-const snapshotWriteQueues = new Map<string, Promise<void>>();
+const snapshotWriteQueues = new Map<string, Promise<boolean>>();
 
 function clampContent(
   content: V2ProviderMessage['content'],
@@ -195,9 +221,7 @@ function clampContent(
     return content.length > maxChars ? content.slice(0, maxChars) : content;
   }
   if (Array.isArray(content)) {
-    return content.map(part => (part.type === 'image_url'
-      ? { type: 'text' as const, text: '[图片附件已省略]' }
-      : { ...part, text: part.text.slice(0, maxChars) }));
+    return content.map(part => part.type === 'image_url' ? part : { ...part, text: part.text.slice(0, maxChars) });
   }
   return content;
 }
@@ -206,10 +230,11 @@ function clampContent(
  * 快照只用于断点续跑：
  * - 只保留最近 24 条消息
  * - 只保留最近 10 轮工具调用，工具结果截断到 1500 字符
- * - 图片一律省略
+ * - 保留可见的图片和原任务系统消息
  */
 export function compactSnapshotMessages(messages: V2ProviderMessage[]): V2ProviderMessage[] {
-  const windowed = messages.slice(-MAX_SNAPSHOT_MESSAGES);
+  const system = messages.filter(item => item.role === 'system');
+  const windowed = messages.filter(item => item.role !== 'system').slice(-MAX_SNAPSHOT_MESSAGES);
   let start = 0;
   while (start < windowed.length && windowed[start].role === 'tool') start += 1;
   const trimmed = windowed.slice(start);
@@ -227,7 +252,7 @@ export function compactSnapshotMessages(messages: V2ProviderMessage[]): V2Provid
     for (const call of trimmed[index].tool_calls || []) keepCallIds.add(call.id);
   }
 
-  const result: V2ProviderMessage[] = [];
+  const result: V2ProviderMessage[] = [...system];
   trimmed.forEach((message, index) => {
     if (message.role === 'tool') {
       if (message.tool_call_id && !keepCallIds.has(message.tool_call_id)) return;
@@ -300,7 +325,7 @@ async function pruneSnapshots(login: string | undefined): Promise<void> {
   }
 }
 
-async function writeRunSnapshot(login: string | undefined, snapshot: RunSnapshot): Promise<void> {
+async function writeRunSnapshot(login: string | undefined, snapshot: RunSnapshot): Promise<boolean> {
   const compact: RunSnapshot = {
     ...snapshot,
     messages: compactSnapshotMessages(snapshot.messages),
@@ -311,15 +336,18 @@ async function writeRunSnapshot(login: string | undefined, snapshot: RunSnapshot
     try {
       localStorage.setItem(snapshotKey(login, compact.runId), JSON.stringify(compact));
     } catch {
-      return;
+      return false;
     }
+  } else {
+    try { localStorage.removeItem(snapshotKey(login, compact.runId)); } catch { /* ignore */ }
   }
-  await pruneSnapshots(login);
+  await pruneSnapshots(login).catch(() => {});
+  return true;
 }
 
-export function saveRunSnapshot(login: string | undefined, snapshot: RunSnapshot): Promise<void> {
+export function saveRunSnapshot(login: string | undefined, snapshot: RunSnapshot): Promise<boolean> {
   const key = idbSnapshotKey(login, snapshot.runId);
-  const previous = snapshotWriteQueues.get(key) || Promise.resolve();
+  const previous = snapshotWriteQueues.get(key) || Promise.resolve(true);
   const next = previous.catch(() => undefined).then(() => writeRunSnapshot(login, snapshot));
   snapshotWriteQueues.set(key, next);
   void next.then(
@@ -331,23 +359,24 @@ export function saveRunSnapshot(login: string | undefined, snapshot: RunSnapshot
 
 export async function loadRunSnapshot(login: string | undefined, runId: string): Promise<RunSnapshot | null> {
   const fromDb = await idbGet<RunSnapshot>(idbSnapshotKey(login, runId));
-  if (fromDb) return fromDb;
   try {
     const raw = localStorage.getItem(snapshotKey(login, runId));
-    return raw ? JSON.parse(raw) as RunSnapshot : null;
-  } catch {
-    return null;
-  }
+    const local = raw ? JSON.parse(raw) as RunSnapshot : null;
+    if (local && (!fromDb || Date.parse(local.savedAt) >= Date.parse(fromDb.savedAt))) return local;
+  } catch { /* ignore */ }
+  return fromDb;
 }
 
 export async function latestRunSnapshot(login: string | undefined, sessionId?: string): Promise<RunSnapshot | null> {
+  const finished = new Set(listRuns(login, MAX_RUNS).filter(item => item.status === 'done').map(item => item.id));
   const snapshots = (await listSnapshots(login))
-    .filter(item => !sessionId || item.sessionId === sessionId)
+    .filter(item => !finished.has(item.runId) && (!sessionId || item.sessionId === sessionId))
     .sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt));
   return snapshots[0] || null;
 }
 
 export async function clearRunSnapshot(login: string | undefined, runId: string): Promise<void> {
+  await snapshotWriteQueues.get(idbSnapshotKey(login, runId))?.catch(() => {});
   await idbDelete(idbSnapshotKey(login, runId));
   try {
     localStorage.removeItem(snapshotKey(login, runId));

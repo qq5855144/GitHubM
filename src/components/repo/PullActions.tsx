@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ExternalLink, GitMerge, MoreHorizontal, RefreshCw } from 'lucide-react';
+import { ExternalLink, FileText, GitMerge, MoreHorizontal, Pencil, RefreshCw, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -159,13 +159,34 @@ export function PullActions({ owner, repo, pr, repository, login, onUpdate }: {
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {canEdit && <DropdownMenuItem onSelect={() => openAction('edit')}>{actionLabels.edit.label}</DropdownMenuItem>}
-          {canEdit && isOpen && !pr.draft && pr.node_id && <DropdownMenuItem onSelect={() => openAction('draft')}>{actionLabels.draft.label}</DropdownMenuItem>}
-          {canEdit && isOpen && <DropdownMenuItem onSelect={() => openAction('close')} className="text-destructive">{actionLabels.close.label}</DropdownMenuItem>}
-          <DropdownMenuItem onSelect={refresh}><RefreshCw className="mr-2 h-3.5 w-3.5" />{i18n.t('刷新状态')}</DropdownMenuItem>
+        <DropdownMenuContent align="end" className="min-w-44">
+          {canEdit && (
+            <DropdownMenuItem onSelect={() => openAction('edit')}>
+              <Pencil aria-hidden="true" />
+              {actionLabels.edit.label}
+            </DropdownMenuItem>
+          )}
+          {canEdit && isOpen && !pr.draft && pr.node_id && (
+            <DropdownMenuItem onSelect={() => openAction('draft')}>
+              <FileText aria-hidden="true" />
+              {actionLabels.draft.label}
+            </DropdownMenuItem>
+          )}
+          {canEdit && isOpen && (
+            <DropdownMenuItem onSelect={() => openAction('close')} className="text-destructive">
+              <XCircle aria-hidden="true" />
+              {actionLabels.close.label}
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={refresh}>
+            <RefreshCw aria-hidden="true" />
+            {i18n.t('刷新状态')}
+          </DropdownMenuItem>
           <DropdownMenuItem asChild>
-            <a href={prUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-3.5 w-3.5" />{i18n.t('在 GitHub 中打开')}</a>
+            <a href={prUrl} target="_blank" rel="noopener noreferrer">
+              <ExternalLink aria-hidden="true" />
+              {i18n.t('在 GitHub 中打开')}
+            </a>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

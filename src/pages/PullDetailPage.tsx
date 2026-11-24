@@ -1,6 +1,6 @@
 // PR 详情页
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type KeyboardEvent } from 'react';
 import { Link, useLocation, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   GitPullRequest,
@@ -8,6 +8,7 @@ import {
   XCircle,
   MessageSquare,
   Send,
+  Edit2,
   ChevronRight,
   FileDiff,
   GitBranch,
@@ -48,6 +49,7 @@ import type {
 import MarkdownRenderer from '@/components/common/MarkdownRenderer';
 import { UserLink } from '@/components/common/UserLink';
 import { useAuth } from '@/contexts/AuthContext';
+import { useChatViewport } from '@/hooks/use-chat-viewport';
 import { PullActions } from '@/components/repo/PullActions';
 import { toast } from 'sonner';
 import i18n from "@/i18n";
@@ -109,6 +111,67 @@ function ReviewDecisionBanner({ decision }: { decision: GQL_ReviewDecision | nul
   return null;
 }
 
+function PullCommentComposer({ value, submitting, onChange, onSubmit }: {
+  value: string;
+  submitting: boolean;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  const native = Boolean((window as Window & { AndroidBridge?: unknown }).AndroidBridge);
+  const viewport = useChatViewport(!native);
+  const label = i18n.t('撰写评论（支持 Markdown）...');
+  const canSubmit = !submitting && !!value.trim();
+  let bottom: string | number = native ? 'env(safe-area-inset-bottom)' : 'calc(4rem + env(safe-area-inset-bottom))';
+  if (viewport?.keyboardOpen) {
+    const layoutHeight = Math.min(window.innerHeight, document.documentElement.clientHeight || window.innerHeight);
+    bottom = Math.max(0, layoutHeight - viewport.top - viewport.height);
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing || event.key !== 'Enter' || (!event.ctrlKey && !event.metaKey)) return;
+    event.preventDefault();
+    if (canSubmit) onSubmit();
+  };
+
+  return (
+    <>
+      {/* 为悬浮栏预留滚动空间，保证最后一条评论可见。 */}
+      <div className="h-36" aria-hidden="true" />
+      <form
+        aria-label={i18n.t('发布评论')}
+        aria-busy={submitting}
+        className={`fixed left-[var(--layout-sidebar-width,0px)] right-0 z-30 border-t border-border bg-background/95 px-4 py-2 backdrop-blur-md md:px-6 ${viewport?.keyboardOpen ? 'focus-within:z-[51]' : ''}`}
+        style={{ bottom }}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSubmit) onSubmit();
+        }}
+      >
+        <div className="mx-auto max-w-[61rem] overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+          <Textarea
+            aria-label={label}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={label}
+            className="min-h-16 resize-none rounded-none border-0 bg-transparent font-mono text-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+            rows={2}
+          />
+          <div className="flex items-center justify-end gap-2 border-t border-border bg-secondary/20 px-2 py-1.5">
+            <span className="hidden items-center gap-1 text-[11px] text-muted-foreground sm:flex">
+              <Edit2 aria-hidden="true" className="h-3 w-3" />{i18n.t('Ctrl+Enter 提交')}
+            </span>
+            <Button type="submit" size="sm" className="h-9 gap-1.5 px-3" disabled={!canSubmit}>
+              {!submitting && <Send aria-hidden="true" className="h-3.5 w-3.5" />}
+              {submitting ? i18n.t('发布中...') : i18n.t('发布评论')}
+            </Button>
+          </div>
+        </div>
+      </form>
+    </>
+  );
+}
+
 export default function PullDetailPage() {
   const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
   return <PullDetail key={`${owner}/${repo}/${number}`} owner={owner!} repo={repo!} number={Number(number)} />;
@@ -152,7 +215,9 @@ function PullDetail({ owner, repo, number }: { owner: string; repo: string; numb
       if (!cancelled) setRepository(data);
     }).catch(() => {});
     getPullRequestComments(owner, repo, number).then((data) => {
-      if (!cancelled) setComments(data);
+      if (cancelled) return;
+      const ids = new Set(data.map((comment) => comment.id));
+      setComments((previous) => [...data, ...previous.filter((comment) => !ids.has(comment.id))]);
     }).catch(() => { if (!cancelled) setCommentsError(true); });
     getPullRequestFiles(owner, repo, number).then(({ data }) => {
       if (!cancelled) setFiles(data);
@@ -190,25 +255,18 @@ function PullDetail({ owner, repo, number }: { owner: string; repo: string; numb
   }, [owner, repo, number, pendingMergeCheck]);
 
   const handleComment = async () => {
-    if (!owner || !repo || !number || !newComment.trim()) return;
+    const body = newComment.trim();
+    if (submitting || !owner || !repo || !number || !body) return;
     setSubmitting(true);
     try {
-      const comment = await createPullRequestComment(owner, repo, Number(number), newComment.trim());
-      setComments((prev) => [...prev, comment]);
-      setNewComment('');
+      const comment = await createPullRequestComment(owner, repo, number, body);
+      setComments((prev) => prev.some(({ id }) => id === comment.id) ? prev : [...prev, comment]);
+      setNewComment((current) => current === newComment ? '' : current);
       toast.success(i18n.t('评论已发布'));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : i18n.t('发布失败'));
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  // Ctrl/Cmd+Enter 快捷提交评论
-  const handleCommentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault();
-      if (!submitting && newComment.trim()) handleComment();
     }
   };
 
@@ -351,31 +409,13 @@ function PullDetail({ owner, repo, number }: { owner: string; repo: string; numb
 
           {commentsError && <p role="status" className="text-sm text-muted-foreground">{i18n.t('暂时无法加载评论')}</p>}
 
-          {/* 添加评论 */}
           {user && (
-            <div className="bg-card border border-border rounded-lg overflow-hidden">
-              <div className="p-4 space-y-3">
-                <Textarea
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  onKeyDown={handleCommentKeyDown}
-                  placeholder={i18n.t('撰写评论（支持 Markdown）...')}
-                  className="bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm min-h-24"
-                  rows={4}
-                />
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground">{i18n.t('Ctrl+Enter 快速提交')}</span>
-                  <Button
-                    className="bg-primary text-primary-foreground hover:bg-primary/90"
-                    onClick={handleComment}
-                    disabled={submitting || !newComment.trim()}
-                    size="sm"
-                  >
-                    {submitting ? i18n.t('发布中...') : <><Send className="w-3.5 h-3.5 mr-1.5" />{i18n.t('发布评论')}</>}
-                  </Button>
-                </div>
-              </div>
-            </div>
+            <PullCommentComposer
+              value={newComment}
+              submitting={submitting}
+              onChange={setNewComment}
+              onSubmit={handleComment}
+            />
           )}
         </TabsContent>
 

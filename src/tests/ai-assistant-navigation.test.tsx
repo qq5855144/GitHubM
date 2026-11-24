@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Link } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import App from '@/App';
-import { loadSessionIndex, loadSessionMessages } from '@/ai-v2/sessionStore';
+import '@/pages/AiAssistantV2Page';
+import { loadSessionIndex, loadSessionMessages, saveSessionIndex, saveSessionMessages } from '@/ai-v2/sessionStore';
 import { saveModelConfig } from '@/components/ai/aiUtils';
 import i18n from '@/i18n';
 
@@ -111,4 +112,51 @@ it('retains partial text and shows a separate status when the stream ends early'
   await sendMessage('Question');
   expect(await screen.findByText('Partial answer')).toBeVisible();
   expect(await screen.findByText(/模型响应提前结束/)).toBeVisible();
+});
+
+it('exports an unopened conversation from storage through the Android download bridge', async () => {
+  const saveBlobData = vi.fn();
+  vi.stubGlobal('AndroidBridge', { saveBlobData, notifyReady: vi.fn() });
+  const createdAt = '2026-07-05T08:00:00.000Z';
+  const updatedAt = '2026-07-06T08:00:00.000Z';
+  await saveSessionIndex('audit-user', {
+    activeId: 'active',
+    sessions: [
+      { id: 'active', title: '当前对话', titleSource: 'manual', repo: null, createdAt, updatedAt },
+      { id: 'archive', title: '项目/审查', titleSource: 'manual', repo: { fullName: 'octo/project', defaultBranch: 'main', branch: 'review' }, createdAt, updatedAt },
+    ],
+  });
+  await saveSessionMessages('audit-user', 'archive', [
+    { id: 'q', role: 'user', content: '检查这些代码 🧪', createdAt, attachments: [{
+      id: 'attachment', name: 'notes.txt', path: 'src/a_b.ts', source: 'repo', size: 28, content: 'internal attachment payload',
+    }] },
+    {
+      id: 'a', role: 'assistant', createdAt: updatedAt, reasoning: 'internal trace',
+      content: ['**完整答复**', '', '```ts', 'const value = 1;', '```'].join('\n'),
+    },
+  ]);
+  render(<App />);
+  expect(await screen.findByRole('heading', { name: '当前对话' })).toBeVisible();
+  fireEvent.click(screen.getByTitle(i18n.t('会话列表')));
+  const drawer = await screen.findByRole('dialog', { name: i18n.t('对话历史') });
+  const row = within(drawer).getByText('项目/审查').closest('.group');
+  if (!(row instanceof HTMLElement)) throw new Error('Missing conversation row');
+  fireEvent.click(within(row).getByRole('button', { name: i18n.t('导出对话为 Markdown') }));
+
+  await waitFor(() => expect(saveBlobData).toHaveBeenCalledOnce());
+  const [name, mime, base64] = saveBlobData.mock.calls[0];
+  const text = new TextDecoder().decode(Uint8Array.from(atob(base64), char => char.charCodeAt(0)));
+  expect(name).toBe('项目-审查-2026-07-06.md');
+  expect(mime).toBe('text/markdown');
+  expect(text).toContain('# 项目/审查');
+  expect(text).toContain('octo/project');
+  expect(text).toContain('review');
+  expect(text).toContain('检查这些代码 🧪');
+  expect(text).toContain('**完整答复**');
+  expect(text).toContain('const value = 1;');
+  expect(text).toContain('src/a\\_b.ts');
+  expect(text).not.toContain('internal attachment payload');
+  expect(text).not.toContain('internal trace');
+  fireEvent.keyDown(drawer, { key: 'Escape' });
+  expect(await screen.findByRole('heading', { name: '当前对话' })).toBeVisible();
 });

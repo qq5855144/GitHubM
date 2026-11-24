@@ -43,6 +43,7 @@ import AiExecutionPanel from '@/components/ai/AiExecutionPanel';
 import { ConversationTurnView, buildTurns } from '@/components/ai/ChatTurn';
 import type { ConversationTurn } from '@/components/ai/ChatTurn';
 import { deriveSessionTitle } from '@/ai-v2/sessionTitle';
+import { createSessionMarkdown } from '@/ai-v2/sessionExport';
 import { extractPdfText, MAX_PDF_BYTES } from '@/ai-v2/pdf';
 import RepoSelector from '@/components/ai/RepoSelector';
 import {
@@ -76,6 +77,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { triggerBlobDownload } from '@/lib/blobDownload';
 import { toast } from 'sonner';
 import i18n from '@/i18n';
 import {
@@ -87,6 +89,7 @@ import {
   ChevronRight,
   ChevronUp,
   Copy,
+  Download,
   Eye,
   FileText,
   GitBranch,
@@ -709,15 +712,19 @@ function SessionList({
   sessions,
   activeId,
   streaming,
+  exportingId,
   onSelect,
   onRename,
+  onExport,
   onDelete,
 }: {
   sessions: V2Session[];
   activeId: string;
   streaming: boolean;
+  exportingId: string | null;
   onSelect: (id: string) => void;
   onRename: (id: string, title: string) => void;
+  onExport: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
   const [query, setQuery] = useState('');
@@ -798,8 +805,21 @@ function SessionList({
                     </button>
                     <button
                       type="button"
+                      onClick={() => onExport(session.id)}
+                      disabled={!!exportingId || (streaming && session.id === activeId)}
+                      aria-busy={exportingId === session.id}
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-md hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+                      title={i18n.t('导出对话为 Markdown')}
+                      aria-label={i18n.t('导出对话为 Markdown')}
+                    >
+                      {exportingId === session.id
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : <Download className="h-3 w-3" />}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => onDelete(session.id)}
-                      disabled={streaming}
+                      disabled={streaming || exportingId === session.id}
                       className="shrink-0 rounded p-1 opacity-100 hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
                       title={i18n.t('删除对话')}
                     >
@@ -947,6 +967,12 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
   const [branchDialogOpen, setBranchDialogOpen] = useState(false);
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const sessionExportRef = useRef<AbortController | null>(null);
+  useEffect(() => () => {
+    sessionExportRef.current?.abort();
+    sessionExportRef.current = null;
+  }, [user?.login]);
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
@@ -1071,6 +1097,7 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
 
   useEffect(() => {
     hydratedRef.current = false;
+    setExportingId(null);
     setSessionLoading(Boolean(user?.login));
     loadedSessionsRef.current = new Set();
     queuedMessagesRef.current.clear();
@@ -2031,6 +2058,38 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
     toast.success(i18n.t('对话已重命名'));
   };
 
+  const handleExportSession = async (id: string) => {
+    const login = user?.login;
+    const session = sessions.find(item => item.id === id);
+    if (!login || !session || !hydratedRef.current || sessionExportRef.current || (streaming && id === activeId)) return;
+
+    const exportController = new AbortController();
+    sessionExportRef.current = exportController;
+    setExportingId(id);
+    try {
+      // 未打开的会话在列表中只有元信息。直接读取消息分片，避免切换会话。
+      const history = loadedSessionsRef.current.has(id)
+        ? session.messages
+        : await loadSessionMessages(login, id);
+      if (exportController.signal.aborted) return;
+
+      const file = createSessionMarkdown(session, history);
+      if (!file) {
+        toast.info(i18n.t('该对话没有可导出的消息'));
+        return;
+      }
+      await triggerBlobDownload(file.blob, file.filename);
+      if (!exportController.signal.aborted && !isAndroid) toast.success(i18n.t('已发起下载'));
+    } catch {
+      if (!exportController.signal.aborted) toast.error(i18n.t('导出失败，请稍后重试'));
+    } finally {
+      if (sessionExportRef.current === exportController) {
+        sessionExportRef.current = null;
+        if (!exportController.signal.aborted) setExportingId(null);
+      }
+    }
+  };
+
   const handleDeleteSession = async (id: string) => {
     if (streaming) return;
     const target = sessions.find(session => session.id === id);
@@ -2140,8 +2199,10 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
             sessions={sessions}
             activeId={activeSession?.id || ''}
             streaming={streaming}
+            exportingId={exportingId}
             onSelect={handleSelectSession}
             onRename={handleRenameSession}
+            onExport={handleExportSession}
             onDelete={handleDeleteSession}
           />
         </div>
@@ -2693,7 +2754,7 @@ const args = approvalRequest.arguments as Record<string, unknown>;
       />
 
       <Sheet open={visible && sessionDialogOpen} onOpenChange={setSessionDialogOpen}>
-        <SheetContent side="left" className="flex w-[86vw] max-w-sm flex-col gap-0 p-0">
+        <SheetContent side="left" aria-describedby={undefined} className="flex w-[86vw] max-w-sm flex-col gap-0 p-0">
           <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border px-3 pr-14">
             <SheetTitle className="text-sm font-semibold">{i18n.t('对话历史')}</SheetTitle>
             <Button type="button" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={handleNewSession} disabled={streaming}>
@@ -2706,8 +2767,10 @@ const args = approvalRequest.arguments as Record<string, unknown>;
               sessions={sessions}
               activeId={activeSession?.id || ''}
               streaming={streaming}
+              exportingId={exportingId}
               onSelect={handleSelectSession}
               onRename={handleRenameSession}
+              onExport={handleExportSession}
               onDelete={handleDeleteSession}
             />
           </div>

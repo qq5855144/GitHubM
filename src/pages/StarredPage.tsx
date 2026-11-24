@@ -1,7 +1,7 @@
 // 我的收藏 —— 用户 Star 过的仓库列表
 
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useNavigationType } from 'react-router-dom';
 import {
   Star,
   GitFork,
@@ -32,6 +32,7 @@ import {
   formatNumber,
   getLanguageColor,
 } from '@/services/github';
+import { useAuth } from '@/contexts/AuthContext';
 import type { GitHubRepo } from '@/types/types';
 import { toast } from 'sonner';
 import { pageCache } from '@/lib/page-cache';
@@ -40,6 +41,14 @@ import i18n from "@/i18n";
 type SortKey = 'updated' | 'created' | 'stars' | 'name';
 
 const PAGE_SIZE = 30;
+
+interface StarredListView {
+  visibleCount: number;
+  search: string;
+  sort: SortKey;
+}
+
+const DEFAULT_VIEW: StarredListView = { visibleCount: PAGE_SIZE, search: '', sort: 'updated' };
 
 function toTime(value?: string): number {
   return value ? new Date(value).getTime() : 0;
@@ -66,48 +75,66 @@ function sortRepos(repos: GitHubRepo[], sort: SortKey): GitHubRepo[] {
 }
 
 export default function StarredPage() {
-  const navigate = useNavigate();
-  const [repos, setRepos] = useState<GitHubRepo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [search, setSearch] = useState('');
-  const [sort, setSort] = useState<SortKey>('updated');
-  const [unstarring, setUnstarring] = useState<number | null>(null);
+  const { user } = useAuth();
+  return <StarredList key={user?.id} accountId={user?.id} />;
+}
 
-  const CACHE_KEY = 'starred:all';
+function StarredList({ accountId }: { accountId?: number }) {
+  const navigate = useNavigate();
+  const navigationType = useNavigationType();
+  const cacheKey = `starred:${accountId}:all`;
+  const viewKey = `starred-view:${accountId}`;
+  const [allowExpired] = useState(() => navigationType === 'POP');
+  const [cached] = useState(() => pageCache.get<GitHubRepo[]>(cacheKey, { allowExpired }));
+  const [repos, setRepos] = useState(cached ?? []);
+  const [loading, setLoading] = useState(!cached);
+  const [refreshing, setRefreshing] = useState(false);
+  const [view, setView] = useState(() => pageCache.get<StarredListView>(viewKey) ?? DEFAULT_VIEW);
+  const { visibleCount, search, sort } = view;
+  const [unstarring, setUnstarring] = useState<number | null>(null);
+  const requestRef = useRef<symbol>();
+
+  useEffect(() => {
+    pageCache.set(viewKey, view, Number.POSITIVE_INFINITY);
+  }, [viewKey, view]);
 
   // 排序在本地做，必须拿到全量收藏；首页先回填，剩余页并发补齐。
   const loadStarred = useCallback(async (force = false) => {
     if (!force) {
-      const cached = pageCache.get<GitHubRepo[]>(CACHE_KEY);
-      if (cached && cached.length > 0) {
-        setRepos(cached);
+      const snapshot = pageCache.get<GitHubRepo[]>(cacheKey, { allowExpired });
+      if (snapshot) {
+        setRepos(snapshot);
         setLoading(false);
         return;
       }
     }
+    const request = Symbol();
+    requestRef.current = request;
     if (force) setRefreshing(true);
     else setLoading(true);
     try {
       const data = await getAllStarredRepos('created', 'desc', (firstPage) => {
+        if (requestRef.current !== request) return;
         setRepos(firstPage);
         setLoading(false);
       });
+      if (requestRef.current !== request) return;
       setRepos(data);
-      pageCache.set(CACHE_KEY, data);
+      pageCache.set(cacheKey, data);
     } catch {
-      toast.error(i18n.t('加载收藏列表失败'));
+      if (requestRef.current === request) toast.error(i18n.t('加载收藏列表失败'));
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (requestRef.current === request) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, []);
+  }, [allowExpired, cacheKey]);
 
-  useEffect(() => { loadStarred(); }, [loadStarred]);
-
-  // 切换排序或关键词后回到首屏条数，避免沿用上一次的展开量
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [sort, search]);
+  useEffect(() => {
+    void loadStarred();
+    return () => { requestRef.current = undefined; };
+  }, [loadStarred]);
 
   const handleUnstar = async (repo: GitHubRepo) => {
     const [owner, name] = repo.full_name.split('/');
@@ -116,7 +143,7 @@ export default function StarredPage() {
       await unstarRepo(owner, name);
       setRepos((prev) => {
         const updated = prev.filter((r) => r.id !== repo.id);
-        pageCache.set(CACHE_KEY, updated);
+        pageCache.set(cacheKey, updated);
         return updated;
       });
       toast.success(`已取消收藏 ${repo.full_name}`);
@@ -177,12 +204,12 @@ export default function StarredPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => setView({ ...view, search: e.target.value, visibleCount: PAGE_SIZE })}
             placeholder={i18n.t('搜索收藏的仓库…')}
             className="search-input pl-9 h-9 text-foreground placeholder:text-muted-foreground text-sm"
           />
         </div>
-        <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
+        <Select value={sort} onValueChange={(v) => setView({ ...view, sort: v as SortKey, visibleCount: PAGE_SIZE })}>
           <SelectTrigger className="w-36 h-9 bg-secondary border-border text-foreground text-sm">
             <SortAsc className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
             <SelectValue />
@@ -318,7 +345,7 @@ export default function StarredPage() {
         <Button
           variant="ghost"
           className="w-full border border-border text-muted-foreground hover:bg-secondary"
-          onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+          onClick={() => setView(prev => ({ ...prev, visibleCount: prev.visibleCount + PAGE_SIZE }))}
         >
           {i18n.t('加载更多')}
         </Button>

@@ -15,6 +15,7 @@ const RESTORE_GUARD_MS = 600;
 const TAB_PATHS = [
   '/',
   '/repos',
+  '/starred',
   '/notifications',
   '/search',
   '/activity',

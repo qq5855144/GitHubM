@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { appendBlockDelta, appendToolBlock, buildRenderGroups, ensureBlocks } from '@/ai-v2/blocks';
-import type { UiChatMessage } from '@/ai-v2/types';
+import type { UiAssistantBlock, UiChatMessage } from '@/ai-v2/types';
 
 describe('assistant blocks', () => {
   it('merges consecutive deltas of the same type', () => {
@@ -63,6 +63,39 @@ describe('assistant blocks', () => {
     let blocks: ReturnType<typeof appendBlockDelta> = [{ id: 'r1', type: 'reasoning', text: '想一想' }];
     blocks = appendBlockDelta(blocks, 'text', '回答');
     expect(buildRenderGroups(blocks).map(group => group.kind)).toEqual(['reasoning', 'text']);
+  });
+
+  it('keeps a sentence intact when reasoning arrives between streaming text fragments', () => {
+    let blocks = appendBlockDelta(undefined, 'reasoning', '先确定目标。');
+    blocks = appendBlockDelta(blocks, 'text', '我先了解');
+    const [firstReasoning, firstText] = buildRenderGroups(blocks);
+    blocks = appendBlockDelta(blocks, 'reasoning', '再安排阅读顺序。');
+    blocks = appendBlockDelta(blocks, 'text', '仓库整体情况，再逐层读关键代码。');
+
+    expect(buildRenderGroups(blocks)).toEqual([
+      { kind: 'reasoning', id: firstReasoning.id, text: '先确定目标。再安排阅读顺序。' },
+      { kind: 'text', id: firstText.id, text: '我先了解仓库整体情况，再逐层读关键代码。' },
+    ]);
+  });
+
+  it('repairs saved display blocks while retaining real tool boundaries', () => {
+    const blocks: UiAssistantBlock[] = [
+      { id: 'before', type: 'text', text: 'Reading **the' },
+      { id: 'thought-before', type: 'reasoning', text: 'Find the relevant files.' },
+      { id: 'text-fragment', type: 'text', text: ' entry point**.' },
+      { id: 'tool', type: 'tool', toolId: 'call_1' },
+      { id: 'after', type: 'text', text: 'The entry point is ' },
+      { id: 'thought-after', type: 'reasoning', text: 'Check the path in the result.' },
+      { id: 'tail', type: 'text', text: '`src/main.tsx`.' },
+    ];
+
+    expect(buildRenderGroups(blocks)).toEqual([
+      { kind: 'reasoning', id: 'thought-before', text: 'Find the relevant files.' },
+      { kind: 'text', id: 'before', text: 'Reading **the entry point**.' },
+      { kind: 'execution', id: 'tool', toolIds: ['call_1'] },
+      { kind: 'reasoning', id: 'thought-after', text: 'Check the path in the result.' },
+      { kind: 'text', id: 'after', text: 'The entry point is `src/main.tsx`.' },
+    ]);
   });
 
   it('skips empty groups', () => {

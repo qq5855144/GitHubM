@@ -22,8 +22,8 @@ import {
   Star,
   Trash2,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useNavigationType } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -78,7 +78,27 @@ import {
   starRepo,
   unstarRepo,
 } from '@/services/github';
-import type { GitHubRepo, RepoSortField, SortDirection } from '@/types/types';
+import type { GitHubRepo, GitHubUser, RepoSortField, SortDirection } from '@/types/types';
+
+interface RepoListView {
+  searchQuery: string;
+  sortField: RepoSortField;
+  sortDirection: SortDirection;
+  typeFilter: 'all' | 'owner' | 'member' | 'public' | 'private';
+}
+
+interface RepoListSnapshot {
+  repos: GitHubRepo[];
+  hasNextPage: boolean;
+  page: number;
+}
+
+const DEFAULT_VIEW: RepoListView = {
+  searchQuery: '',
+  sortField: 'pushed',
+  sortDirection: 'desc',
+  typeFilter: 'all',
+};
 
 // 仓库右键上下文菜单
 // ContextMenu 菜单内容（不含任何弹窗，只触发回调）
@@ -302,40 +322,51 @@ function RepoCardDropdown({ repo, onDeleteRequest, canDelete }: { repo: GitHubRe
 }
 
 export default function ReposPage() {
-  const navigate = useNavigate();
   const { user } = useAuth();
-  const [repos, setRepos] = useState<GitHubRepo[]>([]);
-  const [loading, setLoading] = useState(true);
+  return <RepoList key={user?.id} user={user} />;
+}
+
+function RepoList({ user }: { user: GitHubUser | null }) {
+  const navigate = useNavigate();
+  const navigationType = useNavigationType();
+  const viewKey = `repos-view:${user?.id}`;
+  const [view, setView] = useState(() => pageCache.get<RepoListView>(viewKey) ?? DEFAULT_VIEW);
+  const { searchQuery, sortField, sortDirection, typeFilter } = view;
+  const cacheKey = `repos:${user?.id}:${sortField}:${sortDirection}:${typeFilter}`;
+  const [returnKey] = useState(() => navigationType === 'POP' ? cacheKey : '');
+  const [list, setList] = useState(() =>
+    pageCache.get<RepoListSnapshot>(cacheKey, { allowExpired: returnKey === cacheKey }),
+  );
+  const [loading, setLoading] = useState(!list);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasNextPage, setHasNextPage] = useState(false);
-  const [page, setPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState('');
+  const requestRef = useRef<symbol>();
   const debouncedSearch = useDebounce(searchQuery, 300);
-  const [sortField, setSortField] = useState<RepoSortField>('pushed');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'owner' | 'member' | 'public' | 'private'>('all');
+
+  useEffect(() => {
+    pageCache.set(viewKey, view, Number.POSITIVE_INFINITY);
+  }, [viewKey, view]);
 
   // 删除弹窗状态：在 ContextMenu 树之外统一管理，避免 React Portal 事件冒泡触发 ContextMenu
   const [deleteTarget, setDeleteTarget] = useState<GitHubRepo | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const loadRepos = useCallback(async (pageNum = 1, append = false, force = false) => {
-    if (pageNum === 1) setLoading(true);
-    else setLoadingMore(true);
-
-    // 只对第一页默认加载走缓存（append=false 时），强制刷新跳过缓存
-    const cacheKey = `repos:${sortField}:${sortDirection}:${typeFilter}:p1`;
-    if (pageNum === 1 && !append && !force) {
-      const cached = pageCache.get<{ repos: GitHubRepo[]; hasNextPage: boolean }>(cacheKey);
+  const loadRepos = useCallback(async (force = false, appendFrom?: RepoListSnapshot) => {
+    const request = Symbol();
+    requestRef.current = request;
+    if (!appendFrom && !force) {
+      const cached = pageCache.get<RepoListSnapshot>(cacheKey, { allowExpired: returnKey === cacheKey });
       if (cached) {
-        setRepos(cached.repos);
-        setHasNextPage(cached.hasNextPage);
-        setPage(1);
+        setList(cached);
         setLoading(false);
+        setLoadingMore(false);
         return;
       }
+      setList(null);
     }
 
+    const pageNum = appendFrom ? appendFrom.page + 1 : 1;
+    setLoading(!appendFrom);
+    setLoadingMore(Boolean(appendFrom));
     try {
       const result = await getUserRepos({
         sort: sortField,
@@ -344,29 +375,32 @@ export default function ReposPage() {
         page: pageNum,
         type: typeFilter,
       });
-      if (append) {
-        setRepos((prev) => [...prev, ...result.data]);
-      } else {
-        setRepos(result.data);
-        // 第一页加载成功后写入缓存
-        pageCache.set(cacheKey, { repos: result.data, hasNextPage: result.hasNextPage });
-      }
-      setHasNextPage(result.hasNextPage);
-      setPage(pageNum);
+      if (requestRef.current !== request) return;
+      const snapshot = {
+        repos: appendFrom ? [...appendFrom.repos, ...result.data] : result.data,
+        hasNextPage: result.hasNextPage,
+        page: pageNum,
+      };
+      setList(snapshot);
+      pageCache.set(cacheKey, snapshot);
     } catch (err) {
+      if (requestRef.current !== request) return;
       toast.error(i18n.t('加载仓库列表失败'));
       console.error(err);
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (requestRef.current === request) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
-  }, [sortField, sortDirection, typeFilter]);
+  }, [cacheKey, returnKey, sortField, sortDirection, typeFilter]);
 
   useEffect(() => {
-    loadRepos(1, false);
+    void loadRepos();
+    return () => { requestRef.current = undefined; };
   }, [loadRepos]);
 
-  const filteredRepos = repos.filter((repo) =>
+  const filteredRepos = (list?.repos ?? []).filter((repo) =>
     debouncedSearch
       ? repo.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
         (repo.description || '').toLowerCase().includes(debouncedSearch.toLowerCase())
@@ -386,7 +420,7 @@ export default function ReposPage() {
             variant="ghost"
             size="icon"
             className="text-muted-foreground hover:bg-secondary"
-            onClick={() => loadRepos(1, false, true)}
+            onClick={() => loadRepos(true)}
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
@@ -404,13 +438,13 @@ export default function ReposPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => setView({ ...view, searchQuery: e.target.value })}
             placeholder={i18n.t('搜索仓库...')}
             className="search-input pl-9 text-foreground placeholder:text-muted-foreground"
           />
         </div>
         <div className="flex gap-2 shrink-0">
-          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
+          <Select value={typeFilter} onValueChange={(v) => setView({ ...view, typeFilter: v as typeof typeFilter })}>
             <SelectTrigger className="bg-secondary border-border text-foreground w-28 h-10">
               <Filter className="w-3 h-3 mr-1" />
               <SelectValue />
@@ -423,7 +457,7 @@ export default function ReposPage() {
               <SelectItem value="member" className="text-foreground">{i18n.t('参与的')}</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={sortField} onValueChange={(v) => setSortField(v as RepoSortField)}>
+          <Select value={sortField} onValueChange={(v) => setView({ ...view, sortField: v as RepoSortField })}>
             <SelectTrigger className="bg-secondary border-border text-foreground w-28 h-10">
               <SelectValue />
             </SelectTrigger>
@@ -438,7 +472,7 @@ export default function ReposPage() {
             variant="outline"
             size="icon"
             className="border-border hover:bg-secondary h-10 w-10"
-            onClick={() => setSortDirection(sortDirection === 'desc' ? 'asc' : 'desc')}
+            onClick={() => setView({ ...view, sortDirection: sortDirection === 'desc' ? 'asc' : 'desc' })}
           >
             {sortDirection === 'desc' ? <SortDesc className="w-4 h-4" /> : <SortAsc className="w-4 h-4" />}
           </Button>
@@ -568,12 +602,12 @@ export default function ReposPage() {
       </div>
 
       {/* 加载更多 */}
-      {hasNextPage && !loading && !searchQuery && (
+      {list?.hasNextPage && !loading && !searchQuery && (
         <div className="text-center">
           <Button
             variant="outline"
             className="border-border hover:bg-secondary"
-            onClick={() => loadRepos(page + 1, true)}
+            onClick={() => loadRepos(false, list)}
             disabled={loadingMore}
           >
             {loadingMore ? i18n.t('加载中...') : i18n.t('加载更多')}
@@ -591,9 +625,9 @@ export default function ReposPage() {
           if (!v) setDeleteTarget(null);
         }}
         onDeleteSuccess={(name) => {
-          setRepos(prev => prev.filter(r => r.name !== name));
+          setList(prev => prev && { ...prev, repos: prev.repos.filter(r => r.name !== name) });
           pageCache.invalidate('repos:');
-          loadRepos(1, false, true);
+          void loadRepos(true);
         }}
       />
     </div>

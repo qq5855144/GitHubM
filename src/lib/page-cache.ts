@@ -24,11 +24,11 @@ interface CacheEntry<T> {
 class PageCache {
   private readonly store = new Map<string, CacheEntry<unknown>>();
 
-  /** 读缓存，过期返回 null */
-  get<T>(key: string): T | null {
+  /** 返回已访问的页面时，可以恢复超过 TTL 的列表快照。 */
+  get<T>(key: string, { allowExpired = false } = {}): T | null {
     const entry = this.store.get(key) as CacheEntry<T> | undefined;
     if (!entry) return null;
-    if (Date.now() - entry.timestamp > entry.ttl) {
+    if (!allowExpired && Date.now() - entry.timestamp > entry.ttl) {
       this.store.delete(key);
       return null;
     }

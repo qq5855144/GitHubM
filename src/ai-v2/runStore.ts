@@ -228,13 +228,17 @@ function clampContent(
 
 /**
  * 快照只用于断点续跑：
- * - 只保留最近 24 条消息
+ * - 原始目标在 taskMemory 中单独保存，消息保留当前用户与最近的回合
  * - 只保留最近 10 轮工具调用，工具结果截断到 1500 字符
  * - 保留可见的图片和原任务系统消息
  */
 export function compactSnapshotMessages(messages: V2ProviderMessage[]): V2ProviderMessage[] {
   const system = messages.filter(item => item.role === 'system');
-  const windowed = messages.filter(item => item.role !== 'system').slice(-MAX_SNAPSHOT_MESSAGES);
+  const conversation = messages.filter(item => item.role !== 'system');
+  let lastUser = conversation.length - 1;
+  while (lastUser >= 0 && conversation[lastUser].role !== 'user') lastUser--;
+  const keepUser = lastUser >= 0 && lastUser < conversation.length - MAX_SNAPSHOT_MESSAGES;
+  const windowed = conversation.slice(-(keepUser ? MAX_SNAPSHOT_MESSAGES - 1 : MAX_SNAPSHOT_MESSAGES));
   let start = 0;
   while (start < windowed.length && windowed[start].role === 'tool') start += 1;
   const trimmed = windowed.slice(start);
@@ -253,6 +257,10 @@ export function compactSnapshotMessages(messages: V2ProviderMessage[]): V2Provid
   }
 
   const result: V2ProviderMessage[] = [...system];
+  if (keepUser) {
+    const request = conversation[lastUser];
+    result.push({ ...request, content: clampContent(request.content, MAX_SNAPSHOT_TEXT_CHARS) });
+  }
   trimmed.forEach((message, index) => {
     if (message.role === 'tool') {
       if (message.tool_call_id && !keepCallIds.has(message.tool_call_id)) return;

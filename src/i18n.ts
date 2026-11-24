@@ -5,6 +5,8 @@ import { initReactI18next } from 'react-i18next';
 const resources = {
   en: {
     translation: {
+        "已保存的任务进度": "Saved task progress",
+        "待执行": "Pending",
         "GitHub 正在计算合并状态": "GitHub is checking mergeability",
         "PR 已创建": "PR created",
         "PR 已标记为可评审": "PR marked ready for review",
@@ -1423,6 +1425,8 @@ login: {
   },
   'zh-CN': {
     translation: {
+        "已保存的任务进度": "已保存的任务进度",
+        "待执行": "待执行",
         "GitHub 正在计算合并状态": "GitHub 正在计算合并状态",
         "PR 已创建": "PR 已创建",
         "PR 已标记为可评审": "PR 已标记为可评审",

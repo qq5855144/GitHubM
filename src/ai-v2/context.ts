@@ -1,5 +1,5 @@
 // AI V2 — Context Builder：系统提示词 + 技能 + 记忆 + 预算裁剪
-import type { AgentHistoryMessage, CapabilityInfo, V2ProviderMessage } from './types';
+import type { AgentHistoryMessage, CapabilityInfo, V2ContentPart, V2ProviderMessage } from './types';
 import { searchMemories } from './memory';
 import { selectSkills } from './skills';
 
@@ -26,127 +26,153 @@ export function estimateTokens(text: string): number {
   return Math.max(1, Math.ceil(tokens));
 }
 
+function takeTokenPrefix(text: string, limit: number): string {
+  let used = 0;
+  let index = 0;
+  for (const character of text) {
+    const code = character.codePointAt(0) || 0;
+    const cost = (code >= 0x2e80 && code <= 0x9fff)
+      || (code >= 0xac00 && code <= 0xd7af) || (code >= 0xf900 && code <= 0xfaff)
+      || (code >= 0x3040 && code <= 0x30ff) ? 1 : /\s/u.test(character) ? 0.1 : 0.28;
+    if (used + cost > limit) break;
+    used += cost;
+    index += character.length;
+  }
+  return text.slice(0, index);
+}
+
 export function truncateTextToTokens(text: string, maxTokens: number): string {
   if (maxTokens <= 0 || !text) return '';
-  let tokens = 0;
-  let index = 0;
-  for (const char of text) {
-    const code = char.codePointAt(0) || 0;
-    const cost = code >= 0x2e80
-      ? 1
-      : /\s/.test(char) ? 0.1 : 0.28;
-    if (tokens + cost > maxTokens) break;
-    tokens += cost;
-    index += char.length;
-  }
-  if (index >= text.length) return text;
-  return `${text.slice(0, index)}\n\n…（内容因上下文预算被截断，原长度 ${text.length} 字符）`;
+  if (estimateTokens(text) <= maxTokens) return text;
+  const notice = '…（已压缩）';
+  const available = Math.floor(maxTokens) - estimateTokens(notice);
+  if (available < 4) return takeTokenPrefix(text, maxTokens);
+  const tail = takeTokenPrefix([...text].reverse().join(''), Math.floor(available * 0.25));
+  return `${takeTokenPrefix(text, available - Math.ceil(estimateTokens(tail)))}${notice}${[...tail].reverse().join('')}`;
 }
+
+const IMAGE_TOKENS = 1000;
+const MESSAGE_OVERHEAD = 6;
 
 function messageTokens(message: V2ProviderMessage): number {
-  const toolCalls = message.tool_calls ? JSON.stringify(message.tool_calls) : '';
+  const calls = message.tool_calls ? JSON.stringify(message.tool_calls) : '';
+  const fields = estimateTokens(calls) + estimateTokens(message.name || '') + estimateTokens(message.tool_call_id || '');
   const content = Array.isArray(message.content)
-    ? message.content.map(part => part.type === 'text' ? part.text : '__IMAGE__').join('\n')
-    : (message.content || '');
-  const imageTokens = Array.isArray(message.content)
-    ? message.content.filter(part => part.type === 'image_url').length * 1000
-    : 0;
-  return estimateTokens(`${content}\n${message.reasoning_content || ''}\n${toolCalls}`) + imageTokens;
+    ? message.content.reduce((total, part) => total + (part.type === 'text' ? estimateTokens(part.text) : IMAGE_TOKENS), 0)
+    : estimateTokens(message.content || '');
+  // reasoning_content 在实际发请求前会被移除。
+  return MESSAGE_OVERHEAD + fields + content;
 }
 
-/**
- * 工具循环可能连续产生大量结果。发送模型前压缩旧工具结果，
- * 只保留最近的完整结果，避免无上限轮数把上下文撑爆。
- */
+export function estimateProviderMessages(messages: V2ProviderMessage[]): number {
+  return messages.reduce((total, message) => total + messageTokens(message), 0);
+}
+
+function fitMessage(message: V2ProviderMessage, budget: number): V2ProviderMessage | null {
+  if (messageTokens(message) <= budget) return message;
+  const available = budget - messageTokens({ ...message, content: null });
+  if (available < 1) return null;
+
+  if (Array.isArray(message.content)) {
+    const images = message.content.filter(part => part.type === 'image_url');
+    const text = message.content.filter(part => part.type === 'text').map(part => part.text).join('\n');
+    const minimumText = Math.min(estimateTokens(text), 400);
+    const kept = images.slice(0, Math.floor(Math.max(0, available - minimumText) / IMAGE_TOKENS));
+    const notice = kept.length < images.length ? '\n部分图片因上下文预算省略。' : '';
+    const textBudget = available - kept.length * IMAGE_TOKENS - estimateTokens(notice);
+    const trimmed = truncateTextToTokens(text, textBudget);
+    const content: V2ContentPart[] = [...(trimmed || notice ? [{ type: 'text' as const, text: trimmed + notice }] : []), ...kept];
+    const fitted = { ...message, content };
+    if (messageTokens(fitted) <= budget) return fitted;
+    return { ...message, content: truncateTextToTokens(text, available) };
+  }
+  return { ...message, content: truncateTextToTokens(message.content || '', available) };
+}
+
+function collectMessageGroups(messages: V2ProviderMessage[]): V2ProviderMessage[][] {
+  const groups: V2ProviderMessage[][] = [];
+  for (const message of messages) {
+    const previous = groups[groups.length - 1];
+    if (message.role === 'tool' && previous?.[0].role === 'assistant') {
+      previous.push(message);
+    } else if (message.role !== 'tool') {
+      groups.push([message]);
+    }
+  }
+  return groups;
+}
+
+/** 保留系统/任务记录和当前用户要求，再从最新回合往前填充。助手调用与其工具结果一起保留。 */
 export function compactProviderMessages(
   messages: V2ProviderMessage[],
   budget = 32000,
 ): V2ProviderMessage[] {
-  if (!messages.length) return messages;
-  const safeBudget = Math.max(4000, budget);
-  if (messages.reduce((sum, item) => sum + messageTokens(item), 0) <= safeBudget) {
-    return messages;
-  }
+  if (estimateProviderMessages(messages) <= budget) return messages;
 
-  const cloned = messages.map(item => ({ ...item }));
+  const compacted = messages.slice();
   let toolSeen = 0;
-  for (let index = cloned.length - 1; index >= 0; index--) {
-    const item = cloned[index];
-    if (item.role !== 'tool') continue;
-    toolSeen++;
-    if (toolSeen > 2 && typeof item.content === 'string' && item.content.length > 1500) {
-      item.content = `${item.content.slice(0, 1500)}\n\n…（较早工具结果已压缩，原始长度 ${item.content.length} 字符）`;
+  for (let index = compacted.length - 1; index >= 0; index--) {
+    const message = compacted[index];
+    if (message.role !== 'tool') continue;
+    if (++toolSeen > 2 && typeof message.content === 'string' && message.content.length > 1500) {
+      compacted[index] = { ...message, content: `${message.content.slice(0, 1500)}\n…（较早工具结果已压缩）` };
+    }
+  }
+  if (estimateProviderMessages(compacted) <= budget) return compacted;
+  // 最近的结果也可能很大。缩短正文时保留 tool_call_id 与调用参数。
+  for (let index = 0; index < compacted.length; index++) {
+    const message = compacted[index];
+    if (message.role === 'tool' && typeof message.content === 'string' && estimateTokens(message.content) > 1500) {
+      compacted[index] = { ...message, content: truncateTextToTokens(message.content, 1500) };
     }
   }
 
-  let systemPrefix: V2ProviderMessage[] = [];
-  let body = cloned;
-  for (let index = 0; index < cloned.length; index++) {
-    if (cloned[index].role !== 'system') {
-      systemPrefix = cloned.slice(0, index);
-      body = cloned.slice(index);
-      break;
+  const firstBody = compacted.findIndex(message => message.role !== 'system');
+  const systems = firstBody === -1 ? compacted : compacted.slice(0, firstBody);
+  const body = firstBody === -1 ? [] : compacted.slice(firstBody);
+  let userIndex = body.length - 1;
+  while (userIndex >= 0 && body[userIndex].role !== 'user') userIndex--;
+  const reservedUser = userIndex >= 0 ? Math.min(messageTokens(body[userIndex]), Math.floor(budget / 2)) : 0;
+  const keptSystems: V2ProviderMessage[] = [];
+  let remaining = budget;
+  for (let index = 0; index < systems.length; index++) {
+    const later = systems.slice(index + 1);
+    const reservedLater = Math.min(estimateProviderMessages(later), Math.floor(budget / 4));
+    const fitted = fitMessage(systems[index], remaining - reservedUser - reservedLater);
+    if (fitted) {
+      keptSystems.push(fitted);
+      remaining -= messageTokens(fitted);
     }
   }
 
-  const total = () => [...systemPrefix, ...body].reduce((sum, item) => sum + messageTokens(item), 0);
-  if (total() <= safeBudget) return [...systemPrefix, ...body];
+  const latestUser = userIndex >= 0 ? body[userIndex] : null;
+  const groupsAfter = collectMessageGroups(userIndex >= 0 ? body.slice(userIndex + 1) : body);
+  const userBudget = groupsAfter.length ? Math.max(reservedUser, Math.floor(remaining * 0.75)) : remaining;
+  const user = latestUser ? fitMessage(latestUser, Math.min(remaining, userBudget)) : null;
+  if (user) remaining -= messageTokens(user);
 
-  const userIndexes = body
-    .map((item, index) => item.role === 'user' ? index : -1)
-    .filter(index => index >= 0);
-
-  let compacted: V2ProviderMessage[] | null = null;
-  for (const index of userIndexes) {
-    const candidate = [...systemPrefix, ...body.slice(index)];
-    if (candidate.reduce((sum, item) => sum + messageTokens(item), 0) <= safeBudget) {
-      compacted = candidate;
-      break;
+  const takeRecent = (groups: V2ProviderMessage[][]): V2ProviderMessage[] => {
+    const chosen: V2ProviderMessage[][] = [];
+    for (let index = groups.length - 1; index >= 0; index--) {
+      let group = groups[index];
+      let cost = estimateProviderMessages(group);
+      if (cost > remaining) {
+        const perMessage = Math.min(1500, Math.floor(remaining / group.length));
+        const shorter = group.map(message => fitMessage(message, perMessage));
+        if (shorter.some(message => !message)) break;
+        group = shorter as V2ProviderMessage[];
+        cost = estimateProviderMessages(group);
+      }
+      if (cost > remaining) break;
+      chosen.push(group);
+      remaining -= cost;
     }
-  }
+    return chosen.reverse().flat();
+  };
 
-  if (!compacted && userIndexes.length) {
-    compacted = [...systemPrefix, ...body.slice(userIndexes[userIndexes.length - 1])];
-  }
-
-  if (!compacted) {
-    let start = Math.max(0, body.length - 8);
-    while (start < body.length && body[start].role === 'tool') start += 1;
-    compacted = [...systemPrefix, ...body.slice(start)];
-  }
-
-  const overBudget = (items: V2ProviderMessage[]) =>
-    items.reduce((sum, item) => sum + messageTokens(item), 0) > safeBudget;
-
-  // 仍超预算时，从最早的完整工具回合开始丢弃，保留最近几轮。
-  while (overBudget(compacted) && compacted.length > 8) {
-    const userIndex = compacted.findIndex(item => item.role === 'user');
-    if (userIndex < 0) break;
-    let start = userIndex + 1;
-    while (start < compacted.length && compacted[start].role !== 'assistant') start++;
-    if (start >= compacted.length) break;
-    let end = start + 1;
-    while (end < compacted.length && compacted[end].role === 'tool') end++;
-    compacted.splice(start, end - start);
-  }
-
-  // 兜底清理：任何压缩路径都不能让请求以孤儿 tool 消息开头。
-  const firstBodyIndex = compacted.findIndex(item => item.role !== 'system');
-  if (firstBodyIndex >= 0) {
-    let start = firstBodyIndex;
-    while (start < compacted.length && compacted[start].role === 'tool') start += 1;
-    if (start > firstBodyIndex) compacted.splice(firstBodyIndex, start - firstBodyIndex);
-  }
-  // 最后一个用户消息本身仍然过大时，截断非系统消息正文。
-  return compacted.map(item => {
-    if (item.role === 'tool' && typeof item.content === 'string' && estimateTokens(item.content) > 1500) {
-      return { ...item, content: truncateTextToTokens(item.content, 1500) };
-    }
-    if (item.role !== 'system' && typeof item.content === 'string' && estimateTokens(item.content) > 4000) {
-      return { ...item, content: truncateTextToTokens(item.content, 4000) };
-    }
-    return item;
-  });
+  const after = takeRecent(groupsAfter);
+  const before = user ? takeRecent(collectMessageGroups(body.slice(0, userIndex))) : [];
+  return [...keptSystems, ...before, ...(user ? [user] : []), ...after];
 }
 
 export function buildAgentContext(params: {
@@ -205,7 +231,7 @@ export function buildAgentContext(params: {
   }
   const trimmedMessages = params.history.length - selected.length;
   if (trimmedMessages > 0) {
-    systemContent += `\n\n# 上下文说明\n较早的 ${trimmedMessages} 条历史消息因预算限制已省略；如需细节请让用户补充。`;
+    systemContent += `\n\n# 上下文说明\n较早的 ${trimmedMessages} 条原始消息已省略。继续任务时先参考本机任务记录。`;
     if (estimateTokens(systemContent) > maxSystemTokens) {
       systemContent = truncateTextToTokens(systemContent, maxSystemTokens);
     }

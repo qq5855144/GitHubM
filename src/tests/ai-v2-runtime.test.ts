@@ -21,7 +21,7 @@ describe('AI V2 artifact store', () => {
   beforeEach(() => localStorage.clear());
 
   it('saves, lists and pages artifact content', async () => {
-    const meta = saveArtifact({
+    const meta = await saveArtifact({
       login: 'alice',
       runId: 'run-1',
       toolName: 'github_read_file',
@@ -84,8 +84,12 @@ describe('AI V2 memory and context', () => {
     const messages = [
       { role: 'system' as const, content: 'system' },
       { role: 'user' as const, content: 'do a long task' },
-      ...Array.from({ length: 8 }, (_, index) => ([
-        { role: 'assistant' as const, content: `step ${index}` },
+      ...Array.from({ length: 12 }, (_, index) => ([
+        {
+          role: 'assistant' as const,
+          content: `step ${index}`,
+          tool_calls: [{ id: `call-${index}`, type: 'function' as const, function: { name: 'github_read_file', arguments: '{}' } }],
+        },
         { role: 'tool' as const, content: `${index}`.repeat(20000), tool_call_id: `call-${index}`, name: 'github_read_file' },
       ])).flat(),
     ];

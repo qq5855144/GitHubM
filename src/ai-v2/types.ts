@@ -1,6 +1,7 @@
 // AI Assistant V2 — 通用事件驱动 Agent 类型
 import type { ModelConfig } from '@/components/ai/aiTypes';
 import type { UiAttachment } from './attachments';
+import type { TaskMemory, TaskProgress } from './taskMemory';
 
 export interface RepoContext {
   fullName: string;
@@ -142,6 +143,8 @@ export interface AgentHistoryMessage {
 }
 
 export interface AgentCheckpoint {
+  finished?: boolean;
+  taskMemory?: TaskMemory;
   messages: V2ProviderMessage[];
   steps: number;
   toolCalls?: number;
@@ -151,6 +154,7 @@ export interface AgentCheckpoint {
 }
 
 export interface RunAgentOptions {
+  taskMemory?: TaskMemory;
   token: string;
   userLogin?: string;
   runId?: string;
@@ -213,6 +217,8 @@ export interface UiChatMessage {
   /** 包含附件正文的模型上下文；UI 仍显示 content */
   modelContent?: string | V2ContentPart[];
   attachments?: UiAttachment[];
+  taskScope?: string;
+  taskProgress?: TaskProgress;
   reasoning?: string;
   tools?: UiToolRun[];
   /** 按发生顺序排列的区块；为空时退回旧版布局 */

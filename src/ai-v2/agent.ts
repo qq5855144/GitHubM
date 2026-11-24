@@ -20,7 +20,8 @@ import { streamProvider } from './providers';
 import { getModelCapabilities } from './modelCapabilities';
 import { resolveCapabilities } from './capabilities';
 import { saveArtifact } from './artifacts';
-import { buildAgentContext, compactProviderMessages } from './context';
+import { buildAgentContext, compactProviderMessages, estimateTokens } from './context';
+import { recordTaskActivity, renderTaskContext, taskMemorySearch, withTaskNextSteps } from './taskMemory';
 
 const MAX_INLINE_TOOL_RESULT = 12000;
 const TOOL_PREVIEW_CHARS = 4000;
@@ -165,23 +166,30 @@ async function executeRun(options: RunAgentOptions): Promise<void> {
   const capabilityState = options.tools
     ? { tools: options.tools, capabilities: [] }
     : resolveCapabilities(repo);
-  const supportsTools = config.supportsTools ?? getModelCapabilities(config.type, config.model).supportsTools;
-  const tools = supportsTools ? capabilityState.tools : [];
+  const model = getModelCapabilities(config.type, config.model);
+  const supportsTools = config.supportsTools ?? model.supportsTools;
+  let task = options.taskMemory;
+  const searchable = Boolean(supportsTools && task && (repo || task.previousActivity.length));
+  const tools = supportsTools ? [...capabilityState.tools] : [];
+  if (searchable) tools.push(taskMemorySearch(() => task));
   const toolMap = new Map(tools.map(tool => [tool.name, tool]));
   const toolDefs = toToolDefinitions(tools);
+  const inputBudget = Math.min(contextBudget || 32000, model.contextWindow - model.maxOutput - 512)
+    - (toolDefs.length ? estimateTokens(JSON.stringify(toolDefs)) : 0);
+  if (inputBudget < 1000) throw new Error('可用上下文太小，请调高预算或使用更大上下文的模型');
   const lastUserQuery = historyText([...history].reverse().find(item => item.role === 'user')?.content || '');
   const builtContext = resumeMessages
     ? null
     : buildAgentContext({
         systemPrompt: buildSystemPrompt(repo, persona),
         history,
-        query: currentUserText || lastUserQuery,
+        query: [currentUserText || lastUserQuery, task?.goal !== currentUserText ? task?.goal?.slice(0, 400) : undefined].filter(Boolean).join('\n'),
         userLogin,
         capabilities: capabilityState.capabilities,
-        contextBudget,
+        contextBudget: inputBudget,
         memoryEnabled,
       });
-  let messages: V2ProviderMessage[] = resumeMessages || builtContext!.messages;
+  let messages: V2ProviderMessage[] = resumeMessages ? [...resumeMessages] : builtContext!.messages;
   if (!resumeMessages && currentUserContent) {
     messages = [...messages, { role: 'user', content: currentUserContent }];
   }
@@ -194,8 +202,10 @@ async function executeRun(options: RunAgentOptions): Promise<void> {
   let toolCalls = initialCalls;
   const completedWrites = new Set(options.completedWrites);
 
-  const checkpoint = async (pendingWrite?: PendingWrite, pending: V2ToolCall[] = []) => {
+  const checkpoint = async (pendingWrite?: PendingWrite, pending: V2ToolCall[] = [], finished = false) => {
     const snapshot: AgentCheckpoint = {
+      finished,
+      taskMemory: task,
       messages: [
         ...messages,
         ...pending.map((call): V2ProviderMessage => ({
@@ -219,8 +229,22 @@ async function executeRun(options: RunAgentOptions): Promise<void> {
   while (steps - initialSteps < MAX_ROUNDS_PER_RUN && toolCalls - initialCalls < MAX_CALLS_PER_RUN) {
     checkAbort(signal);
 
-    messages = compactProviderMessages(messages, contextBudget || 32000);
-    const result = await callModel(config, messages, toolDefs, signal, onEvent);
+    const requestMessages = messages.slice();
+    if (task && (task.request !== task.goal || task.previousActivity.length || task.progress.completedCalls || task.progress.pending?.length)) {
+      const firstBody = requestMessages.findIndex(message => message.role !== 'system');
+      const taskContext = renderTaskContext(task, estimateTokens, Math.min(4800, Math.floor(inputBudget * 0.24)), searchable);
+      requestMessages.splice(firstBody < 0 ? requestMessages.length : firstBody, 0, { role: 'system', content: taskContext });
+    }
+    const boundedMessages = compactProviderMessages(requestMessages, inputBudget);
+    const bodyStart = boundedMessages.findIndex(message => message.role !== 'system');
+    // 部分兼容端点要求系统提示只有一条。预算分配后再合并任务记录和系统提示。
+    const providerMessages = task && bodyStart > 1
+      ? [
+          { role: 'system' as const, content: boundedMessages.slice(0, bodyStart).map(message => message.content).join('\n\n') },
+          ...boundedMessages.slice(bodyStart),
+        ]
+      : boundedMessages;
+    const result = await callModel(config, providerMessages, toolDefs, signal, onEvent);
     checkAbort(signal);
     if (result.usage) onEvent({ type: 'usage', usage: result.usage });
 
@@ -241,10 +265,15 @@ async function executeRun(options: RunAgentOptions): Promise<void> {
     if (result.toolCalls.length === 0) {
       finalText = result.content;
       steps++;
+      if (task) {
+        task = withTaskNextSteps(task, finalText, []);
+        await checkpoint(undefined, [], true);
+      }
       onEvent({ type: 'done', text: finalText, steps });
       return;
     }
 
+    if (task) task = withTaskNextSteps(task, result.content, result.toolCalls);
     for (const [index, call] of result.toolCalls.entries()) {
       checkAbort(signal);
       if (toolCalls - initialCalls >= MAX_CALLS_PER_RUN) throw new Error('已到达本次工具调用上限');
@@ -322,9 +351,10 @@ async function executeRun(options: RunAgentOptions): Promise<void> {
       let artifact = outcome.artifact;
       let content = outcome.content || (outcome.ok ? '（无输出）' : '（工具执行失败，未返回详情）');
       if (call.name !== 'artifact_read' && content.length > MAX_INLINE_TOOL_RESULT) {
-        const saved = saveArtifact({
+        const saved = await saveArtifact({
           login: userLogin,
           runId,
+          taskEvidence: Boolean(task),
           toolName: call.name,
           title: `${call.name} 结果`,
           mime: 'text/plain',
@@ -351,7 +381,12 @@ async function executeRun(options: RunAgentOptions): Promise<void> {
         name: call.name,
         content,
       });
-      await checkpoint(undefined, result.toolCalls.slice(index + 1));
+      const pending = result.toolCalls.slice(index + 1);
+      if (task) {
+        if (call.name !== 'task_memory_search') task = recordTaskActivity(task, call, outcome.ok, outcome.content, artifact);
+        task = withTaskNextSteps(task, '', pending);
+      }
+      await checkpoint(undefined, pending);
     }
     steps++;
     await checkpoint();
@@ -365,7 +400,6 @@ export function toAgentHistory(messages: Array<{ role: 'user' | 'assistant'; con
     .filter(message => message.content.trim().length > 0
       || Boolean(message.modelContent && historyText(message.modelContent).trim())
       || Boolean(message.attachments?.length))
-    .slice(-20)
     .map(message => {
       const content = message.modelContent
         || (message.attachments?.length ? buildModelUserParts(message.content, message.attachments) : message.content);

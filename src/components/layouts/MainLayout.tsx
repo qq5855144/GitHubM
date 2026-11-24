@@ -430,7 +430,11 @@ export default function MainLayout({ children, active = true, chatViewport }: {
 
   return (
     <div
-      className={cn('flex w-full bg-background', chatViewport ? 'fixed inset-x-0 overflow-hidden' : 'min-h-screen')}
+      className={cn(
+        'flex w-full bg-background',
+        collapsed ? 'lg:[--layout-sidebar-width:3.5rem]' : 'lg:[--layout-sidebar-width:14rem]',
+        chatViewport ? 'fixed inset-x-0 overflow-hidden' : 'min-h-screen'
+      )}
       style={chatViewport ? { top: chatViewport.top, height: chatViewport.height } : undefined}
     >
       <AutoTranslatorInit />

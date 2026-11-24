@@ -193,6 +193,10 @@ export interface ModelConfig {
   /** 模型思考强度；off=关闭思考，auto/undefined=模型默认 */
   reasoning_effort?: 'off' | 'low' | 'medium' | 'high' | 'max';
   model?: string;
+  /** 自定义接口的能力可由用户覆盖。 */
+  supportsTools?: boolean;
+  supportsVision?: boolean;
+  stream?: boolean;
   /**
    * 请求超时毫秒数（默认 300000 = 5 分钟）
    * 用户可在模型设置中调整，复杂任务建议设 5~10 分钟

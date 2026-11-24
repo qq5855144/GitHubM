@@ -21,7 +21,7 @@ export function getModelCapabilities(type: ModelType | string, model?: string): 
           ? 64_000
           : 32_000;
   return {
-    supportsTools: true,
+    supportsTools: type !== 'custom',
     supportsVision: vision,
     contextWindow,
     maxOutput: 8192,

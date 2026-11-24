@@ -19,7 +19,7 @@ it('selects the saved custom model and sends chat to its endpoint with its own k
     type: 'custom', endpoint: 'https://custom.example/v1', model: 'custom-model', api_key: 'custom-key',
   });
   saveModelConfig({ type: 'openai', model: 'gpt-4o-mini', api_key: 'openai-key' });
-  const fetch = vi.fn(async () => new Response('data: [DONE]\n\n'));
+  const fetch = vi.fn(async () => new Response('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: [DONE]\n\n'));
   vi.stubGlobal('fetch', fetch);
   Element.prototype.scrollIntoView ??= vi.fn();
 

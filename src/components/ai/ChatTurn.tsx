@@ -215,7 +215,7 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff, onRegenerate }: {
         key={group.id}
         text={group.text}
         streaming={isStreaming && isLast}
-        error={message.error && isLast}
+        error={message.error && !message.errorDetail && isLast}
         onApplyDiff={onApplyDiff}
       />
     );
@@ -233,7 +233,7 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff, onRegenerate }: {
             <AssistantTextBlock
               text={message.content}
               streaming={isStreaming}
-              error={message.error}
+              error={message.error && !message.errorDetail}
               onApplyDiff={onApplyDiff}
             />
           ) : null}
@@ -241,6 +241,11 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff, onRegenerate }: {
       )}
 
       {isStreaming && !hasBody && <WaitingDots />}
+      {message.errorDetail && (
+        <p role="status" className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
+          {message.errorDetail}
+        </p>
+      )}
 
       {!message.streaming && message.content && (
         <div className="mt-2 flex items-center gap-3">

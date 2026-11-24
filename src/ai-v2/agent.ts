@@ -1,7 +1,9 @@
 // AI Assistant V2 — 无固定流程的通用 Agent 循环
 import type {
+  AgentCheckpoint,
   AgentEvent,
   AgentHistoryMessage,
+  PendingWrite,
   AgentTool,
   ApprovalRequest,
   RunAgentOptions,
@@ -10,16 +12,47 @@ import type {
   V2ToolCall,
   V2ToolDefinition,
 } from './types';
-import { buildModelUserContent } from './attachments';
+import { buildModelUserParts } from './attachments';
+import { prepareGitHubWrite } from './tools/github';
 import type { UiAttachment } from './attachments';
 import type { V2ContentPart } from './types';
 import { streamProvider } from './providers';
+import { getModelCapabilities } from './modelCapabilities';
 import { resolveCapabilities } from './capabilities';
 import { saveArtifact } from './artifacts';
 import { buildAgentContext, compactProviderMessages } from './context';
 
 const MAX_INLINE_TOOL_RESULT = 12000;
 const TOOL_PREVIEW_CHARS = 4000;
+const MAX_ROUNDS_PER_RUN = 32;
+const MAX_CALLS_PER_RUN = 96;
+const RUN_TIMEOUT_MS = 15 * 60 * 1000;
+
+class CheckpointError extends Error {}
+
+function checkAbort(signal: AbortSignal): void {
+  if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+}
+
+function historyText(content: AgentHistoryMessage['content']): string {
+  return typeof content === 'string' ? content
+    : content.map(part => part.type === 'text' ? part.text : '[图片附件]').join('\n');
+}
+
+function canonicalArguments(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalArguments);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => [key, canonicalArguments(item)]));
+}
+
+async function writeIdentity(name: string, args: Record<string, unknown>): Promise<string> {
+  const text = JSON.stringify([name, canonicalArguments(args)]);
+  if (!globalThis.crypto?.subtle) return text;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 
 export function buildSystemPrompt(
   repo?: { fullName: string; branch?: string; defaultBranch: string },
@@ -85,6 +118,23 @@ function toolErrorMessage(error: unknown): string {
 }
 
 export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
+  checkAbort(options.signal);
+  const run = new AbortController();
+  const abort = () => run.abort();
+  options.signal.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(() => run.abort(), RUN_TIMEOUT_MS);
+  try {
+    await executeRun({ ...options, signal: run.signal });
+  } catch (error) {
+    if (run.signal.aborted && !options.signal.aborted) throw new Error('任务已达到总时长上限');
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    options.signal.removeEventListener('abort', abort);
+  }
+}
+
+async function executeRun(options: RunAgentOptions): Promise<void> {
   const {
     token,
     userLogin,
@@ -115,10 +165,11 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
   const capabilityState = options.tools
     ? { tools: options.tools, capabilities: [] }
     : resolveCapabilities(repo);
-  const tools = capabilityState.tools;
+  const supportsTools = config.supportsTools ?? getModelCapabilities(config.type, config.model).supportsTools;
+  const tools = supportsTools ? capabilityState.tools : [];
   const toolMap = new Map(tools.map(tool => [tool.name, tool]));
   const toolDefs = toToolDefinitions(tools);
-  const lastUserQuery = [...history].reverse().find(item => item.role === 'user')?.content || '';
+  const lastUserQuery = historyText([...history].reverse().find(item => item.role === 'user')?.content || '');
   const builtContext = resumeMessages
     ? null
     : buildAgentContext({
@@ -137,7 +188,24 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
 
   const repeatedCalls = new Map<string, number>();
   let finalText = '';
-  let steps = resumeSteps || 0;
+  const initialSteps = resumeSteps || 0;
+  const initialCalls = options.resumeToolCalls || 0;
+  let steps = initialSteps;
+  let toolCalls = initialCalls;
+  const completedWrites = new Set(options.completedWrites);
+
+  const checkpoint = async (pendingWrite?: PendingWrite, pending: V2ToolCall[] = []) => {
+    const snapshot: AgentCheckpoint = {
+      messages: [
+        ...messages,
+        ...pending.map((call): V2ProviderMessage => ({
+          role: 'tool', tool_call_id: call.id, name: call.name, content: '此调用在中断前尚未执行。',
+        })),
+      ],
+      steps, toolCalls, writeInFlight: Boolean(pendingWrite), pendingWrite, completedWrites: [...completedWrites],
+    };
+    if (await onSnapshot?.(snapshot) === false) throw new CheckpointError('无法保存安全恢复点，任务已停止');
+  };
 
   onEvent({
     type: 'run_start',
@@ -146,14 +214,14 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
     skills: builtContext?.skillIds || [],
     memories: builtContext?.memoryIds || [],
   });
-  onSnapshot?.({ messages, steps });
+  await checkpoint();
 
-  // 不设置固定工具轮数上限：由用户停止、网络错误或重复调用保护来结束。
-  while (true) {
-    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+  while (steps - initialSteps < MAX_ROUNDS_PER_RUN && toolCalls - initialCalls < MAX_CALLS_PER_RUN) {
+    checkAbort(signal);
 
     messages = compactProviderMessages(messages, contextBudget || 32000);
     const result = await callModel(config, messages, toolDefs, signal, onEvent);
+    checkAbort(signal);
     if (result.usage) onEvent({ type: 'usage', usage: result.usage });
 
     const assistantMessage: V2ProviderMessage = {
@@ -177,8 +245,10 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
       return;
     }
 
-    for (const call of result.toolCalls) {
-      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    for (const [index, call] of result.toolCalls.entries()) {
+      checkAbort(signal);
+      if (toolCalls - initialCalls >= MAX_CALLS_PER_RUN) throw new Error('已到达本次工具调用上限');
+      toolCalls++;
       onEvent({ type: 'tool_start', call });
 
       const signature = `${call.name}:${call.arguments}`;
@@ -186,6 +256,7 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
       repeatedCalls.set(signature, count);
 
       let outcome: ToolRunResult = { ok: false, content: '工具未执行' };
+      let checkingWriteResult = false;
       if (count >= 3) {
         outcome = { ok: false, content: '检测到重复调用相同工具和参数，已停止重复执行。' };
       } else {
@@ -195,29 +266,54 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
         } else {
           try {
             const args = safeParseArgs(call.arguments);
-            if (tool.risk === 'write') {
-              if (!requestApproval) {
+            if (tool.risk !== 'read') {
+              const id = await writeIdentity(tool.name, args);
+              if (completedWrites.has(id)) {
+                outcome = { ok: false, content: '该写入已在本任务执行过，已阻止重复提交。' };
+              } else if (!requestApproval) {
                 outcome = {
                   ok: false,
                   content: '写操作未执行：当前运行没有提供用户确认通道。',
                 };
               } else {
+                const target = await prepareGitHubWrite(tool.name, args, { token, userLogin, repo, signal });
+                checkAbort(signal);
                 const approval: ApprovalRequest = {
                   id: call.id,
                   toolName: tool.name,
                   description: tool.description,
                   arguments: args,
                   risk: tool.risk,
+                  target,
                 };
-                const approved = await requestApproval(approval);
-                outcome = approved
-                  ? await tool.execute(args, { token, userLogin, repo, signal })
-                  : { ok: false, content: '用户拒绝了本次写操作，未修改仓库。' };
+                const approved = await requestApproval(approval, signal);
+                checkAbort(signal);
+                if (approved) {
+                  await checkpoint({
+                    id, callId: call.id, tool: call.name, verification: target?.verification,
+                  }, result.toolCalls.slice(index));
+                  if (signal.aborted) {
+                    await checkpoint(undefined, result.toolCalls.slice(index));
+                    checkAbort(signal);
+                  }
+                  checkingWriteResult = true;
+                  outcome = await tool.execute(args, { token, userLogin, repo, signal, approvedWrite: target });
+                  if (!outcome.ok) throw new Error(outcome.content);
+                  completedWrites.add(id);
+                } else {
+                  outcome = { ok: false, content: '用户拒绝了本次写操作，未修改仓库。' };
+                }
               }
             } else {
               outcome = await tool.execute(args, { token, userLogin, repo, signal });
             }
           } catch (error) {
+            if (error instanceof CheckpointError) throw error;
+            if (checkingWriteResult) {
+              onEvent({ type: 'tool_end', call, ok: false, content: toolErrorMessage(error) });
+              throw new Error(`写入未确认完成，请先检查 GitHub 上的结果：${toolErrorMessage(error)}`);
+            }
+            checkAbort(signal);
             outcome = { ok: false, content: `工具执行失败：${toolErrorMessage(error)}` };
           }
         }
@@ -255,29 +351,26 @@ export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
         name: call.name,
         content,
       });
+      await checkpoint(undefined, result.toolCalls.slice(index + 1));
     }
     steps++;
-    onSnapshot?.({ messages, steps });
+    await checkpoint();
   }
+  throw new Error('已到达本次任务上限，可从已保存的进度继续');
 }
 
 /** 给 UI 的轻量历史：只保留最终文本，工具轨迹不进入下一轮上下文 */
 export function toAgentHistory(messages: Array<{ role: 'user' | 'assistant'; content: string; modelContent?: string | V2ContentPart[]; attachments?: UiAttachment[] }>): AgentHistoryMessage[] {
-  const contentText = (content: string | V2ContentPart[]): string => typeof content === 'string'
-    ? content
-    : content.map(part => part.type === 'text' ? part.text : '[图片附件]').join('\n');
   return messages
     .filter(message => message.content.trim().length > 0
-      || Boolean(message.modelContent && contentText(message.modelContent).trim())
+      || Boolean(message.modelContent && historyText(message.modelContent).trim())
       || Boolean(message.attachments?.length))
     .slice(-20)
-    .map(message => ({
-      role: message.role,
-      content: (message.modelContent
-        ? contentText(message.modelContent)
-        : (message.attachments?.length ? buildModelUserContent(message.content, message.attachments) : message.content)
-      ).slice(0, 50000),
-    }));
+    .map(message => {
+      const content = message.modelContent
+        || (message.attachments?.length ? buildModelUserParts(message.content, message.attachments) : message.content);
+      return { role: message.role, content: typeof content === 'string' ? content.slice(0, 50000) : content };
+    });
 }
 
 export function collectToolDefinitions(tools: AgentTool[]): V2ToolDefinition[] {

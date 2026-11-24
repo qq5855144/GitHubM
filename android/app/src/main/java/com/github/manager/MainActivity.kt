@@ -408,7 +408,13 @@ class MainActivity : AppCompatActivity() {
         fun startAgentTask(title: String) {
             runOnUiThread {
                 val text = title.ifBlank { "AI 助手正在执行任务" }
-                AgentForegroundService.start(this@MainActivity, text)
+                try {
+                    AgentForegroundService.start(this@MainActivity, text)
+                } catch (error: IllegalStateException) {
+                    android.util.Log.w("AgentService", "Foreground start unavailable", error)
+                } catch (error: SecurityException) {
+                    android.util.Log.w("AgentService", "Foreground service permission unavailable", error)
+                }
             }
         }
 
@@ -1096,6 +1102,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        AgentForegroundService.stop(this)
         // 用户主动退出（返回键/从最近任务划掉）时清除热启动时间，下次仍是完整冷启动
         if (isFinishing) {
             getSharedPreferences("gm_prefs", MODE_PRIVATE)

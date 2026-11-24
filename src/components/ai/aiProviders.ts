@@ -43,11 +43,18 @@ export function getProviderModelsUrl(type: ModelType, endpoint?: string): string
   }
 }
 
+function probeSignal(): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(15_000);
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 15_000);
+  return controller.signal;
+}
+
 /** 构建请求认证头（gemini OpenAI 兼容端点用 Bearer，其余同样） */
 function authHeaders(apiKey: string): Record<string, string> {
   return {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${apiKey}`,
+    ...(apiKey.trim() ? { Authorization: `Bearer ${apiKey.trim()}` } : {}),
   };
 }
 
@@ -95,7 +102,10 @@ export async function fetchModelsFromAPI(
 
   let res: Response;
   try {
-    res = await fetch(url, { headers: authHeaders(apiKey) });
+    res = await fetch(url, {
+      headers: apiKey.trim() ? { Authorization: `Bearer ${apiKey.trim()}` } : {},
+      signal: probeSignal(),
+    });
   } catch {
     // 浏览器只给出笼统的 “Failed to fetch”：明文 HTTP 被系统拦截、跨域被拒、地址不可达都走这里
     throw new Error(i18n.t('无法连接到接口地址：请确认地址可访问；Android 上如果是 http:// 明文地址，该地址需在白名单内且服务端允许跨域'));
@@ -137,8 +147,11 @@ export async function testProviderConnection(
   proxyUrl?: string,
 ): Promise<TestConnectionResult> {
   if (type === 'wenxin') return { success: false, error: i18n.t('该平台已不再支持') };
+  if (type === 'custom' && !normalizeBaseEndpoint(endpoint)) {
+    return { success: false, error: i18n.t('接口地址为空，请先填写') };
+  }
   // 默认直连；只有显式传入代理地址时才走代理。
-  const proxyBase = proxyUrl?.trim().replace(/\/+$/, '') || '';
+  const proxyBase = type === 'custom' && !apiKey.trim() ? '' : proxyUrl?.trim().replace(/\/+$/, '') || '';
   const url = proxyBase
     ? `${proxyBase}/v1/chat/completions`
     : getProviderChatUrl(type, endpoint);
@@ -146,13 +159,14 @@ export async function testProviderConnection(
   const headers: Record<string, string> = {
     ...authHeaders(apiKey),
     ...(proxyBase ? { 'x-llm-provider': type } : {}),
-    ...(proxyBase && type === 'custom' && endpoint ? { 'x-llm-upstream': endpoint } : {}),
+    ...(proxyBase && type === 'custom' && endpoint ? { 'x-llm-upstream': getProviderChatUrl(type, endpoint) } : {}),
   };
   const startedAt = Date.now();
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers,
+      signal: probeSignal(),
       body: JSON.stringify({
         model: model || getDefaultProviderModel(type),
         messages: [{ role: 'user', content: 'ping' }],

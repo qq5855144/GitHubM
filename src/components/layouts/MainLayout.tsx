@@ -354,7 +354,7 @@ function SidebarNav({
   );
 }
 
-export default function MainLayout({ children }: { children: React.ReactNode }) {
+export default function MainLayout({ children, active = true }: { children: React.ReactNode; active?: boolean }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, rateLimit, logout } = useAuth();
@@ -369,7 +369,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const ThemeIcon = themeIcons[currentTheme];
 
   useEffect(() => {
-    if (!user) {
+    if (!active || !user) {
       setHasUnreadNotifications(false);
       return;
     }
@@ -396,7 +396,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [user]);
+  }, [user, active]);
 
   const cycleTheme = () => {
     const order: ThemeMode[] = ['light', 'dark', 'system'];

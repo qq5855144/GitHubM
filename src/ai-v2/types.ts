@@ -75,6 +75,33 @@ export interface ApprovalRequest {
   description: string;
   arguments: Record<string, unknown>;
   risk: AgentTool['risk'];
+  target?: WritePreview;
+}
+
+export interface WritePreview {
+  repository: string;
+  branch?: string;
+  baseBranch?: string;
+  fileSha?: string | null;
+  headSha?: string;
+  baseSha?: string;
+  createsBranch?: boolean;
+  pullTitle?: string;
+  changes?: Array<{ path: string; diff: string }>;
+  verification?: WriteVerification;
+}
+
+export type WriteVerification =
+  | { kind: 'files'; repository: string; branch: string; files: Array<{ path: string; sha: string }> }
+  | { kind: 'branch'; repository: string; branch: string; sha: string }
+  | { kind: 'pull'; repository: string; head: string; base: string; title: string; sha: string }
+  | { kind: 'merge'; repository: string; number: number; sha: string };
+
+export interface PendingWrite {
+  id: string;
+  callId: string;
+  tool: string;
+  verification?: WriteVerification;
 }
 
 export interface CapabilityInfo {
@@ -96,6 +123,7 @@ export interface ToolRuntimeContext {
   userLogin?: string;
   repo?: RepoContext;
   signal?: AbortSignal;
+  approvedWrite?: WritePreview;
 }
 
 export type AgentEvent =
@@ -110,7 +138,16 @@ export type AgentEvent =
 
 export interface AgentHistoryMessage {
   role: 'user' | 'assistant';
-  content: string;
+  content: string | V2ContentPart[];
+}
+
+export interface AgentCheckpoint {
+  messages: V2ProviderMessage[];
+  steps: number;
+  toolCalls?: number;
+  writeInFlight?: boolean;
+  pendingWrite?: PendingWrite;
+  completedWrites?: string[];
 }
 
 export interface RunAgentOptions {
@@ -130,12 +167,14 @@ export interface RunAgentOptions {
   signal: AbortSignal;
   onEvent: (event: AgentEvent) => void;
   /** 写操作前的用户确认；未提供时写工具默认拒绝 */
-  requestApproval?: (request: ApprovalRequest) => Promise<boolean>;
+  requestApproval?: (request: ApprovalRequest, signal: AbortSignal) => Promise<boolean>;
   /** 每个工具阶段后的状态快照，用于中断恢复 */
-  onSnapshot?: (snapshot: { messages: V2ProviderMessage[]; steps: number }) => void;
+  onSnapshot?: (snapshot: AgentCheckpoint) => void | Promise<unknown>;
   /** 恢复被中断的运行 */
   resumeMessages?: V2ProviderMessage[];
   resumeSteps?: number;
+  resumeToolCalls?: number;
+  completedWrites?: string[];
   /** 测试注入：默认使用真实 provider */
   callModel?: (
     config: ModelConfig,
@@ -180,6 +219,7 @@ export interface UiChatMessage {
   blocks?: UiAssistantBlock[];
   streaming?: boolean;
   error?: boolean;
+  errorDetail?: string;
   metrics?: {
     promptTokens?: number;
     completionTokens?: number;

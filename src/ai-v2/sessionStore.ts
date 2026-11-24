@@ -138,8 +138,7 @@ async function migrateStore(login: string | undefined, store: SessionStore): Pro
     if (!ok) persisted = false;
   }
   const index: SessionIndex = { sessions, activeId: store.activeId };
-  if (persisted) {
-    await idbSet(indexIdbKey(login), index);
+  if (persisted && await idbSet(indexIdbKey(login), index)) {
     await idbDelete(legacyIdbKey(login));
     try {
       if (login) localStorage.removeItem(sessionLocalKey(login));
@@ -150,7 +149,23 @@ async function migrateStore(login: string | undefined, store: SessionStore): Pro
   return index;
 }
 
+const sessionWriteQueues = new Map<string, Promise<void>>();
+
+export function queueSessionWrite(login: string, work: () => Promise<void>): Promise<void> {
+  const previous = sessionWriteQueues.get(login) || Promise.resolve();
+  const next = previous.catch(() => {}).then(work);
+  sessionWriteQueues.set(login, next);
+  const release = () => {
+    if (sessionWriteQueues.get(login) === next) sessionWriteQueues.delete(login);
+  };
+  void next.then(release, release);
+  return next;
+}
+
 export async function loadSessionIndex(login?: string): Promise<SessionIndex | null> {
+  if (login) await sessionWriteQueues.get(login)?.catch(() => {});
+  const fallback = readLocalIndex(login);
+  if (fallback) return fallback;
   const fromDb = validIndex(await idbGet<unknown>(indexIdbKey(login)));
   if (fromDb) return fromDb;
 
@@ -160,16 +175,13 @@ export async function loadSessionIndex(login?: string): Promise<SessionIndex | n
   const legacyLocal = readLegacyLocal(login);
   if (legacyLocal) return migrateStore(login, legacyLocal);
 
-  return readLocalIndex(login);
+  return null;
 }
 
 export async function loadSessionMessages(
   login: string | undefined,
   sessionId: string,
 ): Promise<UiChatMessage[]> {
-  const fromDb = await idbGet<UiChatMessage[]>(messagesIdbKey(login, sessionId));
-  if (Array.isArray(fromDb)) return fromDb;
-
   try {
     const raw = localStorage.getItem(messagesLocalKey(login, sessionId));
     if (raw) {
@@ -180,6 +192,8 @@ export async function loadSessionMessages(
     // ignore
   }
 
+  const fromDb = await idbGet<UiChatMessage[]>(messagesIdbKey(login, sessionId));
+  if (Array.isArray(fromDb)) return fromDb;
   const legacyIdb = validStore(await idbGet<unknown>(legacyIdbKey(login)));
   const legacySession = legacyIdb?.sessions.find(session => session.id === sessionId);
   if (legacySession) return legacySession.messages || [];
@@ -193,7 +207,10 @@ export async function saveSessionIndex(
   index: SessionIndex,
 ): Promise<SessionSaveResult> {
   const persisted = await idbSet(indexIdbKey(login), index);
-  if (persisted) return { ok: true };
+  if (persisted) {
+    try { if (login) localStorage.removeItem(sessionLocalKey(login)); } catch { /* ignore */ }
+    return { ok: true };
+  }
 
   try {
     if (!login) return { ok: false, error: '未登录' };
@@ -210,7 +227,10 @@ export async function saveSessionMessages(
   messages: UiChatMessage[],
 ): Promise<SessionSaveResult> {
   const persisted = await idbSet(messagesIdbKey(login, sessionId), messages);
-  if (persisted) return { ok: true };
+  if (persisted) {
+    try { localStorage.removeItem(messagesLocalKey(login, sessionId)); } catch { /* ignore */ }
+    return { ok: true };
+  }
 
   try {
     localStorage.setItem(messagesLocalKey(login, sessionId), JSON.stringify(messages));

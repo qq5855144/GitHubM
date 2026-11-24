@@ -1,5 +1,5 @@
 // GitHub Pull Request 接口。
-import type { GitHubComment, GitHubPullRequest, PrState, SortDirection } from '@/types/types';
+import type { GitHubComment, GitHubFile, GitHubPullRequest, PrState, SortDirection } from '@/types/types';
 import { request, requestWithPagination } from './core';
 
 export async function getPullRequests(
@@ -13,6 +13,7 @@ export async function getPullRequests(
     page?: number;
     base?: string;
     head?: string;
+    fresh?: boolean;
   } = {}
 ): Promise<{ data: GitHubPullRequest[]; hasNextPage: boolean }> {
   const {
@@ -33,21 +34,23 @@ export async function getPullRequests(
   if (params.head) queryParams.set('head', params.head);
 
   return requestWithPagination<GitHubPullRequest>(
-    `/repos/${owner}/${repo}/pulls?${queryParams.toString()}`
+    `/repos/${owner}/${repo}/pulls?${queryParams.toString()}`,
+    params.fresh ? { cache: 'no-store' } : undefined
   );
 }
 
-/** 创建 Pull Request（同仓库分支）。 */
+/** 创建 Pull Request。 */
 export async function createPullRequest(
   owner: string,
   repo: string,
-  params: { title: string; head: string; base: string; body?: string; draft?: boolean }
+  params: { title: string; head: string; head_repo?: string; base: string; body?: string; draft?: boolean }
 ): Promise<GitHubPullRequest> {
   return request<GitHubPullRequest>(`/repos/${owner}/${repo}/pulls`, {
     method: 'POST',
     body: JSON.stringify({
       title: params.title,
       head: params.head,
+      head_repo: params.head_repo,
       base: params.base,
       body: params.body ?? '',
       draft: params.draft ?? false,
@@ -58,20 +61,32 @@ export async function createPullRequest(
 export async function getPullRequest(
   owner: string,
   repo: string,
-  prNumber: number
+  prNumber: number,
+  options?: { fresh?: boolean }
 ): Promise<GitHubPullRequest> {
-  return request<GitHubPullRequest>(`/repos/${owner}/${repo}/pulls/${prNumber}`);
+  return request<GitHubPullRequest>(
+    `/repos/${owner}/${repo}/pulls/${prNumber}`,
+    options?.fresh ? { cache: 'no-store' } : undefined
+  );
+}
+
+export function samePullRevision(left: GitHubPullRequest, right: GitHubPullRequest): boolean {
+  return left.head.sha === right.head.sha && left.base.ref === right.base.ref && left.base.sha === right.base.sha;
 }
 
 export async function getPullRequestFiles(
   owner: string,
   repo: string,
-  prNumber: number
-): Promise<import('@/types/types').GitHubFile[]> {
-  return request<import('@/types/types').GitHubFile[]>(
-    `/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=100`
+  prNumber: number,
+  page = 1
+): Promise<{ data: GitHubFile[]; hasNextPage: boolean }> {
+  return requestWithPagination<GitHubFile>(
+    `/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=100&page=${page}`,
+    { cache: 'no-store' }
   );
 }
+
+export type PullMergeMethod = 'merge' | 'squash' | 'rebase';
 
 export async function mergePullRequest(
   owner: string,
@@ -80,7 +95,8 @@ export async function mergePullRequest(
   params?: {
     commit_title?: string;
     commit_message?: string;
-    merge_method?: 'merge' | 'squash' | 'rebase';
+    merge_method?: PullMergeMethod;
+    sha?: string;
   }
 ): Promise<{ sha: string; merged: boolean; message: string }> {
   return request<{ sha: string; merged: boolean; message: string }>(

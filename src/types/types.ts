@@ -28,6 +28,7 @@ export interface GitHubRepo {
   description: string | null;
   private: boolean;
   fork: boolean;
+  parent?: Pick<GitHubRepo, 'name' | 'full_name' | 'default_branch' | 'owner'>;
   html_url: string;
   clone_url: string;
   ssh_url: string;
@@ -52,7 +53,11 @@ export interface GitHubRepo {
     name: string;
     spdx_id: string;
   } | null;
+  allow_merge_commit?: boolean;
+  allow_squash_merge?: boolean;
+  allow_rebase_merge?: boolean;
   permissions?: {
+    maintain?: boolean;
     admin: boolean;
     push: boolean;
     pull: boolean;
@@ -110,6 +115,7 @@ export interface GitHubComment {
 
 export interface GitHubPullRequest {
   id: number;
+  node_id?: string;
   number: number;
   title: string;
   body: string | null;
@@ -144,6 +150,7 @@ export interface GitHubPullRequest {
     repo: GitHubRepo;
   };
   mergeable: boolean | null;
+  mergeable_state?: string;
   draft: boolean;
 }
 

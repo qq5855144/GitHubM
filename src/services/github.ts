@@ -7,6 +7,7 @@ import type {
   GitHubComment,
   GitHubPullRequest,
   GitHubCommit,
+  GitHubFile,
   GitHubBranch,
   GitHubCollaborator,
   GitHubNotification,
@@ -521,19 +522,23 @@ export async function compareBranches(
   owner: string,
   repo: string,
   base: string,
-  head: string
+  head: string,
+  options?: { fresh?: boolean }
 ): Promise<{
   ahead_by: number;
   behind_by: number;
   status: string;
   commits: GitHubCommit[];
+  files?: GitHubFile[];
 }> {
   return request<{
     ahead_by: number;
     behind_by: number;
     status: string;
     commits: GitHubCommit[];
-  }>(`/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`);
+    files?: GitHubFile[];
+  }>(`/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+    options?.fresh ? { cache: 'no-store' } : undefined);
 }
 
 // ===== 协作者 API =====
@@ -1488,6 +1493,7 @@ export type ReviewEvent = 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT';
 export interface SubmitReviewParams {
   event: ReviewEvent;
   body?: string;
+  commit_id?: string;
 }
 
 /** 提交 PR 评审（Approve / Request Changes / Comment） */
@@ -1504,6 +1510,7 @@ export async function submitPullRequestReview(
       body: JSON.stringify({
         event: params.event,
         body: params.body ?? '',
+        commit_id: params.commit_id,
       }),
     }
   );

@@ -114,6 +114,12 @@ function consumeCacheBust(url: string): string {
   return url;
 }
 
+function freshRequestUrl(url: string): string {
+  const parsed = new URL(url);
+  parsed.searchParams.set('_t', String(Date.now()));
+  return parsed.toString();
+}
+
 /** 清空全部缓存（退出登录时调用） */
 export function clearApiCache(): void {
   apiCache.clear();
@@ -269,14 +275,15 @@ export async function request<T>(
       ?? 'application/vnd.github+json');
     const cacheKey = buildCacheKey(url, accept);
     // 1. TTL 缓存命中：直接返回，不发网络请求
-    const entry = getCacheEntry<T>(cacheKey);
-    const cached = getCached<T>(cacheKey);
+    const fresh = options.cache === 'no-store';
+    const entry = fresh ? undefined : getCacheEntry<T>(cacheKey);
+    const cached = fresh ? null : getCached<T>(cacheKey);
     if (cached !== null) return cached;
 
     // 2. In-flight 合并：若相同请求正在进行中，共享同一 Promise
     //    fetchUrl 可能附加 _t 时间戳以绕过 GitHub CDN 强制缓存（60s），
     //    但 cacheKey 始终用干净 URL，确保时间戳不污染内存缓存键。
-    const fetchUrl = consumeCacheBust(url);
+    const fetchUrl = fresh ? freshRequestUrl(url) : consumeCacheBust(url);
     const execute = async (): Promise<T> => {
       const headers: Record<string, string> = {
         ...(buildHeaders() as Record<string, string>),
@@ -308,11 +315,11 @@ export async function request<T>(
       }
       if (response.status === 204) return undefined as T;
       const data = await response.json() as T;
-      setCached(cacheKey, data, response.headers.get('etag') ?? undefined, cacheTtlForUrl(url));
+      if (!fresh) setCached(cacheKey, data, response.headers.get('etag') ?? undefined, cacheTtlForUrl(url));
       return data;
     };
     // 带 signal 的调用独立执行，避免一方取消时连带其他共享 Promise 的调用方。
-    return options.signal ? execute() : getOrCreateInFlight<T>(cacheKey, execute);
+    return fresh || options.signal ? execute() : getOrCreateInFlight<T>(cacheKey, execute);
   }
 
   // 非 GET 请求：直接发出，完成后失效相关缓存前缀
@@ -368,13 +375,14 @@ export async function requestWithPagination<T>(
   if (method === 'GET') {
     const cacheKey = buildCacheKey(url);
     // 1. TTL 缓存命中
-    const entry = getCacheEntry<{ data: T[]; hasNextPage: boolean }>(cacheKey);
-    const cached = getCached<{ data: T[]; hasNextPage: boolean }>(cacheKey);
+    const fresh = options.cache === 'no-store';
+    const entry = fresh ? undefined : getCacheEntry<{ data: T[]; hasNextPage: boolean }>(cacheKey);
+    const cached = fresh ? null : getCached<{ data: T[]; hasNextPage: boolean }>(cacheKey);
     if (cached !== null) return cached;
 
     // 2. In-flight 合并（fetchUrl 可能附加 _t 绕过 GitHub CDN 强制缓存）
-    const fetchUrl = consumeCacheBust(url);
-    return getOrCreateInFlight<{ data: T[]; hasNextPage: boolean }>(cacheKey, async () => {
+    const fetchUrl = fresh ? freshRequestUrl(url) : consumeCacheBust(url);
+    const execute = async () => {
       const headers: Record<string, string> = {
         ...(buildHeaders() as Record<string, string>),
         ...(options.headers as Record<string, string> | undefined),
@@ -407,9 +415,10 @@ export async function requestWithPagination<T>(
       const linkHeader = response.headers.get('Link');
       const links = linkHeader ? parseLinkHeader(linkHeader) : {};
       const result = { data, hasNextPage: !!links.next };
-      setCached(cacheKey, result, response.headers.get('etag') ?? undefined, cacheTtlForUrl(url));
+      if (!fresh) setCached(cacheKey, result, response.headers.get('etag') ?? undefined, cacheTtlForUrl(url));
       return result;
-    });
+    };
+    return fresh || options.signal ? execute() : getOrCreateInFlight(cacheKey, execute);
   }
   // 非 GET 分页请求（极少见，直接发出）
   const response = await fetchWithResilience(url, {

@@ -115,9 +115,8 @@ function IssueScrollButton({ pageRef }: { pageRef: RefObject<HTMLDivElement | nu
   return (
     <Button
       type="button"
-      variant="outline"
       size="icon"
-      className="pointer-events-auto absolute bottom-full right-4 mb-3 rounded-full text-xs font-semibold text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:right-6"
+      className="pointer-events-auto absolute bottom-full right-4 mb-3 rounded-full text-xs font-semibold focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:right-6"
       aria-label={label}
       title={label}
       onClick={() => {

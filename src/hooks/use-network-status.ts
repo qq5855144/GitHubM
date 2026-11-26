@@ -10,7 +10,7 @@ interface NetworkStatus {
 /**
  * 监听浏览器网络状态变化。
  *
- * - 断网时 isOnline = false，触发离线横幅
+ * - 断网时 isOnline = false，清除恢复状态
  * - 网络恢复时 justRecovered = true，触发「已恢复」横幅，3s 后自动清除
  * - WebView 内同样有效（依赖 navigator.onLine + online/offline 事件）
  */

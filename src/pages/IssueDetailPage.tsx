@@ -2,8 +2,6 @@
 
 import {
   AlertCircle,
-  ArrowDown,
-  ArrowUp,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -114,13 +112,12 @@ function IssueScrollButton({ pageRef }: { pageRef: RefObject<HTMLDivElement | nu
 
   if (!target) return null;
   const label = target === 'top' ? i18n.t('回到顶部') : i18n.t('滚动到底部');
-  const Icon = target === 'top' ? ArrowUp : ArrowDown;
   return (
     <Button
       type="button"
       variant="outline"
       size="icon"
-      className="pointer-events-auto absolute bottom-full right-4 mb-3 h-11 w-11 rounded-full text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:right-6"
+      className="pointer-events-auto absolute bottom-full right-4 mb-3 rounded-full text-xs font-semibold text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:right-6"
       aria-label={label}
       title={label}
       onClick={() => {
@@ -131,7 +128,7 @@ function IssueScrollButton({ pageRef }: { pageRef: RefObject<HTMLDivElement | nu
         });
       }}
     >
-      <Icon aria-hidden="true" />
+      {target === 'top' ? 'top' : 'bot'}
     </Button>
   );
 }

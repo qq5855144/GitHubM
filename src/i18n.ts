@@ -5,6 +5,13 @@ import { initReactI18next } from 'react-i18next';
 const resources = {
   en: {
     translation: {
+        "草稿列表": "Code drafts",
+        "暂无代码草稿": "No code drafts",
+        "删除草稿": "Delete draft",
+        "无法删除本地草稿": "Could not delete the local draft",
+        "无法放弃本次草稿修改": "Could not remove this session’s changes from the local draft",
+        "放弃修改并退出": "Discard and leave",
+        "可以暂存修改以便下次继续，也可以放弃修改并退出。": "Save a draft to continue later, or discard your changes and leave.",
         "代码编辑器": "Code editor",
         "插入符号": "Insert symbol",
         "正则表达式无效": "Invalid regular expression",
@@ -1437,6 +1444,13 @@ login: {
   },
   'zh-CN': {
     translation: {
+        "草稿列表": "草稿列表",
+        "暂无代码草稿": "暂无代码草稿",
+        "删除草稿": "删除草稿",
+        "无法删除本地草稿": "无法删除本地草稿",
+        "无法放弃本次草稿修改": "无法放弃本次草稿修改",
+        "放弃修改并退出": "放弃修改并退出",
+        "可以暂存修改以便下次继续，也可以放弃修改并退出。": "可以暂存修改以便下次继续，也可以放弃修改并退出。",
         "代码编辑器": "代码编辑器",
         "插入符号": "插入符号",
         "正则表达式无效": "正则表达式无效",

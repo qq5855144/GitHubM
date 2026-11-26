@@ -250,6 +250,17 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 const STORAGE_KEY = 'github_manager_theme';
 
+type AndroidThemeBridge = {
+  notifyTheme?: (isDark: boolean) => void;
+  notifyThemeMode?: (mode: ThemeMode, isDark: boolean) => void;
+};
+
+function readThemeMode(): ThemeMode {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+  return (window as Window & { AndroidBridge?: AndroidThemeBridge }).AndroidBridge ? 'light' : 'system';
+}
+
 function getSystemTheme(): 'dark' | 'light' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
@@ -314,7 +325,7 @@ function applyTheme(mode: ThemeMode) {
     html.classList.remove('dark');
   }
   // 通知 APK 壳同步更新状态栏与底部导航栏颜色
-  notifyAndroidTheme(resolved === 'dark');
+  notifyAndroidTheme(mode, resolved === 'dark');
   return resolved;
 }
 
@@ -323,10 +334,11 @@ function applyTheme(mode: ThemeMode) {
  * AndroidBridge 由 MainActivity 的 addJavascriptInterface 注入，
  * 纯浏览器环境中不存在，通过可选链安全调用。
  */
-function notifyAndroidTheme(isDark: boolean) {
+function notifyAndroidTheme(mode: ThemeMode, isDark: boolean) {
   try {
-    (window as unknown as { AndroidBridge?: { notifyTheme?: (d: boolean) => void } })
-      .AndroidBridge?.notifyTheme?.(isDark);
+    const bridge = (window as Window & { AndroidBridge?: AndroidThemeBridge }).AndroidBridge;
+    if (bridge?.notifyThemeMode) bridge.notifyThemeMode(mode, isDark);
+    else bridge?.notifyTheme?.(isDark);
   } catch {
     // 非 APK 环境或旧版本壳，静默忽略
   }
@@ -410,18 +422,14 @@ const currentResolved = (): 'dark' | 'light' =>
   document.documentElement.classList.contains('dark') ? 'dark' : 'light';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
-    return saved || 'system';
-  });
+  const [theme, setThemeState] = useState<ThemeMode>(readThemeMode);
 
   const [accent, setAccentState] = useState<AccentConfig>(() => loadAccentConfig());
 
   // 同步初始化：applyTheme + applyAccent 在同一个 useState 初始化器里执行，
   // 确保原生桥在 React mount 之前就收到首次颜色信号。
   const [resolvedTheme, setResolvedTheme] = useState<'dark' | 'light'>(() => {
-    const mode = (localStorage.getItem(STORAGE_KEY) as ThemeMode | null) || 'system';
-    const resolved = applyTheme(mode);
+    const resolved = applyTheme(theme);
     applyAccent(loadAccentConfig(), resolved);
     return resolved;
   });

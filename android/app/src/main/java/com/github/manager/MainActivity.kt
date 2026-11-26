@@ -328,7 +328,19 @@ class MainActivity : AppCompatActivity() {
          */
         @JavascriptInterface
         fun notifyTheme(isDark: Boolean) {
-            runOnUiThread { applyNativeTheme(isDark) }
+            runOnUiThread {
+                if (darkTheme != isDark) applyNativeTheme(isDark, animate = webViewReadyReceived)
+            }
+        }
+
+        @JavascriptInterface
+        fun notifyThemeMode(mode: String, isDark: Boolean) {
+            if (mode != "light" && mode != "dark" && mode != "system") return
+            val prefs = getSharedPreferences("gm_prefs", MODE_PRIVATE)
+            if (prefs.getString("theme_mode", null) != mode) {
+                prefs.edit().putString("theme_mode", mode).apply()
+            }
+            notifyTheme(isDark)
         }
 
         /**
@@ -957,19 +969,17 @@ class MainActivity : AppCompatActivity() {
         if (warmStart) splashMinTimeReached = true
 
         // 冷启动时读取上次保存的主题，默认浅色（light 模式）
-        val savedTheme = getSharedPreferences("gm_prefs", MODE_PRIVATE)
-            .getString("theme_mode", "light") ?: "light"
+        val savedTheme = prefs.getString("theme_mode", "light")
         val isInitialDark = when (savedTheme) {
             "light" -> false
             "dark"  -> true
-            else    -> { // system
+            "system" -> {
                 val nightMode = resources.configuration.uiMode and
                     android.content.res.Configuration.UI_MODE_NIGHT_MASK
                 nightMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
             }
+            else -> false
         }
-        // 同步 darkTheme 与系统/用户偏好的初始值，避免 setupWebViewSettings 使用错误颜色
-        darkTheme = isInitialDark
 
         // ── Android 15 边到边适配 ────────────────────────────────────
         // API 35 强制边到边（edge-to-edge），窗口内容延伸至系统栏后方。
@@ -1019,6 +1029,10 @@ class MainActivity : AppCompatActivity() {
         navDivider = findViewById(R.id.navDivider)
         navBarSpacer = findViewById(R.id.navBarSpacer)
         statusBarSpacer = findViewById(R.id.statusBarSpacer)
+        prefs.getString("accent_hex", null)?.let { hex ->
+            ThemeUtils.parseColorSafe(hex)?.let { currentAccentColor = it }
+        }
+        applyNativeTheme(isInitialDark, animate = false)
 
         // ── 关键修复：阻止 BottomNavigationView 自己消费系统导航条 inset ──
         // Material 1.12 的 BottomNavigationView 在构造时注册了 WindowInsets listener，
@@ -1445,102 +1459,6 @@ class MainActivity : AppCompatActivity() {
                 val hash = url?.substringAfter("#", "") ?: return
                 val path = if (hash.startsWith("/")) hash else "/$hash"
                 syncBottomNavSelection(path)
-
-                // 首次加载完成后从 localStorage 读取主题并同步原生颜色
-                // github_manager_theme 是 ThemeContext 使用的 key
-                view?.evaluateJavascript(
-                    "(function(){ return localStorage.getItem('github_manager_theme') || 'dark'; })()"
-                ) { result ->
-                    val raw = result?.trim('"') ?: "system"
-                    // 持久化最新主题设置，供下次冷启动恢复
-                    getSharedPreferences("gm_prefs", MODE_PRIVATE)
-                        .edit().putString("theme_mode", raw).apply()
-                    val resolved = when (raw) {
-                        "light" -> false
-                        "dark"  -> true
-                        else    -> { // system
-                            val nightMode = resources.configuration.uiMode and
-                                android.content.res.Configuration.UI_MODE_NIGHT_MASK
-                            nightMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
-                        }
-                    }
-                    runOnUiThread { applyNativeTheme(resolved) }
-
-                    // 读取强调色：优先使用 SharedPreferences 中 notifyAccent 已持久化的 hex，
-                    // 避免维护枚举映射表——无论增加多少颜色方案都无需改原生代码
-                    val savedAccentHex = getSharedPreferences("gm_prefs", MODE_PRIVATE)
-                        .getString("accent_hex", null)
-
-                    if (savedAccentHex != null) {
-                        // SharedPreferences 有存储值：直接使用，跳过 localStorage 读取
-                        try {
-                            val color = Color.parseColor(savedAccentHex)
-                            val isDark = darkTheme
-                            val unselected = if (isDark) 0xFF9292A8.toInt() else 0xFF64748B.toInt()
-                            val iconColors = android.content.res.ColorStateList(
-                                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                                intArrayOf(color, unselected)
-                            )
-                            runOnUiThread {
-                                currentAccentColor = color
-                                bottomNav.itemIconTintList = iconColors
-                                bottomNav.itemTextColor   = iconColors
-                                bottomNav.itemActiveIndicatorColor =
-                                    android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
-                                // 同步更新最近任务栏卡片颜色
-                                applyTaskDescriptionColor(savedAccentHex)
-                            }
-                        } catch (_: Exception) { /* 非法 hex，静默忽略 */ }
-                    } else {
-                        // 首次安装/未存储：读 localStorage 并写入 SharedPreferences
-                        view?.evaluateJavascript(
-                            "(function(){ return localStorage.getItem('github_manager_accent') || 'monet'; })()"
-                        ) { accentResult ->
-                            val accentId = accentResult?.trim('"') ?: "monet"
-                            // 完整映射表，与 ThemeContext.tsx ACCENT_SCHEMES 保持同步
-                            val accentMap = mapOf(
-                                "monet"   to "#8461B8",
-                                "purple"  to "#7c3aed",
-                                "blue"    to "#1d6be3",
-                                "green"   to "#16a34a",
-                                "orange"  to "#f97316",
-                                "rose"    to "#e11d48",
-                                "cyan"    to "#0891b2",
-                                "indigo"  to "#4f46e5",
-                                "sky"     to "#0ea5e9",
-                                "emerald" to "#059669",
-                                "teal"    to "#0d9488",
-                                "amber"   to "#d97706",
-                                "pink"    to "#ec4899",
-                                "violet"  to "#8b5cf6",
-                                "gold"    to "#ca8a04",
-                                "coral"   to "#f0572a",
-                                "lime"    to "#65a30d",
-                            )
-                            val hex = accentMap[accentId] ?: "#8461B8"
-                            // 持久化，下次冷启动直接读取
-                            getSharedPreferences("gm_prefs", MODE_PRIVATE)
-                                .edit().putString("accent_hex", hex).apply()
-                            try {
-                                val color = Color.parseColor(hex)
-                                val isDark = darkTheme
-                                val unselected = if (isDark) 0xFF9292A8.toInt() else 0xFF64748B.toInt()
-                                val iconColors = android.content.res.ColorStateList(
-                                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                                    intArrayOf(color, unselected)
-                                )
-                                runOnUiThread {
-                                    currentAccentColor = color
-                                    bottomNav.itemIconTintList = iconColors
-                                    bottomNav.itemTextColor   = iconColors
-                                    bottomNav.itemActiveIndicatorColor =
-                                        android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
-                                    applyTaskDescriptionColor(hex)
-                                }
-                            } catch (_: Exception) { /* 静默忽略 */ }
-                        }
-                    }
-                }
             }
         }
     }
@@ -1635,7 +1553,7 @@ class MainActivity : AppCompatActivity() {
      *   浅色：background=#f8f8fb，sidebar-background=#f6f4fa
      * 主题切换时通过 ValueAnimator 平滑过渡颜色，消除生硬跳变。
      */
-    private fun applyNativeTheme(isDark: Boolean) {
+    private fun applyNativeTheme(isDark: Boolean, animate: Boolean = true) {
         darkTheme = isDark
 
         // ── 目标颜色（直接按 isDark 选择，避免依赖 Android Configuration 的 day/night 资源。
@@ -1645,60 +1563,31 @@ class MainActivity : AppCompatActivity() {
         val targetMainBg     = if (isDark) 0xFF111117.toInt() else 0xFFF8F8FB.toInt()
         val targetSidebarBg  = if (isDark) 0xFF0D0D11.toInt() else 0xFFF6F4FA.toInt()
         val targetDivider    = if (isDark) 0xFF21212B.toInt() else 0xFFE2DDF5.toInt()
-        val targetUnselected = if (isDark) 0xFF9292A8.toInt() else 0xFF64748B.toInt()
+        val targetUnselected = ThemeUtils.unselectedNavColor(isDark)
 
-        // ── 辅助：从 View 当前 ColorDrawable 中提取颜色，缺省 fallback ─
-        fun View.currentBgColor(fallback: Int): Int =
-            (background as? android.graphics.drawable.ColorDrawable)?.color ?: fallback
-
-        // ── WebView 背景：平滑过渡，消除主题切换时的白/黑闪烁 ─────────
-        val fromWebBg = webView.solidColor.takeIf { it != 0 } ?: targetMainBg
-        ValueAnimator.ofObject(ArgbEvaluator(), fromWebBg, targetMainBg).apply {
-            duration = 250
-            addUpdateListener { webView.setBackgroundColor(it.animatedValue as Int) }
-            start()
-        }
-
-        // ── 状态栏占位区域背景：与 WebView 背景保持一致，同步切换 ────────
-        val fromStatusBg = statusBarSpacer.currentBgColor(targetMainBg)
-        ValueAnimator.ofObject(ArgbEvaluator(), fromStatusBg, targetMainBg).apply {
-            duration = 250
-            addUpdateListener { statusBarSpacer.setBackgroundColor(it.animatedValue as Int) }
-            start()
-        }
-
-        // ── 系统栏图标颜色（浅色图标=深色主题，深色图标=浅色主题）──────
-        val insetsController = WindowInsetsControllerCompat(window, window.decorView)
-        insetsController.isAppearanceLightStatusBars     = !isDark
-        insetsController.isAppearanceLightNavigationBars = !isDark
-
-        // ── 底部导航容器（含分割线）背景：平滑过渡 ────────────────────
-        val fromContainerBg = bottomNavContainer.currentBgColor(targetSidebarBg)
-        ValueAnimator.ofObject(ArgbEvaluator(), fromContainerBg, targetSidebarBg).apply {
-            duration = 250
-            addUpdateListener {
-                val c = it.animatedValue as Int
-                bottomNavContainer.setBackgroundColor(c)
-                navBarSpacer.setBackgroundColor(c)
+        fun View.updateBackground(target: Int) {
+            val current = (background as? android.graphics.drawable.ColorDrawable)?.color
+            if (!animate || current == null || current == target) {
+                setBackgroundColor(target)
+            } else {
+                ValueAnimator.ofObject(ArgbEvaluator(), current, target).apply {
+                    duration = 250
+                    addUpdateListener { setBackgroundColor(it.animatedValue as Int) }
+                    start()
+                }
             }
-            start()
         }
 
-        // ── 分割线颜色：平滑过渡 ──────────────────────────────────────
-        val fromDivider = navDivider.currentBgColor(targetDivider)
-        ValueAnimator.ofObject(ArgbEvaluator(), fromDivider, targetDivider).apply {
-            duration = 250
-            addUpdateListener { navDivider.setBackgroundColor(it.animatedValue as Int) }
-            start()
-        }
+        webView.updateBackground(targetMainBg)
+        statusBarSpacer.updateBackground(targetMainBg)
+        bottomNavContainer.updateBackground(targetSidebarBg)
+        navBarSpacer.updateBackground(targetSidebarBg)
+        navDivider.updateBackground(targetDivider)
+        bottomNav.updateBackground(targetSidebarBg)
 
-        // ── 底部导航栏背景（BottomNavigationView 本体，透明）────────────
-        val fromNavBg = bottomNav.currentBgColor(targetSidebarBg)
-        ValueAnimator.ofObject(ArgbEvaluator(), fromNavBg, targetSidebarBg).apply {
-            duration = 250
-            addUpdateListener { bottomNav.setBackgroundColor(it.animatedValue as Int) }
-            start()
-        }
+        val insetsController = WindowInsetsControllerCompat(window, window.decorView)
+        insetsController.isAppearanceLightStatusBars = !isDark
+        insetsController.isAppearanceLightNavigationBars = !isDark
 
         // ── 底部导航栏图标与文字颜色（选中色保持 accent，未选中色跟随主题）
         val iconColors = android.content.res.ColorStateList(

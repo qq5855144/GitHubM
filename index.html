@@ -61,15 +61,10 @@
         };
 
         var saved = localStorage.getItem('github_manager_theme');
-        var isDark;
-        if (saved === 'light') {
-          isDark = false;
-        } else if (saved === 'system') {
-          isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        } else {
-          // 'dark' 或未设置（首次使用默认深色）
-          isDark = true;
-        }
+        var mode = saved === 'light' || saved === 'dark' || saved === 'system'
+          ? saved : window.AndroidBridge ? 'light' : 'system';
+        var isDark = mode === 'dark' ||
+          (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
         // 同步写入 html class，不等待 React
         var html = document.documentElement;
@@ -110,7 +105,11 @@
         // 通知 AndroidBridge（壳注入后立即可用；若未注入则静默忽略）
         try {
           if (window.AndroidBridge) {
-            window.AndroidBridge.notifyTheme && window.AndroidBridge.notifyTheme(isDark);
+            if (window.AndroidBridge.notifyThemeMode) {
+              window.AndroidBridge.notifyThemeMode(mode, isDark);
+            } else if (window.AndroidBridge.notifyTheme) {
+              window.AndroidBridge.notifyTheme(isDark);
+            }
             window.AndroidBridge.notifyAccent && window.AndroidBridge.notifyAccent(accentHex);
             window.AndroidBridge.notifyAccentIcon && window.AndroidBridge.notifyAccentIcon(accentHex);
           }

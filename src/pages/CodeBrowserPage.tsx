@@ -4,6 +4,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, typ
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import FileTree from '@/components/code/FileTree';
 import { FullscreenCodeEditor } from '@/components/code/FullscreenCodeEditor';
+import { EditorDraftsDialog } from '@/components/code/EditorDraftsDialog';
 import MainLayout from '@/components/layouts/MainLayout';
 import {
   ChevronRight,
@@ -156,6 +157,7 @@ export default function CodeBrowserPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const branchParam = searchParams.get('branch') || '';
+  const draftBranch = searchParams.get('draft') === '1' ? branchParam : '';
   const { token, user } = useAuth();
   const canManage = isRepoOwner(owner, user?.login);
   const [contents, setContents] = useState<GitHubContent[]>([]);
@@ -183,6 +185,7 @@ export default function CodeBrowserPage() {
   const [commitOpen, setCommitOpen] = useState(false);
   const pendingLeaveRef = useRef<(() => void) | null>(null);
   const flushDraftRef = useRef<(() => boolean) | null>(null);
+  const recoveryDraftWritten = useRef(false);
   const loadSequence = useRef(0);
   const saveInProgress = useRef(false);
   const textFormat = useRef({ lineEnding: '\n', bom: false });
@@ -240,11 +243,17 @@ export default function CodeBrowserPage() {
     !!currentBranch &&
     editContent !== (fileContent ?? '');
 
+  const editorBaseline = draftRestored?.content.replace(/\r\n?/g, '\n') ?? fileContent ?? '';
+  const hasSessionChanges = actionMode === 'edit' && editContent !== editorBaseline;
+
+  const clearCurrentDraft = useCallback(() => {
+    if (!owner || !repo || !currentBranch || !currentFile) return false;
+    return clearEditorDraft(owner, repo, currentBranch, currentFile.path);
+  }, [owner, repo, currentBranch, currentFile]);
+
   const saveCurrentDraftNow = useCallback((): boolean => {
-    if (!owner || !repo || !currentBranch || !currentFile || editContent === (fileContent ?? '')) {
-      return false;
-    }
-    return saveEditorDraft({
+    if (!owner || !repo || !currentBranch || !currentFile) return false;
+    const saved = editContent === (fileContent ?? '') ? clearCurrentDraft() : saveEditorDraft({
       owner,
       repo,
       branch: currentBranch,
@@ -253,39 +262,39 @@ export default function CodeBrowserPage() {
       content: editContent,
       commitMessage: commitMsg,
     });
-  }, [owner, repo, currentBranch, currentFile, editContent, fileContent, commitMsg, draftRestored]);
+    if (saved) recoveryDraftWritten.current = true;
+    return saved;
+  }, [owner, repo, currentBranch, currentFile, editContent, fileContent, commitMsg, draftRestored, clearCurrentDraft]);
 
-  const clearCurrentDraft = useCallback(() => {
-    if (!owner || !repo || !currentBranch || !currentFile) return;
-    clearEditorDraft(owner, repo, currentBranch, currentFile.path);
-  }, [owner, repo, currentBranch, currentFile]);
+  const restoreDraftBaseline = useCallback(() => {
+    if (!recoveryDraftWritten.current) return true;
+    const restored = draftRestored ? saveEditorDraft(draftRestored) : clearCurrentDraft();
+    if (restored) recoveryDraftWritten.current = false;
+    return restored;
+  }, [draftRestored, clearCurrentDraft]);
 
   useLayoutEffect(() => () => {
     // HashRouter can change routes without triggering beforeunload.
     flushDraftRef.current?.();
     flushDraftRef.current = null;
+    recoveryDraftWritten.current = false;
   }, [owner, repo, filePath, currentBranch, actionMode]);
 
   useLayoutEffect(() => {
-    flushDraftRef.current = hasUnsavedChanges ? saveCurrentDraftNow : null;
-  }, [hasUnsavedChanges, saveCurrentDraftNow]);
+    if (actionMode !== 'edit' || !currentFile) return;
+    flushDraftRef.current = hasSessionChanges ? saveCurrentDraftNow : restoreDraftBaseline;
+  }, [actionMode, currentFile, hasSessionChanges, saveCurrentDraftNow, restoreDraftBaseline]);
 
   useEffect(() => {
-    if (!currentFile || actionMode !== 'edit') return;
-    if (editContent === (fileContent ?? '')) {
-      clearCurrentDraft();
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      saveCurrentDraftNow();
-    }, 400);
+    if (!hasSessionChanges && !recoveryDraftWritten.current) return;
+    const timer = window.setTimeout(() => { flushDraftRef.current?.(); }, 400);
     return () => window.clearTimeout(timer);
-  }, [actionMode, currentFile, editContent, fileContent, commitMsg, clearCurrentDraft, saveCurrentDraftNow]);
+  }, [hasSessionChanges, saveCurrentDraftNow]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!hasUnsavedChanges) return;
-      saveCurrentDraftNow();
+      if (!hasSessionChanges) return;
+      flushDraftRef.current?.();
       event.preventDefault();
       event.returnValue = '';
     };
@@ -301,7 +310,7 @@ export default function CodeBrowserPage() {
       window.removeEventListener('pagehide', flushDraft);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [hasUnsavedChanges, saveCurrentDraftNow]);
+  }, [hasSessionChanges]);
 
   // 文件树状态
   const [treeRefreshKey, setTreeRefreshKey] = useState(0);
@@ -311,7 +320,7 @@ export default function CodeBrowserPage() {
   const [pendingDirPath, setPendingDirPath] = useState<string | null>(null);
 
   const loadContents = useCallback(async (discardDraftAndReload = false) => {
-    if (!owner || !repo || !currentBranch) return;
+    if (!owner || !repo || !currentBranch || (draftBranch && currentBranch !== draftBranch)) return;
     const sequence = ++loadSequence.current;
     setLoading(true);
     setFileContent(null);
@@ -369,7 +378,7 @@ export default function CodeBrowserPage() {
     } finally {
       if (sequence === loadSequence.current) setLoading(false);
     }
-  }, [owner, repo, filePath, currentBranch, canManage]);
+  }, [owner, repo, filePath, currentBranch, canManage, draftBranch]);
 
   const handleDownloadDirectory = useCallback(async (directory?: string) => {
     if (!owner || !repo || !currentBranch || directoryDownload.current) return;
@@ -421,17 +430,28 @@ export default function CodeBrowserPage() {
   }, [owner, repo, filePath]);
 
   const requestLeave = useCallback((action: () => void) => {
-    if (!hasUnsavedChanges) {
+    if (!hasSessionChanges) {
       action();
-      return;
-    }
-    if (!saveCurrentDraftNow()) {
-      toast.error(i18n.t('无法保存本地草稿，请先提交或复制修改'));
       return;
     }
     pendingLeaveRef.current = action;
     setLeaveConfirmOpen(true);
-  }, [hasUnsavedChanges, saveCurrentDraftNow]);
+  }, [hasSessionChanges]);
+
+  const finishLeave = (keepDraft: boolean) => {
+    const action = pendingLeaveRef.current;
+    if (!action) return;
+    if (keepDraft && !saveCurrentDraftNow()) {
+      toast.error(i18n.t('无法保存本地草稿，请先提交或复制修改'));
+      return;
+    }
+    if (!keepDraft && !restoreDraftBaseline()) toast.error(i18n.t('无法放弃本次草稿修改'));
+    flushDraftRef.current = null;
+    recoveryDraftWritten.current = false;
+    pendingLeaveRef.current = null;
+    setLeaveConfirmOpen(false);
+    action();
+  };
 
   const guardedNavigate = useCallback((target: string | number, options?: { replace?: boolean }) => {
     requestLeave(() => {
@@ -476,7 +496,7 @@ export default function CodeBrowserPage() {
           return a.name.localeCompare(b.name);
         });
         setBranches(sorted);
-        const preferred = branchParam && sorted.some((branch) => branch.name === branchParam)
+        const preferred = (draftBranch || sorted.some((branch) => branch.name === branchParam))
           ? branchParam
           : defaultBranch || sorted[0]?.name || '';
         if (preferred) setCurrentBranch(preferred);
@@ -488,11 +508,11 @@ export default function CodeBrowserPage() {
   }, [owner, repo]);
 
   useEffect(() => {
-    if (!branchParam || branches.length === 0) return;
-    if (branches.some((branch) => branch.name === branchParam) && branchParam !== currentBranch) {
+    if (!branchParam) return;
+    if ((draftBranch || branches.some((branch) => branch.name === branchParam)) && branchParam !== currentBranch) {
       setCurrentBranch(branchParam);
     }
-  }, [branchParam, branches, currentBranch]);
+  }, [branchParam, branches, currentBranch, draftBranch]);
 
   useEffect(() => {
     void loadContents();
@@ -601,6 +621,7 @@ export default function CodeBrowserPage() {
       }
       flushDraftRef.current = null;
       clearCurrentDraft();
+      recoveryDraftWritten.current = false;
       setDraftRestored(null);
       setFileContent(editContent);
       setCurrentFile({ ...currentFile, ...updated.content });
@@ -957,8 +978,12 @@ export default function CodeBrowserPage() {
                 {draftRestored.baseSha !== currentFile.sha && ` · ${i18n.t('草稿基于旧版本')}`}
               </span>
               <button type="button" className="shrink-0 underline underline-offset-2" disabled={actionBusy} onClick={() => {
+                if (!clearCurrentDraft()) {
+                  toast.error(i18n.t('无法删除本地草稿'));
+                  return;
+                }
                 flushDraftRef.current = null;
-                clearCurrentDraft();
+                recoveryDraftWritten.current = false;
                 setEditContent(fileContent ?? '');
                 setCommitMsg(`Update ${currentFile.name}`);
                 setDraftRestored(null);
@@ -1000,24 +1025,17 @@ export default function CodeBrowserPage() {
             <AlertDialogHeader>
               <AlertDialogTitle className="text-foreground">{i18n.t('有未保存的修改')}</AlertDialogTitle>
               <AlertDialogDescription className="text-muted-foreground">
-                {i18n.t('修改已自动保存为本地草稿，下次打开该文件时可恢复。是否暂时离开？')}
+                {i18n.t('可以暂存修改以便下次继续，也可以放弃修改并退出。')}
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
+            <AlertDialogFooter className="flex-wrap gap-2">
               <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">
                 {i18n.t('继续编辑')}
               </AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={() => {
-                  const action = pendingLeaveRef.current;
-                  pendingLeaveRef.current = null;
-                  setLeaveConfirmOpen(false);
-                  action?.();
-                }}
-              >
-                {i18n.t('暂存并离开')}
-              </AlertDialogAction>
+              <Button type="button" variant="outline" className="text-destructive hover:text-destructive" onClick={() => finishLeave(false)}>
+                {i18n.t('放弃修改并退出')}
+              </Button>
+              <Button type="button" onClick={() => finishLeave(true)}>{i18n.t('暂存并离开')}</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -1407,6 +1425,13 @@ export default function CodeBrowserPage() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+            )}
+            {user?.login && (
+              <EditorDraftsDialog owner={user.login} onResume={draft => {
+                const path = draft.path.split('/').map(encodeURIComponent).join('/');
+                const repoPath = `/repos/${encodeURIComponent(draft.owner)}/${encodeURIComponent(draft.repo)}`;
+                guardedNavigate(`${repoPath}/code/${path}?branch=${encodeURIComponent(draft.branch)}&draft=1`);
+              }} />
             )}
             {branches.length > 0 && currentBranch && (
               <div className="ml-auto flex items-center shrink-0">

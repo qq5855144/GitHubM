@@ -600,7 +600,7 @@ export default function IssueDetailPage() {
         <div
           key={comment.id}
           id={`issuecomment-${comment.id}`}
-          className="bg-card border border-border rounded-lg overflow-hidden scroll-mt-20 transition-shadow"
+          className="bg-card border border-border rounded-lg overflow-hidden scroll-mt-[calc(var(--layout-header-height,3.5rem)+1.5rem)] transition-shadow"
         >
           <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-secondary/30">
             <UserLink login={comment.user.login} className="flex items-center gap-2">

@@ -431,7 +431,8 @@ export default function MainLayout({ children, active = true, chatViewport }: {
   return (
     <div
       className={cn(
-        'flex w-full bg-background',
+        'flex w-full bg-background [--layout-header-inset:0px] [--layout-header-height:calc(3.5rem+var(--layout-header-inset))]',
+        !isNativeApp && !keyboardOpen && 'supports-[padding-top:env(safe-area-inset-top)]:[--layout-header-inset:env(safe-area-inset-top,0px)]',
         collapsed ? 'lg:[--layout-sidebar-width:3.5rem]' : 'lg:[--layout-sidebar-width:14rem]',
         chatViewport ? 'fixed inset-x-0 overflow-hidden' : 'min-h-screen'
       )}
@@ -451,7 +452,13 @@ export default function MainLayout({ children, active = true, chatViewport }: {
       {/* 主内容区 */}
       <div className={cn("flex min-w-0 flex-1 flex-col", chatViewport && "min-h-0")}>
         {/* 顶部导航栏 */}
-        <header className={cn("sticky top-0 z-40 h-14 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur-sm", showHeader ? "flex" : "hidden", chatViewport && "shrink-0")}>
+        <header className={cn(
+          "z-40 h-[var(--layout-header-height)] shrink-0 items-center gap-3 border-b border-border bg-card/95 px-4 pt-[var(--layout-header-inset)] backdrop-blur-sm",
+          showHeader ? "flex" : "hidden",
+          chatViewport
+            ? "relative"
+            : "fixed inset-x-0 top-0 lg:left-[var(--layout-sidebar-width)] lg:transition-[left] lg:duration-200",
+        )}>
           {/* 移动端菜单按钮 */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
@@ -603,7 +610,11 @@ export default function MainLayout({ children, active = true, chatViewport }: {
         </header>
 
         {/* 页面内容 — Web 端统一为底部导航栏留出高度，APK 内由原生导航栏占位 */}
-        <main className={cn("flex-1 overflow-x-hidden", chatViewport && "flex min-h-0 flex-col overflow-hidden", !isNativeApp && !keyboardOpen && "pb-16")}>
+        <main className={cn(
+          "flex-1 overflow-x-hidden",
+          chatViewport ? "flex min-h-0 flex-col overflow-hidden" : "pt-[var(--layout-header-height)]",
+          !isNativeApp && !keyboardOpen && "pb-16",
+        )}>
           {children}
         </main>
       </div>

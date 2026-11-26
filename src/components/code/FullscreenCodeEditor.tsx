@@ -117,7 +117,8 @@ export function FullscreenCodeEditor({
                 <MoreHorizontal aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuContent align="end"
+              className="w-48 border-white/10 bg-[#2b2b2b] text-white [--accent:0_0%_23%] [--accent-foreground:0_0%_100%]">
               <div className="flex items-center justify-between gap-1 px-2 py-1 text-xs">
                 <span>{i18n.t('字号')}</span>
                 <Button type="button" variant="ghost" size="icon" className="h-7 w-7 ml-auto"
@@ -130,7 +131,7 @@ export function FullscreenCodeEditor({
                   <ZoomIn aria-hidden="true" />
                 </Button>
               </div>
-              <DropdownMenuSeparator />
+              <DropdownMenuSeparator className="bg-white/10" />
               <DropdownMenuItem onSelect={() => setReading(!reading)}>
                 {reading ? <Pencil className="mr-2 h-4 w-4" /> : <BookOpen className="mr-2 h-4 w-4" />}
                 {i18n.t(reading ? '退出阅读模式' : '阅读模式')}

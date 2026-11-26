@@ -25,7 +25,7 @@ import { properties } from '@codemirror/legacy-modes/mode/properties';
 import { cmake } from '@codemirror/legacy-modes/mode/cmake';
 import { dockerFile } from '@codemirror/legacy-modes/mode/dockerfile';
 import { toml } from '@codemirror/legacy-modes/mode/toml';
-import { githubLight, githubDark } from '@uiw/codemirror-theme-github';
+import { githubLight } from '@uiw/codemirror-theme-github';
 import { undo, redo } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
 import { json } from '@codemirror/lang-json';
@@ -42,7 +42,6 @@ import { xml } from '@codemirror/lang-xml';
 import { yaml } from '@codemirror/lang-yaml';
 import { sql } from '@codemirror/lang-sql';
 import { searchHighlightField, searchTheme } from './codemirror-search';
-import { useTheme } from '@/contexts/ThemeContext';
 
 export interface CodeEditorRef {
   focus: () => void;
@@ -256,8 +255,6 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
     },
     ref
   ) => {
-    const { theme } = useTheme();
-    const isDark = theme === 'dark';
     const [isMobile, setIsMobile] = useState(
       () => typeof window !== 'undefined' && window.innerWidth < 768
     );
@@ -404,7 +401,7 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
         }),
         searchHighlightField,
         searchTheme,
-        isDark ? githubDark : githubLight,
+        githubLight,
         // 基础主题放在配色主题之后，确保 gutter/行高样式最后生效
         editorBaseTheme,
         activeLineUnderlineField,
@@ -422,7 +419,7 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
       if (languageExtension) exts.push(languageExtension);
       if (wordWrap === 'on') exts.push(EditorView.lineWrapping);
       return exts;
-    }, [isMobile, isDark, wordWrap, languageExtension]);
+    }, [isMobile, wordWrap, languageExtension]);
 
     const handleCreateEditor = useCallback(
       (view: EditorView) => {
@@ -471,7 +468,7 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
     return (
       <div
         ref={containerRef}
-        className="w-full h-full bg-background overflow-hidden"
+        className="w-full h-full overflow-hidden bg-white [color-scheme:only_light]"
         style={{ fontSize: `${fontSize}px` }}
       >
         <CodeMirror

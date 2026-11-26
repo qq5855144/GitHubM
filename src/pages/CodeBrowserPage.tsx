@@ -264,6 +264,7 @@ export default function CodeBrowserPage() {
   const [isDragging, setIsDragging] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [dirDownloading, setDirDownloading] = useState(false);
+  const directoryDownload = useRef<AbortController | null>(null);
   const [dirProgress, setDirProgress] = useState<{ done: number; total: number } | null>(null);
 
   // 判断当前文件是否是图片
@@ -388,10 +389,12 @@ export default function CodeBrowserPage() {
   }, [owner, repo, filePath, currentBranch, canManage]);
 
   const handleDownloadDirectory = useCallback(async (directory?: string) => {
-    if (!owner || !repo || !currentBranch || dirDownloading) return;
+    if (!owner || !repo || !currentBranch || directoryDownload.current) return;
     const targetDir = directory ?? filePath;
+    const controller = new AbortController();
+    directoryDownload.current = controller;
     setDirDownloading(true);
-    setDirProgress(null);
+    setDirProgress(targetDir ? { done: 0, total: 0 } : null);
     try {
       if (!targetDir) {
         const url = `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/${encodeURIComponent(currentBranch)}`;
@@ -403,17 +406,21 @@ export default function CodeBrowserPage() {
           branch: currentBranch,
           directory: targetDir,
           token: token ?? '',
+          signal: controller.signal,
           onProgress: (done, total) => setDirProgress({ done, total }),
         });
       }
       toast.success(i18n.t('目录已打包下载'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : i18n.t('目录下载失败'));
+      if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        toast.error(err instanceof Error ? err.message : i18n.t('目录下载失败'));
+      }
     } finally {
+      directoryDownload.current = null;
       setDirDownloading(false);
       setDirProgress(null);
     }
-  }, [owner, repo, currentBranch, filePath, token, dirDownloading]);
+  }, [owner, repo, currentBranch, filePath, token]);
   // ── 导航栈同步：每次 filePath 变化时更新 sessionStorage 导航栈 ───────────────
   // 这样面包屑点击时可以通过 navigate(-n) 回溯，而不是 push 新条目
   useEffect(() => {
@@ -1522,16 +1529,23 @@ export default function CodeBrowserPage() {
             {/* 目录操作按钮（仅目录页显示） */}
             {canManage && !currentFile && !loading && (
               <div className="flex items-center gap-0.5 shrink-0">
+                {dirDownloading && dirProgress && (
+                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7"
+                    aria-label={i18n.t('取消下载')} title={i18n.t('取消下载')}
+                    onClick={() => directoryDownload.current?.abort()}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className={`h-7 text-xs text-muted-foreground border border-border hover:bg-secondary gap-1 px-2 `}
                       disabled={dirDownloading}
-                      title={dirDownloading && dirProgress ? `${dirProgress.done}/${dirProgress.total}` : i18n.t('下载')}>
+                      title={dirDownloading && dirProgress?.total ? `${dirProgress.done}/${dirProgress.total}` : i18n.t('下载')}>
                       {dirDownloading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
                       <span className="hidden sm:inline">
-                        {dirDownloading && dirProgress
+                        {dirDownloading && dirProgress?.total
                           ? `${dirProgress.done}/${dirProgress.total}`
-                          : i18n.t('下载')}
+                          : i18n.t(dirDownloading ? '下载中…' : '下载')}
                       </span>
                       <ChevronDown className="w-3 h-3 opacity-60" />
                     </Button>

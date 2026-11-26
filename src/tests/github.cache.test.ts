@@ -35,6 +35,7 @@ import {
   setToken,
   getToken,
   getPullRequest,
+  getPullRequestCommentsPage,
 } from '@/services/github';
 
 describe('GitHub API 缓存层', () => {
@@ -62,6 +63,31 @@ describe('GitHub API 缓存层', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch.mock.calls[0][0]).toContain(`${url}?_t=`);
     expect(fetch.mock.calls[0][1].headers).not.toHaveProperty('If-None-Match');
+  });
+
+  it('uses the GitHub Link header to follow PR conversation comments beyond the first page', async () => {
+    const url = 'https://api.github.com/repos/owner/repo/issues/12/comments?per_page=50&page=';
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json([{ id: 50 }], { headers: { Link: `<${url}2>; rel="next"` } }))
+      .mockResolvedValueOnce(Response.json([{ id: 51 }]));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(getPullRequestCommentsPage('owner', 'repo', 12)).resolves.toEqual({ data: [{ id: 50 }], hasNextPage: true });
+    await expect(getPullRequestCommentsPage('owner', 'repo', 12, 2)).resolves.toEqual({ data: [{ id: 51 }], hasNextPage: false });
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([`${url}1`, `${url}2`]);
+  });
+
+  it('keeps a request from a previous account generation from repopulating the cache', async () => {
+    const path = 'https://api.github.com/repos/owner/repo/pulls/12';
+    setToken('first');
+    let complete!: (value: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>(resolve => { complete = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const old = getPullRequest('owner', 'repo', 12);
+    setToken('other');
+    setToken('first');
+    complete(Response.json({ id: 12 }));
+    await old;
+    expect(getCached(buildCacheKey(path))).toBeNull();
   });
 
   // ── buildCacheKey ────────────────────────────────────────────────

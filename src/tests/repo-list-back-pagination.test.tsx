@@ -82,6 +82,20 @@ it('restores the expanded repository list after back and continues from the next
   expect(screen.queryByRole('button', { name: i18n.t('加载更多') })).toBeNull();
 });
 
+it('reloads previously opened pages automatically if the repository cache was evicted', async () => {
+  const getRepos = vi.mocked(getUserRepos).mockReset().mockImplementation(async ({ page = 1 } = {}) => ({
+    data: [repo(page)], hasNextPage: page < 3,
+  }));
+  renderRoutes('/repos');
+  await screen.findByText('repo-01');
+  fireEvent.click(screen.getByRole('button', { name: i18n.t('加载更多') }));
+  fireEvent.click(await screen.findByText('repo-02'));
+  pageCache.clear();
+  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
+  expect(await screen.findByText('repo-02')).toBeVisible();
+  expect(getRepos.mock.calls.map(([options]) => options?.page)).toEqual([1, 2, 1, 2]);
+});
+
 it('restores the expanded starred list, search and scroll position after back', async () => {
   const getStarred = vi.mocked(getAllStarredRepos)
     .mockResolvedValue(Array.from({ length: 70 }, (_, index) => repo(index + 1)));

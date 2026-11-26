@@ -92,7 +92,7 @@ function AccountAssistant() {
 }
 
 function AppContent() {
-  const { loading } = useAuth();
+  const { loading, token } = useAuth();
 
   useEffect(() => {
     if (!loading) {
@@ -108,7 +108,7 @@ function AppContent() {
       <RouteScrollManager />
       <LaunchUpdateChecker />
       <AssistantHost />
-      <Routes>
+      <Routes key={token || 'signed-out'}>
         {/* 公开路由（登录页） */}
         {routes
           .filter((r) => r.public)

@@ -20,6 +20,7 @@ import type { ModelConfig } from '@/components/ai/aiTypes';
 import { getModelCapabilities } from '@/ai-v2/modelCapabilities';
 import { clearArtifacts, listArtifacts } from '@/ai-v2/artifacts';
 import { clearRuns, listRuns } from '@/ai-v2/runStore';
+import { clearLocalSessions, countLocalSessions } from '@/ai-v2/sessionStore';
 import { clearMemories, deleteMemory, listMemories } from '@/ai-v2/memory';
 import { SKILLS } from '@/ai-v2/skills';
 import { loadV2Settings, saveV2Settings } from '@/ai-v2/settings';
@@ -314,10 +315,10 @@ export default function AiSettingsPage() {
     });
     if (!confirmed) return;
     try {
-      const keys = Object.keys(localStorage).filter(key =>
-        key.startsWith('githubm_ai_v2_store:') || key.startsWith('githubm_ai_v2_session:'),
-      );
-      keys.forEach(key => localStorage.removeItem(key));
+      if (!await clearLocalSessions()) {
+        toast.warning(i18n.t('请先停止当前 AI 任务或等待写入核对完成，再清除会话。'));
+        return;
+      }
       setStorageVersion(version => version + 1);
       toast.success(i18n.t('已清除本机会话'));
     } catch {
@@ -325,18 +326,16 @@ export default function AiSettingsPage() {
     }
   };
 
-  const sessions = useMemo(() => {
-    try {
-      return Object.keys(localStorage)
-        .filter(key => key.startsWith('githubm_ai_v2_store:'))
-        .map(key => {
-          const raw = localStorage.getItem(key) || '';
-          const data = JSON.parse(raw) as { sessions?: unknown[] };
-          return { key, count: Array.isArray(data.sessions) ? data.sessions.length : 0 };
-        });
-    } catch {
-      return [];
-    }
+  const [sessionCounts, setSessionCounts] = useState<number[]>([]);
+  useEffect(() => {
+    if (section !== 'context') return;
+    let active = true;
+    void countLocalSessions().then(counts => {
+      if (active) setSessionCounts(counts);
+    }).catch(() => {
+      if (active) setSessionCounts([]);
+    });
+    return () => { active = false; };
   }, [section, storageVersion]);
 
   const runs = useMemo(() => listRuns(user?.login, 6), [user?.login, storageVersion]);
@@ -680,7 +679,7 @@ export default function AiSettingsPage() {
   }
 
   if (activeSection.id === 'context') {
-    const totalSessions = sessions.reduce((sum, item) => sum + item.count, 0);
+    const totalSessions = sessionCounts.reduce((sum, count) => sum + count, 0);
     const clearUserArtifacts = async () => {
       const confirmed = await confirmAction({
         title: i18n.t('清除 Artifact 缓存？'),
@@ -703,7 +702,7 @@ export default function AiSettingsPage() {
             </div>
             <div className="rounded-xl border border-border bg-card p-3">
               <p className="text-[10px] text-muted-foreground">{i18n.t('存储账号')}</p>
-              <p className="mt-1 text-xl font-semibold">{sessions.length}</p>
+              <p className="mt-1 text-xl font-semibold">{sessionCounts.length}</p>
             </div>
             <div className="rounded-xl border border-border bg-card p-3">
               <p className="text-[10px] text-muted-foreground">Artifacts</p>

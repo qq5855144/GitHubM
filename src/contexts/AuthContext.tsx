@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { GitHubUser, GitHubRateLimit, SavedAccount } from '@/types/types';
-import { getCurrentUser, getRateLimit, setToken } from '@/services/github';
+import { getCurrentUser, getRateLimit, getToken, setToken } from '@/services/github';
 import { pageCache } from '@/lib/page-cache';
 import { getSecureItem, setSecureItem, removeSecureItem } from '@/lib/secureStorage';
 
@@ -56,8 +56,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshRateLimit = useCallback(async () => {
     try {
+      const requestToken = getToken();
       const { rate } = await getRateLimit();
-      setRateLimit(rate);
+      if (requestToken === getToken()) setRateLimit(rate);
     } catch {
       // 忽略速率限制获取失败
     }
@@ -72,40 +73,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const authChange = useRef(0);
   const login = useCallback(async (newToken: string) => {
-    const previousToken = token;
+    const attempt = ++authChange.current;
+    const userData = await getCurrentUser(newToken);
+    if (attempt !== authChange.current) return;
+    setSecureItem(TOKEN_KEY, newToken);
+    if (token !== newToken) pageCache.clear();
     setToken(newToken);
-    try {
-      const userData = await getCurrentUser();
-      setSecureItem(TOKEN_KEY, newToken);
-      setTokenState(newToken);
-      setUser(userData);
-      setIsAuthenticated(true);
-      persistAccount(newToken, userData);
-      refreshRateLimit();
-    } catch (error) {
-      // 校验失败时回滚模块级 token，避免「界面还是旧用户、请求全 401」的半登出状态。
-      setToken(previousToken);
-      throw error;
-    }
+    setTokenState(newToken);
+    setUser(userData);
+    setIsAuthenticated(true);
+    setRateLimit(null);
+    persistAccount(newToken, userData);
+    void refreshRateLimit();
   }, [token, refreshRateLimit, persistAccount]);
 
-  const switchAccount = useCallback(async (switchToken: string) => {
-    const previousToken = token;
-    setToken(switchToken);
-    try {
-      const userData = await getCurrentUser();
-      setSecureItem(TOKEN_KEY, switchToken);
-      setTokenState(switchToken);
-      setUser(userData);
-      setIsAuthenticated(true);
-      persistAccount(switchToken, userData);
-      refreshRateLimit();
-    } catch (error) {
-      setToken(previousToken);
-      throw error;
-    }
-  }, [token, refreshRateLimit, persistAccount]);
+  const switchAccount = login;
 
   const removeAccount = useCallback((removeToken: string) => {
     setSavedAccounts((prev) => {
@@ -132,7 +116,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /** 重新请求 /user 刷新当前用户信息 */
   const refreshUser = useCallback(async () => {
     try {
+      const requestToken = getToken();
       const userData = await getCurrentUser();
+      if (requestToken !== getToken()) return;
       setUser(userData);
       // 同步更新 savedAccounts 中对应的用户快照
       if (token) {
@@ -164,6 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [token]);
 
   const logout = useCallback(() => {
+    authChange.current++;
     removeSecureItem(TOKEN_KEY);
     setToken(null);
     setTokenState(null);

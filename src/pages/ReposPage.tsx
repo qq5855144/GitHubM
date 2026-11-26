@@ -64,7 +64,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDebounce } from '@/hooks/use-debounce';
 import i18n from "@/i18n";
-import { pageCache } from '@/lib/page-cache';
+import { pageCache, readListView, saveListView } from '@/lib/page-cache';
 import { isRepoOwner } from '@/lib/repoPermissions';
 import { copyToClipboard } from '@/lib/utils';
 import {
@@ -330,7 +330,7 @@ function RepoList({ user }: { user: GitHubUser | null }) {
   const navigate = useNavigate();
   const navigationType = useNavigationType();
   const viewKey = `repos-view:${user?.id}`;
-  const [view, setView] = useState(() => pageCache.get<RepoListView>(viewKey) ?? DEFAULT_VIEW);
+  const [view, setView] = useState(() => readListView(viewKey, DEFAULT_VIEW));
   const { searchQuery, sortField, sortDirection, typeFilter } = view;
   const cacheKey = `repos:${user?.id}:${sortField}:${sortDirection}:${typeFilter}`;
   const [returnKey] = useState(() => navigationType === 'POP' ? cacheKey : '');
@@ -343,7 +343,7 @@ function RepoList({ user }: { user: GitHubUser | null }) {
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   useEffect(() => {
-    pageCache.set(viewKey, view, Number.POSITIVE_INFINITY);
+    saveListView(viewKey, view);
   }, [viewKey, view]);
 
   // 删除弹窗状态：在 ContextMenu 树之外统一管理，避免 React Portal 事件冒泡触发 ContextMenu
@@ -364,25 +364,31 @@ function RepoList({ user }: { user: GitHubUser | null }) {
       setList(null);
     }
 
-    const pageNum = appendFrom ? appendFrom.page + 1 : 1;
+    const firstPage = appendFrom ? appendFrom.page + 1 : 1;
+    const remembered = returnKey === cacheKey || force ? readListView(cacheKey, 1) : 1;
+    const lastPage = appendFrom ? firstPage : Math.max(1, remembered);
     setLoading(!appendFrom);
     setLoadingMore(Boolean(appendFrom));
     try {
-      const result = await getUserRepos({
-        sort: sortField,
-        direction: sortDirection,
-        per_page: 30,
-        page: pageNum,
-        type: typeFilter,
-      });
-      if (requestRef.current !== request) return;
-      const snapshot = {
-        repos: appendFrom ? [...appendFrom.repos, ...result.data] : result.data,
-        hasNextPage: result.hasNextPage,
-        page: pageNum,
-      };
-      setList(snapshot);
-      pageCache.set(cacheKey, snapshot);
+      const byId = new Map(appendFrom?.repos.map(repo => [repo.id, repo]));
+      for (let pageNum = firstPage; pageNum <= lastPage; pageNum++) {
+        const result = await getUserRepos({
+          sort: sortField,
+          direction: sortDirection,
+          per_page: 30,
+          page: pageNum,
+          type: typeFilter,
+        });
+        if (requestRef.current !== request) return;
+        for (const repo of result.data) byId.set(repo.id, repo);
+        const snapshot = { repos: [...byId.values()], hasNextPage: result.hasNextPage, page: pageNum };
+        if (!result.hasNextPage || pageNum === lastPage) {
+          setList(snapshot);
+          pageCache.set(cacheKey, snapshot);
+          saveListView(cacheKey, pageNum);
+          break;
+        }
+      }
     } catch (err) {
       if (requestRef.current !== request) return;
       toast.error(i18n.t('加载仓库列表失败'));

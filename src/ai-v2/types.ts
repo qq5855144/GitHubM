@@ -1,7 +1,7 @@
 // AI Assistant V2 — 通用事件驱动 Agent 类型
 import type { ModelConfig } from '@/components/ai/aiTypes';
 import type { UiAttachment } from './attachments';
-import type { TaskMemory, TaskProgress } from './taskMemory';
+import type { TaskActivity, TaskMemory, TaskProgress } from './taskMemory';
 
 export interface RepoContext {
   fullName: string;
@@ -155,6 +155,7 @@ export interface AgentCheckpoint {
 
 export interface RunAgentOptions {
   taskMemory?: TaskMemory;
+  taskHistory?: () => Iterable<TaskActivity>;
   token: string;
   userLogin?: string;
   runId?: string;

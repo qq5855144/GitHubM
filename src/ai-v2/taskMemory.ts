@@ -218,7 +218,24 @@ export function renderTaskContext(task: TaskMemory, estimate: (text: string) => 
   return lines.join('\n');
 }
 
-export function taskMemorySearch(getTask: () => TaskMemory | undefined): AgentTool {
+export function* historicalTaskActivity(messages: UiChatMessage[]): Iterable<TaskActivity> {
+  for (const message of messages) {
+    if (message.tools?.length) {
+      for (const tool of message.tools) {
+        if (tool.status !== 'running') {
+          yield makeTaskActivity(tool, tool.status === 'done', tool.content || '', tool.artifact);
+        }
+      }
+    } else {
+      yield* message.taskProgress?.activity || [];
+    }
+  }
+}
+
+export function taskMemorySearch(
+  getTask: () => TaskMemory | undefined,
+  getHistory?: () => Iterable<TaskActivity>,
+): AgentTool {
   return {
     name: 'task_memory_search',
     description: '按文件路径、工具或关键词查询本会话当前仓库和分支上已执行的任务记录。返回的内容仅供核实进度。',
@@ -227,15 +244,26 @@ export function taskMemorySearch(getTask: () => TaskMemory | undefined): AgentTo
     async execute(args) {
       const task = getTask();
       const query = String(args.query || '').trim().toLowerCase().slice(0, 160);
-      const records = [...(task?.previousActivity ?? []), ...(task?.progress.activity ?? [])];
+      const records = function* () {
+        yield* getHistory?.() ?? [];
+        yield* task?.previousActivity ?? [];
+        yield* task?.progress.activity ?? [];
+      };
       const requirements = [...(task?.directives ?? []), ...(task?.recentRequests ?? [])]
         .filter(item => item.toLowerCase().includes(query)).slice(-8).map(safeEvidence);
-      const matches = records.filter(item => [item.tool, item.target, item.evidence, item.artifactId]
-        .some(value => value?.toLowerCase().includes(query))).slice(-15).reverse();
+      const matches = new Map<string, TaskActivity>();
+      for (const item of records()) {
+        if (![item.tool, item.target, item.evidence, item.artifactId]
+          .some(value => value?.toLowerCase().includes(query))) continue;
+        const key = JSON.stringify([item.tool, item.target, item.ok, item.evidence, item.artifactId]);
+        matches.delete(key);
+        matches.set(key, item);
+        if (matches.size > 15) matches.delete(matches.keys().next().value!);
+      }
       return {
         ok: true,
-        content: requirements.length || matches.length
-          ? JSON.stringify({ requirements, activity: matches }) : '当前任务没有匹配的执行记录。',
+        content: requirements.length || matches.size
+          ? JSON.stringify({ requirements, activity: [...matches.values()].reverse() }) : '当前任务没有匹配的执行记录。',
       };
     },
   };

@@ -1,6 +1,6 @@
 // PR 详情页
 
-import { useState, useEffect, type KeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from 'react';
 import { Link, useLocation, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   GitPullRequest,
@@ -31,7 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   getPullRequest,
   getPullRequestFiles,
-  getPullRequestComments,
+  getPullRequestCommentsPage,
   createPullRequestComment,
   getRepo,
   samePullRevision,
@@ -190,6 +190,10 @@ function PullDetail({ owner, repo, number }: { owner: string; repo: string; numb
   const [repository, setRepository] = useState<GitHubRepo | null>(null);
   const [comments, setComments] = useState<GitHubComment[]>([]);
   const [commentsError, setCommentsError] = useState(false);
+  const [commentsPage, setCommentsPage] = useState(0);
+  const [hasMoreComments, setHasMoreComments] = useState(false);
+  const [loadingComments, setLoadingComments] = useState(true);
+  const commentsRequest = useRef<AbortController | null>(null);
   const [files, setFiles] = useState<GitHubFile[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -214,11 +218,6 @@ function PullDetail({ owner, repo, number }: { owner: string; repo: string; numb
     getRepo(owner, repo).then((data) => {
       if (!cancelled) setRepository(data);
     }).catch(() => {});
-    getPullRequestComments(owner, repo, number).then((data) => {
-      if (cancelled) return;
-      const ids = new Set(data.map((comment) => comment.id));
-      setComments((previous) => [...data, ...previous.filter((comment) => !ids.has(comment.id))]);
-    }).catch(() => { if (!cancelled) setCommentsError(true); });
     getPullRequestFiles(owner, repo, number).then(({ data }) => {
       if (!cancelled) setFiles(data);
     }).catch(() => {});
@@ -238,6 +237,37 @@ function PullDetail({ owner, repo, number }: { owner: string; repo: string; numb
       .finally(() => { if (!cancelled) setReviewsLoading(false); });
     return () => { cancelled = true; };
   }, [owner, repo, number, retry]);
+
+  const loadComments = useCallback(async (page: number) => {
+    if (commentsRequest.current) return;
+    const controller = new AbortController();
+    commentsRequest.current = controller;
+    setLoadingComments(true);
+    setCommentsError(false);
+    try {
+      const { data, hasNextPage } = await getPullRequestCommentsPage(owner, repo, number, page, controller.signal);
+      if (controller.signal.aborted) return;
+      setComments(previous => [...new Map([...previous, ...data].map(comment => [comment.id, comment])).values()]
+        .sort((a, b) => a.id - b.id));
+      setCommentsPage(page);
+      setHasMoreComments(hasNextPage);
+    } catch {
+      if (!controller.signal.aborted) setCommentsError(true);
+    } finally {
+      if (commentsRequest.current === controller) {
+        commentsRequest.current = null;
+        setLoadingComments(false);
+      }
+    }
+  }, [owner, repo, number]);
+
+  useEffect(() => {
+    void loadComments(1);
+    return () => {
+      commentsRequest.current?.abort();
+      commentsRequest.current = null;
+    };
+  }, [loadComments]);
 
   const pendingMergeCheck = pr?.state === 'open' && !pr.draft && pr.mergeable === null;
   useEffect(() => {
@@ -408,6 +438,12 @@ function PullDetail({ owner, repo, number }: { owner: string; repo: string; numb
           ))}
 
           {commentsError && <p role="status" className="text-sm text-muted-foreground">{i18n.t('暂时无法加载评论')}</p>}
+          {(hasMoreComments || commentsError || loadingComments) && (
+            <Button type="button" className="w-full" variant="outline" disabled={loadingComments}
+              onClick={() => void loadComments(commentsPage + 1)}>
+              {loadingComments ? i18n.t('加载中…') : commentsError ? i18n.t('重试') : i18n.t('加载更多')}
+            </Button>
+          )}
 
           {user && (
             <PullCommentComposer

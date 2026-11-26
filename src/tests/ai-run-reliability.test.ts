@@ -208,18 +208,39 @@ describe('AI repository approvals and recovery', () => {
     expect(runBinding({ ...repo, branch: 'other' }, config)).not.toEqual(runBinding(repo, config));
   });
 
-  it('stops when tool rounds keep changing arguments without finishing', async () => {
+  it('continues past the old round and tool-call limits while advancing', async () => {
     let rounds = 0;
     const tool: AgentTool = {
       name: 'test_read', description: 'mock', risk: 'read', parameters: {},
       execute: async () => ({ ok: true, content: 'mock' }),
     };
+    const onEvent = vi.fn();
+    await runGeneralAgent(runOptions({
+      tools: [tool],
+      onEvent,
+      callModel: async () => {
+        if (++rounds === 113) return answer;
+        return { ...answer, toolCalls: [{ id: String(rounds), name: tool.name, arguments: JSON.stringify({ rounds }) }] };
+      },
+    }));
+    expect(rounds).toBe(113);
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'done', steps: 113 }));
+  });
+
+  it('pauses at a resumable checkpoint when results stop advancing', async () => {
+    let rounds = 0;
+    const tool: AgentTool = {
+      name: 'test_read', description: 'mock', risk: 'read', parameters: {},
+      execute: async () => ({ ok: true, content: 'mock' }),
+    };
+    const onSnapshot = vi.fn(() => true);
     await expect(runGeneralAgent(runOptions({
       tools: [tool],
+      onSnapshot,
       callModel: async () => ({
-        ...answer, toolCalls: [{ id: String(++rounds), name: tool.name, arguments: JSON.stringify({ rounds }) }],
+        ...answer, toolCalls: [{ id: String(++rounds), name: tool.name, arguments: '{}' }],
       }),
-    }))).rejects.toThrow('任务上限');
-    expect(rounds).toBe(32);
+    }))).rejects.toThrow('未取得新进展');
+    expect(onSnapshot).toHaveBeenLastCalledWith(expect.objectContaining({ steps: rounds, toolCalls: rounds }));
   });
 });

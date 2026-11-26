@@ -1,13 +1,12 @@
 // Issue 列表页
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
   MessageSquare,
   Plus,
-  Filter,
   ChevronRight,
   Tag,
   Search,
@@ -67,9 +66,14 @@ export default function IssuesPage() {
   const [assigneeFilter, setAssigneeFilter] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
 
+  const issueRequest = useRef<AbortController | null>(null);
   const loadIssues = useCallback(async (pageNum = 1, append = false, force = false) => {
     if (!owner || !repo) return;
-    if (pageNum === 1) setLoading(true);
+    if (append && issueRequest.current) return;
+    issueRequest.current?.abort();
+    const request = new AbortController();
+    issueRequest.current = request;
+    setLoading(true);
     const query = debouncedSearch.trim();
     const cacheKey = `issues:${owner}/${repo}:${stateFilter}:${sortField}:${labelFilter}:${milestoneFilter}:${assigneeFilter}:${query}:p1`;
     if (pageNum === 1 && !append && !force) {
@@ -78,6 +82,7 @@ export default function IssuesPage() {
         setIssues(cached.issues);
         setHasNextPage(cached.hasNextPage);
         setPage(1);
+        issueRequest.current = null;
         setLoading(false);
         return;
       }
@@ -99,11 +104,12 @@ export default function IssuesPage() {
         order: sortDirection,
         per_page: 30,
         page: pageNum,
-      });
+      }, request.signal);
+      if (request.signal.aborted) return;
       issuesOnly = result.items;
       nextPage = pageNum * 30 < result.total_count;
       if (append) {
-        setIssues((prev) => [...prev, ...issuesOnly]);
+        setIssues(prev => [...new Map([...prev, ...issuesOnly].map(issue => [issue.id, issue])).values()]);
       } else {
         setIssues(issuesOnly);
         pageCache.set(cacheKey, { issues: issuesOnly, hasNextPage: nextPage });
@@ -111,19 +117,35 @@ export default function IssuesPage() {
       setHasNextPage(nextPage);
       setPage(pageNum);
     } catch (err) {
+      if (request.signal.aborted) return;
       toast.error(err instanceof Error ? err.message : i18n.t('加载 Issue 失败'));
       console.error(err);
     } finally {
-      setLoading(false);
+      if (issueRequest.current === request) {
+        issueRequest.current = null;
+        setLoading(false);
+      }
     }
   }, [owner, repo, stateFilter, sortField, sortDirection, labelFilter, milestoneFilter, assigneeFilter, debouncedSearch]);
+  useLayoutEffect(() => {
+    setHasNextPage(false);
+    setPage(1);
+    void loadIssues();
+    return () => {
+      issueRequest.current?.abort();
+      issueRequest.current = null;
+    };
+  }, [loadIssues]);
+
   useEffect(() => {
-    loadIssues(1);
-    if (owner && repo) {
-      getRepoLabels(owner, repo).then(setLabels).catch(console.error);
-      getRepoMilestones(owner, repo).then(setMilestones).catch(console.error);
-    }
-  }, [loadIssues, owner, repo]);
+    if (!owner || !repo) return;
+    let active = true;
+    setLabels([]);
+    setMilestones([]);
+    getRepoLabels(owner, repo).then(result => { if (active) setLabels(result); }).catch(console.error);
+    getRepoMilestones(owner, repo).then(result => { if (active) setMilestones(result); }).catch(console.error);
+    return () => { active = false; };
+  }, [owner, repo]);
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
@@ -177,7 +199,6 @@ export default function IssuesPage() {
         <div className="flex gap-2">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-t text-muted-foreground" />
             <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={i18n.t('搜索标题或正文…')} className="bg-secondary border-border text-foreground pl-9 h-10" />
           </div>
           <Button variant="outline" className="h-10 shrink-0 border-border hover:bg-secondary" onClick={() => setFilterOpen(true)}>

@@ -30,11 +30,11 @@ describe('AuthContext token rollback', () => {
     vi.mocked(github.setToken).mockReset();
   });
 
-  it('rolls the module token back when validating a new token fails', async () => {
+  it('does not activate a token that fails validation', async () => {
     vi.mocked(github.getCurrentUser).mockRejectedValue(new Error('401'));
     render(<AuthProvider><Probe /></AuthProvider>);
     fireEvent.click(screen.getByText('login'));
-    await waitFor(() => expect(vi.mocked(github.setToken)).toHaveBeenLastCalledWith(null));
-    expect(vi.mocked(github.setToken).mock.calls.map(call => call[0])).toEqual(['bad-token', null]);
+    await waitFor(() => expect(vi.mocked(github.getCurrentUser)).toHaveBeenCalledWith('bad-token'));
+    expect(vi.mocked(github.setToken)).not.toHaveBeenCalled();
   });
 });

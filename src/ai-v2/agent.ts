@@ -1,7 +1,6 @@
 // AI Assistant V2 — 无固定流程的通用 Agent 循环
 import type {
   AgentCheckpoint,
-  AgentEvent,
   AgentHistoryMessage,
   PendingWrite,
   AgentTool,
@@ -21,13 +20,12 @@ import { getModelCapabilities } from './modelCapabilities';
 import { resolveCapabilities } from './capabilities';
 import { saveArtifact } from './artifacts';
 import { buildAgentContext, compactProviderMessages, estimateTokens } from './context';
+import type { TaskActivity } from './taskMemory';
 import { recordTaskActivity, renderTaskContext, taskMemorySearch, withTaskNextSteps } from './taskMemory';
 
 const MAX_INLINE_TOOL_RESULT = 12000;
 const TOOL_PREVIEW_CHARS = 4000;
-const MAX_ROUNDS_PER_RUN = 32;
-const MAX_CALLS_PER_RUN = 96;
-const RUN_TIMEOUT_MS = 15 * 60 * 1000;
+const MAX_STALLED_ROUNDS = 12;
 
 class CheckpointError extends Error {}
 
@@ -114,25 +112,20 @@ function safeParseArgs(raw: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
+function fingerprint(text: string): string {
+  // For detecting repeated tool results only. Write approvals use a separate identity.
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
+  return `${text.length}:${hash}`;
+}
+
 function toolErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
 export async function runGeneralAgent(options: RunAgentOptions): Promise<void> {
   checkAbort(options.signal);
-  const run = new AbortController();
-  const abort = () => run.abort();
-  options.signal.addEventListener('abort', abort, { once: true });
-  const timer = setTimeout(() => run.abort(), RUN_TIMEOUT_MS);
-  try {
-    await executeRun({ ...options, signal: run.signal });
-  } catch (error) {
-    if (run.signal.aborted && !options.signal.aborted) throw new Error('任务已达到总时长上限');
-    throw error;
-  } finally {
-    clearTimeout(timer);
-    options.signal.removeEventListener('abort', abort);
-  }
+  await executeRun(options);
 }
 
 async function executeRun(options: RunAgentOptions): Promise<void> {
@@ -169,9 +162,13 @@ async function executeRun(options: RunAgentOptions): Promise<void> {
   const model = getModelCapabilities(config.type, config.model);
   const supportsTools = config.supportsTools ?? model.supportsTools;
   let task = options.taskMemory;
-  const searchable = Boolean(supportsTools && task && (repo || task.previousActivity.length));
+  const searchable = Boolean(supportsTools && task && (repo || task.previousActivity.length || options.taskHistory));
   const tools = supportsTools ? [...capabilityState.tools] : [];
-  if (searchable) tools.push(taskMemorySearch(() => task));
+  const activity: TaskActivity[] = [];
+  if (searchable) tools.push(taskMemorySearch(() => task, function* () {
+    yield* options.taskHistory?.() ?? [];
+    yield* activity;
+  }));
   const toolMap = new Map(tools.map(tool => [tool.name, tool]));
   const toolDefs = toToolDefinitions(tools);
   const inputBudget = Math.min(contextBudget || 32000, model.contextWindow - model.maxOutput - 512)
@@ -194,13 +191,12 @@ async function executeRun(options: RunAgentOptions): Promise<void> {
     messages = [...messages, { role: 'user', content: currentUserContent }];
   }
 
-  const repeatedCalls = new Map<string, number>();
-  let finalText = '';
-  const initialSteps = resumeSteps || 0;
-  const initialCalls = options.resumeToolCalls || 0;
-  let steps = initialSteps;
-  let toolCalls = initialCalls;
+  const seenResults = new Set<string>();
+  let stalledRounds = 0;
+  let steps = resumeSteps || 0;
+  let toolCalls = options.resumeToolCalls || 0;
   const completedWrites = new Set(options.completedWrites);
+  const declinedWrites = new Set<string>();
 
   const checkpoint = async (pendingWrite?: PendingWrite, pending: V2ToolCall[] = [], finished = false) => {
     const snapshot: AgentCheckpoint = {
@@ -226,7 +222,7 @@ async function executeRun(options: RunAgentOptions): Promise<void> {
   });
   await checkpoint();
 
-  while (steps - initialSteps < MAX_ROUNDS_PER_RUN && toolCalls - initialCalls < MAX_CALLS_PER_RUN) {
+  while (!signal.aborted) {
     checkAbort(signal);
 
     const requestMessages = messages.slice();
@@ -263,7 +259,7 @@ async function executeRun(options: RunAgentOptions): Promise<void> {
     messages.push(assistantMessage);
 
     if (result.toolCalls.length === 0) {
-      finalText = result.content;
+      const finalText = result.content;
       steps++;
       if (task) {
         task = withTaskNextSteps(task, finalText, []);
@@ -274,77 +270,86 @@ async function executeRun(options: RunAgentOptions): Promise<void> {
     }
 
     if (task) task = withTaskNextSteps(task, result.content, result.toolCalls);
+    let madeProgress = false;
     for (const [index, call] of result.toolCalls.entries()) {
       checkAbort(signal);
-      if (toolCalls - initialCalls >= MAX_CALLS_PER_RUN) throw new Error('已到达本次工具调用上限');
       toolCalls++;
       onEvent({ type: 'tool_start', call });
 
-      const signature = `${call.name}:${call.arguments}`;
-      const count = (repeatedCalls.get(signature) || 0) + 1;
-      repeatedCalls.set(signature, count);
-
+      let signature = '';
       let outcome: ToolRunResult = { ok: false, content: '工具未执行' };
       let checkingWriteResult = false;
-      if (count >= 3) {
-        outcome = { ok: false, content: '检测到重复调用相同工具和参数，已停止重复执行。' };
+      const tool = toolMap.get(call.name);
+      if (!tool) {
+        outcome = { ok: false, content: `工具不存在：${call.name}` };
       } else {
-        const tool = toolMap.get(call.name);
-        if (!tool) {
-          outcome = { ok: false, content: `工具不存在：${call.name}` };
-        } else {
-          try {
-            const args = safeParseArgs(call.arguments);
-            if (tool.risk !== 'read') {
-              const id = await writeIdentity(tool.name, args);
-              if (completedWrites.has(id)) {
-                outcome = { ok: false, content: '该写入已在本任务执行过，已阻止重复提交。' };
-              } else if (!requestApproval) {
-                outcome = {
-                  ok: false,
-                  content: '写操作未执行：当前运行没有提供用户确认通道。',
-                };
-              } else {
-                const target = await prepareGitHubWrite(tool.name, args, { token, userLogin, repo, signal });
-                checkAbort(signal);
-                const approval: ApprovalRequest = {
-                  id: call.id,
-                  toolName: tool.name,
-                  description: tool.description,
-                  arguments: args,
-                  risk: tool.risk,
-                  target,
-                };
-                const approved = await requestApproval(approval, signal);
-                checkAbort(signal);
-                if (approved) {
-                  await checkpoint({
-                    id, callId: call.id, tool: call.name, verification: target?.verification,
-                  }, result.toolCalls.slice(index));
-                  if (signal.aborted) {
-                    await checkpoint(undefined, result.toolCalls.slice(index));
-                    checkAbort(signal);
-                  }
-                  checkingWriteResult = true;
-                  outcome = await tool.execute(args, { token, userLogin, repo, signal, approvedWrite: target });
-                  if (!outcome.ok) throw new Error(outcome.content);
-                  completedWrites.add(id);
-                } else {
-                  outcome = { ok: false, content: '用户拒绝了本次写操作，未修改仓库。' };
-                }
-              }
+        try {
+          const args = safeParseArgs(call.arguments);
+          signature = `${call.name}:${fingerprint(JSON.stringify(canonicalArguments(args)))}`;
+          if (tool.risk !== 'read') {
+            const id = await writeIdentity(call.name, args);
+            if (completedWrites.has(id)) {
+              outcome = { ok: false, content: '该写入已在本任务执行过，已阻止重复提交。' };
+            } else if (declinedWrites.has(id)) {
+              outcome = { ok: false, content: '用户已拒绝这项写入。' };
+            } else if (!requestApproval) {
+              outcome = {
+                ok: false,
+                content: '写操作未执行：当前运行没有提供用户确认通道。',
+              };
             } else {
-              outcome = await tool.execute(args, { token, userLogin, repo, signal });
+              const target = await prepareGitHubWrite(tool.name, args, { token, userLogin, repo, signal });
+              checkAbort(signal);
+              const approval: ApprovalRequest = {
+                id: call.id,
+                toolName: tool.name,
+                description: tool.description,
+                arguments: args,
+                risk: tool.risk,
+                target,
+              };
+              const approved = await requestApproval(approval, signal);
+              checkAbort(signal);
+              if (approved) {
+                await checkpoint({
+                  id, callId: call.id, tool: call.name, verification: target?.verification,
+                }, result.toolCalls.slice(index));
+                if (signal.aborted) {
+                  await checkpoint(undefined, result.toolCalls.slice(index));
+                  checkAbort(signal);
+                }
+                checkingWriteResult = true;
+                outcome = await tool.execute(args, { token, userLogin, repo, signal, approvedWrite: target });
+                if (!outcome.ok) throw new Error(outcome.content);
+                completedWrites.add(id);
+              } else {
+                declinedWrites.add(id);
+                outcome = { ok: false, content: '用户拒绝了本次写操作，未修改仓库。' };
+              }
             }
-          } catch (error) {
-            if (error instanceof CheckpointError) throw error;
-            if (checkingWriteResult) {
-              onEvent({ type: 'tool_end', call, ok: false, content: toolErrorMessage(error) });
-              throw new Error(`写入未确认完成，请先检查 GitHub 上的结果：${toolErrorMessage(error)}`);
-            }
-            checkAbort(signal);
-            outcome = { ok: false, content: `工具执行失败：${toolErrorMessage(error)}` };
+          } else {
+            outcome = await tool.execute(args, { token, userLogin, repo, signal });
           }
+        } catch (error) {
+          if (error instanceof CheckpointError) throw error;
+          if (checkingWriteResult) {
+            onEvent({ type: 'tool_end', call, ok: false, content: toolErrorMessage(error) });
+            throw new Error(`写入未确认完成，请先检查 GitHub 上的结果：${toolErrorMessage(error)}`);
+          }
+          checkAbort(signal);
+          outcome = { ok: false, content: `工具执行失败：${toolErrorMessage(error)}` };
+        }
+      }
+
+      if (signature && (outcome.ok || tool?.risk === 'read')) {
+        const operation = outcome.ok ? signature : `${call.name}:error`;
+        const resultSignature = `${operation}:${fingerprint(outcome.content)}`;
+        if (!seenResults.has(resultSignature)) madeProgress = true;
+        seenResults.delete(resultSignature);
+        seenResults.add(resultSignature);
+        if (seenResults.size > 256) {
+          const oldest = seenResults.keys().next().value;
+          if (oldest !== undefined) seenResults.delete(oldest);
         }
       }
 
@@ -383,15 +388,24 @@ async function executeRun(options: RunAgentOptions): Promise<void> {
       });
       const pending = result.toolCalls.slice(index + 1);
       if (task) {
-        if (call.name !== 'task_memory_search') task = recordTaskActivity(task, call, outcome.ok, outcome.content, artifact);
+        if (call.name !== 'task_memory_search') {
+          task = recordTaskActivity(task, call, outcome.ok, outcome.content, artifact);
+          activity.push(task.progress.activity[task.progress.activity.length - 1]);
+        }
         task = withTaskNextSteps(task, '', pending);
       }
       await checkpoint(undefined, pending);
     }
     steps++;
+    // 对发送给模型的工作上下文做滚动压缩。完整工具记录与任务目标独立保存。
+    messages = compactProviderMessages(messages, inputBudget);
     await checkpoint();
+    stalledRounds = madeProgress ? 0 : stalledRounds + 1;
+    if (stalledRounds >= MAX_STALLED_ROUNDS) {
+      throw new Error('工具多轮未取得新进展，可从已保存的进度继续');
+    }
   }
-  throw new Error('已到达本次任务上限，可从已保存的进度继续');
+  checkAbort(signal);
 }
 
 /** 给 UI 的轻量历史：只保留最终文本，工具轨迹不进入下一轮上下文 */

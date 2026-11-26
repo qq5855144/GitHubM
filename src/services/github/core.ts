@@ -5,6 +5,7 @@ import { createHttpError, fetchWithResilience } from './http';
 export const BASE_URL = 'https://api.github.com';
 
 let authToken: string | null = null;
+let authGeneration = 0;
 
 // ── TTL 请求缓存层 ──────────────────────────────────────────────────
 // 替代原 addCacheBuster 时间戳反模式：
@@ -232,7 +233,9 @@ const inFlightMap = new Map<string, Promise<unknown>>();
 export function getOrCreateInFlight<T>(key: string, factory: () => Promise<T>): Promise<T> {
   const existing = inFlightMap.get(key);
   if (existing) return existing as Promise<T>;
-  const promise = factory().finally(() => inFlightMap.delete(key));
+  const promise = factory().finally(() => {
+    if (inFlightMap.get(key) === promise) inFlightMap.delete(key);
+  });
   inFlightMap.set(key, promise as Promise<unknown>);
   return promise;
 }
@@ -240,6 +243,7 @@ export function getOrCreateInFlight<T>(key: string, factory: () => Promise<T>): 
 export function setToken(token: string | null) {
   // token 变更（退出登录）时清空所有缓存，防止旧用户数据泄露
   if (token !== authToken) {
+    authGeneration++;
     clearApiCache();
     inFlightMap.clear();
   }
@@ -271,6 +275,7 @@ export async function request<T>(
   const method = (options.method ?? 'GET').toUpperCase();
 
   if (method === 'GET') {
+    const generation = authGeneration;
     const accept = String((options.headers as Record<string, string> | undefined)?.Accept
       ?? 'application/vnd.github+json');
     const cacheKey = buildCacheKey(url, accept);
@@ -295,7 +300,7 @@ export async function request<T>(
         headers,
       }, method);
       if (response.status === 304 && entry) {
-        touchCached(cacheKey, cacheTtlForUrl(url));
+        if (generation === authGeneration) touchCached(cacheKey, cacheTtlForUrl(url));
         return entry.data;
       }
       if (!response.ok) {
@@ -315,7 +320,7 @@ export async function request<T>(
       }
       if (response.status === 204) return undefined as T;
       const data = await response.json() as T;
-      if (!fresh) setCached(cacheKey, data, response.headers.get('etag') ?? undefined, cacheTtlForUrl(url));
+      if (!fresh && generation === authGeneration) setCached(cacheKey, data, response.headers.get('etag') ?? undefined, cacheTtlForUrl(url));
       return data;
     };
     // 带 signal 的调用独立执行，避免一方取消时连带其他共享 Promise 的调用方。
@@ -373,6 +378,7 @@ export async function requestWithPagination<T>(
   const method = (options.method ?? 'GET').toUpperCase();
 
   if (method === 'GET') {
+    const generation = authGeneration;
     const cacheKey = buildCacheKey(url);
     // 1. TTL 缓存命中
     const fresh = options.cache === 'no-store';
@@ -393,7 +399,7 @@ export async function requestWithPagination<T>(
         headers,
       }, method);
       if (response.status === 304 && entry) {
-        touchCached(cacheKey, cacheTtlForUrl(url));
+        if (generation === authGeneration) touchCached(cacheKey, cacheTtlForUrl(url));
         return entry.data;
       }
       if (!response.ok) {
@@ -415,7 +421,7 @@ export async function requestWithPagination<T>(
       const linkHeader = response.headers.get('Link');
       const links = linkHeader ? parseLinkHeader(linkHeader) : {};
       const result = { data, hasNextPage: !!links.next };
-      if (!fresh) setCached(cacheKey, result, response.headers.get('etag') ?? undefined, cacheTtlForUrl(url));
+      if (!fresh && generation === authGeneration) setCached(cacheKey, result, response.headers.get('etag') ?? undefined, cacheTtlForUrl(url));
       return result;
     };
     return fresh || options.signal ? execute() : getOrCreateInFlight(cacheKey, execute);

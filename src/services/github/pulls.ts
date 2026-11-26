@@ -139,6 +139,19 @@ export async function getPullRequestComments(
   );
 }
 
+export async function getPullRequestCommentsPage(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  page = 1,
+  signal?: AbortSignal,
+): Promise<{ data: GitHubComment[]; hasNextPage: boolean }> {
+  return requestWithPagination<GitHubComment>(
+    `/repos/${owner}/${repo}/issues/${prNumber}/comments?per_page=50&page=${page}`,
+    { signal },
+  );
+}
+
 export async function createPullRequestComment(
   owner: string,
   repo: string,

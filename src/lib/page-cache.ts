@@ -15,34 +15,74 @@
 
 const DEFAULT_TTL = 5 * 60 * 1000; // 5 分钟
 
+const MAX_ENTRIES = 64;
+const MAX_ESTIMATED_BYTES = 24 * 1024 * 1024;
+const BACK_NAVIGATION_GRACE = 30 * 60 * 1000;
+
 interface CacheEntry<T> {
   data: T;
   timestamp: number;
   ttl: number;
+  weight: number;
+}
+
+// Sample list rows so a large page snapshot doesn't need synchronous JSON serialization.
+function estimateWeight(value: unknown, depth = 0): number {
+  if (typeof value === 'string') return 24 + value.length * 2;
+  if (!value || typeof value !== 'object' || depth >= 4) return 16;
+  if (Array.isArray(value)) {
+    const samples = Math.min(value.length, 8);
+    if (!samples) return 32;
+    let bytes = 0;
+    for (let i = 0; i < samples; i++) {
+      bytes += estimateWeight(value[Math.floor(i * value.length / samples)], depth + 1);
+    }
+    return 32 + (bytes / samples + 8) * value.length;
+  }
+  return 32 + Object.entries(value).reduce((bytes, [key, item]) =>
+    bytes + 16 + key.length * 2 + estimateWeight(item, depth + 1), 0);
 }
 
 class PageCache {
   private readonly store = new Map<string, CacheEntry<unknown>>();
+  private weight = 0;
 
   /** 返回已访问的页面时，可以恢复超过 TTL 的列表快照。 */
   get<T>(key: string, { allowExpired = false } = {}): T | null {
     const entry = this.store.get(key) as CacheEntry<T> | undefined;
     if (!entry) return null;
-    if (!allowExpired && Date.now() - entry.timestamp > entry.ttl) {
-      this.store.delete(key);
+    const age = Date.now() - entry.timestamp;
+    if (age > Math.max(entry.ttl, BACK_NAVIGATION_GRACE)) {
+      this.delete(key);
       return null;
     }
+    if (!allowExpired && age > entry.ttl) return null;
+    this.store.delete(key);
+    this.store.set(key, entry);
     return entry.data;
   }
 
   /** 写缓存 */
   set<T>(key: string, data: T, ttl = DEFAULT_TTL): void {
-    this.store.set(key, { data, timestamp: Date.now(), ttl });
+    const now = Date.now();
+    for (const [cachedKey, entry] of this.store) {
+      if (now - entry.timestamp > Math.max(entry.ttl, BACK_NAVIGATION_GRACE)) this.delete(cachedKey);
+    }
+    this.delete(key);
+    const weight = estimateWeight(data);
+    this.store.set(key, { data, timestamp: now, ttl, weight });
+    this.weight += weight;
+    while (this.store.size > 1 && (this.store.size > MAX_ENTRIES || this.weight > MAX_ESTIMATED_BYTES)) {
+      const oldest = this.store.keys().next().value;
+      if (oldest === undefined) break;
+      this.delete(oldest);
+    }
   }
 
   /** 删除指定 key（精确匹配） */
   delete(key: string): void {
-    this.store.delete(key);
+    const entry = this.store.get(key);
+    if (entry && this.store.delete(key)) this.weight -= entry.weight;
   }
 
   /**
@@ -51,13 +91,14 @@ class PageCache {
    */
   invalidate(prefix: string): void {
     for (const key of this.store.keys()) {
-      if (key.startsWith(prefix)) this.store.delete(key);
+      if (key.startsWith(prefix)) this.delete(key);
     }
   }
 
   /** 清空全部缓存（登出时调用） */
   clear(): void {
     this.store.clear();
+    this.weight = 0;
   }
 
   /** 调试用：查看所有缓存 key */
@@ -67,3 +108,23 @@ class PageCache {
 }
 
 export const pageCache = new PageCache();
+
+// Store small navigation preferences separately from evictable repository data.
+const LIST_VIEW_PREFIX = 'githubm_list_view:';
+
+export function readListView<T>(key: string, fallback: T): T {
+  try {
+    const saved = sessionStorage.getItem(LIST_VIEW_PREFIX + key);
+    return saved ? JSON.parse(saved) as T : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveListView<T>(key: string, view: T): void {
+  try {
+    sessionStorage.setItem(LIST_VIEW_PREFIX + key, JSON.stringify(view));
+  } catch {
+    // Do not block loading when browser storage is unavailable.
+  }
+}

@@ -1,6 +1,6 @@
 // PR Diff 对比视图页
 
-import { useState, useEffect, useRef } from 'react';
+import { Fragment, memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronRight,
@@ -156,6 +156,34 @@ function InlineCommentInput({ onSubmit, onCancel }: InlineCommentInputProps) {
 }
 
 // ===== 单文件 Diff 展示（Unified 模式）=====
+const DIFF_ROWS_PER_BATCH = 200;
+const DIFF_EAGER_LINES = 600;
+
+function defaultCollapsedFiles(files: GitHubFile[], remainingLineBudget = DIFF_EAGER_LINES): Set<string> {
+  const collapsed = new Set<string>();
+  for (const file of files) {
+    if (!file.patch) continue;
+    if (file.changes > DIFF_ROWS_PER_BATCH || file.changes > remainingLineBudget) {
+      collapsed.add(file.filename);
+    } else {
+      remainingLineBudget -= file.changes;
+    }
+  }
+  return collapsed;
+}
+
+function DiffRowControls({ count, total, onShow }: { count: number; total: number; onShow: (count: number) => void }) {
+  if (count >= total) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t border-border p-2">
+      <Button type="button" size="sm" variant="ghost" onClick={() => onShow(count + DIFF_ROWS_PER_BATCH)}>
+        {i18n.t('加载更多')} <span className="text-muted-foreground">{count}/{total}</span>
+      </Button>
+      <Button type="button" size="sm" variant="ghost" onClick={() => onShow(total)}>{i18n.t('显示全部')}</Button>
+    </div>
+  );
+}
+
 interface UnifiedDiffProps {
   file: GitHubFile;
   commentGroups: Map<string, LineCommentGroup>;
@@ -169,6 +197,8 @@ interface UnifiedDiffProps {
 function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onCommentAdded }: UnifiedDiffProps) {
   const [activeCommentLine, setActiveCommentLine] = useState<number | null>(null);
   const { user } = useAuth();
+  const lines = useMemo(() => file.patch ? parsePatch(file.patch) : [], [file.patch]);
+  const [shown, setShown] = useState(DIFF_ROWS_PER_BATCH);
 
   if (!file.patch) {
     return (
@@ -177,8 +207,6 @@ function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onC
       </div>
     );
   }
-
-  const lines = parsePatch(file.patch);
 
   const handleAddComment = async (body: string, lineNum: number, side: 'LEFT' | 'RIGHT') => {
     if (!owner || !repo) return;
@@ -202,7 +230,7 @@ function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onC
     <div className="overflow-x-auto">
       <table className="w-full min-w-max text-xs font-mono border-collapse">
         <tbody>
-          {lines.map((line, idx) => {
+          {lines.slice(0, shown).map((line, idx) => {
             const side: 'LEFT' | 'RIGHT' = line.type === 'remove' ? 'LEFT' : 'RIGHT';
             const lineNum = side === 'RIGHT' ? (line.lineNew ?? 0) : (line.lineOld ?? 0);
             const commentKey = `${file.filename}:${side}:${lineNum}`;
@@ -229,9 +257,8 @@ function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onC
             const prefix = line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' ';
 
             return (
-              <>
+              <Fragment key={idx}>
                 <tr
-                  key={idx}
                   className={`group ${rowBg} hover:brightness-95 transition-colors`}
                 >
                   {/* 旧行号 */}
@@ -296,11 +323,12 @@ function UnifiedDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onC
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             );
           })}
         </tbody>
       </table>
+      <DiffRowControls count={shown} total={lines.length} onShow={setShown} />
     </div>
   );
 }
@@ -316,20 +344,7 @@ interface SideBySideDiffProps {
   onCommentAdded: (c: GitHubComment, path: string, line: number) => void;
 }
 
-function SideBySideDiff({ file, commentGroups, prHead, owner, repo, pullNumber, onCommentAdded }: SideBySideDiffProps) {
-  const [activeCommentLine, setActiveCommentLine] = useState<{ idx: number; side: 'old' | 'new' } | null>(null);
-  const { user } = useAuth();
-
-  if (!file.patch) {
-    return (
-      <div className="px-4 py-3 text-xs text-muted-foreground italic">
-        {file.status === 'binary' ? i18n.t('二进制文件，无法预览差异') : i18n.t('无差异内容')}
-      </div>
-    );
-  }
-
-  const lines = parsePatch(file.patch);
-
+function pairDiffLines(lines: DiffLine[]) {
   // 构建左右两侧行列表
   const pairs: Array<{ left: DiffLine | null; right: DiffLine | null; hunk?: DiffLine }> = [];
   let i = 0;
@@ -358,6 +373,23 @@ function SideBySideDiff({ file, commentGroups, prHead, owner, repo, pullNumber, 
       i++;
     }
   }
+  return pairs;
+}
+
+function SideBySideDiff({ file, prHead, owner, repo, pullNumber, onCommentAdded }: SideBySideDiffProps) {
+  const [activeCommentLine, setActiveCommentLine] = useState<{ idx: number; side: 'old' | 'new' } | null>(null);
+  const { user } = useAuth();
+  const lines = useMemo(() => file.patch ? parsePatch(file.patch) : [], [file.patch]);
+  const [shown, setShown] = useState(DIFF_ROWS_PER_BATCH);
+  const pairs = useMemo(() => pairDiffLines(lines), [lines]);
+
+  if (!file.patch) {
+    return (
+      <div className="px-4 py-3 text-xs text-muted-foreground italic">
+        {file.status === 'binary' ? i18n.t('二进制文件，无法预览差异') : i18n.t('无差异内容')}
+      </div>
+    );
+  }
 
   const handleAddComment = async (body: string, lineNum: number, side: 'old' | 'new') => {
     try {
@@ -380,7 +412,7 @@ function SideBySideDiff({ file, commentGroups, prHead, owner, repo, pullNumber, 
     <div className="overflow-x-auto">
       <table className="w-full min-w-max text-xs font-mono border-collapse">
         <tbody>
-          {pairs.map((pair, idx) => {
+          {pairs.slice(0, shown).map((pair, idx) => {
             if (pair.hunk) {
               return (
                 <tr key={idx} className="bg-accent/5">
@@ -394,8 +426,8 @@ function SideBySideDiff({ file, commentGroups, prHead, owner, repo, pullNumber, 
             const isActive = activeCommentLine?.idx === idx;
 
             return (
-              <>
-                <tr key={idx} className="group">
+              <Fragment key={idx}>
+                <tr className="group">
                   {/* 左侧（删除）*/}
                   <td className={`w-10 px-2 py-0.5 text-right select-none border-r border-border text-muted-foreground ${leftBg}`}>
                     {pair.left?.lineOld ?? ''}
@@ -446,11 +478,12 @@ function SideBySideDiff({ file, commentGroups, prHead, owner, repo, pullNumber, 
                     onCancel={() => setActiveCommentLine(null)}
                   />
                 )}
-              </>
+              </Fragment>
             );
           })}
         </tbody>
       </table>
+      <DiffRowControls count={shown} total={pairs.length} onShow={setShown} />
     </div>
   );
 }
@@ -460,7 +493,7 @@ interface FileDiffCardProps {
   file: GitHubFile;
   mode: 'unified' | 'side';
   collapsed: boolean;
-  onToggle: () => void;
+  onToggle: (filename: string) => void;
   commentGroups: Map<string, LineCommentGroup>;
   prHead: string;
   owner: string;
@@ -469,7 +502,18 @@ interface FileDiffCardProps {
   onCommentAdded: (c: GitHubComment, path: string, line: number) => void;
 }
 
-function FileDiffCard({ file, mode, collapsed, onToggle, commentGroups, prHead, owner, repo, pullNumber, onCommentAdded }: FileDiffCardProps) {
+const FileDiffCard = memo(function FileDiffCard({ file, mode, collapsed, onToggle, commentGroups, prHead, owner, repo, pullNumber, onCommentAdded }: FileDiffCardProps) {
+
+  const card = useRef<HTMLDivElement>(null);
+  const [hasEnteredViewport, setHasEnteredViewport] = useState(typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    if (collapsed || hasEnteredViewport || !card.current) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) setHasEnteredViewport(true);
+    }, { rootMargin: '400px' });
+    observer.observe(card.current);
+    return () => observer.disconnect();
+  }, [collapsed, hasEnteredViewport]);
 
   const statusColor =
     file.status === 'added' ? 'text-success border-success/30 bg-success/10' :
@@ -477,13 +521,13 @@ function FileDiffCard({ file, mode, collapsed, onToggle, commentGroups, prHead, 
     'text-muted-foreground border-border bg-secondary';
 
   return (
-    <div className="bg-card border border-border rounded-lg overflow-hidden">
+    <div ref={card} className="bg-card border border-border rounded-lg overflow-hidden [content-visibility:auto] [contain-intrinsic-size:auto_48px]">
       {/* 文件头 */}
       <button
         type="button"
         aria-expanded={!collapsed}
         className="flex w-full items-center gap-2 border-b border-border bg-secondary/40 px-3 py-2.5 text-left transition-colors hover:bg-secondary/70"
-        onClick={onToggle}
+        onClick={() => { setHasEnteredViewport(true); onToggle(file.filename); }}
       >
         {collapsed ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
         <code className="text-xs text-foreground font-mono flex-1 min-w-0 truncate">{file.filename}</code>
@@ -499,14 +543,14 @@ function FileDiffCard({ file, mode, collapsed, onToggle, commentGroups, prHead, 
           </Badge>
         </span>
       </button>
-      {!collapsed && (
+      {!collapsed && hasEnteredViewport && (
         mode === 'unified'
           ? <UnifiedDiff file={file} commentGroups={commentGroups} prHead={prHead} owner={owner} repo={repo} pullNumber={pullNumber} onCommentAdded={onCommentAdded} />
           : <SideBySideDiff file={file} commentGroups={commentGroups} prHead={prHead} owner={owner} repo={repo} pullNumber={pullNumber} onCommentAdded={onCommentAdded} />
       )}
     </div>
   );
-}
+});
 
 // ===== 主页面 =====
 export default function PrDiffPage() {
@@ -553,7 +597,7 @@ function PrDiff({ owner, repo, number }: { owner: string; repo: string; number: 
         setFiles(result.data);
         setFilesPage(1);
         setMoreFiles(result.hasNextPage);
-        setCollapsedFiles(new Set());
+        setCollapsedFiles(defaultCollapsedFiles(result.data));
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : i18n.t('加载 Diff 失败'));
       } finally {
@@ -591,7 +635,12 @@ function PrDiff({ owner, repo, number }: { owner: string; repo: string; number: 
         setRevisionChanged(true);
         throw new Error(changedMessage);
       }
-      setFiles((previous) => [...previous, ...result.data]);
+      setFiles(previous => [...new Map([...previous, ...result.data].map(file => [file.filename, file])).values()]);
+      // Keep the current layout stable and open newly loaded changes on demand.
+      const knownFiles = new Set(files.map(file => file.filename));
+      setCollapsedFiles(previous => new Set([...previous, ...result.data
+        .filter(file => !knownFiles.has(file.filename) && file.patch)
+        .map(file => file.filename)]));
       setFilesPage(page);
       setMoreFiles(result.hasNextPage);
     } catch (err) {
@@ -601,21 +650,21 @@ function PrDiff({ owner, repo, number }: { owner: string; repo: string; number: 
     }
   };
 
-  const commentGroups = groupCommentsByLine(reviewComments);
+  const commentGroups = useMemo(() => groupCommentsByLine(reviewComments), [reviewComments]);
   const allCollapsed = files.length > 0 && files.every((item) => collapsedFiles.has(item.filename));
 
-  const toggleFile = (filename: string) => {
+  const toggleFile = useCallback((filename: string) => {
     setCollapsedFiles((prev) => {
       const next = new Set(prev);
       if (next.has(filename)) next.delete(filename);
       else next.add(filename);
       return next;
     });
-  };
+  }, []);
 
-  const handleCommentAdded = (comment: GitHubComment, _path: string, _line: number) => {
-    setReviewComments((prev) => [...prev, comment]);
-  };
+  const handleCommentAdded = useCallback((comment: GitHubComment) => {
+    setReviewComments(prev => [...prev, comment]);
+  }, []);
 
   const reviewOptions: Record<ReviewEvent, string> = {
     APPROVE: i18n.t('批准'),
@@ -764,7 +813,7 @@ function PrDiff({ owner, repo, number }: { owner: string; repo: string; number: 
             file={file}
             mode={mode}
             collapsed={collapsedFiles.has(file.filename)}
-            onToggle={() => toggleFile(file.filename)}
+            onToggle={toggleFile}
             commentGroups={commentGroups}
             prHead={pr.head.sha}
             owner={owner!}

@@ -1,6 +1,6 @@
 // 我的收藏 —— 用户 Star 过的仓库列表
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useNavigationType } from 'react-router-dom';
 import {
   Star,
@@ -35,8 +35,20 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import type { GitHubRepo } from '@/types/types';
 import { toast } from 'sonner';
-import { pageCache } from '@/lib/page-cache';
+import { pageCache, readListView, saveListView } from '@/lib/page-cache';
 import i18n from "@/i18n";
+
+type StarredCard = Pick<GitHubRepo,
+  'id' | 'name' | 'full_name' | 'description' | 'language' | 'private' | 'fork'
+  | 'stargazers_count' | 'forks_count' | 'pushed_at' | 'updated_at' | 'created_at'
+  | 'starred_at' | 'topics'>;
+
+function toStarredCard(repo: GitHubRepo): StarredCard {
+  const { id, name, full_name, description, language, private: isPrivate, fork,
+    stargazers_count, forks_count, pushed_at, updated_at, created_at, starred_at, topics } = repo;
+  return { id, name, full_name, description, language, private: isPrivate, fork,
+    stargazers_count, forks_count, pushed_at, updated_at, created_at, starred_at, topics };
+}
 
 type SortKey = 'updated' | 'created' | 'stars' | 'name';
 
@@ -54,7 +66,7 @@ function toTime(value?: string): number {
   return value ? new Date(value).getTime() : 0;
 }
 
-function sortRepos(repos: GitHubRepo[], sort: SortKey): GitHubRepo[] {
+function sortRepos(repos: StarredCard[], sort: SortKey): StarredCard[] {
   return [...repos].sort((a, b) => {
     let diff = 0;
     switch (sort) {
@@ -85,42 +97,44 @@ function StarredList({ accountId }: { accountId?: number }) {
   const cacheKey = `starred:${accountId}:all`;
   const viewKey = `starred-view:${accountId}`;
   const [allowExpired] = useState(() => navigationType === 'POP');
-  const [cached] = useState(() => pageCache.get<GitHubRepo[]>(cacheKey, { allowExpired }));
+  const [cached] = useState(() => pageCache.get<StarredCard[]>(cacheKey, { allowExpired }));
   const [repos, setRepos] = useState(cached ?? []);
   const [loading, setLoading] = useState(!cached);
   const [refreshing, setRefreshing] = useState(false);
-  const [view, setView] = useState(() => pageCache.get<StarredListView>(viewKey) ?? DEFAULT_VIEW);
+  const [view, setView] = useState(() => readListView(viewKey, DEFAULT_VIEW));
   const { visibleCount, search, sort } = view;
   const [unstarring, setUnstarring] = useState<number | null>(null);
-  const requestRef = useRef<symbol>();
+  const requestRef = useRef<AbortController>();
 
   useEffect(() => {
-    pageCache.set(viewKey, view, Number.POSITIVE_INFINITY);
+    saveListView(viewKey, view);
   }, [viewKey, view]);
 
-  // 排序在本地做，必须拿到全量收藏；首页先回填，剩余页并发补齐。
+  // 首屏使用 GitHub 的更新时间排序，随后补齐本地的全量排序和搜索。
   const loadStarred = useCallback(async (force = false) => {
     if (!force) {
-      const snapshot = pageCache.get<GitHubRepo[]>(cacheKey, { allowExpired });
+      const snapshot = pageCache.get<StarredCard[]>(cacheKey, { allowExpired });
       if (snapshot) {
         setRepos(snapshot);
         setLoading(false);
         return;
       }
     }
-    const request = Symbol();
+    requestRef.current?.abort();
+    const request = new AbortController();
     requestRef.current = request;
     if (force) setRefreshing(true);
     else setLoading(true);
     try {
-      const data = await getAllStarredRepos('created', 'desc', (firstPage) => {
+      const data = await getAllStarredRepos('updated', 'desc', (firstPage) => {
         if (requestRef.current !== request) return;
-        setRepos(firstPage);
+        setRepos(firstPage.map(toStarredCard));
         setLoading(false);
-      });
+      }, request.signal);
       if (requestRef.current !== request) return;
-      setRepos(data);
-      pageCache.set(cacheKey, data);
+      const cards = data.map(toStarredCard);
+      setRepos(cards);
+      pageCache.set(cacheKey, cards);
     } catch {
       if (requestRef.current === request) toast.error(i18n.t('加载收藏列表失败'));
     } finally {
@@ -133,10 +147,10 @@ function StarredList({ accountId }: { accountId?: number }) {
 
   useEffect(() => {
     void loadStarred();
-    return () => { requestRef.current = undefined; };
+    return () => { requestRef.current?.abort(); requestRef.current = undefined; };
   }, [loadStarred]);
 
-  const handleUnstar = async (repo: GitHubRepo) => {
+  const handleUnstar = async (repo: StarredCard) => {
     const [owner, name] = repo.full_name.split('/');
     setUnstarring(repo.id);
     try {
@@ -154,7 +168,7 @@ function StarredList({ accountId }: { accountId?: number }) {
     }
   };
 
-  const filtered = sortRepos(
+  const filtered = useMemo(() => sortRepos(
     repos.filter((r) => {
       if (!search.trim()) return true;
       const q = search.toLowerCase();
@@ -165,7 +179,7 @@ function StarredList({ accountId }: { accountId?: number }) {
       );
     }),
     sort
-  );
+  ), [repos, search, sort]);
   const visible = filtered.slice(0, visibleCount);
   const hasMore = filtered.length > visibleCount;
 
@@ -257,7 +271,7 @@ function StarredList({ accountId }: { accountId?: number }) {
                 key={repo.id}
                 role="button"
                 tabIndex={0}
-                className="px-4 py-3 hover:bg-secondary/30 transition-colors group cursor-pointer"
+                className="px-4 py-3 hover:bg-secondary/30 transition-colors group cursor-pointer [content-visibility:auto] [contain-intrinsic-size:auto_84px]"
                 onClick={() => navigate(`/repos/${repo.full_name}`)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {

@@ -1,5 +1,5 @@
 // AI 对话轮次展示组件：思考、工具、正文、头像与用户气泡。
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Copy, Eye, Loader2, Pencil, RefreshCw, Wrench, XCircle, Zap, AtSign, Paperclip } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toolCallLabel } from '@/ai-v2/agent';
@@ -126,7 +126,7 @@ function WaitingDots() {
   );
 }
 
-function AssistantTextBlock({ text, streaming, error, onApplyDiff }: {
+const AssistantTextBlock = memo(function AssistantTextBlock({ text, streaming, error, onApplyDiff }: {
   text: string;
   streaming?: boolean;
   error?: boolean;
@@ -166,7 +166,7 @@ ${text.slice(-STREAMING_PLAIN_LIMIT)}`
       )}
     </div>
   );
-}
+});
 
 function AssistantTurn({ message, onOpenArtifact, onApplyDiff, onRegenerate }: {
   message: UiChatMessage;
@@ -175,7 +175,8 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff, onRegenerate }: {
   onRegenerate?: () => void;
 }) {
   const blocks = message.blocks || [];
-  const tools = message.tools || [];
+  const tools = useMemo(() => message.tools || [], [message.tools]);
+  const toolsById = useMemo(() => new Map(tools.map(tool => [tool.id, tool])), [tools]);
   const isStreaming = Boolean(message.streaming);
 
   const hasBody = blocks.length > 0 || Boolean(message.content || message.reasoning) || tools.length > 0;
@@ -189,7 +190,7 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff, onRegenerate }: {
   };
 
   // 同一阶段内思考在正文上方，只有工具调用分隔正文。
-  const groups = buildRenderGroups(blocks);
+  const groups = useMemo(() => buildRenderGroups(message.blocks || []), [message.blocks]);
   const lastGroupIndex = groups.length - 1;
   const renderedBlocks = groups.map((group, index) => {
     const isLast = index === lastGroupIndex;
@@ -198,7 +199,7 @@ function AssistantTurn({ message, onOpenArtifact, onApplyDiff, onRegenerate }: {
     }
     if (group.kind === 'execution') {
       const groupTools = group.toolIds
-        .map(id => tools.find(item => item.id === id))
+        .map(id => toolsById.get(id))
         .filter((tool): tool is UiToolRun => Boolean(tool));
       if (!groupTools.length) return null;
       return (
@@ -278,7 +279,20 @@ export interface ConversationTurn {
   assistants: UiChatMessage[];
 }
 
+const turnsByMessages = new WeakMap<UiChatMessage[], ConversationTurn[]>();
+
+export function retainTurnsForLastMessage(previous: UiChatMessage[], next: UiChatMessage[]): void {
+  const turns = turnsByMessages.get(previous);
+  const last = turns?.[turns.length - 1];
+  const nextMessage = next[next.length - 1];
+  if (!turns || !last?.assistants.length || !nextMessage) return;
+  const updated = { ...last, assistants: [...last.assistants.slice(0, -1), nextMessage] };
+  turnsByMessages.set(next, [...turns.slice(0, -1), updated]);
+}
+
 export function buildTurns(messages: UiChatMessage[]): ConversationTurn[] {
+  const cached = turnsByMessages.get(messages);
+  if (cached) return cached;
   const turns: ConversationTurn[] = [];
   let current: ConversationTurn | null = null;
   for (const message of messages) {
@@ -293,6 +307,7 @@ export function buildTurns(messages: UiChatMessage[]): ConversationTurn[] {
     }
     current.assistants.push(message);
   }
+  turnsByMessages.set(messages, turns);
   return turns;
 }
 
@@ -331,7 +346,7 @@ function UserAvatar({ avatarUrl, login }: { avatarUrl?: string; login?: string }
   );
 }
 
-export function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff, onEditUser, onRegenerate, regenerateId }: {
+export const ConversationTurnView = memo(function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff, onEditUser, onRegenerate, regenerateId }: {
   turn: ConversationTurn;
   index: number;
   onOpenArtifact: (meta: ArtifactMeta) => void;
@@ -426,4 +441,4 @@ export function ConversationTurnView({ turn, onOpenArtifact, onApplyDiff, onEdit
       </div>
     </section>
   );
-}
+});

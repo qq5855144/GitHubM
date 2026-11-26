@@ -43,6 +43,8 @@ import android.animation.ValueAnimator
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import java.io.File
 import java.io.IOException
+import java.io.OutputStream
+import java.util.UUID
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.regex.Pattern
@@ -60,6 +62,13 @@ private const val WARM_START_WINDOW_MS = 10 * 60 * 1000L
 
 class MainActivity : AppCompatActivity() {
 
+    private data class ChunkedDownload(
+        val output: OutputStream,
+        val finish: () -> Unit,
+        val discard: () -> Unit
+    )
+
+    private val chunkedDownloads = mutableMapOf<String, ChunkedDownload>()
     private lateinit var webView: WebView
     private var imeLayoutListener: ViewTreeObserver.OnGlobalLayoutListener? = null
     private lateinit var splashOverlay: View
@@ -465,6 +474,47 @@ class MainActivity : AppCompatActivity() {
             checkUpdateInternal()
         }
 
+        @JavascriptInterface
+        fun startBlobDownload(fileName: String, mimeType: String): String = synchronized(chunkedDownloads) {
+            runCatching {
+                val id = UUID.randomUUID().toString()
+                chunkedDownloads[id] = openChunkedDownload(fileName, mimeType)
+                id
+            }.getOrElse { "error:" + (it.message ?: "无法保存下载文件") }
+        }
+
+        @JavascriptInterface
+        fun appendBlobDownload(id: String, base64: String): String = synchronized(chunkedDownloads) {
+            val download = chunkedDownloads[id] ?: return@synchronized "下载已取消"
+            runCatching {
+                require(base64.length <= 350_000) { "下载数据块过大" }
+                download.output.write(Base64.decode(base64, Base64.DEFAULT))
+                ""
+            }.getOrElse { it.message ?: "写入下载文件失败" }
+        }
+
+        @JavascriptInterface
+        fun finishBlobDownload(id: String): String = synchronized(chunkedDownloads) {
+            val download = chunkedDownloads.remove(id) ?: return@synchronized "下载已取消"
+            runCatching {
+                download.output.close()
+                download.finish()
+                ""
+            }.getOrElse {
+                runCatching { download.discard() }
+                it.message ?: "保存下载文件失败"
+            }
+        }
+
+        @JavascriptInterface
+        fun cancelBlobDownload(id: String) {
+            synchronized(chunkedDownloads) {
+                val download = chunkedDownloads.remove(id) ?: return
+                runCatching { download.output.close() }
+                runCatching { download.discard() }
+            }
+        }
+
         /**
          * ExportPage 调用：传内存文本内容（Base64 编码），由原生写入「下载」文件夹。
          * 适用于 JSON/CSV 导出等纯文本内容，不经过 DownloadManager。
@@ -676,6 +726,46 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun openChunkedDownload(fileName: String, mimeType: String): ChunkedDownload {
+        val safeName = FileUtils.resolveFileName(fileName, emptySet())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, safeName)
+                put(MediaStore.Downloads.MIME_TYPE, FileUtils.normalizeMimeType(mimeType))
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw IOException("无法在 MediaStore 创建下载记录")
+            try {
+                val output = contentResolver.openOutputStream(uri)?.buffered()
+                    ?: throw IOException("无法打开下载文件")
+                return ChunkedDownload(output, {
+                    val visible = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+                    if (contentResolver.update(uri, visible, null, null) == 0) throw IOException("无法完成下载")
+                }, { contentResolver.delete(uri, null, null) })
+            } catch (error: Exception) {
+                runCatching { contentResolver.delete(uri, null, null) }
+                throw error
+            }
+        }
+        if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            throw IOException("请授予存储权限后重试")
+        }
+        val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        directory.mkdirs()
+        val temporary = File.createTempFile(".githubm-", ".part", directory)
+        try {
+            return ChunkedDownload(temporary.outputStream().buffered(), {
+                val existingNames = directory.list()?.toSet() ?: emptySet()
+                val target = File(directory, FileUtils.resolveFileName(safeName, existingNames))
+                if (!temporary.renameTo(target)) throw IOException("无法完成下载")
+            }, { temporary.delete() })
+        } catch (error: Exception) {
+            temporary.delete()
+            throw error
         }
     }
 
@@ -1102,6 +1192,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        synchronized(chunkedDownloads) {
+            for (download in chunkedDownloads.values) {
+                runCatching { download.output.close() }
+                runCatching { download.discard() }
+            }
+            chunkedDownloads.clear()
+        }
         AgentForegroundService.stop(this)
         // 用户主动退出（返回键/从最近任务划掉）时清除热启动时间，下次仍是完整冷启动
         if (isFinishing) {

@@ -1,6 +1,7 @@
-import { zipSync } from 'fflate';
-import { triggerBlobDownload } from '@/lib/blobDownload';
-import { getBranch, getGitBlob, getGitTree } from '@/services/github';
+import { openDownloadSink, triggerBlobDownload } from '@/lib/blobDownload';
+import { checkDownloadSignal, openDirectoryArchive } from '@/lib/directoryArchiveClient';
+import type { ArchiveCommand } from '@/lib/directoryArchive';
+import { getBranch, getGitBlobRaw, getGitTree, getToken, type GitTreeItem } from '@/services/github';
 
 const DOWNLOAD_PROXY_ENABLED_KEY = 'github_download_wget_la';
 const DOWNLOAD_PROXY_URL_KEY = 'github_download_accel_url';
@@ -279,72 +280,157 @@ export async function downloadGithubFile(
   await triggerBlobDownload(await res.blob(), filename);
 }
 
-function base64ToBytes(base64: string): Uint8Array {
-  const clean = base64.replace(/\s/g, '');
-  const binary = atob(clean);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
+const ZIP_MAX_BYTES = 0xffffffff;
+const ZIP_MAX_ENTRIES = 0xffff;
+const ZIP_CHUNK_SIZE = 256 * 1024;
+const EMPTY_ZIP_CHUNK = new Uint8Array(0);
+
+async function collectDirectoryFiles(
+  owner: string,
+  repo: string,
+  branch: string,
+  directory: string,
+  signal: AbortSignal,
+): Promise<GitTreeItem[]> {
+  const initialToken = getToken();
+  function assertAccount() {
+    checkDownloadSignal(signal);
+    if (initialToken !== getToken()) throw new DOMException('Account changed', 'AbortError');
+  }
+  assertAccount();
+  const { commit } = await getBranch(owner, repo, branch, signal);
+  const readTree = (sha: string, recursive = false) => {
+    assertAccount();
+    return getGitTree(owner, repo, sha, recursive, signal);
+  };
+  const root = await readTree(commit.sha, true);
+  if (!root.truncated) return root.tree
+    .filter(item => item.type === 'blob' && item.path.startsWith(`${directory}/`))
+    .map(item => ({ ...item, path: item.path.slice(directory.length + 1) }));
+
+  // GitHub limits recursive tree responses. Resolve this directory first and walk its subtrees.
+  let sha = commit.sha;
+  for (const segment of directory.split('/')) {
+    const children = await readTree(sha);
+    if (children.truncated) throw new Error('GitHub 返回了截断的目录，无法获取完整文件列表');
+    const child = children.tree.find(item => item.path === segment && item.type === 'tree');
+    if (!child) return [];
+    sha = child.sha;
+  }
+  const files: GitTreeItem[] = [];
+  const stack = [{ path: '', sha }];
+  while (stack.length) {
+    const next = stack.pop()!;
+    const children = await readTree(next.sha);
+    if (children.truncated) throw new Error('GitHub 返回了截断的目录，无法获取完整文件列表');
+    for (const child of children.tree) {
+      const path = `${next.path}${child.path}`;
+      if (child.type === 'tree') stack.push({ path: `${path}/`, sha: child.sha });
+      else if (child.type === 'blob') files.push({ ...child, path });
+    }
+  }
+  return files;
 }
 
-function encodePath(path: string): string {
-  return path.split('/').map(encodeURIComponent).join('/');
+function safeArchivePath(path: string): boolean {
+  return !path.includes('\\') && path.split('/').every(part => part && part !== '.' && part !== '..');
 }
 
-/**
- * 下载仓库某个目录为 ZIP。
- * 通过 Git Tree API 递归列出 blob，再并发拉取 raw 内容，最后用 fflate 打包。
- */
 export async function downloadRepoDirectoryZip(params: {
   owner: string;
   repo: string;
   branch: string;
   directory: string;
   token: string;
+  signal?: AbortSignal;
   onProgress?: (done: number, total: number) => void;
 }): Promise<void> {
   const { owner, repo, branch, directory, token, onProgress } = params;
-  const branchInfo = await getBranch(owner, repo, branch);
-  const commitSha = branchInfo.commit.sha;
-  const tree = await getGitTree(owner, repo, commitSha, true);
-  if (tree.truncated) {
-    throw new Error('目录过大，GitHub 返回了截断的文件树，请缩小下载范围');
-  }
+  const callerSignal = params.signal;
+  if (callerSignal) checkDownloadSignal(callerSignal);
+  const controller = new AbortController();
+  const signal = controller.signal;
+  const abort = () => controller.abort();
   const prefix = directory.replace(/^\/+|\/+$/g, '');
-  const basePrefix = prefix ? `${prefix}/` : '';
-  const blobs = tree.tree.filter(item => item.type === 'blob' && (!basePrefix || item.path.startsWith(basePrefix)));
-  if (blobs.length === 0) throw new Error('目录为空或不存在');
   if (!prefix) {
-    // 整个仓库：直接用 GitHub zipball 交给原生流式下载，避免在 WebView 内构造整包 ZIP。
     const zipballUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/${encodeURIComponent(branch)}`;
     await downloadGithubFile(zipballUrl, `${repo}.zip`, token);
     return;
   }
-  if (blobs.length > 300) throw new Error(`目录包含 ${blobs.length} 个文件，超过单次下载上限（300）`);
-  const totalBytes = blobs.reduce((sum, item) => sum + (item.size || 0), 0);
-  if (totalBytes > 40 * 1024 * 1024) {
-    throw new Error(`目录总大小约 ${(totalBytes / 1024 / 1024).toFixed(1)} MB，超过 40 MB 安全上限；请缩小下载范围`);
-  }
-
-  const entries: Record<string, Uint8Array> = {};
-  let done = 0;
-  const concurrency = 6;
-  let cursor = 0;
-  const rootName = prefix.split('/').filter(Boolean).pop() || repo;
-
-  async function worker() {
-    while (cursor < blobs.length) {
-      const blob = blobs[cursor++];
-      // 走 Git Blob API，避免 raw.githubusercontent.com 对 Authorization 的 CORS 预检失败
-      const data = await getGitBlob(owner, repo, blob.sha);
-      const relative = basePrefix ? blob.path.slice(basePrefix.length) : blob.path;
-      entries[`${rootName}/${relative}`] = base64ToBytes(data.content);
-      done++;
-      onProgress?.(done, blobs.length);
+  const rootName = prefix.split('/').pop() || repo;
+  const output = await openDownloadSink(`${rootName}.zip`, 'application/zip');
+  if (callerSignal?.aborted) abort();
+  callerSignal?.addEventListener('abort', abort, { once: true });
+  const prefetched = new Map<number, Promise<Response>>();
+  let archive: Awaited<ReturnType<typeof openDirectoryArchive>> | undefined;
+  try {
+    const files = await collectDirectoryFiles(owner, repo, branch, prefix, signal);
+    if (!files.length) throw new Error('目录为空或不存在');
+    if (files.length > ZIP_MAX_ENTRIES) throw new Error('该目录超过标准 ZIP 格式的文件数上限，请分目录下载');
+    archive = await openDirectoryArchive(signal);
+    let archiveSize = 0;
+    const write = async (command: ArchiveCommand) => {
+      for (const chunk of await archive!.send(command)) {
+        checkDownloadSignal(signal);
+        archiveSize += chunk.byteLength;
+        if (archiveSize > ZIP_MAX_BYTES) throw new Error('压缩包超过标准 ZIP 格式的 4 GiB 上限，请分目录下载');
+        if (chunk.byteLength) await output.write(chunk);
+      }
+    };
+    const writeBytes = async (bytes: Uint8Array) => {
+      for (let offset = 0; offset < bytes.length; offset += ZIP_CHUNK_SIZE) {
+        const part = Uint8Array.from(bytes.subarray(offset, offset + ZIP_CHUNK_SIZE));
+        await write({ type: 'data', bytes: part, final: false });
+      }
+    };
+    const fetchBlob = (file: GitTreeItem) => getGitBlobRaw(owner, repo, file.sha, token, signal);
+    onProgress?.(0, files.length);
+    for (const [index, file] of files.entries()) {
+      checkDownloadSignal(signal);
+      const filename = `${rootName}/${file.path}`;
+      if (!safeArchivePath(filename)) throw new Error(`无法安全打包路径：${file.path}`);
+      await write({ type: 'start', filename });
+      const request = prefetched.get(index) || fetchBlob(file);
+      for (let ahead = index + 1; ahead <= index + 3; ahead++) {
+        const upcoming = files[ahead];
+        if (!upcoming || upcoming.size === undefined || upcoming.size > 512 * 1024 || prefetched.has(ahead)) continue;
+        const loading = fetchBlob(upcoming);
+        void loading.catch(() => {});
+        prefetched.set(ahead, loading);
+      }
+      const response = await request;
+      prefetched.delete(index);
+      const reader = response.body?.getReader();
+      if (!reader) {
+        await writeBytes(new Uint8Array(await response.arrayBuffer()));
+      } else {
+        const cancelRead = () => { void reader.cancel().catch(() => {}); };
+        signal.addEventListener('abort', cancelRead, { once: true });
+        try {
+          while (!signal.aborted) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            await writeBytes(value);
+          }
+        } finally {
+          signal.removeEventListener('abort', cancelRead);
+          await reader.cancel().catch(() => {});
+          reader.releaseLock();
+        }
+      }
+      await write({ type: 'data', bytes: EMPTY_ZIP_CHUNK.slice(), final: true });
+      onProgress?.(index + 1, files.length);
     }
+    await write({ type: 'finish' });
+    checkDownloadSignal(signal);
+    await output.finish();
+  } catch (error) {
+    abort();
+    for (const pending of prefetched.values()) void pending.then(response => response.body?.cancel()).catch(() => {});
+    await output.abort().catch(() => {});
+    throw error;
+  } finally {
+    callerSignal?.removeEventListener('abort', abort);
+    archive?.close();
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, blobs.length) }, () => worker()));
-
-  const zipped = zipSync(entries, { level: 6 });
-  await triggerBlobDownload(new Blob([zipped], { type: 'application/zip' }), `${rootName}.zip`);
 }

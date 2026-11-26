@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/select';
 import {
   getAllBranches,
+  getToken,
   createBranch,
   deleteBranch,
   compareBranches,
@@ -70,7 +71,9 @@ const CARD_ACTION_BUTTON_CLASS = 'h-8 px-2 text-xs gap-1.5 text-muted-foreground
 export default function BranchesPage() {
   const { owner, repo } = useParams<{ owner: string; repo: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const cachePrefix = `branches:${user?.login || 'anonymous'}:${owner}/${repo}:`;
+  const cacheKey = `${cachePrefix}all-v2`;
   const [branches, setBranches] = useState<BranchWithCompare[]>([]);
   const [defaultBranch, setDefaultBranch] = useState('main');
   const [loading, setLoading] = useState(true);
@@ -91,7 +94,6 @@ export default function BranchesPage() {
     const requestId = ++requestSeq.current;
     if (showLoading) setLoading(true);
 
-    const cacheKey = `branches:${owner}/${repo}:all-v2`;
     if (!force) {
       const cached = pageCache.get<{
         branches: BranchWithCompare[];
@@ -170,7 +172,7 @@ export default function BranchesPage() {
     } finally {
       if (requestId === requestSeq.current && showLoading) setLoading(false);
     }
-  }, [owner, repo]);
+  }, [owner, repo, cacheKey]);
 
   useEffect(() => {
     loadBranches();
@@ -193,6 +195,7 @@ export default function BranchesPage() {
         toast.error(i18n.t('找不到基础分支'));
         return;
       }
+      if (getToken() !== token) return;
       await createBranch(owner, repo, {
         ref: newBranchName.trim(),
         sha: baseBranch.commit.sha,
@@ -200,8 +203,8 @@ export default function BranchesPage() {
       toast.success(`分支 ${newBranchName} 创建成功！`);
       setCreateDialogOpen(false);
       setNewBranchName('');
-      pageCache.invalidate(`branches:${owner}/${repo}:`);
-      await loadBranches(true, false);
+      pageCache.invalidate(cachePrefix);
+      if (getToken() === token) await loadBranches(true, false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : i18n.t('创建分支失败'));
     } finally {
@@ -216,7 +219,7 @@ export default function BranchesPage() {
       await deleteBranch(owner, repo, deleteTarget);
       setBranches((prev) => {
         const updated = prev.filter((b) => b.name !== deleteTarget);
-        pageCache.set(`branches:${owner}/${repo}:all-v2`, {
+        pageCache.set(cacheKey, {
           branches: updated,
           defaultBranch,
           canPush,
@@ -240,8 +243,8 @@ export default function BranchesPage() {
       await updateRepo(owner, repo, { default_branch: defaultTarget });
       toast.success(`分支 ${defaultTarget} 已设为默认分支`);
       setDefaultTarget(null);
-      pageCache.invalidate(`branches:${owner}/${repo}:`);
-      await loadBranches(true, false);
+      pageCache.invalidate(cachePrefix);
+      if (getToken() === token) await loadBranches(true, false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : i18n.t('设置默认分支失败'));
     } finally {

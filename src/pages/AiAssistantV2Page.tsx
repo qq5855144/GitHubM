@@ -1,14 +1,14 @@
 import { flushSync } from 'react-dom';
 // AI Assistant V2 — 通用聊天优先，仓库可选，Operit 风格对话流
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { runGeneralAgent, toAgentHistory } from '@/ai-v2/agent';
 import { verifyGitHubWrite } from '@/ai-v2/tools/github';
-import { createTaskMemory, recordTaskActivity, scopedTaskHistory, taskMemoryScope } from '@/ai-v2/taskMemory';
+import { createTaskMemory, historicalTaskActivity, recordTaskActivity, scopedTaskHistory, taskMemoryScope } from '@/ai-v2/taskMemory';
 import type { AgentCheckpoint, AgentEvent, ApprovalRequest, ArtifactMeta, RepoContext, UiChatMessage, UiToolRun } from '@/ai-v2/types';
 import { readArtifact } from '@/ai-v2/artifacts';
-import { appendRunEvent, clearRunSnapshot, clearRunSnapshots, finishRun, latestRunSnapshot, resumeRun, runBinding, saveRunSnapshot, startRun } from '@/ai-v2/runStore';
+import { appendRunEvent, clearRunSnapshot, clearRunSnapshots, finishRun, hasUnresolvedRunWrite, latestRunSnapshot, resumeRun, runBinding, saveRunSnapshot, startRun } from '@/ai-v2/runStore';
 import type { RunSnapshot } from '@/ai-v2/runStore';
 import { loadV2Settings } from '@/ai-v2/settings';
 import { applyUnifiedDiff, diffStats } from '@/ai-v2/patch';
@@ -25,23 +25,28 @@ import {
   prepareImageAttachment,
 } from '@/ai-v2/attachments';
 import type { UiAttachment } from '@/ai-v2/attachments';
-import { putImageBlob } from '@/ai-v2/imageStore';
+import { deleteImageBlob, putImageBlob } from '@/ai-v2/imageStore';
 import { loadActiveCharacter } from '@/ai-v2/characters';
 import type { CharacterCard } from '@/ai-v2/characters';
 import {
+  collectSessionImages,
   deleteSessionMessages,
+  getSessionClearVersion,
+  isClearingSessions,
+  LEGACY_SESSION_PREFIX,
   loadSessionIndex,
   loadSessionMessages,
   queueSessionWrite,
+  registerSessionClearGuard,
+  sessionImageIds,
+  subscribeSessionClear,
   saveSessionIndex,
   saveSessionMessages,
   toSessionMeta,
 } from '@/ai-v2/sessionStore';
-import type { SessionIndex, V2Session } from '@/ai-v2/sessionStore';
+import type { V2Session } from '@/ai-v2/sessionStore';
 import { appendBlockDelta, appendToolBlock, ensureBlocks } from '@/ai-v2/blocks';
-import AiExecutionPanel from '@/components/ai/AiExecutionPanel';
-import { ConversationTurnView, buildTurns } from '@/components/ai/ChatTurn';
-import type { ConversationTurn } from '@/components/ai/ChatTurn';
+import { ConversationTurnView, buildTurns, retainTurnsForLastMessage } from '@/components/ai/ChatTurn';
 import { deriveSessionTitle } from '@/ai-v2/sessionTitle';
 import { createSessionMarkdown } from '@/ai-v2/sessionExport';
 import { extractPdfText, MAX_PDF_BYTES } from '@/ai-v2/pdf';
@@ -84,7 +89,6 @@ import {
   ArrowDown,
   AtSign,
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -113,7 +117,7 @@ import {
   Zap,
 } from 'lucide-react';
 
-const LEGACY_PREFIX = 'githubm_ai_v2_session:';
+const EMPTY_MESSAGES: UiChatMessage[] = [];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 /** 流式增量合并窗口（毫秒）：只做渲染合批，不做速度限制 */
 const STREAM_FLUSH_MS = 24;
@@ -170,6 +174,7 @@ function newSession(): V2Session {
 }
 
 function migrateLegacyRoundLimit(messages: UiChatMessage[]): UiChatMessage[] {
+  if (!messages.some(message => message.streaming || message.tools?.some(tool => tool.status === 'running'))) return messages;
   return messages.map(message => {
     // 上次运行被中断时，消息可能停在 streaming / running 状态，加载时统一收尾
     let next = message.streaming ? { ...message, streaming: false } : message;
@@ -185,14 +190,15 @@ function migrateLegacyRoundLimit(messages: UiChatMessage[]): UiChatMessage[] {
   });
 }
 
-function messagesForStorage(messages: UiChatMessage[]): UiChatMessage[] {
-  return messages.map(message => ({
+function messageForStorage(message: UiChatMessage): UiChatMessage {
+  if (!message.modelContent && !message.attachments?.some(item => item.imageBlobId && item.dataUrl)) return message;
+  return {
     ...message,
     modelContent: undefined,
     attachments: message.attachments?.map(attachment => (
       attachment.imageBlobId ? { ...attachment, dataUrl: undefined } : attachment
     )),
-  }));
+  };
 }
 
 type AgentBridge = { startAgentTask?: (title: string) => void; stopAgentTask?: () => void };
@@ -983,17 +989,38 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
   const verificationRef = useRef<AbortController | null>(null);
   const [resumableSnapshot, setResumableSnapshot] = useState<RunSnapshot | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<UiAttachment[]>([]);
+  const draftAttachments = useRef<UiAttachment[]>([]);
+  const draftImages = useRef(new Map<string, Blob>());
+  const draftGeneration = useRef(0);
+  const setAttachments = useCallback((next: UiAttachment[] | ((current: UiAttachment[]) => UiAttachment[])) => {
+    const items = typeof next === 'function' ? next(draftAttachments.current) : next;
+    draftAttachments.current = items;
+    for (const id of draftImages.current.keys()) {
+      if (!items.some(item => item.id === id)) draftImages.current.delete(id);
+    }
+    setPendingAttachments(items);
+  }, []);
+  const resetAttachments = useCallback(() => {
+    draftGeneration.current++;
+    setAttachments([]);
+  }, [setAttachments]);
   const [repoFileDialogOpen, setRepoFileDialogOpen] = useState(false);
   const [patchRequest, setPatchRequest] = useState<{ path: string; diff: string } | null>(null);
   const [storageError, setStorageError] = useState('');
   const [sessionLoading, setSessionLoading] = useState(true);
   const sessionLoadSequence = useRef(0);
+  const deletingSessionRef = useRef<string | null>(null);
   const pendingSessionSaveRef = useRef<(() => void) | null>(null);
   const sessionWritesRef = useRef(Promise.resolve());
   const sessionWriteFailure = useRef('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadedSessionsRef = useRef<Set<string>>(new Set());
   const queuedMessagesRef = useRef(new Map<string, UiChatMessage[]>());
+  const durableMessagesRef = useRef(new Map<string, UiChatMessage[]>());
+  const durableIndexRef = useRef('');
+  const unsavedPlaceholder = useRef('');
+  const [saveRevision, setSaveRevision] = useState(0);
+  const clearVersion = useSyncExternalStore(subscribeSessionClear, getSessionClearVersion, getSessionClearVersion);
   const runCapabilitiesRef = useRef<string[]>([]);
   const runMetricsRef = useRef<{ runId: string; startedAt: number; firstTokenAt?: number } | null>(null);
   const pendingStreamRef = useRef<{ assistantId: string; content: string; reasoning: string } | null>(null);
@@ -1028,19 +1055,28 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
   }, [isAndroid]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
+  const scrollFrame = useRef<number | null>(null);
+  const scrollOffsets = useRef(new Map<string, number>());
+  const restoreScroll = useRef(false);
+  const forceScroll = useRef(false);
   const hydratedRef = useRef(false);
 
-  const legacyKey = user?.login ? `${LEGACY_PREFIX}${user.login}` : '';
+  const legacyKey = user?.login ? `${LEGACY_SESSION_PREFIX}${user.login}` : '';
   const activeSession = useMemo(
     () => sessions.find(session => session.id === activeId) || sessions[0] || null,
     [sessions, activeId],
   );
-  const messages = activeSession?.messages || [];
+  const messages = activeSession?.messages || EMPTY_MESSAGES;
+  const activeSessionIdRef = useRef(activeId);
+  activeSessionIdRef.current = activeId;
   const repoContext = activeSession?.repo || null;
   const hasConversation = messages.length > 0;
-  const turns = useMemo(() => buildTurns(messages), [messages]);
+  const turns = useMemo(() => visible ? buildTurns(messages) : [], [messages, visible]);
+  const turnKey = useCallback((index: number) => turns[index]?.id ?? index, [turns]);
   const virtualizer = useVirtualizer({
     count: turns.length,
+    enabled: visible,
+    getItemKey: turnKey,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 240,
     overscan: 4,
@@ -1095,13 +1131,28 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
     setCharacter(loadActiveCharacter(user?.login));
   }, [user?.login, visible]);
 
+  useLayoutEffect(() => registerSessionClearGuard(() =>
+    !abortRef.current && !verificationRef.current && !deletingSessionRef.current,
+  ), []);
+
   useEffect(() => {
     hydratedRef.current = false;
+    pendingSessionSaveRef.current = null;
+    sessionLoadSequence.current++;
+    resetAttachments();
+    setInput('');
+    setEditTargetId(null);
+    setResumableSnapshot(null);
     setExportingId(null);
     setSessionLoading(Boolean(user?.login));
     loadedSessionsRef.current = new Set();
     queuedMessagesRef.current.clear();
+    durableMessagesRef.current.clear();
+    scrollOffsets.current.clear();
+    durableIndexRef.current = '';
+    unsavedPlaceholder.current = '';
     let cancelled = false;
+    const isStale = () => cancelled || clearVersion !== getSessionClearVersion();
     if (!user?.login) {
       setSessions([]);
       setActiveId('');
@@ -1112,7 +1163,7 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
     const login = user.login;
     void (async () => {
       let index = await loadSessionIndex(login);
-      if (cancelled) return;
+      if (isStale()) return;
       if (!index?.sessions?.length) {
         try {
           const legacyRaw = legacyKey ? localStorage.getItem(legacyKey) : null;
@@ -1124,12 +1175,12 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
             migrated.repo = legacy.repo || null;
             migrated.title = deriveSessionTitle(legacyMessages);
             migrated.titleSource = 'auto';
-            const saved = await saveSessionMessages(login, migrated.id, messagesForStorage(legacyMessages));
-            if (cancelled) return;
+            const saved = await saveSessionMessages(login, migrated.id, legacyMessages, 0, messageForStorage);
+            if (isStale()) return;
             if (!saved.ok) throw new Error(saved.error);
             const migratedIndex = { sessions: [toSessionMeta(migrated)], activeId: migrated.id };
             const savedIndex = await saveSessionIndex(login, migratedIndex);
-            if (cancelled) return;
+            if (isStale()) return;
             if (!savedIndex.ok) throw new Error(savedIndex.error);
             index = migratedIndex;
             if (legacyKey) localStorage.removeItem(legacyKey);
@@ -1148,9 +1199,13 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
         ? index.activeId
         : metas[0].id;
       // 只有当前会话的消息进入内存，其余会话等待切换时再加载
-      const loadedMessages = migrateLegacyRoundLimit(await loadSessionMessages(login, nextActive));
-      if (cancelled) return;
+      if (!index) unsavedPlaceholder.current = nextActive;
+      const rawMessages = index ? await loadSessionMessages(login, nextActive) : EMPTY_MESSAGES;
+      const loadedMessages = migrateLegacyRoundLimit(rawMessages);
+      if (isStale()) return;
       loadedSessionsRef.current.add(nextActive);
+      durableMessagesRef.current.set(nextActive, rawMessages);
+      if (index) durableIndexRef.current = JSON.stringify(index);
       setSessions(metas.map(meta => ({
         ...meta,
         messages: meta.id === nextActive ? loadedMessages : [],
@@ -1160,43 +1215,81 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
       setSessionLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [user?.login, legacyKey]);
+  }, [user?.login, legacyKey, clearVersion, resetAttachments]);
   useLayoutEffect(() => {
-    if (!hydratedRef.current || !user?.login || !activeId) return;
+    if (!hydratedRef.current || !user?.login || !activeId || isClearingSessions()) return;
     const login = user.login;
+    const only = sessions.length === 1 ? sessions[0] : undefined;
+    if (only?.id === unsavedPlaceholder.current && !only.messages.length && !only.repo && !only.model && !only.modelType) return;
     const flush = () => {
       if (pendingSessionSaveRef.current !== flush) return;
       pendingSessionSaveRef.current = null;
       const changed = sessions.filter(session => loadedSessionsRef.current.has(session.id)
+        && deletingSessionRef.current !== session.id
+        && durableMessagesRef.current.get(session.id) !== session.messages
         && queuedMessagesRef.current.get(session.id) !== session.messages);
       for (const session of changed) queuedMessagesRef.current.set(session.id, session.messages);
       const index = { sessions: sessions.map(toSessionMeta), activeId };
+      const retiredImages = new Set<string>();
       sessionWritesRef.current = queueSessionWrite(login, async () => {
         let failure = '';
         let fallback = false;
         for (const session of changed) {
-          const result = await saveSessionMessages(login, session.id, messagesForStorage(session.messages));
-          if (!result.ok) {
-            failure = result.error || i18n.t('会话保存失败，可能存储空间不足');
-            if (queuedMessagesRef.current.get(session.id) === session.messages) {
-              queuedMessagesRef.current.delete(session.id);
+          const previous = durableMessagesRef.current.get(session.id) || EMPTY_MESSAGES;
+          let firstChanged = 0;
+          while (firstChanged < Math.min(previous.length, session.messages.length)
+            && previous[firstChanged] === session.messages[firstChanged]) firstChanged++;
+          const result = await saveSessionMessages(login, session.id, session.messages, firstChanged, messageForStorage);
+          if (queuedMessagesRef.current.get(session.id) === session.messages) queuedMessagesRef.current.delete(session.id);
+          if (result.ok) {
+            durableMessagesRef.current.set(session.id, session.messages);
+            if (firstChanged < previous.length) {
+              const kept = sessionImageIds(session.messages.slice(firstChanged));
+              for (const id of sessionImageIds(previous.slice(firstChanged))) {
+                if (!kept.has(id)) retiredImages.add(id);
+              }
             }
+          } else {
+            failure = result.error || i18n.t('会话保存失败，可能存储空间不足');
           }
           fallback ||= Boolean(result.fallback);
         }
-        if (!failure) {
+        const serializedIndex = JSON.stringify(index);
+        if (!failure && serializedIndex !== durableIndexRef.current) {
           const result = await saveSessionIndex(login, index);
-          if (!result.ok) failure = result.error || i18n.t('会话保存失败，可能存储空间不足');
+          if (result.ok) durableIndexRef.current = serializedIndex;
+          else failure = result.error || i18n.t('会话保存失败，可能存储空间不足');
           fallback ||= Boolean(result.fallback);
         }
         sessionWriteFailure.current = failure;
         setStorageError(failure || (fallback ? i18n.t('存储受限，已使用兼容模式保存') : ''));
+        if (!visibleRef.current || changed.some(session => session.id !== activeSessionIdRef.current)) {
+          setSaveRevision(revision => revision + 1);
+        }
       });
+      void sessionWritesRef.current.then(() => collectSessionImages(retiredImages)).catch(() => {});
     };
     pendingSessionSaveRef.current = flush;
     const timer = window.setTimeout(flush, 300);
     return () => window.clearTimeout(timer);
   }, [sessions, activeId, user?.login]);
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    if (!visible) pendingSessionSaveRef.current?.();
+    const evicted = new Set<string>();
+    for (const session of sessions) {
+      if (session.id === activeId && (visible || streaming || abortRef.current || verificationRef.current || sessionLoading)) continue;
+      if (!session.messages.length || durableMessagesRef.current.get(session.id) !== session.messages) continue;
+      evicted.add(session.id);
+      loadedSessionsRef.current.delete(session.id);
+      durableMessagesRef.current.delete(session.id);
+    }
+    if (evicted.size) {
+      setSessions(current => current.map(session => evicted.has(session.id) && !loadedSessionsRef.current.has(session.id)
+        ? { ...session, messages: EMPTY_MESSAGES } : session));
+    }
+  }, [activeId, saveRevision, sessionLoading, sessions, streaming, visible]);
 
   useLayoutEffect(() => {
     const save = () => pendingSessionSaveRef.current?.();
@@ -1231,18 +1324,23 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
       verificationRef.current?.abort();
       if (abortRef.current) setAndroidTask(abortRef.current);
       if (streamFlushTimerRef.current !== null) window.clearTimeout(streamFlushTimerRef.current);
+      if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
     };
   }, []);
 
   const scrollToBottom = useCallback((force = false) => {
-    if (!force && !stickToBottomRef.current) return;
-    requestAnimationFrame(() => {
+    if (!visibleRef.current || (!force && !stickToBottomRef.current)) return;
+    forceScroll.current ||= force;
+    if (scrollFrame.current !== null) return;
+    scrollFrame.current = requestAnimationFrame(() => {
+      scrollFrame.current = null;
+      const shouldScroll = forceScroll.current || stickToBottomRef.current;
+      forceScroll.current = false;
       const el = scrollRef.current;
-      if (!el) return;
-      // 用容器自身滚动，避免 scrollIntoView 顺手滚动外层 body
+      if (!el || !shouldScroll) return;
       el.scrollTop = el.scrollHeight;
+      setShowScrollButton(false);
     });
-    setShowScrollButton(false);
   }, []);
 
   useEffect(() => {
@@ -1262,9 +1360,22 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
     return () => observer.disconnect();
   }, [isAndroid, visible, scrollToBottom]);
 
+  useLayoutEffect(() => {
+    if (!visible) {
+      restoreScroll.current = true;
+      return;
+    }
+    if (!restoreScroll.current || sessionLoading || !loadedSessionsRef.current.has(activeId)) return;
+    restoreScroll.current = false;
+    const offset = scrollOffsets.current.get(activeId);
+    if (offset === undefined || stickToBottomRef.current) scrollToBottom();
+    else virtualizer.scrollToOffset(offset);
+  }, [activeId, messages, scrollToBottom, sessionLoading, virtualizer, visible]);
+
   const handleScroll = () => {
     const el = scrollRef.current;
-    if (!el) return;
+    if (!el || !visible || sessionLoading || restoreScroll.current) return;
+    scrollOffsets.current.set(activeId, el.scrollTop);
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
     stickToBottomRef.current = nearBottom;
     setShowScrollButton(!nearBottom);
@@ -1318,15 +1429,22 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
 
   const setMessages = useCallback((
     updater: UiChatMessage[] | ((previous: UiChatMessage[]) => UiChatMessage[]),
+    streamDelta = false,
   ) => {
     updateActiveSession(session => {
       const nextMessages = typeof updater === 'function' ? updater(session.messages) : updater;
+      if (nextMessages === session.messages) return session;
+      const previousLast = session.messages[session.messages.length - 1];
+      const nextLast = nextMessages[nextMessages.length - 1];
+      if (streamDelta && nextLast !== previousLast && nextLast?.id === previousLast?.id) {
+        retainTurnsForLastMessage(session.messages, nextMessages);
+      }
       return {
         ...session,
         messages: nextMessages,
-        title: session.titleSource === 'manual' ? session.title : deriveSessionTitle(nextMessages),
+        title: streamDelta || session.titleSource === 'manual' ? session.title : deriveSessionTitle(nextMessages),
         titleSource: session.titleSource || 'auto',
-        updatedAt: new Date().toISOString(),
+        updatedAt: streamDelta ? session.updatedAt : new Date().toISOString(),
       };
     });
   }, [updateActiveSession]);
@@ -1358,18 +1476,24 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
     const pending = pendingStreamRef.current;
     pendingStreamRef.current = null;
     if (!pending) return;
-    setMessages(prev => prev.map(message => {
-      if (message.id !== pending.assistantId) return message;
+    setMessages(prev => {
+      const lastIndex = prev.length - 1;
+      const index = prev[lastIndex]?.id === pending.assistantId
+        ? lastIndex : prev.findIndex(message => message.id === pending.assistantId);
+      if (index < 0) return prev;
+      const message = prev[index];
       let blocks = message.blocks;
       if (pending.content) blocks = appendBlockDelta(blocks, 'text', pending.content);
       if (pending.reasoning) blocks = appendBlockDelta(blocks, 'reasoning', pending.reasoning);
-      return {
+      const next = prev.slice();
+      next[index] = {
         ...message,
         content: pending.content ? message.content + pending.content : message.content,
         reasoning: pending.reasoning ? (message.reasoning || '') + pending.reasoning : message.reasoning,
         blocks,
       };
-    }));
+      return next;
+    }, true);
   }, [setMessages]);
 
   const queueStreamDelta = useCallback((id: string, patch: { content?: string; reasoning?: string }) => {
@@ -1533,24 +1657,25 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
   }, [flushStreamDelta, patchAssistant, user?.login]);
 
   const addAttachment = useCallback((attachment: UiAttachment) => {
-    setPendingAttachments(prev => {
-      if (prev.length >= MAX_ATTACHMENTS) {
-        toast.warning(i18n.t('最多添加 {{count}} 个附件', { count: MAX_ATTACHMENTS }));
-        return prev;
-      }
-      const duplicate = prev.some(item => (item.path || item.name) === (attachment.path || attachment.name));
-      if (duplicate) {
-        toast.warning(i18n.t('该文件已经添加'));
-        return prev;
-      }
-      return [...prev, attachment];
-    });
-  }, []);
+    const current = draftAttachments.current;
+    if (current.length >= MAX_ATTACHMENTS) {
+      toast.warning(i18n.t('最多添加 {{count}} 个附件', { count: MAX_ATTACHMENTS }));
+      return false;
+    }
+    if (current.some(item => (item.path || item.name) === (attachment.path || attachment.name))) {
+      toast.warning(i18n.t('该文件已经添加'));
+      return false;
+    }
+    setAttachments([...current, attachment]);
+    return true;
+  }, [setAttachments]);
 
   const handleLocalFiles = async (files: FileList | null) => {
     if (!files?.length) return;
+    const generation = draftGeneration.current;
     const candidates = Array.from(files).slice(0, MAX_ATTACHMENTS);
     for (const file of candidates) {
+      if (generation !== draftGeneration.current) return;
       if (file.type.startsWith('image/')) {
         if (!modelCapabilities.supportsVision) {
           toast.error(i18n.t('当前模型不支持图片，请切换到 Gemini 或 GPT-4o 等视觉模型'));
@@ -1563,8 +1688,8 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
         try {
           const prepared = await prepareImageAttachment(file);
           const imageId = makeAttachmentId('image');
-          const stored = await putImageBlob(imageId, prepared.blob);
-          addAttachment({
+          if (generation !== draftGeneration.current) return;
+          const added = addAttachment({
             id: imageId,
             name: file.name,
             source: 'local',
@@ -1572,12 +1697,10 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
             size: prepared.size,
             content: '',
             thumbDataUrl: prepared.thumbDataUrl,
-            imageBlobId: stored ? imageId : undefined,
-            // 存储不可用时退回 dataUrl，保证图片仍然能发送
-            dataUrl: stored ? undefined : await readFileAsDataUrl(prepared.blob),
             width: prepared.width,
             height: prepared.height,
           });
+          if (added) draftImages.current.set(imageId, prepared.blob);
         } catch {
           toast.error(i18n.t('图片处理失败：{{name}}', { name: file.name }));
         }
@@ -1639,7 +1762,7 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
   const handleSend = async (options?: { text?: string; attachments?: UiAttachment[]; editTargetId?: string }) => {
     const text = (options?.text ?? input).trim();
     const attachments = options ? (options.attachments ?? []) : pendingAttachments;
-    if ((!text && !attachments.length) || abortRef.current || sessionLoading || !activeSession || !hydratedRef.current) return;
+    if ((!text && !attachments.length) || isClearingSessions() || deletingSessionRef.current || abortRef.current || sessionLoading || !activeSession || !hydratedRef.current) return;
     if (resumableSnapshot?.sessionId === activeId && resumableSnapshot.writeInFlight) {
       toast.warning(i18n.t('请先核对上次仓库写入的结果'));
       return;
@@ -1662,9 +1785,29 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
     abortRef.current = controller;
     setStreaming(true);
     setResumableSnapshot(null);
+    const stagedImages: string[] = [];
+    let attachmentsCommitted = false;
     try {
+      if (user?.login && await hasUnresolvedRunWrite(user.login, activeId)) {
+        setResumableSnapshot(await latestRunSnapshot(user.login, activeId));
+        toast.warning(i18n.t('请先核对上次仓库写入的结果'));
+        return;
+      }
+      if (controller.signal.aborted) return;
       const userText = text || i18n.t('请查看附件');
-      const hydratedAttachments = await hydrateAttachmentImages(attachments);
+      const savedAttachments: UiAttachment[] = [];
+      for (const attachment of attachments) {
+        const blob = draftImages.current.get(attachment.id);
+        if (!blob) {
+          savedAttachments.push(attachment);
+        } else if (await putImageBlob(attachment.id, blob)) {
+          stagedImages.push(attachment.id);
+          savedAttachments.push({ ...attachment, imageBlobId: attachment.id });
+        } else {
+          savedAttachments.push({ ...attachment, dataUrl: await readFileAsDataUrl(blob) });
+        }
+      }
+      const hydratedAttachments = await hydrateAttachmentImages(savedAttachments);
       const modelContent = buildModelUserParts(userText, hydratedAttachments);
       const displayText = text || `${i18n.t('请查看附件')}：${attachments.map(item => item.path || item.name).join('、')}`;
       if (controller.signal.aborted) return;
@@ -1675,8 +1818,7 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
         role: 'user',
         taskScope: scope,
         content: displayText,
-        modelContent,
-        attachments: attachments.length ? attachments : undefined,
+        attachments: savedAttachments.length ? savedAttachments : undefined,
         createdAt: now,
       };
       const assistantId = makeId('assistant');
@@ -1716,9 +1858,10 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
       flushSync(() => {
         setMessages([...baseMessages, userMessage, assistantMessage]);
         setInput('');
-        setPendingAttachments([]);
+        resetAttachments();
         setEditTargetId(null);
       });
+      attachmentsCommitted = true;
       stickToBottomRef.current = true;
       setAndroidTask(controller, i18n.t('AI 助手正在执行任务'));
       runMetricsRef.current = { runId, startedAt: Date.now() };
@@ -1738,6 +1881,7 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
           config: effectiveConfig,
           history,
           taskMemory,
+          taskHistory: () => historicalTaskActivity(scopeHistory),
           currentUserContent: modelContent,
           currentUserText: userText,
           contextBudget: Math.min(v2Settings.contextBudget, modelCapabilities.contextWindow),
@@ -1823,30 +1967,36 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
     } catch (error) {
       if (!controller.signal.aborted) toast.error((error as Error).message);
     } finally {
+      if (!attachmentsCommitted) void Promise.all(stagedImages.map(deleteImageBlob));
       setStreaming(false);
       abortRef.current = null;
       setAndroidTask(controller);
     }
   };
 
-  const handleEditUser = (message: UiChatMessage) => {
-    if (streaming) return;
+  const handleEditUser = useCallback((message: UiChatMessage) => {
+    if (abortRef.current || isClearingSessions()) return;
     setInput(message.content);
-    setPendingAttachments(message.attachments || []);
+    draftGeneration.current++;
+    setAttachments(message.attachments || []);
     setEditTargetId(message.id);
-  };
-  const handleRegenerate = (userMessage: UiChatMessage) => {
-    if (streaming) return;
-    void handleSend({
+  }, [setAttachments]);
+
+  const sendRef = useRef(handleSend);
+  useLayoutEffect(() => { sendRef.current = handleSend; }, [handleSend]);
+
+  const handleRegenerate = useCallback((userMessage: UiChatMessage) => {
+    if (abortRef.current) return;
+    void sendRef.current({
       text: userMessage.content,
       attachments: userMessage.attachments,
       editTargetId: userMessage.id,
     });
-  };
+  }, []);
   const handleVerifyWrite = async () => {
     const snapshot = resumableSnapshot;
     const pending = snapshot?.pendingWrite;
-    if (!snapshot || !pending?.verification || !token || !user?.login || verificationRef.current
+    if (isClearingSessions() || deletingSessionRef.current || !snapshot || !pending?.verification || !token || !user?.login || verificationRef.current
       || snapshot.sessionId !== activeId) return;
     const controller = new AbortController();
     verificationRef.current = controller;
@@ -1893,7 +2043,7 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
 
   const handleResume = async () => {
     const snapshot = resumableSnapshot;
-    if (!snapshot || abortRef.current || sessionLoading || !token || !user?.login || snapshot.sessionId !== activeId) return;
+    if (!snapshot || isClearingSessions() || deletingSessionRef.current || abortRef.current || sessionLoading || !token || !user?.login || snapshot.sessionId !== activeId) return;
     if (!snapshot.binding || snapshot.writeInFlight || JSON.stringify(snapshot.binding) !== JSON.stringify(binding)) {
       toast.warning(i18n.t('恢复任务需保持原仓库、分支和模型。存在未确认写入时，请先在 GitHub 核对结果。'));
       return;
@@ -1931,6 +2081,10 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
           messages.slice(0, messages.findIndex(message => message.id === assistantId) + 1),
           snapshot.title, repoContext,
         ),
+        taskHistory: () => historicalTaskActivity(scopedTaskHistory(
+          messages.slice(0, messages.findIndex(message => message.id === assistantId) + 1),
+          taskMemoryScope(repoContext),
+        )),
         resumeMessages: snapshot.messages,
         resumeSteps: snapshot.steps,
         resumeToolCalls: snapshot.toolCalls,
@@ -1988,10 +2142,10 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
   };
 
   const handleNewSession = () => {
-    if (streaming || sessionLoading) return;
+    if (streaming || sessionLoading || isClearingSessions() || deletingSessionRef.current) return;
     if (activeSession && loadedSessionsRef.current.has(activeSession.id) && activeSession.messages.length === 0) {
       setSessionDialogOpen(false);
-      requestAnimationFrame(() => scrollToBottom(true));
+      scrollToBottom(true);
       return;
     }
     const session = newSession();
@@ -1999,44 +2153,49 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
     setSessions([session, ...sessions]);
     setActiveId(session.id);
     setInput('');
-    setPendingAttachments([]);
+    resetAttachments();
     setSessionDialogOpen(false);
-    requestAnimationFrame(() => scrollToBottom(true));
+    scrollToBottom(true);
   };
   const handleSelectSession = (id: string) => {
-    if (streaming) return;
-    sessionLoadSequence.current++;
-    setSessionLoading(false);
+    if (streaming || isClearingSessions() || deletingSessionRef.current) return;
     setSessionDialogOpen(false);
-    setPendingAttachments([]);
+    resetAttachments();
     stickToBottomRef.current = true;
-    if (id === activeId && loadedSessionsRef.current.has(id)) {
-      requestAnimationFrame(() => scrollToBottom(true));
+    if (id !== activeId) setActiveId(id);
+    scrollToBottom(true);
+  };
+
+  useLayoutEffect(() => {
+    if (!visible) {
+      if (hydratedRef.current) setSessionLoading(false);
       return;
     }
-    setActiveId(id);
-    if (!user?.login || loadedSessionsRef.current.has(id)) {
-      requestAnimationFrame(() => scrollToBottom(true));
+    if (!hydratedRef.current || !user?.login || !activeId || isClearingSessions()) return;
+    if (loadedSessionsRef.current.has(activeId)) {
+      setSessionLoading(false);
       return;
     }
     const login = user.login;
-    setSessionLoading(true);
     const sequence = ++sessionLoadSequence.current;
-    void loadSessionMessages(login, id)
-      .then(loaded => {
+    setSessionLoading(true);
+    void loadSessionMessages(login, activeId)
+      .then(rawMessages => {
         if (sessionLoadSequence.current !== sequence) return;
-        loadedSessionsRef.current.add(id);
-        const nextMessages = migrateLegacyRoundLimit(loaded);
-        setSessions(prev => prev.map(session => session.id === id
+        const nextMessages = migrateLegacyRoundLimit(rawMessages);
+        loadedSessionsRef.current.add(activeId);
+        durableMessagesRef.current.set(activeId, rawMessages);
+        setSessions(prev => prev.map(session => session.id === activeId
           ? {
               ...session,
               messages: nextMessages,
-              title: session.titleSource === 'manual' ? session.title : deriveSessionTitle(nextMessages),
+              title: session.titleSource === 'manual' ? session.title : deriveSessionTitle(nextMessages) || session.title,
             }
           : session));
       })
       .finally(() => { if (sessionLoadSequence.current === sequence) setSessionLoading(false); });
-  };
+    return () => { sessionLoadSequence.current++; };
+  }, [activeId, user?.login, visible]);
 
   const handleSelectModel = (type: string, model: string) => {
     if (abortRef.current || sessionLoading) return;
@@ -2099,43 +2258,51 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
       description: i18n.t('「{{title}}」及其消息将被永久删除，无法恢复。', { title: target.title || i18n.t('新对话') }),
       confirmText: i18n.t('删除'),
     });
-    if (!confirmed) return;
-    if (user?.login) void clearRunSnapshots(user.login, id);
-    if (user?.login) {
-      const login = user.login;
-      sessionWritesRef.current = queueSessionWrite(login, () => deleteSessionMessages(login, id));
-    }
-    loadedSessionsRef.current.delete(id);
-    queuedMessagesRef.current.delete(id);
-    const remaining = sessions.filter(session => session.id !== id);
-    if (remaining.length === 0) {
-      const session = newSession();
-      loadedSessionsRef.current.add(session.id);
-      setSessions([session]);
-      setActiveId(session.id);
-      return;
-    }
-    setSessions(remaining);
-    if (id === activeId) {
-      const nextId = remaining[0].id;
-      setActiveId(nextId);
-      if (user?.login && !loadedSessionsRef.current.has(nextId)) {
-        const login = user.login;
-        setSessionLoading(true);
-        void loadSessionMessages(login, nextId)
-          .then(loaded => {
-            loadedSessionsRef.current.add(nextId);
-            setSessions(prev => prev.map(session => session.id === nextId
-              ? { ...session, messages: migrateLegacyRoundLimit(loaded) }
-              : session));
-          })
-          .finally(() => setSessionLoading(false));
+    if (!confirmed || abortRef.current || isClearingSessions() || deletingSessionRef.current || !user?.login) return;
+    const login = user.login;
+    deletingSessionRef.current = id;
+    try {
+      if (await hasUnresolvedRunWrite(login, id)) {
+        toast.warning(i18n.t('请先核对上次仓库写入的结果'));
+        return;
       }
+      pendingSessionSaveRef.current?.();
+      await sessionWritesRef.current;
+      const history = loadedSessionsRef.current.has(id) ? target.messages : await loadSessionMessages(login, id);
+      await queueSessionWrite(login, () => deleteSessionMessages(login, id));
+      loadedSessionsRef.current.delete(id);
+      durableMessagesRef.current.delete(id);
+      queuedMessagesRef.current.delete(id);
+      scrollOffsets.current.delete(id);
+      const remaining = sessions.filter(session => session.id !== id);
+      const next = remaining.length ? remaining : [newSession()];
+      if (!remaining.length) loadedSessionsRef.current.add(next[0].id);
+      const nextActive = id === activeId ? next[0].id : activeId;
+      if (id === activeId) {
+        sessionLoadSequence.current++;
+        resetAttachments();
+        setInput('');
+        setEditTargetId(null);
+        setResumableSnapshot(null);
+        stickToBottomRef.current = true;
+      }
+      flushSync(() => {
+        setSessions(next);
+        setActiveId(nextActive);
+      });
+      pendingSessionSaveRef.current?.();
+      await sessionWritesRef.current;
+      await clearRunSnapshots(login, id);
+      void collectSessionImages(sessionImageIds(history)).catch(() => {});
+    } catch {
+      toast.error(i18n.t('清除失败'));
+    } finally {
+      deletingSessionRef.current = null;
     }
   };
 
   const handleClear = async () => {
-    if (streaming) return;
+    if (streaming || isClearingSessions() || deletingSessionRef.current) return;
     if (hasConversation) {
       const confirmed = await confirmAction({
         title: i18n.t('清空当前对话？'),
@@ -2144,10 +2311,16 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
       });
       if (!confirmed) return;
     }
+    if (abortRef.current || isClearingSessions() || !activeSession?.id || activeSession.id !== activeSessionIdRef.current) return;
+    if (user?.login && await hasUnresolvedRunWrite(user.login, activeSession.id)) {
+      toast.warning(i18n.t('请先核对上次仓库写入的结果'));
+      return;
+    }
+    if (abortRef.current || isClearingSessions() || activeSession.id !== activeSessionIdRef.current) return;
     setMessages([]);
     setInput('');
-    setPendingAttachments([]);
-    if (user?.login && activeSession?.id) void clearRunSnapshots(user.login, activeSession.id);
+    resetAttachments();
+    if (user?.login) void clearRunSnapshots(user.login, activeSession.id);
     setResumableSnapshot(null);
   };
 
@@ -2160,6 +2333,8 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
     setRepoDialogOpen(false);
     toast.success(i18n.t('已选择仓库'));
   };
+
+  if (!visible) return null;
 
   const quickPrompts = repoContext
     ? [
@@ -2367,7 +2542,7 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
                 const virtualItems = virtualizer.getVirtualItems();
                 // 极端情况下（容器高度为 0、ResizeObserver 不可用）退化为只渲染最近几轮
                 if (!virtualItems.length) {
-                  const recent = turns.slice(-12);
+                  const recent = typeof ResizeObserver === 'undefined' ? turns : turns.slice(-12);
                   return (
                     <div className="space-y-6">
                       {recent.map((turn, index) => (
@@ -2478,7 +2653,7 @@ export default function AiAssistantV2Page({ visible = true, compactKeyboard = fa
                       <span className="shrink-0 text-muted-foreground">{formatFileSize(attachment.size)}</span>
                       <button
                         type="button"
-                        onClick={() => setPendingAttachments(prev => prev.filter(item => item.id !== attachment.id))}
+                        onClick={() => setAttachments(prev => prev.filter(item => item.id !== attachment.id))}
                         className="shrink-0 rounded-full p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       >
                         <X className="h-2.5 w-2.5" />

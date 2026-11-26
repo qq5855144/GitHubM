@@ -60,7 +60,7 @@ interface CodeEditorProps {
   readOnly?: boolean;
   fontSize?: number;
   autoFocus?: boolean;
-  onMount?: () => void;
+  onMount?: (view: EditorView) => void;
   onSearch?: () => void;
   onCursorChange?: (position: string) => void;
   onFontSizeChange?: (newSize: number) => void;
@@ -290,11 +290,11 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
     useImperativeHandle(ref, () => ({
       focus: () => viewRef.current?.focus(),
       undo: () => {
-        if (!viewRef.current) return false;
+        if (!viewRef.current || readOnly) return false;
         return undo(viewRef.current);
       },
       redo: () => {
-        if (!viewRef.current) return false;
+        if (!viewRef.current || readOnly) return false;
         return redo(viewRef.current);
       },
       getValue: () => viewRef.current?.state.doc.toString() ?? '',
@@ -427,7 +427,7 @@ export const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
     const handleCreateEditor = useCallback(
       (view: EditorView) => {
         viewRef.current = view;
-        onMount?.();
+        onMount?.(view);
       },
       [onMount]
     );

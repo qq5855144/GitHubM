@@ -5,6 +5,13 @@ import { initReactI18next } from 'react-i18next';
 const resources = {
   en: {
     translation: {
+        "代码编辑器": "Code editor",
+        "插入符号": "Insert symbol",
+        "正则表达式无效": "Invalid regular expression",
+        "关闭搜索": "Close search",
+        "缩小字号": "Decrease font size",
+        "放大字号": "Increase font size",
+        "无法保存本地草稿，请先提交或复制修改": "Could not save the local draft. Commit or copy your changes first.",
         "已保存的任务进度": "Saved task progress",
         "待执行": "Pending",
         "GitHub 正在计算合并状态": "GitHub is checking mergeability",
@@ -1430,6 +1437,13 @@ login: {
   },
   'zh-CN': {
     translation: {
+        "代码编辑器": "代码编辑器",
+        "插入符号": "插入符号",
+        "正则表达式无效": "正则表达式无效",
+        "关闭搜索": "关闭搜索",
+        "缩小字号": "缩小字号",
+        "放大字号": "放大字号",
+        "无法保存本地草稿，请先提交或复制修改": "无法保存本地草稿，请先提交或复制修改",
         "已保存的任务进度": "已保存的任务进度",
         "待执行": "待执行",
         "GitHub 正在计算合并状态": "GitHub 正在计算合并状态",

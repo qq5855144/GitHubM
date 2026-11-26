@@ -125,7 +125,9 @@ function AppContent() {
               path={route.path}
               element={
                 <RouteGuard>
-                  {route.path !== ASSISTANT_PATH && <MainLayout>{route.element}</MainLayout>}
+                  {route.path !== ASSISTANT_PATH && (
+                    route.ownLayout ? route.element : <MainLayout>{route.element}</MainLayout>
+                  )}
                 </RouteGuard>
               }
             />

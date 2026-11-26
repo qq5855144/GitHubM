@@ -640,12 +640,14 @@ export async function getRepoContents(
   owner: string,
   repo: string,
   path = '',
-  ref?: string
+  ref?: string,
+  options: { fresh?: boolean } = {},
 ): Promise<GitHubContent | GitHubContent[]> {
   const queryParams = ref ? `?ref=${encodeURIComponent(ref)}` : '';
   const encodedPath = path ? `/${path.split('/').map(encodeURIComponent).join('/')}` : '';
   return request<GitHubContent | GitHubContent[]>(
-    `/repos/${owner}/${repo}/contents${encodedPath}${queryParams}`
+    `/repos/${owner}/${repo}/contents${encodedPath}${queryParams}`,
+    options.fresh ? { cache: 'no-store' } : undefined,
   );
 }
 
@@ -760,9 +762,9 @@ export async function updateFileContent(
   repo: string,
   path: string,
   data: { message: string; content: string; sha: string; branch?: string }
-): Promise<void> {
+): Promise<{ content: GitHubContent }> {
   const encodedPath = path.split('/').map(encodeURIComponent).join('/');
-  await request<unknown>(`/repos/${owner}/${repo}/contents/${encodedPath}`, {
+  return request<{ content: GitHubContent }>(`/repos/${owner}/${repo}/contents/${encodedPath}`, {
     method: 'PUT',
     body: JSON.stringify(data),
   });

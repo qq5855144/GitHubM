@@ -56,6 +56,8 @@ export interface RouteConfig {
   path: string;
   element: ReactNode;
   visible?: boolean;
+  /** Page chooses its own layout, including an editor that fills the viewport. */
+  ownLayout?: boolean;
   /** Accessible without login. Routes without this flag require authentication. Has no effect when RouteGuard is not in use. */
   public?: boolean;
 }
@@ -103,8 +105,8 @@ export const routes: RouteConfig[] = [
   { nameKey: '新建 PR', path: '/repos/:owner/:repo/pulls/new', element: page(<NewPullPage />), visible: false },
   { nameKey: 'PR 详情', path: '/repos/:owner/:repo/pulls/:number', element: page(<PullDetailPage />) },
   { nameKey: 'PR Diff', path: '/repos/:owner/:repo/pulls/:number/diff', element: page(<PrDiffPage />) },
-  { nameKey: '代码浏览', path: '/repos/:owner/:repo/code/*', element: page(<CodeBrowserPage />) },
-  { nameKey: '代码浏览根', path: '/repos/:owner/:repo/code', element: page(<CodeBrowserPage />) },
+  { nameKey: '代码浏览', path: '/repos/:owner/:repo/code/*', element: page(<CodeBrowserPage />), ownLayout: true },
+  { nameKey: '代码浏览根', path: '/repos/:owner/:repo/code', element: page(<CodeBrowserPage />), ownLayout: true },
   { nameKey: '提交历史', path: '/repos/:owner/:repo/commits', element: page(<CommitsPage />) },
   { nameKey: '提交详情', path: '/repos/:owner/:repo/commits/:sha', element: page(<CommitDetailPage />) },
   { nameKey: '分支管理', path: '/repos/:owner/:repo/branches', element: page(<BranchesPage />) },

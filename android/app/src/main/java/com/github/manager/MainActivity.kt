@@ -74,6 +74,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var splashOverlay: View
     private lateinit var bottomNav: BottomNavigationView
     private lateinit var bottomNavContainer: android.widget.LinearLayout
+    private var codeEditorFullscreen = false
     private lateinit var navDivider: View
     private lateinit var navBarSpacer: View
     private lateinit var statusBarSpacer: View
@@ -306,6 +307,11 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 // ignore
             }
+        }
+
+        @JavascriptInterface
+        fun setCodeEditorFullscreen(active: Boolean) {
+            runOnUiThread { updateCodeEditorFullscreen(active) }
         }
 
         @JavascriptInterface
@@ -1129,13 +1135,17 @@ class MainActivity : AppCompatActivity() {
         // 使用 OnBackPressedDispatcher 替代废弃的 onBackPressed，兼容 Android 13+ 预测性返回手势
         onBackPressedDispatcher.addCallback(this) {
             webView.evaluateJavascript(
-                "(function(){ var s=window.history.state; return (s&&s.idx>0)?'1':'0'; })()"
+                """(function(){
+                    if (!window.dispatchEvent(new Event('githubm:android-back', { cancelable: true }))) return 'handled';
+                    var s = window.history.state;
+                    return (s && s.idx > 0) ? 'history' : 'exit';
+                })()""".trimIndent()
             ) { result ->
                 runOnUiThread {
-                    if (result?.trim('"') == "1") {
-                        webView.evaluateJavascript("window.history.back()", null)
-                    } else {
-                        handleExitOnBack()
+                    when (result?.trim('"')) {
+                        "handled" -> Unit
+                        "history" -> webView.evaluateJavascript("window.history.back()", null)
+                        else -> handleExitOnBack()
                     }
                 }
             }
@@ -1273,11 +1283,20 @@ class MainActivity : AppCompatActivity() {
 
     }
 
+    private fun updateCodeEditorFullscreen(active: Boolean) {
+        if (codeEditorFullscreen == active) return
+        codeEditorFullscreen = active
+        val visibility = if (active) View.GONE else View.VISIBLE
+        bottomNav.visibility = visibility
+        navDivider.visibility = visibility
+    }
+
     private fun setupWebViewClient() {
         webView.webViewClient = object : WebViewClient() {
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+                updateCodeEditorFullscreen(false)
                 android.util.Log.d("WebView", "开始加载: $url")
             }
 

@@ -1,11 +1,10 @@
 // 代码浏览页（含在线编辑 + 文件树 + 右键上下文菜单 + 全屏编辑 + 文件图标 + 图片预览）
 
-import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, type ReactNode } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import FileTree from '@/components/code/FileTree';
-import { CodeEditor } from '@/components/code/CodeEditor';
-import type { CodeEditorRef } from '@/components/code/CodeEditor';
-import { EditorSearchPanel } from '@/components/code/EditorSearchPanel';
+import { FullscreenCodeEditor } from '@/components/code/FullscreenCodeEditor';
+import MainLayout from '@/components/layouts/MainLayout';
 import {
   ChevronRight,
   ArrowLeft,
@@ -29,25 +28,15 @@ import {
   FolderOpen,
   ClipboardCopy,
   Link,
-  FileEdit,
   Image as ImageIcon,
   Search,
-  ChevronUp,
   ChevronDown,
-  ZoomIn,
-  ZoomOut,
   PanelLeftOpen,
   PanelLeftClose,
   MoreHorizontal,
   GitBranch,
   TerminalSquare,
-  Maximize2,
-  Minimize2,
-  Undo2,
-  Redo2,
   Menu,
-  BookOpen,
-  WrapText,
   MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -112,12 +101,13 @@ import {
   deleteFolderContents,
 } from '@/services/github';
 import { useAuth } from '@/contexts/AuthContext';
+import { useChatViewport } from '@/hooks/use-chat-viewport';
 import { isRepoOwner } from '@/lib/repoPermissions';
 import type { GitHubContent, GitHubBranch } from '@/types/types';
 import { toast } from 'sonner';
 import { decodeBase64Content, copyToClipboard } from '@/lib/utils';
 import { getFileIconInfo, isImageFile } from '@/components/common/FileIcon';
-import { fileToBase64, formatFileSize, base64ToDataUri, FileItemIcon, codeNavKey, getCodeNavStack, setCodeNavStack, EDITOR_QUICK_SYMBOLS, QuickToolButton, QuickSymbolButton } from '@/components/code/codeBrowserUtils';
+import { fileToBase64, formatFileSize, base64ToDataUri, FileItemIcon, codeNavKey, getCodeNavStack, setCodeNavStack } from '@/components/code/codeBrowserUtils';
 import { downloadGithubFile, downloadRepoDirectoryZip } from '@/lib/githubDownload';
 import { clearEditorDraft, readEditorDraft, saveEditorDraft, type EditorDraft } from '@/lib/editorDraft';
 import i18n from "@/i18n";
@@ -152,12 +142,6 @@ interface UploadFile {
   targetPath: string;
 }
 
-export interface EditorSyntaxError {
-  line: number;
-  column: number;
-  message: string;
-}
-
 /**
  * 将 File 转换为 base64 字符串（GitHub Contents API 所需格式）。
  *
@@ -184,46 +168,24 @@ export default function CodeBrowserPage() {
 
   // 操作状态
   const [actionMode, setActionMode] = useState<ActionMode | null>(null);
+  const editorViewport = useChatViewport(actionMode === 'edit');
+  const editorDialogStyle = editorViewport && {
+    top: editorViewport.top + editorViewport.height / 2,
+    maxHeight: Math.max(1, editorViewport.height - 16),
+  };
   const [actionTarget, setActionTarget] = useState<GitHubContent | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number } | null>(null);
 
-  // 编辑器全屏
-  const [editorFullscreen, setEditorFullscreen] = useState(false);
-  const [isReadingMode, setIsReadingMode] = useState(false);
-  // 软键盘遮挡高度（visualViewport 坐标系），用于把移动端快捷工具栏顶到键盘上方
-  const [keyboardInset, setKeyboardInset] = useState(0);
-
-  // 编辑器显示选项
-  const [editorFontSize, setEditorFontSize] = useState(14);   // px，范围 10-22
-
-  // 编辑器搜索面板状态
-  const [showSearchPanel, setShowSearchPanel] = useState(false);
-  
-  // 使用 ref 和 DOM 直接更新避免渲染卡顿
-  const cursorPositionRef = useRef('1:1');
-  const handleCursorChange = useCallback((pos: string) => {
-    cursorPositionRef.current = pos;
-    document.querySelectorAll('.editor-cursor-pos').forEach(el => {
-      el.textContent = pos;
-    });
-  }, []);
-
-  const [wordWrap, setWordWrap] = useState<'on' | 'off'>(
-    window.innerWidth < 768 ? 'on' : 'off'
-  );
-  
-  // 语法错误状态
-  const [syntaxErrors, setSyntaxErrors] = useState<EditorSyntaxError[]>([]);
-  const [showSyntaxWarning, setShowSyntaxWarning] = useState(false);
   const [draftRestored, setDraftRestored] = useState<EditorDraft | null>(null);
   const [saveConflict, setSaveConflict] = useState<{ remoteSha: string } | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [commitOpen, setCommitOpen] = useState(false);
   const pendingLeaveRef = useRef<(() => void) | null>(null);
-
-  // 编辑器搜索
-  const editorRef = useRef<CodeEditorRef | null>(null);
-  const commitInputRef = useRef<HTMLInputElement | null>(null);
+  const flushDraftRef = useRef<(() => boolean) | null>(null);
+  const loadSequence = useRef(0);
+  const saveInProgress = useRef(false);
+  const textFormat = useRef({ lineEnding: '\n', bom: false });
   const breadcrumbRef = useRef<HTMLDivElement | null>(null);
 
   // 路径变化后自动横向滚动到当前目录，保证最深路径始终可见
@@ -298,6 +260,16 @@ export default function CodeBrowserPage() {
     clearEditorDraft(owner, repo, currentBranch, currentFile.path);
   }, [owner, repo, currentBranch, currentFile]);
 
+  useLayoutEffect(() => () => {
+    // HashRouter can change routes without triggering beforeunload.
+    flushDraftRef.current?.();
+    flushDraftRef.current = null;
+  }, [owner, repo, filePath, currentBranch, actionMode]);
+
+  useLayoutEffect(() => {
+    flushDraftRef.current = hasUnsavedChanges ? saveCurrentDraftNow : null;
+  }, [hasUnsavedChanges, saveCurrentDraftNow]);
+
   useEffect(() => {
     if (!currentFile || actionMode !== 'edit') return;
     if (editContent === (fileContent ?? '')) {
@@ -317,8 +289,18 @@ export default function CodeBrowserPage() {
       event.preventDefault();
       event.returnValue = '';
     };
+    const flushDraft = () => { flushDraftRef.current?.(); };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') flushDraft();
+    };
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', flushDraft);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', flushDraft);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [hasUnsavedChanges, saveCurrentDraftNow]);
 
   // 文件树状态
@@ -328,22 +310,23 @@ export default function CodeBrowserPage() {
   // 由文件树触发新建时记录目标目录（用于绕过 URL filePath）
   const [pendingDirPath, setPendingDirPath] = useState<string | null>(null);
 
-  const loadContents = useCallback(async () => {
+  const loadContents = useCallback(async (discardDraftAndReload = false) => {
     if (!owner || !repo || !currentBranch) return;
+    const sequence = ++loadSequence.current;
     setLoading(true);
     setFileContent(null);
     setFileBase64(null);
     setCurrentFile(null);
     // 加载新路径时重置编辑器状态
-    setEditorFullscreen(false);
-    setIsReadingMode(false);
+    setCommitOpen(false);
     setActionMode(null);
     setEditContent('');
     setCommitMsg('');
     setDraftRestored(null);
     setSaveConflict(null);
     try {
-      const data = await getRepoContents(owner, repo, filePath, currentBranch);
+      const data = await getRepoContents(owner, repo, filePath, currentBranch, { fresh: discardDraftAndReload });
+      if (sequence !== loadSequence.current) return;
       if (Array.isArray(data)) {
         const sorted = [...data].sort((a, b) => {
           if (a.type === 'dir' && b.type !== 'dir') return -1;
@@ -353,38 +336,38 @@ export default function CodeBrowserPage() {
         setContents(sorted);
       } else {
         setCurrentFile(data);
-        if (data.content && data.encoding === 'base64') {
-          const raw = data.content.replace(/\n/g, '');
-          setFileBase64(raw);
-          if (!isImageFile(data.name)) {
-            const decoded = decodeBase64Content(data.content);
-            const draft = readEditorDraft(owner, repo, currentBranch, data.path);
-            const restored = draft && draft.content !== decoded ? draft : null;
-            setFileContent(decoded);
-            // 文本文件：直接在此原子性地打开编辑器，避免 useEffect 竞态
-            setEditContent(restored?.content ?? decoded);
-            setCommitMsg(restored?.commitMessage || `Update ${data.name}`);
-            setDraftRestored(restored);
-            if (restored) {
-              toast.info(i18n.t('已恢复未提交的本地草稿'));
-              if (restored.baseSha !== data.sha) {
-                toast.warning(i18n.t('草稿基于旧版本，保存时会检查远端冲突'));
-              }
-            }
-            if (canManage) {
-              setActionMode('edit');
-              setEditorFullscreen(window.innerWidth < 768);
-            }
-          }
-        } else {
-          setFileContent(i18n.t('（无法解码文件内容）'));
+        if (typeof data.content !== 'string' || data.encoding !== 'base64') return;
+        if (isImageFile(data.name)) {
+          setFileBase64(data.content.replace(/\s/g, ''));
+          return;
         }
+
+        const decoded = decodeBase64Content(data.content);
+        // Keep the original line endings and UTF-8 BOM when saving the normalized editor text.
+        textFormat.current = {
+          lineEnding: decoded.includes('\r\n') ? '\r\n' : '\n',
+          bom: data.content.startsWith('77u/'),
+        };
+        const source = decoded.replace(/\r\n?/g, '\n');
+        if (source.includes('\0')) return;
+        setFileContent(source);
+        if (!canManage || data.type !== 'file') return;
+
+        if (discardDraftAndReload) clearEditorDraft(owner, repo, currentBranch, data.path);
+        const draft = readEditorDraft(owner, repo, currentBranch, data.path);
+        const draftText = draft?.content.replace(/\r\n?/g, '\n');
+        const restored = draft && draftText !== source ? draft : null;
+        setEditContent(restored ? draftText ?? source : source);
+        setCommitMsg(restored?.commitMessage || `Update ${data.name}`);
+        setDraftRestored(restored);
+        setActionMode('edit');
       }
     } catch (err) {
+      if (sequence !== loadSequence.current) return;
       toast.error(i18n.t('加载文件内容失败'));
       console.error(err);
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   }, [owner, repo, filePath, currentBranch, canManage]);
 
@@ -442,7 +425,10 @@ export default function CodeBrowserPage() {
       action();
       return;
     }
-    saveCurrentDraftNow();
+    if (!saveCurrentDraftNow()) {
+      toast.error(i18n.t('无法保存本地草稿，请先提交或复制修改'));
+      return;
+    }
     pendingLeaveRef.current = action;
     setLeaveConfirmOpen(true);
   }, [hasUnsavedChanges, saveCurrentDraftNow]);
@@ -452,10 +438,15 @@ export default function CodeBrowserPage() {
       if (typeof target === 'number') {
         navigate(target);
       } else {
-        navigate(target, options);
+        const codeRoot = `/repos/${owner}/${repo}/code`;
+        if (currentBranch && (target === codeRoot || target.startsWith(`${codeRoot}/`)) && !target.includes('?')) {
+          navigate(`${target}?branch=${encodeURIComponent(currentBranch)}`, options);
+        } else {
+          navigate(target, options);
+        }
       }
     });
-  }, [navigate, requestLeave]);
+  }, [navigate, requestLeave, owner, repo, currentBranch]);
 
   const handleBranchChange = useCallback((branch: string) => {
     requestLeave(() => {
@@ -503,7 +494,10 @@ export default function CodeBrowserPage() {
     }
   }, [branchParam, branches, currentBranch]);
 
-  useEffect(() => { loadContents(); }, [loadContents]);
+  useEffect(() => {
+    void loadContents();
+    return () => { loadSequence.current++; };
+  }, [loadContents]);
 
   // 关闭操作：非编辑模式直接清理；编辑模式返回上级目录
   // replace=true 时用 replace 导航，避免关闭后按返回键重新打开编辑器
@@ -517,35 +511,35 @@ export default function CodeBrowserPage() {
     setRenameTo('');
     setMoveTo('');
     setDeleteProgress(null);
-    setEditorFullscreen(false);
-    setIsReadingMode(false);
+    setCommitOpen(false);
     setDraftRestored(null);
     setSaveConflict(null);
     if (returnToParent && filePath) {
-      const parentParts = filePath.split('/').slice(0, -1);
+      const parentParts = filePath.split('/').slice(0, -1).map(encodeURIComponent);
       // replace: true 将当前文件路由条目替换为父目录，而非新增入栈，
       // 这样用户按返回键时不会重新打开编辑器
       navigate(
-        `/repos/${owner}/${repo}/code${parentParts.length ? '/' + parentParts.join('/') : ''}`,
+        `/repos/${owner}/${repo}/code${parentParts.length ? '/' + parentParts.join('/') : ''}?branch=${encodeURIComponent(currentBranch)}`,
         { replace: true }
       );
     }
   };
 
-  const requestCloseEditor = useCallback(() => {
-    requestLeave(() => closeAction(true));
-  }, [requestLeave]);
+  const requestCloseEditor = () => {
+    if (actionBusy) return;
+    if (leaveConfirmOpen) {
+      pendingLeaveRef.current = null;
+      setLeaveConfirmOpen(false);
+    } else if (saveConflict) setSaveConflict(null);
+    else if (commitOpen) setCommitOpen(false);
+    else requestLeave(() => closeAction(true));
+  };
 
   const openAction = (mode: ActionMode, target?: GitHubContent, dirPath?: string) => {
     setActionMode(mode);
     setActionTarget(target || null);
     // 文件树触发时记录目标目录；未传则清空（沿用 URL filePath）
     setPendingDirPath(dirPath !== undefined ? dirPath : null);
-    if (mode === 'edit' && fileContent) {
-      setEditContent(fileContent);
-      setCommitMsg(`Update ${currentFile?.name || 'file'}`);
-      setEditorFullscreen(true);
-    }
     if (mode === 'new-file') { setNewFileName(''); setNewFileContent(''); setCommitMsg('Add new file'); }
     if (mode === 'new-folder') { setNewFolderName(''); setCommitMsg('Add new folder'); }
     if (mode === 'upload') { setUploadFiles([]); setUploadCommitMsg('Upload files'); setUploadProgress(0); setSkipExisting(false); }
@@ -556,57 +550,84 @@ export default function CodeBrowserPage() {
   };
 
   // ─── 保存编辑 ───
-  const handleSaveEdit = async (options: { forceSyntax?: boolean; overwriteSha?: string } = {}) => {
-    if (!owner || !repo || !currentFile || !commitMsg.trim()) { toast.error(i18n.t('请填写提交信息')); return; }
-    if (syntaxErrors.length > 0 && !options.forceSyntax) {
-      setShowSyntaxWarning(true);
-      return;
-    }
-    setShowSyntaxWarning(false);
-    setActionBusy(true);
-    try {
-      if (!options.overwriteSha) {
-        const remote = await getFileInfo(owner, repo, currentFile.path, currentBranch);
-        if (!remote) {
-          saveCurrentDraftNow();
-          setSaveConflict({ remoteSha: '' });
-          return;
-        }
-        if (remote.sha !== currentFile.sha) {
-          saveCurrentDraftNow();
-          setSaveConflict({ remoteSha: remote.sha });
-          return;
-        }
-      }
-      await updateFileContent(owner, repo, currentFile.path, {
-        message: commitMsg.trim(),
-        content: btoa(unescape(encodeURIComponent(editContent))),
-        sha: options.overwriteSha || currentFile.sha,
-        branch: currentBranch,
-      });
-      clearCurrentDraft();
-      setDraftRestored(null);
-      toast.success(i18n.t('文件已保存并提交'));
-      // 直接导航到上级目录，不更新 fileContent（避免触发响应式副作用）
-      closeAction(true);
-    } catch (err) {
-      saveCurrentDraftNow();
-      const message = err instanceof Error ? err.message : i18n.t('保存失败');
-      if (/409|sha|conflict/i.test(message)) {
-        toast.error(i18n.t('远端文件已更新，草稿已保留'));
-      } else {
-        toast.error(message);
-      }
-    }
-    finally { setActionBusy(false); }
-  };
-  const handleQuickSave = () => {
+  const handleSaveEdit = async (overwriteSha?: string) => {
+    if (!owner || !repo || !currentFile || !currentBranch || !canManage || !hasUnsavedChanges || saveInProgress.current) return;
     if (!commitMsg.trim()) {
-      commitInputRef.current?.focus();
       toast.error(i18n.t('请填写提交信息'));
       return;
     }
-    void handleSaveEdit();
+
+    const sequence = loadSequence.current;
+    const format = textFormat.current;
+    const expectedSha = overwriteSha || draftRestored?.baseSha || currentFile.sha;
+    const getRemoteFile = async () => {
+      try {
+        const result = await getRepoContents(owner, repo, currentFile.path, currentBranch, { fresh: true });
+        return Array.isArray(result) || result.type !== 'file' ? null : result;
+      } catch (error) {
+        if ((error as { status?: number }).status === 404) return null;
+        throw error;
+      }
+    };
+    const showConflict = (remoteSha: string) => {
+      saveCurrentDraftNow();
+      setCommitOpen(false);
+      setSaveConflict({ remoteSha });
+    };
+
+    saveInProgress.current = true;
+    setActionBusy(true);
+    try {
+      const remote = await getRemoteFile();
+      if (sequence !== loadSequence.current) return;
+      if (!remote || remote.sha !== expectedSha) {
+        showConflict(remote?.sha || '');
+        return;
+      }
+
+      const { lineEnding, bom } = format;
+      const source = lineEnding === '\n' ? editContent : editContent.replace(/\n/g, lineEnding);
+      const content = await fileToBase64(new Blob([bom ? '\ufeff' : '', source]));
+      if (sequence !== loadSequence.current) return;
+      const updated = await updateFileContent(owner, repo, currentFile.path, {
+        message: commitMsg.trim(),
+        content,
+        sha: expectedSha,
+        branch: currentBranch,
+      });
+      if (sequence !== loadSequence.current) {
+        if (readEditorDraft(owner, repo, currentBranch, currentFile.path)?.content === editContent) clearCurrentDraft();
+        return;
+      }
+      flushDraftRef.current = null;
+      clearCurrentDraft();
+      setDraftRestored(null);
+      setFileContent(editContent);
+      setCurrentFile({ ...currentFile, ...updated.content });
+      setCommitOpen(false);
+      setTreeRefreshKey(key => key + 1);
+      toast.success(i18n.t('文件已保存并提交'));
+    } catch (error) {
+      if (sequence !== loadSequence.current) return;
+      saveCurrentDraftNow();
+      const message = error instanceof Error ? error.message : i18n.t('保存失败');
+      if ((error as { status?: number }).status === 409 || /sha|conflict/i.test(message)) {
+        try {
+          const remote = await getRemoteFile();
+          if (sequence !== loadSequence.current) return;
+          if (!remote || remote.sha !== expectedSha) {
+            showConflict(remote?.sha || '');
+            return;
+          }
+        } catch {
+          // Keep the original save error if the remote version also cannot be read.
+        }
+      }
+      toast.error(message);
+    } finally {
+      saveInProgress.current = false;
+      setActionBusy(false);
+    }
   };
   // ─── 新建文件 ───
   const handleCreateFile = async () => {
@@ -713,7 +734,7 @@ export default function CodeBrowserPage() {
       setTreeRefreshKey(k => k + 1);
       closeAction();
       if (currentFile?.path === actionTarget.path) {
-        const parentParts = filePath.split('/').slice(0, -1);
+        const parentParts = filePath.split('/').slice(0, -1).map(encodeURIComponent);
         navigate(`/repos/${owner}/${repo}/code${parentParts.length ? '/' + parentParts.join('/') : ''}`);
       } else { loadContents(); }
     } catch (err) { toast.error(err instanceof Error ? err.message : i18n.t('删除失败')); }
@@ -912,59 +933,150 @@ export default function CodeBrowserPage() {
     </ContextMenuContent>
   );
 
-  // 全屏编辑器：计算搜索匹配（提升到组件级别，避免子组件重挂载导致焦点丢失）
-  const fsLineCount = editContent.split('\n').length;
-  const fsIsLarge = fsLineCount > 500;
+  if (actionMode === 'edit' && currentFile) {
+    return (
+      <>
+        <FullscreenCodeEditor
+          key={`${currentBranch}:${currentFile.path}`}
+          name={currentFile.name}
+          path={currentFile.path}
+          branch={currentBranch}
+          content={editContent}
+          viewport={editorViewport}
+          dialogStyle={editorDialogStyle ?? undefined}
+          dirty={hasUnsavedChanges}
+          saving={actionBusy}
+          modalOpen={commitOpen || leaveConfirmOpen || Boolean(saveConflict)}
+          onChange={setEditContent}
+          onBack={requestCloseEditor}
+          onSave={() => setCommitOpen(true)}
+          notice={draftRestored && (
+            <div role="status" className="flex shrink-0 items-center gap-2 border-b border-warning/20 bg-warning/10 px-3 py-1.5 text-xs text-warning">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0 flex-1">
+                {i18n.t('已恢复未提交的本地草稿')}
+                {draftRestored.baseSha !== currentFile.sha && ` · ${i18n.t('草稿基于旧版本')}`}
+              </span>
+              <button type="button" className="shrink-0 underline underline-offset-2" disabled={actionBusy} onClick={() => {
+                flushDraftRef.current = null;
+                clearCurrentDraft();
+                setEditContent(fileContent ?? '');
+                setCommitMsg(`Update ${currentFile.name}`);
+                setDraftRestored(null);
+              }}>{i18n.t('放弃草稿')}</button>
+            </div>
+          )}
+          onDownload={currentFile.download_url
+            ? () => downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? '')
+            : undefined}
+        />
+        <Dialog open={commitOpen} onOpenChange={open => { if (!actionBusy) setCommitOpen(open); }}>
+          <DialogContent className="max-w-[calc(100%-2rem)] overflow-y-auto md:max-w-md" style={editorDialogStyle ?? undefined} aria-describedby={undefined}>
+            <DialogHeader><DialogTitle>{i18n.t('保存并提交')}</DialogTitle></DialogHeader>
+            <form className="space-y-4" onSubmit={event => {
+              event.preventDefault();
+              void handleSaveEdit();
+            }}>
+              <div className="space-y-2">
+                <Label htmlFor="editor-commit-message">{i18n.t('提交信息')}</Label>
+                <Input id="editor-commit-message" value={commitMsg} disabled={actionBusy}
+                  onChange={event => setCommitMsg(event.target.value)} required />
+                <p className="truncate text-xs text-muted-foreground">{currentBranch} · {currentFile.path}</p>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="ghost" onClick={() => setCommitOpen(false)} disabled={actionBusy}>{i18n.t('取消')}</Button>
+                <Button type="submit" disabled={actionBusy || !commitMsg.trim()}>
+                  {actionBusy ? <Loader2 className="animate-spin" /> : <Save />}
+                  {i18n.t(actionBusy ? '提交中...' : '保存并提交')}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+        <AlertDialog open={leaveConfirmOpen} onOpenChange={(open) => {
+          setLeaveConfirmOpen(open);
+          if (!open) pendingLeaveRef.current = null;
+        }}>
+          <AlertDialogContent className="max-w-[calc(100%-2rem)] overflow-y-auto md:max-w-md bg-card border-border" style={editorDialogStyle ?? undefined}>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-foreground">{i18n.t('有未保存的修改')}</AlertDialogTitle>
+              <AlertDialogDescription className="text-muted-foreground">
+                {i18n.t('修改已自动保存为本地草稿，下次打开该文件时可恢复。是否暂时离开？')}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">
+                {i18n.t('继续编辑')}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={() => {
+                  const action = pendingLeaveRef.current;
+                  pendingLeaveRef.current = null;
+                  setLeaveConfirmOpen(false);
+                  action?.();
+                }}
+              >
+                {i18n.t('暂存并离开')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
-  // 用 useMemo 稳定匹配结果，避免每次渲染产生新数组导致 useCallback 失效
-  // 编辑器打开时聚焦
-  useEffect(() => {
-    if (actionMode === 'edit') {
-      const timer = setTimeout(() => editorRef.current?.focus(), 80);
-      return () => clearTimeout(timer);
-    }
-  }, [actionMode]);
-
-  // 移动端软键盘适配：visualViewport 高度收缩时，为编辑器预留键盘高度。
-  // 这样底部黑色快捷工具栏会自动停在输入法上方，不会继续被键盘遮挡。
-  useEffect(() => {
-    if (actionMode !== 'edit') {
-      setKeyboardInset(0);
-      return;
-    }
-    const vv = window.visualViewport;
-    if (!vv) return;
-    let rafId = 0;
-    const update = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const inset = Math.max(0, window.innerHeight - (vv.offsetTop + vv.height));
-        // 小于 80px 的多为地址栏/浏览器工具栏变化，不当作软键盘。
-        const next = inset > 80 ? Math.round(inset) : 0;
-        setKeyboardInset(prev => (Math.abs(prev - next) > 1 ? next : prev));
-      });
-    };
-    update();
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => {
-      cancelAnimationFrame(rafId);
-      vv.removeEventListener('resize', update);
-      vv.removeEventListener('scroll', update);
-      setKeyboardInset(0);
-    };
-  }, [actionMode]);
+        <AlertDialog open={!!saveConflict} onOpenChange={(open) => { if (!open) setSaveConflict(null); }}>
+          <AlertDialogContent className="max-w-[calc(100%-2rem)] overflow-y-auto md:max-w-lg bg-card border-border" style={editorDialogStyle ?? undefined}>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-foreground">
+                {saveConflict?.remoteSha === ''
+                  ? i18n.t('远端文件已不存在')
+                  : i18n.t('文件已在远端更新')}
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-muted-foreground space-y-2">
+                {saveConflict?.remoteSha === '' ? (
+                  <span className="block">{i18n.t('远端文件已被删除或移动，无法直接覆盖。你的修改已保存为本地草稿。')}</span>
+                ) : (
+                  <span className="block">{i18n.t('文件在编辑期间被其他设备修改。直接覆盖会丢失远端的新修改。')}</span>
+                )}
+                <span className="block text-xs">{i18n.t('本地草稿已保留。')}</span>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="gap-2 flex-wrap">
+              <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">
+                {i18n.t('继续编辑')}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="border border-border bg-transparent text-muted-foreground hover:bg-secondary"
+                onClick={() => { void loadContents(true); }}
+              >
+                {i18n.t('放弃本地并加载最新')}
+              </AlertDialogAction>
+              {saveConflict?.remoteSha !== '' && (
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => {
+                    const remoteSha = saveConflict?.remoteSha;
+                    setSaveConflict(null);
+                    if (remoteSha) void handleSaveEdit(remoteSha);
+                  }}
+                >
+                  {i18n.t('仍然覆盖')}
+                </AlertDialogAction>
+              )}
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
+    );
+  }
 
   return (
+    <MainLayout>
     <div className="flex flex-col h-full w-full overflow-hidden bg-background text-foreground">
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* ─── 桌面端：Activity Bar ─── */}
         <div className="hidden md:flex flex-col w-12 border-r border-border bg-sidebar shrink-0 items-center py-3 gap-4 z-10">
         <Button variant="ghost" size="icon" className={`w-10 h-10 rounded-xl ${treeVisible ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setTreeVisible(true)} title={i18n.t('资源管理器')}>
           <FolderOpen className="w-5 h-5" />
-        </Button>
-        <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => setShowSearchPanel(true)} title={i18n.t('搜索')}>
-          <Search className="w-5 h-5" />
         </Button>
         <div className="mt-auto mb-2 flex flex-col gap-4">
           <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => guardedNavigate('/repos')} title={i18n.t('返回仓库列表')}>
@@ -1169,344 +1281,8 @@ export default function CodeBrowserPage() {
             </div>
           )}
 
-          {/* 统一编辑器区域 */}
-          {actionMode === 'edit' && (
-            <div
-              className={`flex flex-col bg-background ${editorFullscreen ? 'fixed inset-0 z-50' : 'hidden md:flex flex-1 min-h-0'}`}
-              style={keyboardInset > 0 ? { paddingBottom: `${keyboardInset}px` } : undefined}
-            >
-              {/* 编辑器顶栏 */}
-              {!isReadingMode && (
-                <div className="flex flex-col">
-                  {/* 移动端工具栏 */}
-                  <div className="flex md:hidden items-center gap-1 px-1.5 h-12 bg-[#2d2d2d] text-white shrink-0 border-b border-white/10 select-none">
-                    <Button variant="ghost" size="icon" className="w-10 h-10 shrink-0 text-white hover:bg-white/10" onClick={() => requestCloseEditor()} title={i18n.t('返回')}>
-                      <ArrowLeft className="w-5 h-5" />
-                    </Button>
-                    <div className="flex-1 min-w-0 px-1 text-center">
-                      <div className="text-sm font-medium truncate text-white">{currentFile?.name || i18n.t('编辑')}</div>
-                      <div className="text-[10px] text-gray-400 truncate">
-                        {editContent !== (fileContent ?? '') ? i18n.t('未保存') : currentBranch}
-                      </div>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="w-9 h-9 shrink-0 text-white hover:bg-white/10" title={i18n.t('更多')}>
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56 bg-[#2d2d2d] text-white border-white/10" onCloseAutoFocus={(e) => e.preventDefault()}>
-                        <div className="flex items-center justify-between px-2 py-1.5">
-                          <span className="text-sm">{i18n.t('字号')}</span>
-                          <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-white/10"
-                              onClick={(e) => { e.preventDefault(); setEditorFontSize(s => Math.max(10, s - 1)); }} disabled={editorFontSize <= 10}>
-                              <ZoomOut className="w-4 h-4" />
-                            </Button>
-                            <span className="text-sm w-6 text-center tabular-nums">{editorFontSize}</span>
-                            <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-white/10"
-                              onClick={(e) => { e.preventDefault(); setEditorFontSize(s => Math.min(22, s + 1)); }} disabled={editorFontSize >= 22}>
-                              <ZoomIn className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                        <DropdownMenuSeparator className="bg-white/10" />
-                        <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => setIsReadingMode(true)}>
-                          <BookOpen className="w-4 h-4 mr-2" />{i18n.t('阅读模式')}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={() => { copyToClipboard(editContent); toast.success(i18n.t('代码已复制')); }}>
-                          <Copy className="w-4 h-4 mr-2" />{i18n.t('复制内容')}</DropdownMenuItem>
-                        {currentFile?.download_url && (
-                          <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onSelect={async () => { try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); } catch { toast.error(i18n.t('下载失败')); } }}>
-                            <Download className="w-4 h-4 mr-2" />{i18n.t('下载文件')}</DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  {/* 移动端文件信息栏 */}
-                  <div className="flex md:hidden items-center justify-between px-3 h-8 bg-[#1e1e1e] text-gray-400 text-xs shrink-0 font-mono">
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span className="truncate text-gray-500">{currentFile?.path}</span>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="editor-cursor-pos">{cursorPositionRef.current}</span>
-                      <span>UTF-8</span>
-                    </div>
-                  </div>
-
-                  {/* 桌面端工具栏 */}
-                  <div className="hidden md:flex items-center gap-2 px-3 h-11 shrink-0 border-b border-border bg-card/95 select-none">
-                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                    <FileItemIcon filename={currentFile?.name ?? ''} isDir={false} size="w-4 h-4" />
-                    <span className="text-sm font-mono text-foreground truncate">{currentFile?.name}</span>
-                    {currentFile && (
-                      <span className="text-xs text-muted-foreground hidden lg:inline">
-                        · {formatFileSize(currentFile.size)} · {fsLineCount} {i18n.t('行')}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <Button variant='ghost' size="icon"
-                      className="w-7 h-7 text-muted-foreground hover:bg-secondary hidden md:flex"
-                      onClick={() => { editorRef.current?.undo(); }}
-                      title={i18n.t('撤销 (Ctrl+Z)')}>
-                      <Undo2 className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant='ghost' size="icon"
-                      className="w-7 h-7 text-muted-foreground hover:bg-secondary hidden md:flex"
-                      onClick={() => { editorRef.current?.redo(); }}
-                      title={i18n.t('重做 (Ctrl+Y)')}>
-                      <Redo2 className="w-3.5 h-3.5" />
-                    </Button>
-                    <div className="w-px h-4 bg-border shrink-0 hidden md:block mx-0.5" />
-                    <Button variant='ghost' size="icon"
-                      className="w-7 h-7 text-muted-foreground hover:bg-secondary"
-                      onClick={() => setShowSearchPanel(!showSearchPanel)}
-                      title={i18n.t('搜索 (Ctrl+F)')}>
-                      <Search className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant='ghost' size="icon"
-                      className={`w-7 h-7 hover:bg-secondary hidden md:flex ${wordWrap === 'on' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
-                      onClick={() => setWordWrap(w => w === 'on' ? 'off' : 'on')}
-                      title={wordWrap === 'on' ? i18n.t('取消自动换行') : i18n.t('自动换行')}>
-                      <WrapText className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant='ghost' size="icon"
-                      className="w-7 h-7 text-muted-foreground hover:bg-secondary hidden md:flex"
-                      onClick={() => setEditorFullscreen(!editorFullscreen)}
-                      title={editorFullscreen ? i18n.t('退出全屏') : i18n.t('全屏模式')}>
-                      {editorFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                    </Button>
-                    <Button variant='ghost' size="icon"
-                      className="w-7 h-7 text-muted-foreground hover:bg-secondary md:hidden"
-                      onClick={() => setIsReadingMode(!isReadingMode)}
-                      title={isReadingMode ? i18n.t('退出阅读模式') : i18n.t('阅读模式')}>
-                      {isReadingMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary">
-                          <MoreHorizontal className="w-3.5 h-3.5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48" onCloseAutoFocus={(e) => e.preventDefault()}>
-                        <div className="flex items-center justify-between px-2 py-1.5">
-                          <span className="text-xs text-muted-foreground">{i18n.t('字号')}</span>
-                          <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="icon" className="w-6 h-6 hover:bg-secondary"
-                              onClick={(e) => { e.preventDefault(); setEditorFontSize(s => Math.max(10, s - 1)); }} disabled={editorFontSize <= 10}>
-                              <ZoomOut className="w-3 h-3" />
-                            </Button>
-                            <span className="text-xs w-5 text-center tabular-nums">{editorFontSize}</span>
-                            <Button variant="ghost" size="icon" className="w-6 h-6 hover:bg-secondary"
-                              onClick={(e) => { e.preventDefault(); setEditorFontSize(s => Math.min(22, s + 1)); }} disabled={editorFontSize >= 22}>
-                              <ZoomIn className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        </div>
-                        <DropdownMenuItem onSelect={() => setShowSearchPanel(true)}>
-                          <Search className="w-3.5 h-3.5 mr-2" />{i18n.t('搜索 / 替换')}</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => { copyToClipboard(editContent); toast.success(i18n.t('代码已复制')); }}>
-                          <Copy className="w-3.5 h-3.5 mr-2" />{i18n.t('复制内容')}</DropdownMenuItem>
-                        {currentFile?.download_url && (
-                          <DropdownMenuItem onSelect={async () => { try { await downloadCodeFile(currentFile.download_url!, currentFile.name, token ?? ''); } catch { toast.error(i18n.t('下载失败')); } }}>
-                            <Download className="w-3.5 h-3.5 mr-2" />{i18n.t('下载文件')}</DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <div className="w-px h-4 bg-border shrink-0 mx-0.5" />
-                    <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:bg-secondary"
-                      onClick={() => requestCloseEditor()} title={i18n.t('关闭编辑器')}>
-                      <X className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                  {/* 桌面端工具栏闭合 */}
-                  </div>
-                </div>
-              )}
-
-              {draftRestored && !isReadingMode && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-warning/10 border-b border-warning/20 text-xs text-warning shrink-0">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span className="flex-1 min-w-0 text-pretty">
-                    {i18n.t('已恢复未提交的本地草稿')}
-                    {draftRestored.baseSha !== currentFile?.sha && ` · ${i18n.t('草稿基于旧版本')}`}
-                  </span>
-                  <button
-                    type="button"
-                    className="shrink-0 underline underline-offset-2 hover:text-foreground"
-                    onClick={() => {
-                      clearCurrentDraft();
-                      setEditContent(fileContent ?? '');
-                      setCommitMsg(`Update ${currentFile?.name || 'file'}`);
-                      setDraftRestored(null);
-                      toast.info(i18n.t('已放弃本地草稿'));
-                    }}
-                  >
-                    {i18n.t('放弃草稿')}
-                  </button>
-                </div>
-              )}
-
-              {/* 代码编辑区 */}
-              <div className="relative flex-1 min-h-0 flex overflow-hidden">
-                {isReadingMode ? (
-                  <CodeEditor
-                    key={`read-${currentFile?.path || currentFile?.name || 'editor'}`}
-                    ref={editorRef}
-                    value={editContent}
-                    fileName={currentFile?.name || ''}
-                    fontSize={editorFontSize}
-                    wordWrap={wordWrap}
-                    readOnly
-                    onFontSizeChange={setEditorFontSize}
-                  />
-                ) : (
-                  <CodeEditor
-                    key={currentFile?.path || currentFile?.name || 'editor'}
-                    ref={editorRef}
-                    value={editContent}
-                    onChange={setEditContent}
-                    fileName={currentFile?.name || ''}
-                    fontSize={editorFontSize}
-                    wordWrap={wordWrap}
-                    onFontSizeChange={setEditorFontSize}
-                    onSearch={() => setShowSearchPanel(true)}
-                    onCursorChange={handleCursorChange}
-                  />
-                )}
-                
-                <EditorSearchPanel 
-                  view={editorRef.current?.getView() ?? null}
-                  content={editContent}
-                  visible={showSearchPanel && !isReadingMode}
-                  onClose={() => setShowSearchPanel(false)}
-                  readOnly={isReadingMode}
-                />
-
-                <AlertDialog open={showSyntaxWarning} onOpenChange={setShowSyntaxWarning}>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle className="flex items-center gap-2">
-                        <AlertCircle className="w-5 h-5 text-destructive" />
-                        {i18n.t('存在语法错误')}</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {i18n.t('当前代码存在')}{syntaxErrors.length} {i18n.t('个语法错误。是否仍要强行保存？')}</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{i18n.t('返回修改')}</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => {
-                        handleSaveEdit({ forceSyntax: true });
-                      }}>{i18n.t('强行保存')}</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-                
-                {/* 阅读模式悬浮退出按钮 */}
-                {isReadingMode && (
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    className="absolute top-4 right-4 z-50 rounded-full shadow-lg h-10 w-10 opacity-80 hover:opacity-100 bg-background border border-border md:hidden"
-                    onClick={() => setIsReadingMode(false)}
-                    title={i18n.t('退出阅读模式')}
-                  >
-                    <Minimize2 className="w-5 h-5 text-foreground" />
-                  </Button>
-                )}
-              </div>
-
-
-              {/* 移动端底部快捷栏（Acode 风格） */}
-              {!isReadingMode && (
-                <div className="md:hidden flex items-center h-11 shrink-0 border-t border-white/10 bg-[#252526] text-gray-300 select-none">
-                  <div className="flex items-center gap-0.5 px-1">
-                    <QuickToolButton title={i18n.t('撤销')} onClick={() => editorRef.current?.undo()}>
-                      <Undo2 className="w-4 h-4" />
-                    </QuickToolButton>
-                    <QuickToolButton title={i18n.t('重做')} onClick={() => editorRef.current?.redo()}>
-                      <Redo2 className="w-4 h-4" />
-                    </QuickToolButton>
-                    <QuickToolButton
-                      title={i18n.t('搜索/替换')}
-                      active={showSearchPanel}
-                      onClick={() => setShowSearchPanel(v => !v)}
-                    >
-                      <Search className="w-4 h-4" />
-                    </QuickToolButton>
-                    <QuickToolButton
-                      title={wordWrap === 'on' ? i18n.t('取消自动换行') : i18n.t('自动换行')}
-                      active={wordWrap === 'on'}
-                      onClick={() => setWordWrap(w => w === 'on' ? 'off' : 'on')}
-                    >
-                      <WrapText className="w-4 h-4" />
-                    </QuickToolButton>
-                  </div>
-                  <div className="w-px h-5 bg-white/10 shrink-0" />
-                  <div className="flex-1 min-w-0 flex items-center gap-0.5 overflow-x-auto scrollbar-none px-1">
-                    {EDITOR_QUICK_SYMBOLS.map((item) => (
-                      <QuickSymbolButton
-                        key={item.label}
-                        label={item.label}
-                        value={item.value}
-                        onInsert={(value) => editorRef.current?.insertText(value)}
-                      />
-                    ))}
-                  </div>
-                  <div className="w-px h-5 bg-white/10 shrink-0" />
-                  <div className="flex items-center px-1">
-                    <QuickToolButton
-                      title={actionBusy ? i18n.t('提交中...') : i18n.t('保存并提交')}
-                      disabled={actionBusy}
-                      onClick={handleQuickSave}
-                    >
-                      {actionBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    </QuickToolButton>
-                  </div>
-                </div>
-              )}
-
-
-              {/* 底栏：提交（桌面端保留；移动端使用上方黑色快捷工具栏） */}
-              {!isReadingMode && (
-                <div className="hidden md:flex flex-col shrink-0 border-t border-border bg-card/95 select-none">
-                  {syntaxErrors.length > 0 && (
-                    <div className="px-3 py-1.5 bg-destructive/10 border-b border-destructive/20 text-xs text-destructive max-h-24 overflow-y-auto">
-                      <div className="font-semibold mb-1 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />{i18n.t('发现')}{syntaxErrors.length} {i18n.t('个语法错误：')}</div>
-                      <ul className="list-disc list-inside pl-4 space-y-0.5">
-                        {syntaxErrors.map((err, i) => (
-                          <li key={i}>[{err.line}:{err.column}] {err.message}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 px-3 h-12">
-                    <div className="flex-1 min-w-0">
-                      <Input value={commitMsg} onChange={(e) => {
-                        setCommitMsg(e.target.value);
-                        setShowSyntaxWarning(false);
-                      }}
-                      ref={commitInputRef}
-                      placeholder={i18n.t('提交信息（必填）...')}
-                      className="h-8 bg-secondary border-border text-foreground placeholder:text-muted-foreground text-sm" />
-                  </div>
-                  <Button variant="ghost" size="sm"
-                    className="h-8 text-xs text-muted-foreground border border-border hover:bg-secondary shrink-0 px-3"
-                    onClick={() => requestCloseEditor()}>
-                    <X className="w-3 h-3 mr-1" />{i18n.t('取消')}</Button>
-                  <Button size="sm" className={`h-8 text-xs shrink-0 px-3 ${syntaxErrors.length > 0 ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}
-                    onClick={() => handleSaveEdit()} disabled={actionBusy || !commitMsg.trim()}>
-                    {actionBusy
-                      ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />{i18n.t('提交中...')}</>
-                      : <><Save className="w-3 h-3 mr-1" />{i18n.t('保存并提交')}</>}
-                  </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 路径操作工具条（非编辑状态，或移动端编辑状态） */}
-          <div className={`flex flex-wrap items-center gap-1.5 px-3 py-1.5 border-b border-border bg-secondary/20 shrink-0 ${actionMode === 'edit' ? 'md:hidden' : ''}`}>
+          {/* 路径操作工具条 */}
+          <div className="flex flex-wrap items-center gap-1.5 px-3 py-1.5 border-b border-border bg-secondary/20 shrink-0">
             {filePath ? (
               <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 shrink-0 px-2"
                 onClick={() => {
@@ -1677,8 +1453,8 @@ export default function CodeBrowserPage() {
             )}
           </div>
 
-          {/* 内容区域（非编辑状态，或移动端） */}
-          <div className={`flex-1 min-h-0 overflow-y-auto ${actionMode === 'edit' ? 'md:hidden' : ''}`}>
+          {/* 内容区域 */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="bg-card border-x-0 overflow-hidden">
         {loading ? (
           <div className="p-4 space-y-2">
@@ -1727,23 +1503,12 @@ export default function CodeBrowserPage() {
                   </p>
                 </div>
               </div>
-            ) : !canManage && fileContent !== null ? (
+            ) : fileContent !== null ? (
               <div className="p-4 overflow-auto">
                 <pre className="text-xs font-mono whitespace-pre text-foreground/90">{fileContent}</pre>
               </div>
             ) : (
-              /* 文本文件 - 移动端等待全屏编辑器打开时的占位 */
-              <div className="flex md:hidden flex-col items-center justify-center py-16 gap-4">
-                <div className="flex items-center gap-3 text-muted-foreground">
-                  <FileEdit className="w-6 h-6 text-primary animate-pulse" />
-                  <span className="text-sm">{i18n.t('正在打开编辑器...')}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <FileItemIcon filename={currentFile.name} isDir={false} size="w-4 h-4" />
-                  <span className="text-sm font-mono text-foreground/70">{currentFile.path}</span>
-                </div>
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-              </div>
+              <p className="p-6 text-sm text-muted-foreground">{i18n.t('（无法解码文件内容）')}</p>
             )}
           </div>
         ) : (
@@ -2149,83 +1914,6 @@ export default function CodeBrowserPage() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={leaveConfirmOpen} onOpenChange={(open) => {
-        setLeaveConfirmOpen(open);
-        if (!open) pendingLeaveRef.current = null;
-      }}>
-        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-md bg-card border-border">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">{i18n.t('有未保存的修改')}</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
-              {i18n.t('修改已自动保存为本地草稿，下次打开该文件时可恢复。是否暂时离开？')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">
-              {i18n.t('继续编辑')}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={() => {
-                const action = pendingLeaveRef.current;
-                pendingLeaveRef.current = null;
-                setLeaveConfirmOpen(false);
-                action?.();
-              }}
-            >
-              {i18n.t('暂存并离开')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!saveConflict} onOpenChange={(open) => { if (!open) setSaveConflict(null); }}>
-        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg bg-card border-border">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">
-              {saveConflict?.remoteSha === ''
-                ? i18n.t('远端文件已不存在')
-                : i18n.t('文件已在远端更新')}
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground space-y-2">
-              {saveConflict?.remoteSha === '' ? (
-                <span className="block">{i18n.t('远端文件已被删除或移动，无法直接覆盖。你的修改已保存为本地草稿。')}</span>
-              ) : (
-                <span className="block">{i18n.t('文件在编辑期间被其他设备修改。直接覆盖会丢失远端的新修改。')}</span>
-              )}
-              <span className="block text-xs">{i18n.t('本地草稿已保留。')}</span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 flex-wrap">
-            <AlertDialogCancel className="border-border text-foreground hover:bg-secondary">
-              {i18n.t('继续编辑')}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="border border-border bg-transparent text-muted-foreground hover:bg-secondary"
-              onClick={() => {
-                clearCurrentDraft();
-                setDraftRestored(null);
-                setSaveConflict(null);
-                void loadContents();
-              }}
-            >
-              {i18n.t('放弃本地并加载最新')}
-            </AlertDialogAction>
-            {saveConflict?.remoteSha !== '' && (
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={() => {
-                  const remoteSha = saveConflict?.remoteSha;
-                  setSaveConflict(null);
-                  if (remoteSha) void handleSaveEdit({ forceSyntax: true, overwriteSha: remoteSha });
-                }}
-              >
-                {i18n.t('仍然覆盖')}
-              </AlertDialogAction>
-            )}
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       </div>
       </div>
       </div>
@@ -2236,15 +1924,14 @@ export default function CodeBrowserPage() {
       <div className="hidden md:flex items-center justify-between px-3 h-6 border-t border-border bg-[#007acc] text-white text-[10px] shrink-0 font-mono z-20 select-none">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1 cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors"><GitBranch className="w-3 h-3"/> {currentBranch}</span>
-          {syntaxErrors.length > 0 && <span className="flex items-center gap-1 cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors"><AlertCircle className="w-3 h-3"/> {syntaxErrors.length}</span>}
         </div>
         <div className="flex items-center gap-4">
-          {actionMode === 'edit' && <span className="cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors editor-cursor-pos">{cursorPositionRef.current}</span>}
           <span className="cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors">UTF-8</span>
           <span className="cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors">TypeScript React</span>
           <span className="cursor-pointer hover:bg-white/20 px-1 py-0.5 rounded transition-colors">Spaces: 2</span>
         </div>
       </div>
     </div>
+    </MainLayout>
   );
 }

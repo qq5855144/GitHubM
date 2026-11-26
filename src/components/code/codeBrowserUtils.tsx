@@ -1,10 +1,8 @@
 // 代码浏览页共享工具与移动端快捷栏组件。
-import type { ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
 import { getFileIconInfo } from '@/components/common/FileIcon';
 import i18n from '@/i18n';
 
-export function fileToBase64(file: File): Promise<string> {
+export function fileToBase64(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -64,8 +62,7 @@ export function setCodeNavStack(owner: string, repo: string, stack: string[]) {
   catch { /* ignore */ }
 }
 
-// ── 移动端底部快捷栏 ─────────────────────────────────────────────────────
-// 参考 Acode：常用操作 + 代码符号横向滚动，尽量让拇指完成编辑。
+// 编辑器符号面板。
 export const EDITOR_QUICK_SYMBOLS: Array<{ label: string; value: string }> = [
   { label: 'Tab', value: '  ' },
   { label: '{', value: '{' },
@@ -98,47 +95,3 @@ export const EDITOR_QUICK_SYMBOLS: Array<{ label: string; value: string }> = [
   { label: '$', value: '$' },
   { label: '%', value: '%' },
 ];
-
-export function QuickToolButton({
-  title,
-  onClick,
-  active = false,
-  disabled = false,
-  children,
-}: {
-  title: string;
-  onClick: () => void;
-  active?: boolean;
-  disabled?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className={`h-8 w-8 shrink-0 rounded-md hover:bg-white/10 hover:text-white ${active ? 'bg-white/10 text-white' : 'text-gray-300'} ${disabled ? 'opacity-40' : ''}`}
-      onPointerDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      aria-label={title}
-    >
-      {children}
-    </Button>
-  );
-}
-
-export function QuickSymbolButton({ label, value, onInsert }: { label: string; value: string; onInsert: (value: string) => void }) {
-  return (
-    <button
-      type="button"
-      className="h-7 min-w-7 shrink-0 rounded-md px-1.5 font-mono text-[13px] text-gray-300 hover:bg-white/10 hover:text-white active:bg-white/20"
-      onPointerDown={(e) => e.preventDefault()}
-      onClick={() => onInsert(value)}
-      aria-label={`${i18n.t('插入')} ${label}`}
-    >
-      {label}
-    </button>
-  );
-}

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
 import type { EditorView } from '@codemirror/view';
 import { ArrowLeft, BookOpen, Braces, Copy, Download, Loader2, MoreHorizontal, Pencil, Redo2, Save, Search, Undo2, WrapText, ZoomIn, ZoomOut } from 'lucide-react';
 import { toast } from 'sonner';
@@ -83,6 +83,13 @@ export function FullscreenCodeEditor({
   const searchLabel = i18n.t('搜索 / 替换');
   const saveLabel = i18n.t('保存并提交');
   const backLabel = i18n.t('关闭编辑器');
+  const undoLabel = i18n.t('撤销');
+  const redoLabel = i18n.t('重做');
+  const symbolsLabel = i18n.t('插入符号');
+  const wrapLabel = i18n.t('自动换行');
+  const keepEditorFocus = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button === 0 && view?.hasFocus) event.preventDefault();
+  };
 
   return (
     <section
@@ -101,8 +108,6 @@ export function FullscreenCodeEditor({
           <h1 className="truncate text-sm font-semibold">{name}</h1>
           <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className="min-w-0 truncate">{branch}</span>
-            <span aria-hidden="true">·</span>
-            <span className="shrink-0 tabular-nums" ref={cursorRef}>1:1</span>
             {dirty && <span className="shrink-0 text-warning">· {i18n.t('未保存')}</span>}
           </p>
         </div>
@@ -117,6 +122,55 @@ export function FullscreenCodeEditor({
             <span className="hidden sm:inline">{saveLabel}</span>
           </Button>
         )}
+      </header>
+
+      {notice}
+      <EditorSearchPanel view={view} content={content} visible={searchOpen}
+        onClose={() => setSearchOpen(false)} readOnly={reading || saving} />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <CodeEditor
+          ref={editorRef}
+          onMount={setView}
+          value={content}
+          fileName={name}
+          onChange={onChange}
+          fontSize={fontSize}
+          wordWrap={wrap ? 'on' : 'off'}
+          readOnly={reading || saving}
+          onFontSizeChange={setFontSize}
+          onSearch={() => setSearchOpen(true)}
+          onCursorChange={position => { if (cursorRef.current) cursorRef.current.textContent = position; }}
+        />
+      </div>
+
+      <footer
+        className="flex shrink-0 items-center gap-1 border-t border-border bg-card px-2 py-1 sm:gap-2 sm:px-3"
+        style={bridge || viewport?.keyboardOpen ? undefined : { paddingBottom: 'calc(0.25rem + env(safe-area-inset-bottom, 0px))' }}
+      >
+        {!reading && (
+          <>
+            <Button type="button" variant="ghost" size="icon" className="shrink-0"
+              aria-label={undoLabel} title={undoLabel} disabled={saving}
+              onPointerDown={keepEditorFocus} onClick={() => { editorRef.current?.undo(); }}>
+              <Undo2 aria-hidden="true" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className="shrink-0"
+              aria-label={redoLabel} title={redoLabel} disabled={saving}
+              onPointerDown={keepEditorFocus} onClick={() => { editorRef.current?.redo(); }}>
+              <Redo2 aria-hidden="true" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className="shrink-0"
+              aria-label={symbolsLabel} title={symbolsLabel} disabled={saving} onClick={() => setSymbolsOpen(true)}>
+              <Braces aria-hidden="true" />
+            </Button>
+          </>
+        )}
+        <Button type="button" variant={wrap ? 'secondary' : 'ghost'} size="icon" className="shrink-0"
+          aria-label={wrapLabel} aria-pressed={wrap} title={wrapLabel}
+          onPointerDown={keepEditorFocus} onClick={() => setWrap(value => !value)}>
+          <WrapText aria-hidden="true" />
+        </Button>
+        <span className="ml-auto min-w-0 truncate px-1 text-xs tabular-nums text-muted-foreground" ref={cursorRef}>1:1</span>
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button type="button" variant="ghost" size="icon" className="shrink-0" aria-label={i18n.t('更多操作')} title={i18n.t('更多操作')}>
@@ -137,21 +191,9 @@ export function FullscreenCodeEditor({
               </Button>
             </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => { editorRef.current?.undo(); }} disabled={reading || saving}>
-              <Undo2 className="mr-2 h-4 w-4" />{i18n.t('撤销')}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => { editorRef.current?.redo(); }} disabled={reading || saving}>
-              <Redo2 className="mr-2 h-4 w-4" />{i18n.t('重做')}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setWrap(!wrap)}>
-              <WrapText className="mr-2 h-4 w-4" />{i18n.t(wrap ? '取消自动换行' : '自动换行')}
-            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setReading(!reading)}>
               {reading ? <Pencil className="mr-2 h-4 w-4" /> : <BookOpen className="mr-2 h-4 w-4" />}
               {i18n.t(reading ? '退出阅读模式' : '阅读模式')}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setSymbolsOpen(true)} disabled={reading || saving}>
-              <Braces className="mr-2 h-4 w-4" />{i18n.t('插入符号')}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={async () => {
               if (await copyToClipboard(content)) toast.success(i18n.t('代码已复制'));
@@ -168,26 +210,7 @@ export function FullscreenCodeEditor({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
-      </header>
-
-      {notice}
-      <EditorSearchPanel view={view} content={content} visible={searchOpen}
-        onClose={() => setSearchOpen(false)} readOnly={reading || saving} />
-      <div className="min-h-0 flex-1 overflow-hidden" style={bridge || viewport?.keyboardOpen ? undefined : { paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        <CodeEditor
-          ref={editorRef}
-          onMount={setView}
-          value={content}
-          fileName={name}
-          onChange={onChange}
-          fontSize={fontSize}
-          wordWrap={wrap ? 'on' : 'off'}
-          readOnly={reading || saving}
-          onFontSizeChange={setFontSize}
-          onSearch={() => setSearchOpen(true)}
-          onCursorChange={position => { if (cursorRef.current) cursorRef.current.textContent = position; }}
-        />
-      </div>
+      </footer>
       <Dialog open={symbolsOpen} onOpenChange={setSymbolsOpen}>
         <DialogContent className="max-w-[min(24rem,calc(100%-1.5rem))] overflow-y-auto" style={dialogStyle} aria-describedby={undefined} onCloseAutoFocus={event => event.preventDefault()}>
           <DialogHeader><DialogTitle>{i18n.t('插入符号')}</DialogTitle></DialogHeader>

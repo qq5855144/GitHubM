@@ -943,7 +943,6 @@ export default function CodeBrowserPage() {
           branch={currentBranch}
           content={editContent}
           viewport={editorViewport}
-          dialogStyle={editorDialogStyle ?? undefined}
           dirty={hasUnsavedChanges}
           saving={actionBusy}
           modalOpen={commitOpen || leaveConfirmOpen || Boolean(saveConflict)}

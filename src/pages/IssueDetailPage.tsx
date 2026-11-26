@@ -2,6 +2,8 @@
 
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -18,7 +20,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import MarkdownRenderer from '@/components/common/MarkdownRenderer';
@@ -83,6 +85,57 @@ const HIDE_REASONS: Array<{ value: HideCommentReason; label: string }> = [
   { value: 'DUPLICATE', label: '重复' },
 ];
 
+function IssueScrollButton({ pageRef }: { pageRef: RefObject<HTMLDivElement | null> }) {
+  const [target, setTarget] = useState<'top' | 'bottom' | null>(null);
+
+  useEffect(() => {
+    const scrollRoot = document.scrollingElement || document.documentElement;
+    let frame: number | null = null;
+    const updateTarget = () => {
+      frame = null;
+      const distance = scrollRoot.scrollHeight - scrollRoot.clientHeight;
+      setTarget(distance <= 1 ? null : scrollRoot.scrollTop < distance / 2 ? 'bottom' : 'top');
+    };
+    const schedule = () => {
+      if (frame === null) frame = window.requestAnimationFrame(updateTarget);
+    };
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
+    if (pageRef.current) observer?.observe(pageRef.current);
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    updateTarget();
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [pageRef]);
+
+  if (!target) return null;
+  const label = target === 'top' ? i18n.t('回到顶部') : i18n.t('滚动到底部');
+  const Icon = target === 'top' ? ArrowUp : ArrowDown;
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      className="pointer-events-auto absolute bottom-full right-4 mb-3 h-11 w-11 rounded-full text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:right-6"
+      aria-label={label}
+      title={label}
+      onClick={() => {
+        const scrollRoot = document.scrollingElement || document.documentElement;
+        window.scrollTo({
+          top: target === 'top' ? 0 : scrollRoot.scrollHeight - scrollRoot.clientHeight,
+          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        });
+      }}
+    >
+      <Icon aria-hidden="true" />
+    </Button>
+  );
+}
+
 export default function IssueDetailPage() {
   const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
   const navigate = useNavigate();
@@ -90,6 +143,8 @@ export default function IssueDetailPage() {
   const canManage = isRepoOwner(owner, user?.login);
   // APK 内底部导航由原生提供，Web 端由 MobileBottomNav（4rem）提供
   const hasBridge = typeof window !== 'undefined' && !!(window as unknown as { AndroidBridge?: unknown }).AndroidBridge;
+  const bottomOffset = hasBridge ? 'env(safe-area-inset-bottom)' : 'calc(4rem + env(safe-area-inset-bottom))';
+  const pageRef = useRef<HTMLDivElement>(null);
   const [issue, setIssue] = useState<GitHubIssue | null>(null);
   const [comments, setComments] = useState<GitHubComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -486,7 +541,7 @@ export default function IssueDetailPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
+    <div ref={pageRef} className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
         <button type="button" className="hover:text-accent transition-colors" onClick={() => navigate('/repos')}>{i18n.t('仓库')}</button>
@@ -694,14 +749,20 @@ export default function IssueDetailPage() {
       )}
 
       {/* 添加评论 —— 固定悬浮在底部 */}
+      {!user && (
+        <div className="pointer-events-none fixed inset-x-0 z-30" style={{ bottom: bottomOffset }}>
+          <IssueScrollButton pageRef={pageRef} />
+        </div>
+      )}
       {user && (
         <>
           {/* 占位，避免固定栏遮挡最后一条评论 */}
           <div className="h-36" aria-hidden="true" />
           <div
             className="fixed inset-x-0 z-30 px-4 md:px-6 pt-2 pb-2 bg-background/95 backdrop-blur-md border-t border-border"
-            style={{ bottom: hasBridge ? 'env(safe-area-inset-bottom)' : 'calc(4rem + env(safe-area-inset-bottom))' }}
+            style={{ bottom: bottomOffset }}
           >
+            <IssueScrollButton pageRef={pageRef} />
             <div className="rounded-xl border border-border bg-card shadow-lg overflow-hidden max-w-4xl mx-auto">
               {/* 引用预览条：引用块独立于正文存储，所以可以单独移除，不必手动删 Markdown */}
               {pendingQuote && (

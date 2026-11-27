@@ -1299,7 +1299,8 @@ export default function CodeBrowserPage() {
           )}
 
           {/* 路径操作工具条 */}
-          <div className="flex flex-wrap items-center gap-1.5 px-3 py-1.5 border-b border-border bg-secondary/20 shrink-0">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border bg-secondary/20 shrink-0">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
             {filePath ? (
               <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-secondary gap-1 shrink-0 px-2"
                 onClick={() => {
@@ -1426,6 +1427,7 @@ export default function CodeBrowserPage() {
                 </DropdownMenu>
               </div>
             )}
+            </div>
             {user?.login && (
               <EditorDraftsDialog owner={user.login} onResume={draft => {
                 const path = draft.path.split('/').map(encodeURIComponent).join('/');

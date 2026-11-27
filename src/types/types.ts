@@ -240,7 +240,7 @@ export interface GitHubNotification {
   last_read_at: string | null;
   subject: {
     title: string;
-    url: string;
+    url: string | null;
     latest_comment_url: string | null;
     type: string;
   };

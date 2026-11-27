@@ -383,18 +383,29 @@ export default function MainLayout({ children, active = true, chatViewport }: {
       return;
     }
     let cancelled = false;
-    const refresh = async () => {
+    let requestNumber = 0;
+    const refresh = async (fresh = false) => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      const currentRequest = ++requestNumber;
       try {
-        const result = await getNotifications({ all: false, per_page: 1 });
-        if (!cancelled) setHasUnreadNotifications(result.data.some((item) => item.unread));
+        const result = await getNotifications({ all: false, per_page: 1 }, { fresh });
+        if (!cancelled && currentRequest === requestNumber) {
+          setHasUnreadNotifications(result.data.some((item) => item.unread));
+        }
       } catch {
         // 通知接口失败时不改动现有红点状态，避免误清除。
       }
     };
     void refresh();
-    const unsubscribe = subscribeNotificationUnread(setHasUnreadNotifications);
-    const interval = window.setInterval(refresh, 60_000);
+    const unsubscribe = subscribeNotificationUnread(hasUnread => {
+      if (hasUnread === null) {
+        void refresh(true);
+      } else {
+        requestNumber++;
+        setHasUnreadNotifications(hasUnread);
+      }
+    });
+    const interval = window.setInterval(() => void refresh(), 60_000);
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') void refresh();
     };

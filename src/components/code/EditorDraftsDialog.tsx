@@ -34,10 +34,9 @@ export function EditorDraftsDialog({ owner, onResume }: {
       setOpen(next);
     }}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground"
+        <Button variant="ghost" size="icon" className="size-7 shrink-0 text-muted-foreground"
           aria-label={title} title={title}>
           <Files aria-hidden="true" />
-          <span>{title}</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[85dvh] max-w-[calc(100%-1.5rem)] overflow-y-auto sm:max-w-lg" aria-describedby={undefined}>

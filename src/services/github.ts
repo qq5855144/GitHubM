@@ -602,36 +602,45 @@ export async function updateCollaboratorPermission(
 
 export async function getNotifications(params: {
   all?: boolean;
+  done?: boolean;
   participating?: boolean;
   per_page?: number;
   page?: number;
-} = {}): Promise<{ data: GitHubNotification[]; hasNextPage: boolean }> {
-  const { all = false, participating = false, per_page = 50, page = 1 } = params;
+  before?: string;
+} = {}, options: { fresh?: boolean; signal?: AbortSignal } = {}): Promise<{ data: GitHubNotification[]; hasNextPage: boolean }> {
+  const { all = false, done = false, participating = false, per_page = 50, page = 1, before } = params;
+  const query = new URLSearchParams({ all: String(all || done), is_done: String(done),
+    participating: String(participating), per_page: String(per_page), page: String(page) });
+  if (before) query.set('before', before);
   return requestWithPagination<GitHubNotification>(
-    `/notifications?all=${all}&participating=${participating}&per_page=${per_page}&page=${page}`
+    `/notifications?${query}`, { cache: options.fresh ? 'no-store' : undefined, signal: options.signal },
   );
 }
 
-export async function markNotificationRead(threadId: string): Promise<void> {
-  await request<void>(`/notifications/threads/${threadId}`, { method: 'PATCH' });
-  // 顶栏红点与通知列表会重新拉取，必须清掉带 ETag 的通知缓存。
+// 通知写接口可能返回空响应，直接检查状态码，避免把 205/304 误报为 JSON 解析失败。
+async function updateNotifications(path: string, method: 'PATCH' | 'PUT' | 'DELETE', body?: { last_read_at: string; read: true }): Promise<number> {
+  const response = await fetchWithResilience(`${BASE_URL}${path}`, {
+    method,
+    headers: { ...buildHeaders(), ...(body && { 'Content-Type': 'application/json' }) },
+    body: body && JSON.stringify(body),
+  }, method);
+  if (!response.ok && response.status !== 304) throw await createHttpError(response);
   invalidateAndBust('/notifications');
+  return response.status;
+}
+
+export async function markNotificationRead(threadId: string): Promise<void> {
+  await updateNotifications(`/notifications/threads/${encodeURIComponent(threadId)}`, 'PATCH');
 }
 
 export async function deleteNotification(threadId: string): Promise<void> {
-  await request<void>(`/notifications/threads/${threadId}`, { method: 'DELETE' });
-  // 删除后通知列表可能被其他 GET 请求缓存，主动失效。
-  invalidateAndBust('/notifications');
+  await updateNotifications(`/notifications/threads/${encodeURIComponent(threadId)}`, 'DELETE');
 }
 
-export async function markAllNotificationsRead(): Promise<void> {
-  await request<void>('/notifications', {
-    method: 'PUT',
-    body: JSON.stringify({ read: true }),
-    headers: { 'Content-Type': 'application/json' },
-  });
-  // 全部已读后，顶栏下一次查询必须命中空列表而不是旧 ETag 缓存。
-  invalidateAndBust('/notifications');
+export async function markAllNotificationsRead(lastReadAt?: string): Promise<'completed' | 'pending'> {
+  const status = await updateNotifications('/notifications', 'PUT',
+    lastReadAt ? { last_read_at: lastReadAt, read: true } : undefined);
+  return status === 202 ? 'pending' : 'completed';
 }
 
 // ===== 内容/代码浏览 API =====

@@ -565,18 +565,6 @@ export default function MainLayout({ children, active = true, chatViewport }: {
               )}
             </Button>
 
-            {/* 全部功能（九宫格）：Android 端原生底部导航仅 5 个 Tab，
-                其余 28+ 功能页通过此入口直达 */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="topbar-icon text-muted-foreground hover:bg-secondary"
-              onClick={() => navigate('/more')}
-              aria-label="全部功能"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </Button>
-
             {/* 用户下拉菜单 */}
             {user && (
               <DropdownMenu>
